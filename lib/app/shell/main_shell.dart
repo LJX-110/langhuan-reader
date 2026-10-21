@@ -1,13 +1,14 @@
 import 'dart:async';
 
-import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/core/events/event.dart';
 import 'package:langhuan/features/shelf/book_shelf.dart';
 import 'package:langhuan/features/discover/explore_page.dart';
 import 'package:langhuan/features/profile/me_page.dart';
 import 'package:flutter/material.dart';
 
-/// App root shell: 书架 / 发现 / 我 (WeChat Reading–like bottom tabs).
+import 'glass_dock.dart';
+
+/// App root shell: 书架 / 发现 / 我.
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -38,7 +39,6 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       body: IndexedStack(
         index: _index,
@@ -48,48 +48,9 @@ class _MainShellState extends State<MainShell> {
           Me(embedded: true),
         ],
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: dark ? AppColors.surfaceDark : AppColors.surface,
-          border: Border(
-            top: BorderSide(
-              color: dark ? AppColors.dividerDark : AppColors.divider,
-              width: 0.5,
-            ),
-          ),
-        ),
-        child: SafeArea(
-          top: false,
-          // Don't force a fixed height — Material BottomNavigationBar needs
-          // slightly more than 56px for icon + label and overflows otherwise.
-          child: BottomNavigationBar(
-            currentIndex: _index,
-            onTap: (i) => setState(() => _index = i),
-            type: BottomNavigationBarType.fixed,
-            elevation: 0,
-            backgroundColor: Colors.transparent,
-            selectedFontSize: 12,
-            unselectedFontSize: 12,
-            iconSize: 22,
-            items: const [
-              BottomNavigationBarItem(
-                icon: Icon(Icons.menu_book_outlined),
-                activeIcon: Icon(Icons.menu_book),
-                label: '书架',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.explore_outlined),
-                activeIcon: Icon(Icons.explore),
-                label: '发现',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.person_outline),
-                activeIcon: Icon(Icons.person),
-                label: '我',
-              ),
-            ],
-          ),
-        ),
+      bottomNavigationBar: LanhuanDock(
+        index: _index,
+        onTap: (i) => setState(() => _index = i),
       ),
     );
   }

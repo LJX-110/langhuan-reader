@@ -9,6 +9,7 @@ import 'package:langhuan/features/reader/read_book.dart';
 import 'package:langhuan/features/search/search_page.dart';
 import 'package:langhuan/features/shelf/sort_shelf.dart';
 import 'package:langhuan/features/sources/source_manage_page.dart';
+import 'package:langhuan/features/settings/cache_manager.dart';
 import 'package:langhuan/features/settings/font_set_page.dart';
 import 'package:langhuan/features/settings/log_viewer_page.dart';
 import 'package:fluro/fluro.dart';
@@ -77,4 +78,9 @@ var sourcesHandler =
 var logsHandler =
     Handler(handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
   return const LogViewer();
+});
+
+var cacheHandler =
+    Handler(handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
+  return const CacheManager();
 });

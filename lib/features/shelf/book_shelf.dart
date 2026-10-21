@@ -1,4 +1,5 @@
 import 'package:langhuan/core/platform/screen.dart';
+import 'package:langhuan/design/components/archive_header.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/core/storage/prefs_keys.dart';
 import 'package:langhuan/core/storage/local_store.dart';
@@ -9,7 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// 书架（微信读书风格）
+/// 书架
 class BookShelf extends ConsumerStatefulWidget {
   const BookShelf({super.key});
 
@@ -90,47 +91,21 @@ class _ShelfHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final dark = theme.brightness == Brightness.dark;
-    final onSurface = dark ? AppColors.textOnDark : AppColors.textPrimary;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final background = dark ? AppColors.scaffoldDark : AppColors.paper;
 
     return Container(
-      color: dark ? AppColors.surfaceDark : AppColors.surface,
-      padding: const EdgeInsets.fromLTRB(16, 8, 8, 10),
+      color: background,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '书架',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: onSurface,
-                        height: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      count == 0 ? '暂无藏书' : '共 $count 本',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
+          ArchiveBrandBar(
+            actions: [
+              _HeaderIcon(
+                icon: Icons.search,
+                tooltip: '搜索',
+                onTap: onSearch,
               ),
-              // _HeaderIcon(
-              //   icon: Icons.search,
-              //   tooltip: '搜索',
-              //   onTap: onSearch,
-              // ),
               _HeaderIcon(
                 icon: coverMode
                     ? Icons.view_list_outlined
@@ -145,31 +120,16 @@ class _ShelfHeader extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          // 搜索入口条（微信读书感）
-          Material(
-            color: dark ? const Color(0xFF2A2A2A) : const Color(0xFFF2F2F2),
-            borderRadius: BorderRadius.circular(18),
-            child: InkWell(
+          const ArchiveLabel('01 / 藏书'),
+          ArchiveTitle(
+            title: '书架',
+            subtitle: count == 0 ? '暂无藏书' : '共 $count 本 · 私人书阁',
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
+            child: PaperSearchEntry(
               onTap: onSearch,
-              borderRadius: BorderRadius.circular(18),
-              child: SizedBox(
-                height: AppDimens.searchBarHeight,
-                child: Row(
-                  children: const [
-                    SizedBox(width: 12),
-                    Icon(Icons.search, size: 18, color: AppColors.textTertiary),
-                    SizedBox(width: 6),
-                    Text(
-                      '搜索书架或全网书籍',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.textTertiary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              hint: '搜索书架或全网书籍',
             ),
           ),
         ],

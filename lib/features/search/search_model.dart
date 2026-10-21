@@ -8,6 +8,17 @@ import 'package:langhuan/core/storage/local_store.dart';
 import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 
+/// One book after duplicate hits from different sources are folded together.
+class SearchGroup {
+  SearchGroup(this.item);
+
+  final SearchItem item;
+  final Set<String> sourceNames = <String>{};
+  final Set<String> sourceUrls = <String>{};
+
+  int get sourceCount => sourceUrls.length;
+}
+
 class SearchModel with ChangeNotifier {
   List<String> searchHistory = [];
   BuildContext? context;
@@ -37,6 +48,26 @@ class SearchModel with ChangeNotifier {
 
   /// Bumps on each new search/loadMore so stale chunks are discarded.
   int _searchGen = 0;
+
+  /// Search hits folded by book name + author, preserving first hit order.
+  List<SearchGroup> get groups {
+    final folded = <String, SearchGroup>{};
+    for (final item in bks) {
+      final name = item.name.trim().toLowerCase();
+      final author = item.author.trim().toLowerCase();
+      final key = author.isEmpty ? name : '$name|$author';
+      final group = folded.putIfAbsent(key, () => SearchGroup(item));
+      if (item.sourceUrl.isNotEmpty) {
+        group.sourceUrls.add(item.sourceUrl);
+      } else if (item.sourceName.isNotEmpty) {
+        group.sourceUrls.add(item.sourceName);
+      }
+      if (item.sourceName.isNotEmpty) {
+        group.sourceNames.add(item.sourceName);
+      }
+    }
+    return folded.values.toList(growable: false);
+  }
 
   void clear() {
     searchHistory = [];

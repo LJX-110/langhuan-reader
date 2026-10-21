@@ -15,7 +15,7 @@ class ColorModel with ChangeNotifier {
   bool dark = false;
   Map _fonts = {};
 
-  /// When true, use WeChat-neutral theme (product default).
+  /// When true, use the 琅嬛阁 paper-ink theme (product default).
   bool useWeReadSkin = SpUtil.getBool('use_weread_skin', defValue: true);
 
   /// Families already registered with [FontLoader] this process.
@@ -53,7 +53,7 @@ class ColorModel with ChangeNotifier {
     final family = font == "Roboto" || font.isEmpty ? null : font;
 
     if (useWeReadSkin) {
-      _theme = buildWeReadTheme(dark: dark, fontFamily: family);
+      _theme = buildLanghuanTheme(dark: dark, fontFamily: family);
     } else {
       final scheme =
           FlexScheme.values[idx.clamp(0, FlexScheme.values.length - 1)];
