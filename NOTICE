@@ -1,0 +1,18 @@
+# NOTICE
+
+This product is based on the open-source project:
+
+- `book` — https://github.com/leetomlee123/book
+- Upstream commit: `0b25219cf7ebdbd2b166f9a299c239f21fc721a0`
+- Licensed under the Apache License, Version 2.0.
+
+The upstream project and its contributors retain copyright in the portions
+that remain. This repository contains substantial modifications, removals,
+and new code for 琅嬛阁, a personal, single-user Android reader.
+
+Additional third-party notices are kept with their components, including:
+
+- `third_party/flutter_js/LICENSE`
+- `assets/fonts/HarmonyOS_Sans_SC_LICENSE.txt`
+
+The Apache License 2.0 text is in `LICENSE`.

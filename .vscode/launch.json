@@ -1,0 +1,22 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "debug", //debug 模式
+            "request": "launch",
+            "type": "dart",
+        },
+        {
+            "name": "profile", //profile 模式 可解决非联机调试白屏
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "release", //release 模式 可解决非联机调试白屏
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        },
+    ]
+}

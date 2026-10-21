@@ -1,0 +1,67 @@
+name: langhuan
+description: 琅嬛阁 — 个人自用的 Flutter 网络小说阅读器。
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  flutter_riverpod: ^2.6.1
+  dio: ^5.8.0+1
+  fluro: ^2.0.5
+  bot_toast: ^4.1.3
+  event_bus: ^2.0.1
+  sqflite: ^2.4.2
+  path_provider: ^2.1.6
+  shared_preferences: ^2.5.3
+  flutter_cache_manager: ^3.4.1
+  scrollable_positioned_list: ^0.3.8
+  flex_color_scheme: ^8.2.0
+  html: ^0.15.6
+  json_annotation: ^4.9.0
+  convert: ^3.1.2
+  url_launcher: ^6.3.1
+  readmore: ^3.0.0
+  intl: ^0.20.2
+  ffi: ^2.1.4
+  path: ^1.9.1
+  # Book-source engine: charset + JS rules (Legado subset)
+  fast_gbk: ^1.0.0
+  # Hosted 0.8.7 still applies kotlin-android (KGP warning on Flutter 3.44+).
+  # Local patch of 0.8.7: drop KGP apply (mirrors abner/flutter_js#191).
+  # Revert to hosted once upstream ships Built-in Kotlin (0.8.8+).
+  flutter_js:
+    path: third_party/flutter_js
+  # Force modern Android embedding (namespace) for AGP 8+/9
+  flutter_plugin_android_lifecycle: ^2.0.28
+  extended_image: ^10.1.0
+  file_picker: ^11.0.2
+
+  vector_math: any
+  package_info_plus: ^9.0.1
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  build_runner: ^2.4.15
+  json_serializable: ^6.9.5
+
+# Transitive pins that break Dart 3.12 / AGP 9 builds
+dependency_overrides:
+  platform: ^3.1.6
+
+flutter:
+  uses-material-design: true
+  assets:
+    - images/
+    # Bundled CJK face for reader + Rust book_pager (ABI v3 shared font_path).
+    - assets/fonts/HarmonyOS_Sans_SC_Regular.ttf
+  fonts:
+    - family: HarmonyOSSansSC
+      fonts:
+        - asset: assets/fonts/HarmonyOS_Sans_SC_Regular.ttf

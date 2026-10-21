@@ -1,0 +1,93 @@
+import 'package:langhuan/entity/read_page.dart';
+import 'package:langhuan/entity/text_line.dart';
+import 'package:langhuan/entity/text_page.dart';
+import 'package:langhuan/model/reader/text_paginator.dart';
+
+/// In-page loading / error placeholders drawn as normal [ReadPage]s.
+///
+/// No BotToast overlay — the reader canvas paints these like chapter content.
+class ReaderLoadingPresenter {
+  ReaderLoadingPresenter({
+    required this.paginator,
+    required this.setLoadingHint,
+    required this.setCurPage,
+    required this.clearPictures,
+    required this.markNeedsPaint,
+    required this.notify,
+  });
+
+  final TextPaginator paginator;
+  final void Function(String text) setLoadingHint;
+  final void Function(ReadPage page) setCurPage;
+  final void Function() clearPictures;
+  final void Function() markNeedsPaint;
+  final void Function() notify;
+
+  /// Bumped on every show/hide so superseded paints are ignored.
+  int _token = 0;
+
+  /// Lightweight sync placeholder (no paginator / isolate) for open/clear races.
+  ///
+  /// [chapterTitle]: painted in the top chrome (prefer last reading chapter so
+  /// shelf re-open doesn't flash "加载中").
+  /// [hint]: body text. Empty keeps a blank paper page — preferred when local
+  /// cache is about to paint within a frame or two.
+  static ReadPage syncPlaceholder(
+    String hint, {
+    String chapterTitle = '加载中',
+  }) {
+    final page = ReadPage.kong();
+    page.chapterName = chapterTitle.isNotEmpty ? chapterTitle : '加载中';
+    page.chapterContent = hint;
+    if (hint.isEmpty) {
+      // Blank paper — no centered "正在加载" text. Real content replaces this.
+      page.pages = [TextPage(const [], 0)];
+    } else {
+      page.pages = [
+        TextPage([TextLine.simple(hint)], 24),
+      ];
+    }
+    return page;
+  }
+
+  /// Build a single-page [ReadPage] with a readable error/hint message.
+  Future<ReadPage> messagePage(String title, String message) async {
+    final page = ReadPage.kong();
+    page.chapterName = title;
+    page.chapterContent = message;
+    try {
+      page.pages = await paginator.paginate(page);
+    } catch (_) {
+      page.pages = const [];
+    }
+    if (page.pages.isEmpty) {
+      // Absolute fallback so drawContent never paints a blank canvas.
+      page.pages = [
+        TextPage([
+          TextLine.simple(message, height: 24),
+        ], 24),
+      ];
+    }
+    return page;
+  }
+
+  /// Paint an in-page loading hint. Does not touch [Book.pageIndex].
+  Future<void> show(String text) async {
+    setLoadingHint(text);
+    final token = ++_token;
+    final page = await messagePage('加载中', text);
+    if (token != _token) return; // superseded
+    setCurPage(page);
+    // Do NOT touch book.index — loading is a 1-page placeholder only.
+    // Mutating index here used to wipe restored progress (DB idx → 0).
+    clearPictures();
+    markNeedsPaint();
+    notify();
+  }
+
+  /// Content replacement (openChapterAt / chapter load) clears the hint page.
+  /// Bump token so any in-flight [show] paint is ignored.
+  void hide() {
+    _token++;
+  }
+}
