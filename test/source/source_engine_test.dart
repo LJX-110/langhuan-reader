@@ -1,14 +1,14 @@
-import 'package:langhuan/source/analyzer/js_analyzer.dart';
-import 'package:langhuan/source/analyzer/regex_analyzer.dart';
-import 'package:langhuan/source/engine/progress_mapper.dart';
-import 'package:langhuan/source/import/source_importer.dart';
-import 'package:langhuan/source/model/book_source.dart';
-import 'package:langhuan/source/model/search_book.dart';
-import 'package:langhuan/source/net/analyze_url.dart';
-import 'package:langhuan/source/rule/analyze_rule.dart';
-import 'package:langhuan/source/util/book_id.dart';
-import 'package:langhuan/source/util/text_clean.dart';
-import 'package:langhuan/source/util/url_join.dart';
+import 'package:langhuan/features/sources/analyzer/js_analyzer.dart';
+import 'package:langhuan/features/sources/analyzer/regex_analyzer.dart';
+import 'package:langhuan/features/sources/engine/progress_mapper.dart';
+import 'package:langhuan/features/sources/import/source_importer.dart';
+import 'package:langhuan/features/sources/model/book_source.dart';
+import 'package:langhuan/features/sources/model/search_book.dart';
+import 'package:langhuan/features/sources/net/analyze_url.dart';
+import 'package:langhuan/features/sources/rule/analyze_rule.dart';
+import 'package:langhuan/features/sources/util/book_id.dart';
+import 'package:langhuan/features/sources/util/text_clean.dart';
+import 'package:langhuan/features/sources/util/url_join.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

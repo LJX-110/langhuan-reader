@@ -1,8 +1,8 @@
-import 'package:langhuan/app_init.dart';
-import 'package:langhuan/common/app_brand.dart';
-import 'package:langhuan/route/routes.dart';
-import 'package:langhuan/store/providers.dart';
-import 'package:langhuan/view/system/main_shell.dart';
+import 'package:langhuan/app/bootstrap.dart';
+import 'package:langhuan/design/brand/app_brand.dart';
+import 'package:langhuan/app/router/routes.dart';
+import 'package:langhuan/app/providers.dart';
+import 'package:langhuan/app/shell/main_shell.dart';
 import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

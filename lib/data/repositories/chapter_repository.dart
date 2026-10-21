@@ -1,9 +1,9 @@
 import 'dart:convert';
 
-import 'package:langhuan/data/db/reader_database.dart';
-import 'package:langhuan/entity/chapter_node.dart';
-import 'package:langhuan/entity/chapter_toc_entry.dart';
-import 'package:langhuan/entity/text_page.dart';
+import 'package:langhuan/core/database/reader_database.dart';
+import 'package:langhuan/data/entities/chapter_node.dart';
+import 'package:langhuan/data/entities/chapter_toc_entry.dart';
+import 'package:langhuan/data/entities/text_page.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 

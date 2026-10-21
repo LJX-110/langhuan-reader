@@ -1,6 +1,6 @@
-import 'package:langhuan/entity/text_line.dart';
-import 'package:langhuan/entity/text_page.dart';
-import 'package:langhuan/model/reader/reader_painter.dart';
+import 'package:langhuan/data/entities/text_line.dart';
+import 'package:langhuan/data/entities/text_page.dart';
+import 'package:langhuan/features/reader/model/reader_painter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

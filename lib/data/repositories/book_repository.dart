@@ -1,6 +1,6 @@
-import 'package:langhuan/common/local_store.dart';
-import 'package:langhuan/data/db/reader_database.dart';
-import 'package:langhuan/entity/book.dart';
+import 'package:langhuan/core/storage/local_store.dart';
+import 'package:langhuan/core/database/reader_database.dart';
+import 'package:langhuan/data/entities/book.dart';
 import 'package:sqflite/sqflite.dart';
 
 /// Shelf + reading progress persistence.

@@ -1,14 +1,14 @@
 import 'dart:ui' as ui;
 
-import 'package:langhuan/animation/static_page_turn.dart';
-import 'package:langhuan/entity/book.dart';
-import 'package:langhuan/entity/read_page.dart';
-import 'package:langhuan/entity/text_line.dart';
-import 'package:langhuan/entity/text_page.dart';
-import 'package:langhuan/model/reader/page_picture_cache.dart';
-import 'package:langhuan/model/reader/page_picture_resolver.dart';
-import 'package:langhuan/model/reader/reader_painter.dart';
-import 'package:langhuan/view/page_turn/reader_page_manager.dart';
+import 'package:langhuan/features/reader/animation/static_page_turn.dart';
+import 'package:langhuan/data/entities/book.dart';
+import 'package:langhuan/data/entities/read_page.dart';
+import 'package:langhuan/data/entities/text_line.dart';
+import 'package:langhuan/data/entities/text_page.dart';
+import 'package:langhuan/features/reader/model/page_picture_cache.dart';
+import 'package:langhuan/features/reader/model/page_picture_resolver.dart';
+import 'package:langhuan/features/reader/model/reader_painter.dart';
+import 'package:langhuan/features/reader/page_turn/reader_page_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

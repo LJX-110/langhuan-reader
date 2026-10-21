@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import 'package:langhuan/data/db/reader_database.dart';
-import 'package:langhuan/source/import/source_importer.dart';
-import 'package:langhuan/source/model/book_source.dart';
+import 'package:langhuan/core/database/reader_database.dart';
+import 'package:langhuan/features/sources/import/source_importer.dart';
+import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:sqflite/sqflite.dart';
 
 /// Book-source persistence on [ReaderDatabase] (`sources` table).
