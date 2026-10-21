@@ -46,4 +46,4 @@ flutter build apk --release --target-platform android-arm64
 
 ## 阶段性验收
 
-详见 `docs/ROADMAP.md`。当前阶段：Phase 0 基线。
+详见 `docs/ROADMAP.md`。当前阶段：Phase 1 设计基础。

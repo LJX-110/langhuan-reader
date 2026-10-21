@@ -1,6 +1,6 @@
 # 琅嬛阁
 
-琅嬛阁是一个自用的 Android 网络小说阅读器，基于 Flutter。当前处于 Phase 0 基线整理。
+琅嬛阁是一个自用的 Android 网络小说阅读器，基于 Flutter。Phase 0 已完成，进入 Phase 1 设计基础。
 
 - 目标设备：Redmi K90 至尊版
 - 产物：单个 arm64 APK
@@ -87,7 +87,7 @@ Wenku8 仅作为视觉参考，未复制其 GPL-3.0 代码。
 - [x] `flutter analyze` 通过
 - [x] `flutter test` 通过（60 项）
 - [x] debug arm64 APK 构建通过
-- [ ] debug APK 安装启动验证（当前未连接手机）
+- [x] debug APK 安装启动验证（Redmi K90 至尊版）
 - [x] 应用名 / 包名
 - [x] 临时图标与启动图（`assets/brand/`，待视觉定稿）
 - [ ] 自有 release keystore
