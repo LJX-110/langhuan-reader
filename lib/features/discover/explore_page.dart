@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:langhuan/design/components/archive_header.dart';
 import 'package:langhuan/design/components/pic_widget.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/data/entities/search_item.dart';
@@ -41,52 +42,46 @@ class _ExplorePageState extends ConsumerState<ExplorePage>
     final model = ref.watch(exploreModelProvider);
 
     return Scaffold(
-      backgroundColor: dark ? AppColors.scaffoldDark : AppColors.scaffold,
-      appBar: AppBar(
-        title: Text(
-          '发现',
-          style: TextStyle(
-            color: dark ? AppColors.textOnDark : AppColors.textPrimary,
-            fontSize: 17,
-            fontWeight: FontWeight.w600,
-          ),
+      backgroundColor: dark ? AppColors.scaffoldDark : AppColors.paper,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ArchiveBrandBar(
+              actions: [
+                IconButton(
+                  tooltip: '搜索',
+                  icon: const Icon(Icons.search, size: 21),
+                  onPressed: () {
+                    Routes.navigateTo(context, Routes.search, params: {
+                      'type': 'book',
+                      'name': '',
+                    });
+                  },
+                ),
+                IconButton(
+                  tooltip: '刷新书源',
+                  icon: const Icon(Icons.refresh, size: 21),
+                  onPressed: () => model.reloadSources(),
+                ),
+              ],
+            ),
+            const ArchiveLabel('01 / 寻书'),
+            const ArchiveTitle(
+              title: '发现',
+              subtitle: '从自己的书源里，慢慢找一本书',
+            ),
+            const SizedBox(height: 8),
+            _ExploreSourceTrigger(model: model, dark: dark),
+            if (model.kinds.length > 1) _KindBar(model: model, dark: dark),
+            Divider(
+              height: 1,
+              color: dark ? AppColors.dividerDark : AppColors.divider,
+            ),
+            Expanded(child: _BookList(model: model, dark: dark)),
+          ],
         ),
-        centerTitle: true,
-        elevation: 0,
-        backgroundColor: dark ? AppColors.scaffoldDark : AppColors.scaffold,
-        foregroundColor: dark ? AppColors.textOnDark : AppColors.textPrimary,
-        iconTheme: IconThemeData(
-          color: dark ? AppColors.textOnDark : AppColors.textPrimary,
-        ),
-        actions: [
-          IconButton(
-            tooltip: '搜索',
-            icon: const Icon(Icons.search),
-            onPressed: () {
-              Routes.navigateTo(context, Routes.search, params: {
-                'type': 'book',
-                'name': '',
-              });
-            },
-          ),
-          IconButton(
-            tooltip: '刷新书源',
-            icon: const Icon(Icons.refresh),
-            onPressed: () => model.reloadSources(),
-          ),
-        ],
-      ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _ExploreSourceTrigger(model: model, dark: dark),
-          if (model.kinds.length > 1) _KindBar(model: model, dark: dark),
-          Divider(
-            height: 1,
-            color: dark ? AppColors.dividerDark : AppColors.divider,
-          ),
-          Expanded(child: _BookList(model: model, dark: dark)),
-        ],
       ),
     );
   }
@@ -372,7 +367,17 @@ class _BookRow extends StatelessWidget {
       onTap: onTap,
       child: Container(
         height: rowH,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? AppColors.dividerDark
+                  : AppColors.line,
+              width: .5,
+            ),
+          ),
+        ),
         child: Row(
           children: [
             ClipRRect(
