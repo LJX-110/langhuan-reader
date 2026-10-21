@@ -70,6 +70,7 @@ docs/           路线、架构、书源仓库、上游说明
 - [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - [`docs/SOURCE_REPO.md`](docs/SOURCE_REPO.md)
+- [`docs/SIGNING.md`](docs/SIGNING.md)
 - [`docs/UPSTREAM.md`](docs/UPSTREAM.md)
 
 ## 许可与归属
