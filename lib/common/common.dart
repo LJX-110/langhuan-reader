@@ -5,10 +5,6 @@ class PrefsKeys {
   PrefsKeys._();
 
   static const dark = 'dark';
-  static const auth = 'auth';
-  static const token = 'token';
-  static const username = 'username';
-  static const email = 'email';
   static const version = 'version';
   static const coverGrid = 'cover';
   static const leftClickNext = 'leftClickNext';

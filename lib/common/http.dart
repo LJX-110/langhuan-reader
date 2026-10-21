@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:langhuan/common/auth_interceptor.dart';
+import 'package:langhuan/common/request_interceptor.dart';
 import 'package:langhuan/common/error_interceptor.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -22,7 +22,7 @@ class HttpUtil {
           receiveTimeout: const Duration(hours: 24))
 
       //网络状态拦截
-      ..interceptors.add(AuthInterceptor())
+      ..interceptors.add(RequestInterceptor())
       // ..interceptors.add(HttpLog())
       ..interceptors.add(ErrorInterceptor());
   }

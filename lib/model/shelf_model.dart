@@ -136,16 +136,7 @@ class ShelfModel with ChangeNotifier {
     await _books.touchSortTime(book.id);
   }
 
-  /// 退出登录（本地账号，不清除书架）
-  Future<void> dropAccountOut() async {
-    SpUtil.remove(PrefsKeys.username);
-    SpUtil.remove(PrefsKeys.auth);
-    SpUtil.remove(PrefsKeys.email);
-    BotToast.showText(text: "已退出登录");
-    notifyListeners();
-  }
-
-//根据id判断书架是否存在本书
+  //根据id判断书架是否存在本书
   bool isOnShelf(String id) {
     return shelf.map((f) => f.id).toList().contains(id);
   }
