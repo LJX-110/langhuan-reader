@@ -21,8 +21,10 @@ class ReaderThemeController {
   final void Function() notify;
 
   /// Legacy texture filename (when not using solid paper).
-  String backgroundImageName =
-      SpUtil.getString(PrefsKeys.bgIdx, defValue: ReadSetting.bgImg.first);
+  String backgroundImageName = SpUtil.getString(
+    PrefsKeys.bgIdx,
+    defValue: ReadSetting.bgImg.first,
+  );
 
   PaperTheme paperTheme = ReadSetting.getPaperTheme();
 
@@ -81,17 +83,21 @@ class ReaderThemeController {
       return;
     }
     if (SpUtil.getBool(PrefsKeys.dark) || paperTheme == PaperTheme.night) {
-      setBgUI(await loadAssetImage(
-        "images/${ReadSetting.bgImg.last}",
-        width: Screen.width.ceil(),
-        height: Screen.height.ceil(),
-      ));
+      setBgUI(
+        await loadAssetImage(
+          "images/${ReadSetting.bgImg.last}",
+          width: Screen.width.ceil(),
+          height: Screen.height.ceil(),
+        ),
+      );
     } else {
-      setBgUI(await loadAssetImage(
-        "images/$backgroundImageName",
-        width: Screen.width.ceil(),
-        height: Screen.height.ceil(),
-      ));
+      setBgUI(
+        await loadAssetImage(
+          "images/$backgroundImageName",
+          width: Screen.width.ceil(),
+          height: Screen.height.ceil(),
+        ),
+      );
     }
   }
 }

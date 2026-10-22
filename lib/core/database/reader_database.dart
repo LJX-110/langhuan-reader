@@ -76,9 +76,7 @@ CREATE TABLE books (
   has_update INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL DEFAULT ''
 )''');
-    await db.execute(
-      'CREATE INDEX idx_books_sort ON books (sort_time DESC)',
-    );
+    await db.execute('CREATE INDEX idx_books_sort ON books (sort_time DESC)');
   }
 
   Future<void> _createChapters(Database db) async {
@@ -98,15 +96,11 @@ CREATE TABLE chapters (
   pages_cached_at INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (book_id) REFERENCES books (id) ON DELETE CASCADE
 )''');
-    await db.execute(
-      'CREATE INDEX idx_chapters_book ON chapters (book_id)',
-    );
+    await db.execute('CREATE INDEX idx_chapters_book ON chapters (book_id)');
     await db.execute(
       'CREATE UNIQUE INDEX idx_chapters_book_ord ON chapters (book_id, ord)',
     );
-    await db.execute(
-      'CREATE INDEX idx_chapters_url ON chapters (url)',
-    );
+    await db.execute('CREATE INDEX idx_chapters_url ON chapters (url)');
   }
 
   Future<void> _createSources(Database db) async {

@@ -112,10 +112,7 @@ class ReadingSessionLifecycle {
     if (savedIndex < 0) {
       b.pageIndex = 0;
     } else if (savedIndex > maxIdx) {
-      AppLog.w(
-        'Read',
-        'clamp index $savedIndex -> $maxIdx (pages=$pages)',
-      );
+      AppLog.w('Read', 'clamp index $savedIndex -> $maxIdx (pages=$pages)');
       b.pageIndex = maxIdx;
     } else {
       b.pageIndex = savedIndex;

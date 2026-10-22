@@ -12,10 +12,10 @@ class ReadPage {
   String chapterName;
 
   ReadPage.kong()
-      : pages = const [],
-        chapterContent = '',
-        height = 0,
-        chapterName = '';
+    : pages = const [],
+      chapterContent = '',
+      height = 0,
+      chapterName = '';
 
   ReadPage(this.chapterContent, this.chapterName, this.height, this.pages);
 

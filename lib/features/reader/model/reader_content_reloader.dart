@@ -87,7 +87,8 @@ class ReaderContentReloader {
       if (content.isEmpty) {
         content = '章节内容加载失败，请检查书源或换源后重试';
       }
-      final looksOk = !content.startsWith('章节内容加载失败') &&
+      final looksOk =
+          !content.startsWith('章节内容加载失败') &&
           !content.startsWith('书源不存在') &&
           !content.startsWith('章节地址为空');
       if (looksOk) {

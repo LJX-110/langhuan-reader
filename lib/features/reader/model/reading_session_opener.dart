@@ -106,10 +106,7 @@ class ReadingSessionOpener {
     if (b.sourceUrl.isEmpty || b.bookUrl.isEmpty) {
       AppLog.w('Read', 'missing sourceUrl/bookUrl for ${b.id}');
       BotToast.showText(text: '旧版云端书籍无法继续阅读，请重新搜索添加');
-      setCurPage(await messagePage(
-        '无法阅读',
-        '旧版云端书籍缺少书源信息，请重新搜索添加后再阅读。',
-      ));
+      setCurPage(await messagePage('无法阅读', '旧版云端书籍缺少书源信息，请重新搜索添加后再阅读。'));
       b.chapterIndex = savedCur < 0 ? 0 : savedCur;
       b.pageIndex = savedIndex < 0 ? 0 : savedIndex;
       setSessionReady(true);
@@ -145,10 +142,12 @@ class ReadingSessionOpener {
     if (activeSourceOf() == null) {
       AppLog.e('Read', 'source not found: ${b.sourceUrl} (${b.originName})');
       BotToast.showText(text: '书源不存在：${b.originName}');
-      setCurPage(await messagePage(
-        '书源不可用',
-        '未找到书源「${b.originName}」，请在书源管理中导入对应书源，或在阅读菜单中换源。',
-      ));
+      setCurPage(
+        await messagePage(
+          '书源不可用',
+          '未找到书源「${b.originName}」，请在书源管理中导入对应书源，或在阅读菜单中换源。',
+        ),
+      );
       b.chapterIndex = savedCur < 0 ? 0 : savedCur;
       b.pageIndex = savedIndex < 0 ? 0 : savedIndex;
       setSessionReady(true);
@@ -166,10 +165,7 @@ class ReadingSessionOpener {
     AppLog.i('Read', 'fetched toc chapters=${toc.length}');
     if (toc.isEmpty) {
       AppLog.e('Read', 'toc empty after fetch for ${b.bookUrl}');
-      setCurPage(await messagePage(
-        '目录为空',
-        '未能获取章节目录，请检查书源规则、网络，或尝试换源。',
-      ));
+      setCurPage(await messagePage('目录为空', '未能获取章节目录，请检查书源规则、网络，或尝试换源。'));
       b.chapterIndex = savedCur < 0 ? 0 : savedCur;
       b.pageIndex = savedIndex < 0 ? 0 : savedIndex;
     } else {
@@ -196,10 +192,7 @@ class ReadingSessionOpener {
     required int savedIndex,
   }) async {
     if (savedCur < 0 || savedCur >= localToc.length) {
-      AppLog.w(
-        'Read',
-        'clamp cur $savedCur -> 0 (len=${localToc.length})',
-      );
+      AppLog.w('Read', 'clamp cur $savedCur -> 0 (len=${localToc.length})');
       b.chapterIndex = 0;
     } else {
       b.chapterIndex = savedCur;
@@ -214,10 +207,12 @@ class ReadingSessionOpener {
       if (activeSourceOf() == null) {
         AppLog.e('Read', 'source not found: ${b.sourceUrl} (${b.originName})');
         BotToast.showText(text: '书源不存在：${b.originName}');
-        setCurPage(await messagePage(
-          '书源不可用',
-          '未找到书源「${b.originName}」，请在书源管理中导入对应书源，或在阅读菜单中换源。',
-        ));
+        setCurPage(
+          await messagePage(
+            '书源不可用',
+            '未找到书源「${b.originName}」，请在书源管理中导入对应书源，或在阅读菜单中换源。',
+          ),
+        );
         setSessionReady(true);
         setChaptersLoading(false);
         setProgressReady(false);
@@ -228,11 +223,7 @@ class ReadingSessionOpener {
 
     // With page cache: open silently (prepareOpen showed last chapter title +
     // blank paper). Without cache: openChapterAt paints one loading page.
-    await openChapterAt(
-      b.chapterIndex,
-      false,
-      showLoading: !canSkipLoading,
-    );
+    await openChapterAt(b.chapterIndex, false, showLoading: !canSkipLoading);
     restorePageIndex(savedIndex);
     setSessionReady(true);
     setChaptersLoading(false);

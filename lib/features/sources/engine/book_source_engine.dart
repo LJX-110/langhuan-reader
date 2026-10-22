@@ -158,18 +158,20 @@ class BookSourceEngine {
       }
       if (cover.isNotEmpty) cover = urlJoin(resp.url, cover);
       if (_isPlaceholderCover(cover)) cover = '';
-      out.add(SearchBook(
-        name: name,
-        author: _resolveAuthor(rule, ruleStr: authorRule, scope: item),
-        kind: rule.getString(kindRule, scope: item),
-        wordCount: rule.getString(wordCountRule, scope: item),
-        lastChapter: rule.getString(lastChapterRule, scope: item),
-        intro: rule.getString(introRule, scope: item),
-        coverUrl: cover,
-        bookUrl: bookUrl,
-        sourceUrl: source.bookSourceUrl,
-        sourceName: source.bookSourceName,
-      ));
+      out.add(
+        SearchBook(
+          name: name,
+          author: _resolveAuthor(rule, ruleStr: authorRule, scope: item),
+          kind: rule.getString(kindRule, scope: item),
+          wordCount: rule.getString(wordCountRule, scope: item),
+          lastChapter: rule.getString(lastChapterRule, scope: item),
+          intro: rule.getString(introRule, scope: item),
+          coverUrl: cover,
+          bookUrl: bookUrl,
+          sourceUrl: source.bookSourceUrl,
+          sourceName: source.bookSourceName,
+        ),
+      );
     }
     AppLog.i(
       'Source',
@@ -337,14 +339,17 @@ class BookSourceEngine {
             continue;
           }
           if (!seen.add(url)) continue;
-          final isVol = source.ruleToc.isVolume.isNotEmpty &&
+          final isVol =
+              source.ruleToc.isVolume.isNotEmpty &&
               rule.getString(source.ruleToc.isVolume, scope: item).isNotEmpty;
-          all.add(SourceChapter(
-            name: name,
-            url: url,
-            isVolume: isVol,
-            index: all.length,
-          ));
+          all.add(
+            SourceChapter(
+              name: name,
+              url: url,
+              isVolume: isVol,
+              index: all.length,
+            ),
+          );
         }
         AppLog.d(
           'Source',
@@ -560,7 +565,8 @@ class BookSourceEngine {
       if (trimmed.startsWith('@regex:') ||
           trimmed.startsWith(':') ||
           trimmed.startsWith('@Regex:')) {
-        final pat = trimmed.startsWith('@regex:') || trimmed.startsWith('@Regex:')
+        final pat =
+            trimmed.startsWith('@regex:') || trimmed.startsWith('@Regex:')
             ? trimmed.substring(trimmed.indexOf(':') + 1)
             : trimmed.substring(1);
         final out = RegexAnalyzer.getString(body, pat);

@@ -61,8 +61,9 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
   void _onPositionsChanged() {
     final positions = _itemPositionsListener.itemPositions.value;
     if (positions.isEmpty) return;
-    final minIndex =
-        positions.map((e) => e.index).reduce((a, b) => a < b ? a : b);
+    final minIndex = positions
+        .map((e) => e.index)
+        .reduce((a, b) => a < b ? a : b);
     final next = minIndex >= 8;
     if (next != showToTopBtn && mounted) {
       setState(() => showToTopBtn = next);
@@ -167,13 +168,17 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
                   hintText: '章节序号',
                   hintStyle: TextStyle(color: _tertiary),
                   filled: true,
-                  fillColor: _dark ? const Color(0xFF2A2A2A) : AppColors.scaffold,
+                  fillColor: _dark
+                      ? const Color(0xFF2A2A2A)
+                      : AppColors.scaffold,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
                 ),
                 onSubmitted: (v) {
                   final n = int.tryParse(v.trim());
@@ -192,7 +197,10 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
                 final n = int.tryParse(ctrl.text.trim());
                 Navigator.pop(ctx, n);
               },
-              child: Text('确定', style: TextStyle(color: AppColors.accentOf(context))),
+              child: Text(
+                '确定',
+                style: TextStyle(color: AppColors.accentOf(context)),
+              ),
             ),
           ],
         );
@@ -255,16 +263,19 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
 
   @override
   Widget build(BuildContext context) {
-    final chapters =
-        ref.watch(readModelProvider.select((m) => m.chapters));
-    final cur =
-        ref.watch(readModelProvider.select((m) => m.book?.chapterIndex ?? 0));
-    final bookName =
-        ref.watch(readModelProvider.select((m) => m.book?.name ?? '目录'));
-    final chaptersLoading =
-        ref.watch(readModelProvider.select((m) => m.chaptersLoading));
-    final loadingHint =
-        ref.watch(readModelProvider.select((m) => m.loadingHint));
+    final chapters = ref.watch(readModelProvider.select((m) => m.chapters));
+    final cur = ref.watch(
+      readModelProvider.select((m) => m.book?.chapterIndex ?? 0),
+    );
+    final bookName = ref.watch(
+      readModelProvider.select((m) => m.book?.name ?? '目录'),
+    );
+    final chaptersLoading = ref.watch(
+      readModelProvider.select((m) => m.chaptersLoading),
+    );
+    final loadingHint = ref.watch(
+      readModelProvider.select((m) => m.loadingHint),
+    );
     final filtered = _filtered(chapters);
 
     if (!_centeredOnce && chapters.isNotEmpty && _query.isEmpty) {
@@ -325,51 +336,47 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
               child: chaptersLoading && chapters.isEmpty
                   ? Center(
                       child: Text(
-                        loadingHint.isEmpty
-                            ? '正在加载目录…'
-                            : loadingHint,
+                        loadingHint.isEmpty ? '正在加载目录…' : loadingHint,
                         style: TextStyle(color: _secondary, fontSize: 14),
                       ),
                     )
                   : chapters.isEmpty
-                      ? Center(
-                          child: Text(
-                            '暂无章节',
-                            style: TextStyle(color: _secondary, fontSize: 14),
-                          ),
-                        )
-                      : filtered.isEmpty
-                          ? Center(
-                              child: Text(
-                                '未找到匹配章节',
-                                style:
-                                    TextStyle(color: _secondary, fontSize: 14),
-                              ),
-                            )
-                          : ScrollablePositionedList.builder(
-                              itemScrollController: _itemScrollController,
-                              itemPositionsListener: _itemPositionsListener,
-                              padding:
-                                  const EdgeInsets.fromLTRB(0, 4, 0, 8),
-                              itemCount: filtered.length,
-                              itemBuilder: (context, i) {
-                                final item = filtered[i];
-                                final index = item.index;
-                                final chapter = item.chapter;
-                                final selected = index == cur;
-                                final cached = chapter.hasBody;
-                                return _ChapterTile(
-                                  index: index,
-                                  title: chapter.title,
-                                  selected: selected,
-                                  cached: cached,
-                                  dark: _dark,
-                                  primary: _primary,
-                                  tertiary: _tertiary,
-                                  onTap: () => _openChapter(index),
-                                );
-                              },
-                            ),
+                  ? Center(
+                      child: Text(
+                        '暂无章节',
+                        style: TextStyle(color: _secondary, fontSize: 14),
+                      ),
+                    )
+                  : filtered.isEmpty
+                  ? Center(
+                      child: Text(
+                        '未找到匹配章节',
+                        style: TextStyle(color: _secondary, fontSize: 14),
+                      ),
+                    )
+                  : ScrollablePositionedList.builder(
+                      itemScrollController: _itemScrollController,
+                      itemPositionsListener: _itemPositionsListener,
+                      padding: const EdgeInsets.fromLTRB(0, 4, 0, 8),
+                      itemCount: filtered.length,
+                      itemBuilder: (context, i) {
+                        final item = filtered[i];
+                        final index = item.index;
+                        final chapter = item.chapter;
+                        final selected = index == cur;
+                        final cached = chapter.hasBody;
+                        return _ChapterTile(
+                          index: index,
+                          title: chapter.title,
+                          selected: selected,
+                          cached: cached,
+                          dark: _dark,
+                          primary: _primary,
+                          tertiary: _tertiary,
+                          onTap: () => _openChapter(index),
+                        );
+                      },
+                    ),
             ),
             _BottomBar(
               dark: _dark,
@@ -383,14 +390,12 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
               onJumpList: chaptersLoading || _query.isNotEmpty
                   ? null
                   : topOrBottom,
-              onJumpChapter:
-                  chaptersLoading || chapters.isEmpty
-                      ? null
-                      : _showJumpDialog,
-              onLocateCurrent:
-                  chaptersLoading || chapters.isEmpty
-                      ? null
-                      : _goCurrent,
+              onJumpChapter: chaptersLoading || chapters.isEmpty
+                  ? null
+                  : _showJumpDialog,
+              onLocateCurrent: chaptersLoading || chapters.isEmpty
+                  ? null
+                  : _goCurrent,
             ),
           ],
         ),
@@ -456,8 +461,11 @@ class _Header extends StatelessWidget {
                 children: [
                   IconButton(
                     tooltip: '返回',
-                    icon:
-                        Icon(Icons.arrow_back_ios_new, size: 18, color: primary),
+                    icon: Icon(
+                      Icons.arrow_back_ios_new,
+                      size: 18,
+                      color: primary,
+                    ),
                     onPressed: onBack,
                   ),
                   Expanded(
@@ -515,8 +523,11 @@ class _Header extends StatelessWidget {
                     ),
                     IconButton(
                       tooltip: '定位当前',
-                      icon: Icon(Icons.my_location_outlined,
-                          size: 20, color: primary),
+                      icon: Icon(
+                        Icons.my_location_outlined,
+                        size: 20,
+                        color: primary,
+                      ),
                       onPressed: onLocate,
                     ),
                   ],
@@ -763,11 +774,7 @@ class _BottomBar extends StatelessWidget {
               )
             : Row(
                 children: [
-                  btn(
-                    icon: Icons.refresh,
-                    label: '刷新',
-                    onTap: onReload,
-                  ),
+                  btn(icon: Icons.refresh, label: '刷新', onTap: onReload),
                   btn(
                     icon: Icons.low_priority,
                     label: '跳转',

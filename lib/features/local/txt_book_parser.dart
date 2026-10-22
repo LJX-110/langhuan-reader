@@ -47,10 +47,7 @@ class TxtBookParser {
     caseSensitive: false,
   );
 
-  static ParsedTxtBook parse({
-    required String fileName,
-    required String text,
-  }) {
+  static ParsedTxtBook parse({required String fileName, required String text}) {
     final clean = text
         .replaceAll('\r\n', '\n')
         .replaceAll('\r', '\n')
@@ -85,7 +82,9 @@ class TxtBookParser {
       }
       for (var i = 0; i < matches.length; i++) {
         final match = matches[i];
-        final end = i + 1 < matches.length ? matches[i + 1].start : clean.length;
+        final end = i + 1 < matches.length
+            ? matches[i + 1].start
+            : clean.length;
         final body = clean.substring(match.end, end).trim();
         final heading = match.group(0)!.trim();
         chapters.add(

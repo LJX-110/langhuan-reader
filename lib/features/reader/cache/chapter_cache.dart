@@ -19,10 +19,7 @@ class ChapterCache {
   }
 
   /// Opportunistic eviction after page-cache writes.
-  static Future<void> maybeEvict({
-    String? activeBookId,
-    int? activeCur,
-  }) async {
+  static Future<void> maybeEvict({String? activeBookId, int? activeCur}) async {
     final now = DateTime.now();
     final last = _lastEvictAt;
     if (last != null && now.difference(last) < _evictMinInterval) {

@@ -23,6 +23,7 @@ class ReaderInputController {
   final bool Function() isBusy;
   final bool Function() tapLeftToAdvanceOf;
   final void Function() toggleMenu;
+
   /// When true, taps go only through [triggerTapTurn] (no commit fallthrough).
   final bool Function() hasPageManager;
   final bool Function(int direction) triggerTapTurn;

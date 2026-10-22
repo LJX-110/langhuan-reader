@@ -41,8 +41,9 @@ bool _looksLikeCode(String s) {
   if (s.contains('\n') || s.contains(';')) return true;
   if (s.contains('(') && s.contains(')')) {
     // `getArgs(...)` or `let x = f()` — not a relative path.
-    if (RegExp(r'\b(let|var|const|function|return|if|for|while)\b')
-        .hasMatch(s)) {
+    if (RegExp(
+      r'\b(let|var|const|function|return|if|for|while)\b',
+    ).hasMatch(s)) {
       return true;
     }
   }

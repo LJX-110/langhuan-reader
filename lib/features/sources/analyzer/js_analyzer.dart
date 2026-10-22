@@ -117,9 +117,7 @@ function cfCheck(html, targetUrl){ return String(html==null?'':html); }
   static bool needsJs(String rule) {
     final r = rule.trim();
     if (r.isEmpty) return false;
-    return r.startsWith('@js:') ||
-        r.contains('<js>') ||
-        r.contains('@js:');
+    return r.startsWith('@js:') || r.contains('<js>') || r.contains('@js:');
   }
 
   /// Extract pure JS code from a Legado rule fragment.
@@ -129,7 +127,10 @@ function cfCheck(html, targetUrl){ return String(html==null?'':html); }
     if (r.startsWith('@js:')) {
       return r.substring(4).trim();
     }
-    final m = RegExp(r'<js>([\s\S]*?)</js>', caseSensitive: false).firstMatch(r);
+    final m = RegExp(
+      r'<js>([\s\S]*?)</js>',
+      caseSensitive: false,
+    ).firstMatch(r);
     if (m != null) return (m.group(1) ?? '').trim();
     // inline @js: mid-string
     final idx = r.indexOf('@js:');
@@ -150,7 +151,8 @@ function cfCheck(html, targetUrl){ return String(html==null?'':html); }
     if (rt == null || code.isEmpty) return result;
     try {
       // Escape via JSON so quotes/newlines are safe.
-      final prelude = '''
+      final prelude =
+          '''
 var result = ${jsonEncode(result)};
 var baseUrl = ${jsonEncode(baseUrl)};
 var src = ${jsonEncode(src.isEmpty ? result : src)};
@@ -192,15 +194,19 @@ if (typeof cfCheck !== 'function') {
       // Single expression-statements (`cfCheck(result, baseUrl);`) also need return.
       // Multi-statement scripts run as-is (should assign `result` if they need output).
       final trimmedCode = code.trim();
-      final singleExprStmt = RegExp(r'^([^;{}\n]+);\s*$').firstMatch(trimmedCode);
-      final looksExpr = !trimmedCode.contains(';') &&
+      final singleExprStmt = RegExp(
+        r'^([^;{}\n]+);\s*$',
+      ).firstMatch(trimmedCode);
+      final looksExpr =
+          !trimmedCode.contains(';') &&
           !trimmedCode.contains('{') &&
           !RegExp(
             r'\b(var|let|const|function|return|if|for|while|class)\b',
           ).hasMatch(trimmedCode);
       final String wrapped;
       if (looksExpr) {
-        wrapped = '''
+        wrapped =
+            '''
 (function(){
 $prelude
 return ($trimmedCode);
@@ -208,14 +214,16 @@ return ($trimmedCode);
 ''';
       } else if (singleExprStmt != null) {
         final expr = singleExprStmt.group(1)!.trim();
-        wrapped = '''
+        wrapped =
+            '''
 (function(){
 $prelude
 return ($expr);
 })()
 ''';
       } else {
-        wrapped = '''
+        wrapped =
+            '''
 (function(){
 $prelude
 $trimmedCode

@@ -27,8 +27,10 @@ class ReaderFontBootstrap {
         fontsDir.createSync(recursive: true);
       }
       // File name must match the asset basename so cache paths stay stable.
-      final outPath =
-          p.join(fontsDir.path, p.basename(ReadSetting.defaultFontAsset));
+      final outPath = p.join(
+        fontsDir.path,
+        p.basename(ReadSetting.defaultFontAsset),
+      );
       final outFile = File(outPath);
 
       // Re-extract if missing or suspiciously small (corrupt / partial write).
@@ -49,7 +51,7 @@ class ReaderFontBootstrap {
           AppLog.w(
             'Font',
             'bundled font asset missing (${ReadSetting.defaultFontAsset}); '
-            'Rust pager needs a custom font path or Dart fallback',
+                'Rust pager needs a custom font path or Dart fallback',
             error: e,
           );
           return;

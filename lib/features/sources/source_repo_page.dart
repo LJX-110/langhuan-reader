@@ -73,9 +73,7 @@ class _SourceRepoPageState extends ConsumerState<SourceRepoPage> {
       _savedName = fetched.name;
       _lastSync = SpUtil.getString(PrefsKeys.sourceRepoLastSync, defValue: '');
 
-      BotToast.showText(
-        text: '已同步「${fetched.name}」：$count 个书源',
-      );
+      BotToast.showText(text: '已同步「${fetched.name}」：$count 个书源');
     } catch (e) {
       BotToast.showText(text: '同步失败：$e');
     } finally {
@@ -135,7 +133,11 @@ class _SourceRepoPageState extends ConsumerState<SourceRepoPage> {
           Text(
             '应用不内置、不提供任何书源。这里只保存你自己的仓库地址，'
             '同步时由你主动触发。',
-            style: TextStyle(fontSize: 13, color: Colors.grey[700], height: 1.6),
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey[700],
+              height: 1.6,
+            ),
           ),
           const SizedBox(height: 16),
           TextField(
@@ -158,10 +160,7 @@ class _SourceRepoPageState extends ConsumerState<SourceRepoPage> {
             value: _agreed,
             onChanged: (v) {
               setState(() => _agreed = v ?? false);
-              SpUtil.putBool(
-                PrefsKeys.sourceDisclaimerAgreed,
-                _agreed,
-              );
+              SpUtil.putBool(PrefsKeys.sourceDisclaimerAgreed, _agreed);
             },
           ),
           const SizedBox(height: 8),
@@ -215,7 +214,11 @@ class _SourceRepoPageState extends ConsumerState<SourceRepoPage> {
             '仓库格式：Legado 书源数组，或 '
             '{"name":"…","version":"…","sources":[…]}。'
             '应用不会自动联网更新，也不会内置任何默认地址。',
-            style: TextStyle(fontSize: 12, color: Colors.grey[600], height: 1.5),
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+              height: 1.5,
+            ),
           ),
           const SizedBox(height: 20),
           TextButton.icon(

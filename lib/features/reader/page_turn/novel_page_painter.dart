@@ -4,8 +4,7 @@ import 'package:flutter/material.dart';
 
 class NovelPagePainter extends CustomPainter {
   ReaderPageManager? pageManager;
-  TouchEvent currentTouchData =
-      TouchEvent(TouchEvent.ACTION_UP, Offset.zero);
+  TouchEvent currentTouchData = TouchEvent(TouchEvent.ACTION_UP, Offset.zero);
   int? currentPageIndex;
   int? currentChapterId;
   NovelPagePainter({this.pageManager});

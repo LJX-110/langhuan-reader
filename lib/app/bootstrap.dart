@@ -99,7 +99,8 @@ class AppInit {
       final pkg = await PackageInfo.fromPlatform();
       SpUtil.putString(PrefsKeys.version, '${pkg.version}+${pkg.buildNumber}');
     } catch (_) {
-      if (!SpUtil.haveKey(PrefsKeys.version) || SpUtil.getString(PrefsKeys.version).isEmpty) {
+      if (!SpUtil.haveKey(PrefsKeys.version) ||
+          SpUtil.getString(PrefsKeys.version).isEmpty) {
         SpUtil.putString(PrefsKeys.version, '1.0.0+1');
       }
     }

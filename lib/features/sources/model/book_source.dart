@@ -11,6 +11,7 @@ class BookSource {
   String header;
   String searchUrl;
   String exploreUrl;
+
   /// Shared JS helpers (Legado `jsLib`) injected before rule evaluation.
   String jsLib;
   int customOrder;
@@ -45,11 +46,11 @@ class BookSource {
     TocRule? ruleToc,
     ContentRule? ruleContent,
     this.rawJson = '',
-  })  : ruleSearch = ruleSearch ?? SearchRule(),
-        ruleBookInfo = ruleBookInfo ?? BookInfoRule(),
-        ruleExplore = ruleExplore ?? SearchRule(),
-        ruleToc = ruleToc ?? TocRule(),
-        ruleContent = ruleContent ?? ContentRule();
+  }) : ruleSearch = ruleSearch ?? SearchRule(),
+       ruleBookInfo = ruleBookInfo ?? BookInfoRule(),
+       ruleExplore = ruleExplore ?? SearchRule(),
+       ruleToc = ruleToc ?? TocRule(),
+       ruleContent = ruleContent ?? ContentRule();
 
   factory BookSource.fromLegadoJson(Map<String, dynamic> json) {
     Map<String, dynamic> asMap(dynamic v) {
@@ -203,10 +204,7 @@ List<ExploreKind> parseExploreKinds(String raw) {
         final title = (m['title'] ?? m['name'] ?? m['style'] ?? '').toString();
         final url = (m['url'] ?? m['href'] ?? m['value'] ?? '').toString();
         if (url.isEmpty) return;
-        list.add(ExploreKind(
-          title: title.isEmpty ? url : title,
-          url: url,
-        ));
+        list.add(ExploreKind(title: title.isEmpty ? url : title, url: url));
       }
 
       if (decoded is List) {
@@ -277,30 +275,30 @@ class SearchRule {
   });
 
   factory SearchRule.fromJson(Map<String, dynamic> json) => SearchRule(
-        bookList: (json['bookList'] ?? '').toString(),
-        name: (json['name'] ?? '').toString(),
-        author: (json['author'] ?? '').toString(),
-        kind: (json['kind'] ?? '').toString(),
-        wordCount: (json['wordCount'] ?? '').toString(),
-        lastChapter: (json['lastChapter'] ?? '').toString(),
-        intro: (json['intro'] ?? '').toString(),
-        coverUrl: (json['coverUrl'] ?? '').toString(),
-        bookUrl: (json['bookUrl'] ?? '').toString(),
-        checkKeyWord: (json['checkKeyWord'] ?? '').toString(),
-      );
+    bookList: (json['bookList'] ?? '').toString(),
+    name: (json['name'] ?? '').toString(),
+    author: (json['author'] ?? '').toString(),
+    kind: (json['kind'] ?? '').toString(),
+    wordCount: (json['wordCount'] ?? '').toString(),
+    lastChapter: (json['lastChapter'] ?? '').toString(),
+    intro: (json['intro'] ?? '').toString(),
+    coverUrl: (json['coverUrl'] ?? '').toString(),
+    bookUrl: (json['bookUrl'] ?? '').toString(),
+    checkKeyWord: (json['checkKeyWord'] ?? '').toString(),
+  );
 
   Map<String, dynamic> toJson() => {
-        'bookList': bookList,
-        'name': name,
-        'author': author,
-        'kind': kind,
-        'wordCount': wordCount,
-        'lastChapter': lastChapter,
-        'intro': intro,
-        'coverUrl': coverUrl,
-        'bookUrl': bookUrl,
-        'checkKeyWord': checkKeyWord,
-      };
+    'bookList': bookList,
+    'name': name,
+    'author': author,
+    'kind': kind,
+    'wordCount': wordCount,
+    'lastChapter': lastChapter,
+    'intro': intro,
+    'coverUrl': coverUrl,
+    'bookUrl': bookUrl,
+    'checkKeyWord': checkKeyWord,
+  };
 }
 
 class BookInfoRule {
@@ -329,30 +327,30 @@ class BookInfoRule {
   });
 
   factory BookInfoRule.fromJson(Map<String, dynamic> json) => BookInfoRule(
-        init: (json['init'] ?? '').toString(),
-        name: (json['name'] ?? '').toString(),
-        author: (json['author'] ?? '').toString(),
-        kind: (json['kind'] ?? '').toString(),
-        wordCount: (json['wordCount'] ?? '').toString(),
-        lastChapter: (json['lastChapter'] ?? '').toString(),
-        intro: (json['intro'] ?? '').toString(),
-        coverUrl: (json['coverUrl'] ?? '').toString(),
-        tocUrl: (json['tocUrl'] ?? '').toString(),
-        canReName: (json['canReName'] ?? '').toString(),
-      );
+    init: (json['init'] ?? '').toString(),
+    name: (json['name'] ?? '').toString(),
+    author: (json['author'] ?? '').toString(),
+    kind: (json['kind'] ?? '').toString(),
+    wordCount: (json['wordCount'] ?? '').toString(),
+    lastChapter: (json['lastChapter'] ?? '').toString(),
+    intro: (json['intro'] ?? '').toString(),
+    coverUrl: (json['coverUrl'] ?? '').toString(),
+    tocUrl: (json['tocUrl'] ?? '').toString(),
+    canReName: (json['canReName'] ?? '').toString(),
+  );
 
   Map<String, dynamic> toJson() => {
-        'init': init,
-        'name': name,
-        'author': author,
-        'kind': kind,
-        'wordCount': wordCount,
-        'lastChapter': lastChapter,
-        'intro': intro,
-        'coverUrl': coverUrl,
-        'tocUrl': tocUrl,
-        'canReName': canReName,
-      };
+    'init': init,
+    'name': name,
+    'author': author,
+    'kind': kind,
+    'wordCount': wordCount,
+    'lastChapter': lastChapter,
+    'intro': intro,
+    'coverUrl': coverUrl,
+    'tocUrl': tocUrl,
+    'canReName': canReName,
+  };
 }
 
 class TocRule {
@@ -373,22 +371,22 @@ class TocRule {
   });
 
   factory TocRule.fromJson(Map<String, dynamic> json) => TocRule(
-        chapterList: (json['chapterList'] ?? '').toString(),
-        chapterName: (json['chapterName'] ?? '').toString(),
-        chapterUrl: (json['chapterUrl'] ?? '').toString(),
-        isVolume: (json['isVolume'] ?? '').toString(),
-        updateTime: (json['updateTime'] ?? '').toString(),
-        nextTocUrl: (json['nextTocUrl'] ?? '').toString(),
-      );
+    chapterList: (json['chapterList'] ?? '').toString(),
+    chapterName: (json['chapterName'] ?? '').toString(),
+    chapterUrl: (json['chapterUrl'] ?? '').toString(),
+    isVolume: (json['isVolume'] ?? '').toString(),
+    updateTime: (json['updateTime'] ?? '').toString(),
+    nextTocUrl: (json['nextTocUrl'] ?? '').toString(),
+  );
 
   Map<String, dynamic> toJson() => {
-        'chapterList': chapterList,
-        'chapterName': chapterName,
-        'chapterUrl': chapterUrl,
-        'isVolume': isVolume,
-        'updateTime': updateTime,
-        'nextTocUrl': nextTocUrl,
-      };
+    'chapterList': chapterList,
+    'chapterName': chapterName,
+    'chapterUrl': chapterUrl,
+    'isVolume': isVolume,
+    'updateTime': updateTime,
+    'nextTocUrl': nextTocUrl,
+  };
 }
 
 class ContentRule {
@@ -407,18 +405,18 @@ class ContentRule {
   });
 
   factory ContentRule.fromJson(Map<String, dynamic> json) => ContentRule(
-        content: (json['content'] ?? '').toString(),
-        nextContentUrl: (json['nextContentUrl'] ?? '').toString(),
-        sourceRegex: (json['sourceRegex'] ?? '').toString(),
-        replaceRegex: (json['replaceRegex'] ?? '').toString(),
-        imageStyle: (json['imageStyle'] ?? '').toString(),
-      );
+    content: (json['content'] ?? '').toString(),
+    nextContentUrl: (json['nextContentUrl'] ?? '').toString(),
+    sourceRegex: (json['sourceRegex'] ?? '').toString(),
+    replaceRegex: (json['replaceRegex'] ?? '').toString(),
+    imageStyle: (json['imageStyle'] ?? '').toString(),
+  );
 
   Map<String, dynamic> toJson() => {
-        'content': content,
-        'nextContentUrl': nextContentUrl,
-        'sourceRegex': sourceRegex,
-        'replaceRegex': replaceRegex,
-        'imageStyle': imageStyle,
-      };
+    'content': content,
+    'nextContentUrl': nextContentUrl,
+    'sourceRegex': sourceRegex,
+    'replaceRegex': replaceRegex,
+    'imageStyle': imageStyle,
+  };
 }

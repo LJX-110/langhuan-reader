@@ -297,7 +297,7 @@ class ReadModel with ChangeNotifier {
   PaperTheme get paperTheme => _theme.paperTheme;
   set paperTheme(PaperTheme value) => _theme.paperTheme = value;
 
-//章节翻页标志
+  //章节翻页标志
   bool sessionReady = false;
 
   /// True while TOC is being fetched (open book / 重新加载目录).
@@ -313,7 +313,7 @@ class ReadModel with ChangeNotifier {
 
   //页面上下文
 
-/// When false, progress persistence is disabled (e.g. user declined shelf add).
+  /// When false, progress persistence is disabled (e.g. user declined shelf add).
   bool get allowProgressSave => _progress.enabled;
   set allowProgressSave(bool v) => _progress.enabled = v;
 
@@ -461,8 +461,10 @@ class ReadModel with ChangeNotifier {
 
   /// Content-only picture for vertical scroll (no title/time/page chrome).
   ui.Picture? scrollPagePicture(
-          int chapterIdx, int pageIdx, ReadPage readPage) =>
-      _scroll.scrollPagePicture(chapterIdx, pageIdx, readPage);
+    int chapterIdx,
+    int pageIdx,
+    ReadPage readPage,
+  ) => _scroll.scrollPagePicture(chapterIdx, pageIdx, readPage);
 
   /// Natural height of a scroll tile (content only + tiny pad).
   double scrollPageHeight(ReadPage readPage, int pageIdx) =>

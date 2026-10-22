@@ -8,10 +8,7 @@ import 'package:bot_toast/bot_toast.dart';
 
 /// Network chapter body fetch + optional bulk download into reader.db.
 class ChapterDownloadService {
-  ChapterDownloadService({
-    required this.engine,
-    required this.chapters,
-  });
+  ChapterDownloadService({required this.engine, required this.chapters});
 
   final BookSourceEngine engine;
   final ChapterRepository chapters;

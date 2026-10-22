@@ -50,10 +50,7 @@ class PagePictureCache {
   ///
   /// Keys: `bookId|chapter|page` or `bookId|chapter|page|sc`
   /// (see [PagePictureResolver]).
-  void prune({
-    required String bookId,
-    required int centerChapter,
-  }) {
+  void prune({required String bookId, required int centerChapter}) {
     if (_entries.isEmpty) return;
     final keepCur = {
       for (final c in [centerChapter - 1, centerChapter, centerChapter + 1])
@@ -89,7 +86,7 @@ class PagePictureCache {
 
   /// Parse `bookId|chapter|page` or `bookId|chapter|page|sc`.
   static ({String bookId, int chapterIndex, int pageIndex, bool scroll})?
-      parseKey(String key) {
+  parseKey(String key) {
     final parts = key.split('|');
     if (parts.length == 3) {
       final c = int.tryParse(parts[1]);

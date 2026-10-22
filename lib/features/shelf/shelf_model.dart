@@ -21,17 +21,21 @@ class ShelfModel with ChangeNotifier {
         return shelf;
       case ShelfFilter.reading:
         return shelf
-            .where((b) =>
-                b.readingChapter.trim().isNotEmpty ||
-                b.chapterIndex > 0 ||
-                b.pageIndex > 0)
+            .where(
+              (b) =>
+                  b.readingChapter.trim().isNotEmpty ||
+                  b.chapterIndex > 0 ||
+                  b.pageIndex > 0,
+            )
             .toList(growable: false);
       case ShelfFilter.unread:
         return shelf
-            .where((b) =>
-                b.readingChapter.trim().isEmpty &&
-                b.chapterIndex <= 0 &&
-                b.pageIndex <= 0)
+            .where(
+              (b) =>
+                  b.readingChapter.trim().isEmpty &&
+                  b.chapterIndex <= 0 &&
+                  b.pageIndex <= 0,
+            )
             .toList(growable: false);
     }
   }
@@ -182,8 +186,9 @@ class ShelfModel with ChangeNotifier {
   }
 
   Future<void> modifyShelf(Book book) async {
-    var action =
-        shelf.map((f) => f.id).toList().contains(book.id) ? 'del' : 'add';
+    var action = shelf.map((f) => f.id).toList().contains(book.id)
+        ? 'del'
+        : 'add';
     if (action == "add") {
       shelf.insert(0, book);
       await _books.upsertAll([book]);

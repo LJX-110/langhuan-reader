@@ -7,20 +7,22 @@ import 'package:fast_gbk/fast_gbk.dart';
 /// Shared Dio client for book-source fetches (independent of official API).
 class SourceHttp {
   SourceHttp._() {
-    _dio = Dio(BaseOptions(
-      connectTimeout: const Duration(seconds: 12),
-      receiveTimeout: const Duration(seconds: 20),
-      sendTimeout: const Duration(seconds: 12),
-      responseType: ResponseType.bytes,
-      validateStatus: (c) => c != null && c < 500,
-      headers: {
-        'User-Agent':
-            'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-        'Accept':
-            'text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-      },
-    ));
+    _dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 12),
+        receiveTimeout: const Duration(seconds: 20),
+        sendTimeout: const Duration(seconds: 12),
+        responseType: ResponseType.bytes,
+        validateStatus: (c) => c != null && c < 500,
+        headers: {
+          'User-Agent':
+              'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+          'Accept':
+              'text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        },
+      ),
+    );
   }
 
   static final SourceHttp instance = SourceHttp._();
@@ -40,8 +42,9 @@ class SourceHttp {
     final options = Options(
       method: req.method,
       headers: req.headers,
-      contentType:
-          req.method == 'POST' ? Headers.formUrlEncodedContentType : null,
+      contentType: req.method == 'POST'
+          ? Headers.formUrlEncodedContentType
+          : null,
     );
     final response = await _dio.request<List<int>>(
       url,
@@ -69,8 +72,10 @@ class SourceHttp {
   }
 
   String _charsetFrom(String contentType, String fallback) {
-    final m = RegExp(r'charset=([^\s;]+)', caseSensitive: false)
-        .firstMatch(contentType);
+    final m = RegExp(
+      r'charset=([^\s;]+)',
+      caseSensitive: false,
+    ).firstMatch(contentType);
     if (m != null) return m.group(1)!.replaceAll('"', '').toLowerCase();
     return fallback.toLowerCase();
   }
@@ -83,12 +88,16 @@ class SourceHttp {
       allowInvalid: true,
     );
     final m1 = RegExp(
-      r'charset\s*=\s*["' "'" r']?([a-zA-Z0-9_\-]+)',
+      r'charset\s*=\s*["'
+      "'"
+      r']?([a-zA-Z0-9_\-]+)',
       caseSensitive: false,
     ).firstMatch(head);
     if (m1 != null) return m1.group(1)!.toLowerCase();
     final m2 = RegExp(
-      r'encoding\s*=\s*["' "'" r']?([a-zA-Z0-9_\-]+)',
+      r'encoding\s*=\s*["'
+      "'"
+      r']?([a-zA-Z0-9_\-]+)',
       caseSensitive: false,
     ).firstMatch(head);
     if (m2 != null) return m2.group(1)!.toLowerCase();

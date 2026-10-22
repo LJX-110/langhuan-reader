@@ -33,6 +33,7 @@ class ChapterWindowController {
   final void Function(ReadPage? page) setPrePage;
   final void Function(ReadPage? page) setNextPage;
   final void Function() clearPictures;
+
   /// Record current page picture + schedule prev/next after chapter open.
   final void Function() warmPictures;
   final void Function(int savedIndex) restorePageIndex;
@@ -42,11 +43,7 @@ class ChapterWindowController {
   /// Bumped on every [openAt] so stale neighbor futures cannot overwrite pages.
   int _openGeneration = 0;
 
-  Future<void> openAt(
-    int idx,
-    bool jump, {
-    bool showLoadingUi = true,
-  }) async {
+  Future<void> openAt(int idx, bool jump, {bool showLoadingUi = true}) async {
     final keepIndex = bookOf()?.pageIndex ?? 0;
     final gen = ++_openGeneration;
     final openBookId = bookOf()?.id;
@@ -68,10 +65,7 @@ class ChapterWindowController {
 
       var cur = await loadChapter(idx);
       if (gen != _openGeneration || bookOf()?.id != openBookId) return;
-      cur ??= await messagePage(
-        '加载失败',
-        '当前章节内容为空，请检查书源或点击菜单刷新。',
-      );
+      cur ??= await messagePage('加载失败', '当前章节内容为空，请检查书源或点击菜单刷新。');
       if (gen != _openGeneration || bookOf()?.id != openBookId) return;
       setCurPage(cur);
       clearPictures();
@@ -105,7 +99,12 @@ class ChapterWindowController {
       notify();
     } catch (e, st) {
       if (gen != _openGeneration) return;
-      AppLog.e('Read', 'openChapterAt failed idx=$idx', error: e, stackTrace: st);
+      AppLog.e(
+        'Read',
+        'openChapterAt failed idx=$idx',
+        error: e,
+        stackTrace: st,
+      );
       final cur = await messagePage('加载失败', '章节加载异常：$e');
       if (gen != _openGeneration || bookOf()?.id != openBookId) return;
       setCurPage(cur);

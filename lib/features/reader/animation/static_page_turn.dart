@@ -84,19 +84,25 @@ class StaticPageTurn extends BaseAnimationPage {
 
   @override
   Animation<Offset>? getCancelAnimation(
-      AnimationController controller, GlobalKey canvasKey) {
+    AnimationController controller,
+    GlobalKey canvasKey,
+  ) {
     return null;
   }
 
   @override
   Animation<Offset>? getConfirmAnimation(
-      AnimationController controller, GlobalKey canvasKey) {
+    AnimationController controller,
+    GlobalKey canvasKey,
+  ) {
     return null;
   }
 
   @override
   Simulation? getFlingAnimationSimulation(
-      AnimationController controller, DragEndDetails details) {
+    AnimationController controller,
+    DragEndDetails details,
+  ) {
     return null;
   }
 }

@@ -18,6 +18,7 @@ class FontCatalog {
   static const String localPrefix = 'local:';
   static const String fontPathKey = 'fontPath';
   static const String localFontsKey = 'local_fonts';
+
   /// name → absolute path for CDN fonts that finished downloading.
   static const String downloadedFontsKey = 'downloaded_fonts';
 
@@ -168,8 +169,9 @@ class FontCatalog {
 
     // 4) flutter_cache_manager (legacy / mid-download)
     try {
-      final info =
-          await CustomCacheManager.instanceFont.getFileFromCache(fontName);
+      final info = await CustomCacheManager.instanceFont.getFileFromCache(
+        fontName,
+      );
       if (info != null && await info.file.exists()) {
         // Promote into our durable store.
         return await persistDownloaded(fontName, info.file);
@@ -178,8 +180,9 @@ class FontCatalog {
     try {
       final url = downloadUrl(fontName);
       if (url.isNotEmpty) {
-        final info =
-            await CustomCacheManager.instanceFont.getFileFromCache(url);
+        final info = await CustomCacheManager.instanceFont.getFileFromCache(
+          url,
+        );
         if (info != null && await info.file.exists()) {
           return await persistDownloaded(fontName, info.file);
         }
@@ -203,8 +206,7 @@ class FontCatalog {
 
     final dir = await _fontsDir();
     var ext = p.extension(source.path).toLowerCase();
-    if (ext.isEmpty ||
-        !const {'.ttf', '.otf', '.ttc', '.otc'}.contains(ext)) {
+    if (ext.isEmpty || !const {'.ttf', '.otf', '.ttc', '.otc'}.contains(ext)) {
       // Guess from URL / built-in.
       final url = downloadUrl(fontName);
       ext = p.extension(url).toLowerCase();

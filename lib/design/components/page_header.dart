@@ -4,11 +4,7 @@ import 'package:langhuan/design/tokens/app_colors.dart';
 
 /// One-line page header: title on the left, actions on the right.
 class PageHeader extends StatelessWidget {
-  const PageHeader({
-    super.key,
-    required this.title,
-    this.actions = const [],
-  });
+  const PageHeader({super.key, required this.title, this.actions = const []});
 
   final String title;
   final List<Widget> actions;

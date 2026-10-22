@@ -13,6 +13,7 @@ class AnalyzeRule {
   final String content;
   final String baseUrl;
   final bool isJson;
+
   /// Optional Legado jsLib helpers for this evaluation.
   final String jsLib;
   Document? _doc;
@@ -216,9 +217,10 @@ class AnalyzeRule {
     }
 
     // Hybrid: CSS/JSON first then trailing <js>
-    final jsEmbed =
-        RegExp(r'([\s\S]*?)<js>([\s\S]*?)</js>\s*$', caseSensitive: false)
-            .firstMatch(r);
+    final jsEmbed = RegExp(
+      r'([\s\S]*?)<js>([\s\S]*?)</js>\s*$',
+      caseSensitive: false,
+    ).firstMatch(r);
     if (jsEmbed != null) {
       final head = (jsEmbed.group(1) ?? '').trim();
       final code = (jsEmbed.group(2) ?? '').trim();
@@ -230,7 +232,13 @@ class AnalyzeRule {
         if (prior.isEmpty) prior = content;
       }
       return JsEngine.instance
-          .eval(code, result: prior, baseUrl: baseUrl, src: content, jsLib: jsLib)
+          .eval(
+            code,
+            result: prior,
+            baseUrl: baseUrl,
+            src: content,
+            jsLib: jsLib,
+          )
           .trim();
     }
 
@@ -262,9 +270,7 @@ class AnalyzeRule {
       //   whole list-item (title+author+intro) and poisons author/name fields.
       if (result.isEmpty && parsed.selector.isNotEmpty) {
         if (parsed.attr == 'href' || parsed.attr == 'src') {
-          final a = scope.localName == 'a'
-              ? scope
-              : scope.querySelector('a');
+          final a = scope.localName == 'a' ? scope : scope.querySelector('a');
           if (a != null) {
             result = a.attributes[parsed.attr] ?? '';
           }
@@ -287,7 +293,10 @@ class AnalyzeRule {
           result = CssAnalyzer.getString(els.first, '', parsed.attr);
         } else {
           result = CssAnalyzer.getString(
-              sub.documentElement ?? sub.body!, '', parsed.attr);
+            sub.documentElement ?? sub.body!,
+            '',
+            parsed.attr,
+          );
         }
       } else {
         final els = CssAnalyzer.getElements(doc, parsed.selector);
@@ -406,7 +415,9 @@ class AnalyzeRule {
   static bool _hasJoin(String rule) {
     final r = rule.trim();
     if (!r.contains('&&')) return false;
-    if (JsEngine.needsJs(r) && !_hasTrailingCssAfterJs(r) && !r.contains('##')) {
+    if (JsEngine.needsJs(r) &&
+        !_hasTrailingCssAfterJs(r) &&
+        !r.contains('##')) {
       // Pure JS may contain && as operator — don't split.
       if (r.startsWith('@js:') || r.startsWith('<js>')) return false;
     }

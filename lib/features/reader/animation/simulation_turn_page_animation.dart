@@ -16,7 +16,6 @@ class SimulationTurnPageAnimation extends BaseAnimationPage {
   Path mTopBackAreaPagePath = Path();
   Path mShadowPath = Path();
 
-
   double mCornerX = 1; // 拖拽点对应的页脚
   double mCornerY = 1;
 
@@ -79,23 +78,18 @@ class SimulationTurnPageAnimation extends BaseAnimationPage {
   void calBezierPoint() {
     // Avoid division by zero when touch sits on the corner X.
     if ((mTouch.dx - mCornerX).abs() < 0.5) {
-      mTouch = Offset(
-        mCornerX + (mCornerX == 0 ? 0.5 : -0.5),
-        mTouch.dy,
-      );
+      mTouch = Offset(mCornerX + (mCornerX == 0 ? 0.5 : -0.5), mTouch.dy);
     }
     if ((mTouch.dy - mCornerY).abs() < 0.5) {
-      mTouch = Offset(
-        mTouch.dx,
-        mCornerY + (mCornerY == 0 ? 0.5 : -0.5),
-      );
+      mTouch = Offset(mTouch.dx, mCornerY + (mCornerY == 0 ? 0.5 : -0.5));
     }
 
     mMiddleX = (mTouch.dx + mCornerX) / 2;
     mMiddleY = (mTouch.dy + mCornerY) / 2;
 
-    mMaxLength = math
-        .sqrt(math.pow(currentSize.width, 2) + math.pow(currentSize.height, 2));
+    mMaxLength = math.sqrt(
+      math.pow(currentSize.width, 2) + math.pow(currentSize.height, 2),
+    );
 
     final dxCornerMid = mCornerX - mMiddleX;
     final dyCornerMid = mCornerY - mMiddleY;
@@ -108,24 +102,29 @@ class SimulationTurnPageAnimation extends BaseAnimationPage {
         : dyCornerMid;
 
     mBezierControl1 = Offset(
-        mMiddleX - dyCornerMid * dyCornerMid / denX,
-        mCornerY.toDouble());
+      mMiddleX - dyCornerMid * dyCornerMid / denX,
+      mCornerY.toDouble(),
+    );
 
     mBezierControl2 = Offset(
-        mCornerX.toDouble(),
-        mMiddleY - dxCornerMid * dxCornerMid / denY);
+      mCornerX.toDouble(),
+      mMiddleY - dxCornerMid * dxCornerMid / denY,
+    );
 
     mBezierStart1 = Offset(
-        mBezierControl1.dx - (mCornerX - mBezierControl1.dx) / 2,
-        mCornerY.toDouble());
+      mBezierControl1.dx - (mCornerX - mBezierControl1.dx) / 2,
+      mCornerY.toDouble(),
+    );
 
     // 当mBezierStart1.x < 0或者mBezierStart1.x > width时
     // 如果继续翻页，会出现BUG故在此限制
     if (mTouch.dx > 0 && mTouch.dx < currentSize.width) {
       if (mBezierStart1.dx < 0 || mBezierStart1.dx > currentSize.width) {
         if (mBezierStart1.dx < 0) {
-          mBezierStart1 =
-              Offset(currentSize.width - mBezierStart1.dx, mBezierStart1.dy);
+          mBezierStart1 = Offset(
+            currentSize.width - mBezierStart1.dx,
+            mBezierStart1.dy,
+          );
         }
 
         double f1 = (mCornerX - mTouch.dx).abs();
@@ -145,38 +144,48 @@ class SimulationTurnPageAnimation extends BaseAnimationPage {
         final denX2 = dx2.abs() < 1e-4 ? (dx2 >= 0 ? 1e-4 : -1e-4) : dx2;
         final denY2 = dy2.abs() < 1e-4 ? (dy2 >= 0 ? 1e-4 : -1e-4) : dy2;
 
-        mBezierControl1 = Offset(
-            mMiddleX - dy2 * dy2 / denX2,
-            mCornerY);
+        mBezierControl1 = Offset(mMiddleX - dy2 * dy2 / denX2, mCornerY);
 
-        mBezierControl2 = Offset(
-            mCornerX,
-            mMiddleY - dx2 * dx2 / denY2);
+        mBezierControl2 = Offset(mCornerX, mMiddleY - dx2 * dx2 / denY2);
 
         mBezierStart1 = Offset(
-            mBezierControl1.dx - (mCornerX - mBezierControl1.dx) / 2,
-            mBezierStart1.dy);
+          mBezierControl1.dx - (mCornerX - mBezierControl1.dx) / 2,
+          mBezierStart1.dy,
+        );
       }
     }
 
-    mBezierStart2 = Offset(mCornerX.toDouble(),
-        mBezierControl2.dy - (mCornerY - mBezierControl2.dy) / 2);
+    mBezierStart2 = Offset(
+      mCornerX.toDouble(),
+      mBezierControl2.dy - (mCornerY - mBezierControl2.dy) / 2,
+    );
 
-    mTouchToCornerDis = math.sqrt(math.pow((mTouch.dx - mCornerX), 2) +
-        math.pow((mTouch.dy - mCornerY), 2));
+    mTouchToCornerDis = math.sqrt(
+      math.pow((mTouch.dx - mCornerX), 2) + math.pow((mTouch.dy - mCornerY), 2),
+    );
 
-    mBezierEnd1 =
-        getCross(mTouch, mBezierControl1, mBezierStart1, mBezierStart2);
-    mBezierEnd2 =
-        getCross(mTouch, mBezierControl2, mBezierStart1, mBezierStart2);
+    mBezierEnd1 = getCross(
+      mTouch,
+      mBezierControl1,
+      mBezierStart1,
+      mBezierStart2,
+    );
+    mBezierEnd2 = getCross(
+      mTouch,
+      mBezierControl2,
+      mBezierStart1,
+      mBezierStart2,
+    );
 
     mBezierVertex1 = Offset(
-        (mBezierStart1.dx + 2 * mBezierControl1.dx + mBezierEnd1.dx) / 4,
-        (2 * mBezierControl1.dy + mBezierStart1.dy + mBezierEnd1.dy) / 4);
+      (mBezierStart1.dx + 2 * mBezierControl1.dx + mBezierEnd1.dx) / 4,
+      (2 * mBezierControl1.dy + mBezierStart1.dy + mBezierEnd1.dy) / 4,
+    );
 
     mBezierVertex2 = Offset(
-        (mBezierStart2.dx + 2 * mBezierControl2.dx + mBezierEnd2.dx) / 4,
-        (2 * mBezierControl2.dy + mBezierStart2.dy + mBezierEnd2.dy) / 4);
+      (mBezierStart2.dx + 2 * mBezierControl2.dx + mBezierEnd2.dx) / 4,
+      (2 * mBezierControl2.dy + mBezierStart2.dy + mBezierEnd2.dy) / 4,
+    );
   }
 
   /// 获取交点（含平行/零分母保护）
@@ -237,8 +246,8 @@ class SimulationTurnPageAnimation extends BaseAnimationPage {
       _horizontalMode = true;
     }
 
-    mIsRTandLB = (mCornerX == 0 && mCornerY == h) ||
-        (mCornerX == w && mCornerY == 0);
+    mIsRTandLB =
+        (mCornerX == 0 && mCornerY == h) || (mCornerX == w && mCornerY == 0);
   }
 
   Offset _applyHorizontalLock(Offset pos) {
@@ -264,7 +273,8 @@ class SimulationTurnPageAnimation extends BaseAnimationPage {
   void _updateDirectionAndActive() {
     // Corner on the right + finger left of corner ⇒ turn next; opposite ⇒ prev.
     isTurnToNext = mTouch.dx < mCornerX;
-    final can = (!isTurnToNext && canTurnPrevious()) || (isTurnToNext && canTurnNext());
+    final can =
+        (!isTurnToNext && canTurnPrevious()) || (isTurnToNext && canTurnNext());
     if (can) {
       isStartAnimation = true;
     }
@@ -346,14 +356,24 @@ class SimulationTurnPageAnimation extends BaseAnimationPage {
     mTopPagePath.moveTo(mCornerX == 0 ? currentSize.width : 0, mCornerY);
     mTopPagePath.lineTo(mBezierStart1.dx, mBezierStart1.dy);
     mTopPagePath.quadraticBezierTo(
-        mBezierControl1.dx, mBezierControl1.dy, mBezierEnd1.dx, mBezierEnd1.dy);
+      mBezierControl1.dx,
+      mBezierControl1.dy,
+      mBezierEnd1.dx,
+      mBezierEnd1.dy,
+    );
     mTopPagePath.lineTo(mTouch.dx, mTouch.dy);
     mTopPagePath.lineTo(mBezierEnd2.dx, mBezierEnd2.dy);
-    mTopPagePath.quadraticBezierTo(mBezierControl2.dx, mBezierControl2.dy,
-        mBezierStart2.dx, mBezierStart2.dy);
+    mTopPagePath.quadraticBezierTo(
+      mBezierControl2.dx,
+      mBezierControl2.dy,
+      mBezierStart2.dx,
+      mBezierStart2.dy,
+    );
     mTopPagePath.lineTo(mCornerX, mCornerY == 0 ? currentSize.height : 0);
-    mTopPagePath.lineTo(mCornerX == 0 ? currentSize.width : 0,
-        mCornerY == 0 ? currentSize.height : 0);
+    mTopPagePath.lineTo(
+      mCornerX == 0 ? currentSize.width : 0,
+      mCornerY == 0 ? currentSize.height : 0,
+    );
     mTopPagePath.close();
 
     canvas.save();
@@ -391,10 +411,18 @@ class SimulationTurnPageAnimation extends BaseAnimationPage {
     mBottomPagePath.moveTo(mCornerX, mCornerY);
     mBottomPagePath.lineTo(mBezierStart1.dx, mBezierStart1.dy);
     mBottomPagePath.quadraticBezierTo(
-        mBezierControl1.dx, mBezierControl1.dy, mBezierEnd1.dx, mBezierEnd1.dy);
+      mBezierControl1.dx,
+      mBezierControl1.dy,
+      mBezierEnd1.dx,
+      mBezierEnd1.dy,
+    );
     mBottomPagePath.lineTo(mBezierEnd2.dx, mBezierEnd2.dy);
-    mBottomPagePath.quadraticBezierTo(mBezierControl2.dx, mBezierControl2.dy,
-        mBezierStart2.dx, mBezierStart2.dy);
+    mBottomPagePath.quadraticBezierTo(
+      mBezierControl2.dx,
+      mBezierControl2.dy,
+      mBezierStart2.dx,
+      mBezierStart2.dy,
+    );
     mBottomPagePath.close();
 
     _extraRegionPath
@@ -413,8 +441,9 @@ class SimulationTurnPageAnimation extends BaseAnimationPage {
     canvas.save();
     canvas.clipRect(Offset.zero & currentSize);
     canvas.clipPath(mBottomPagePath, doAntiAlias: false);
-    final pagePic =
-        isTurnToNext ? readerViewModel.paintNextPicture() : readerViewModel.paintPreviousPicture();
+    final pagePic = isTurnToNext
+        ? readerViewModel.paintNextPicture()
+        : readerViewModel.paintPreviousPicture();
     if (pagePic != null) canvas.drawPicture(pagePic);
 
     drawBottomPageShadow(canvas);
@@ -442,12 +471,14 @@ class SimulationTurnPageAnimation extends BaseAnimationPage {
     }
 
     canvas.translate(mBezierStart1.dx, mBezierStart1.dy);
-    canvas.rotate(math.atan2(
-        mBezierControl1.dx - mCornerX, mBezierControl2.dy - mCornerY));
+    canvas.rotate(
+      math.atan2(mBezierControl1.dx - mCornerX, mBezierControl2.dy - mCornerY),
+    );
 
     // Reused paint — only the shader rect changes with the drag position.
-    _bottomShadowPaint.shader =
-        shadowGradient.createShader(Rect.fromLTRB(left, 0, right, mMaxLength));
+    _bottomShadowPaint.shader = shadowGradient.createShader(
+      Rect.fromLTRB(left, 0, right, mMaxLength),
+    );
 
     canvas.drawRect(
       Rect.fromLTRB(left, 0, right, mMaxLength),
@@ -461,11 +492,19 @@ class SimulationTurnPageAnimation extends BaseAnimationPage {
     mBottomPagePath.moveTo(mCornerX, mCornerY);
     mBottomPagePath.lineTo(mBezierStart1.dx, mBezierStart1.dy);
     mBottomPagePath.quadraticBezierTo(
-        mBezierControl1.dx, mBezierControl1.dy, mBezierEnd1.dx, mBezierEnd1.dy);
+      mBezierControl1.dx,
+      mBezierControl1.dy,
+      mBezierEnd1.dx,
+      mBezierEnd1.dy,
+    );
     mBottomPagePath.lineTo(mTouch.dx, mTouch.dy);
     mBottomPagePath.lineTo(mBezierEnd2.dx, mBezierEnd2.dy);
-    mBottomPagePath.quadraticBezierTo(mBezierControl2.dx, mBezierControl2.dy,
-        mBezierStart2.dx, mBezierStart2.dy);
+    mBottomPagePath.quadraticBezierTo(
+      mBezierControl2.dx,
+      mBezierControl2.dy,
+      mBezierStart2.dx,
+      mBezierStart2.dy,
+    );
     mBottomPagePath.close();
 
     _tempBackAreaPath
@@ -476,7 +515,10 @@ class SimulationTurnPageAnimation extends BaseAnimationPage {
       ..close();
 
     mTopBackAreaPagePath = Path.combine(
-        PathOperation.intersect, _tempBackAreaPath, mBottomPagePath);
+      PathOperation.intersect,
+      _tempBackAreaPath,
+      mBottomPagePath,
+    );
 
     // Paper color from reader theme (bgPaint defaults to black and looks solid).
     final paper = ReadSetting.paperColor(readerViewModel.paperTheme);
@@ -493,8 +535,10 @@ class SimulationTurnPageAnimation extends BaseAnimationPage {
     canvas.save();
     canvas.translate(mBezierControl1.dx, mBezierControl1.dy);
 
-    final dis = math.sqrt(math.pow((mCornerX - mBezierControl1.dx), 2) +
-        math.pow((mBezierControl2.dy - mCornerY), 2));
+    final dis = math.sqrt(
+      math.pow((mCornerX - mBezierControl1.dx), 2) +
+          math.pow((mBezierControl2.dy - mCornerY), 2),
+    );
     if (dis > 0.001) {
       final sinAngle = (mCornerX - mBezierControl1.dx) / dis;
       final cosAngle = (mBezierControl2.dy - mCornerY) / dis;
@@ -511,7 +555,11 @@ class SimulationTurnPageAnimation extends BaseAnimationPage {
         ..setEntry(1, 0, 2 * sinAngle * cosAngle)
         ..setEntry(1, 1, 1 - 2 * s2);
       _foldMatrix.translateByDouble(
-          -mBezierControl1.dx, -mBezierControl1.dy, 0, 1);
+        -mBezierControl1.dx,
+        -mBezierControl1.dy,
+        0,
+        1,
+      );
       canvas.transform(_foldMatrix.storage);
 
       final curPic = readerViewModel.paintCurrentPicture();
@@ -555,23 +603,25 @@ class SimulationTurnPageAnimation extends BaseAnimationPage {
     }
 
     canvas.translate(mBezierStart1.dx, mBezierStart1.dy);
-    canvas.rotate(math.atan2(
-        mBezierControl1.dx - mCornerX, mBezierControl2.dy - mCornerY));
+    canvas.rotate(
+      math.atan2(mBezierControl1.dx - mCornerX, mBezierControl2.dy - mCornerY),
+    );
 
     // Reused gradient + paint — only the shader rect changes per frame.
-    _flapShadowPaint.shader =
-        _kShadowDarkLast.createShader(Rect.fromLTRB(0, 0, width, mMaxLength));
-
-    canvas.drawRect(
+    _flapShadowPaint.shader = _kShadowDarkLast.createShader(
       Rect.fromLTRB(0, 0, width, mMaxLength),
-      _flapShadowPaint,
     );
+
+    canvas.drawRect(Rect.fromLTRB(0, 0, width, mMaxLength), _flapShadowPaint);
   }
 
   @override
   Animation<Offset>? getCancelAnimation(
-      AnimationController controller, GlobalKey canvasKey) {
-    if ((!isTurnToNext && !canTurnPrevious()) || (isTurnToNext && !canTurnNext())) {
+    AnimationController controller,
+    GlobalKey canvasKey,
+  ) {
+    if ((!isTurnToNext && !canTurnPrevious()) ||
+        (isTurnToNext && !canTurnNext())) {
       return null;
     }
     isConfirmAnimation = false;
@@ -593,8 +643,11 @@ class SimulationTurnPageAnimation extends BaseAnimationPage {
 
   @override
   Animation<Offset>? getConfirmAnimation(
-      AnimationController controller, GlobalKey canvasKey) {
-    if ((!isTurnToNext && !canTurnPrevious()) || (isTurnToNext && !canTurnNext())) {
+    AnimationController controller,
+    GlobalKey canvasKey,
+  ) {
+    if ((!isTurnToNext && !canTurnPrevious()) ||
+        (isTurnToNext && !canTurnNext())) {
       return null;
     }
     // Drawing flags — page commit is owned by ReaderPageManager.
@@ -619,7 +672,9 @@ class SimulationTurnPageAnimation extends BaseAnimationPage {
 
   @override
   Simulation? getFlingAnimationSimulation(
-      AnimationController controller, DragEndDetails details) {
+    AnimationController controller,
+    DragEndDetails details,
+  ) {
     return null;
   }
 

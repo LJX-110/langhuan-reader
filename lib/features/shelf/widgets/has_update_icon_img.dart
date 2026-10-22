@@ -35,8 +35,7 @@ class HasUpdateIconImg extends StatelessWidget {
               top: 0,
               right: 0,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                 decoration: const BoxDecoration(
                   color: AppColors.updateBadge,
                   borderRadius: BorderRadius.only(

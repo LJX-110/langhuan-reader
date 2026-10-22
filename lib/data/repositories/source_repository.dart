@@ -88,7 +88,8 @@ class SourceRepository {
       );
       // Preserve caller order.
       final byUrl = <String, BookSource>{
-        for (final r in rows) (r['book_source_url'] as String? ?? ''): _fromFullRow(r),
+        for (final r in rows)
+          (r['book_source_url'] as String? ?? ''): _fromFullRow(r),
       };
       for (final u in part) {
         final s = byUrl[u];
@@ -210,11 +211,7 @@ class SourceRepository {
       );
       final batch = db.batch();
       for (final url in part) {
-        batch.delete(
-          'sources',
-          where: 'book_source_url = ?',
-          whereArgs: [url],
-        );
+        batch.delete('sources', where: 'book_source_url = ?', whereArgs: [url]);
       }
       await batch.commit(noResult: true);
     }
@@ -232,11 +229,7 @@ class SourceRepository {
 
   Future<void> delete(String url) async {
     final db = await _database;
-    await db.delete(
-      'sources',
-      where: 'book_source_url = ?',
-      whereArgs: [url],
-    );
+    await db.delete('sources', where: 'book_source_url = ?', whereArgs: [url]);
   }
 
   Future<void> clear() async {

@@ -43,13 +43,10 @@ List<ExploreSourceSection> groupExploreSources(List<BookSource> sources) {
   }
 
   final sections = <ExploreSourceSection>[
-    for (final g in order)
-      ExploreSourceSection(title: g, items: buckets[g]!),
+    for (final g in order) ExploreSourceSection(title: g, items: buckets[g]!),
   ];
   if (ungrouped.isNotEmpty) {
-    sections.add(
-      ExploreSourceSection(title: '未分组', items: ungrouped),
-    );
+    sections.add(ExploreSourceSection(title: '未分组', items: ungrouped));
   }
   return sections;
 }
@@ -288,8 +285,9 @@ class _ExploreSourcePickerSheetState extends State<ExploreSourcePickerSheet> {
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 15,
-                                fontWeight:
-                                    selected ? FontWeight.w600 : FontWeight.w400,
+                                fontWeight: selected
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
                                 color: selected ? accent : primary,
                               ),
                             ),

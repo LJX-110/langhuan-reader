@@ -44,8 +44,7 @@ class ReaderSourceCoordinator {
   Future<void> ensureSource() async {
     final b = bookOf();
     if (b == null || Book.isLocalSource(b.sourceUrl)) return;
-    if (activeSource != null &&
-        activeSource!.bookSourceUrl == b.sourceUrl) {
+    if (activeSource != null && activeSource!.bookSourceUrl == b.sourceUrl) {
       return;
     }
     activeSource = await SourceModel().findByUrl(b.sourceUrl);
@@ -120,13 +119,9 @@ class ReaderSourceCoordinator {
         final name = (mapped >= 0 && mapped < updated.length)
             ? updated[mapped].title
             : '';
-        BotToast.showText(
-          text: '已切换至「${source.bookSourceName}」，定位到：$name',
-        );
+        BotToast.showText(text: '已切换至「${source.bookSourceName}」，定位到：$name');
       } else {
-        BotToast.showText(
-          text: '已切换至「${source.bookSourceName}」',
-        );
+        BotToast.showText(text: '已切换至「${source.bookSourceName}」');
       }
       notify();
       return true;

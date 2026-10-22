@@ -17,11 +17,7 @@ class InfoState extends State<InfoPage> {
   Widget build(BuildContext context) {
     final version = SpUtil.getString(PrefsKeys.version);
     return Scaffold(
-      appBar: AppBar(
-        title: Text("公告"),
-        centerTitle: true,
-        elevation: 0,
-      ),
+      appBar: AppBar(title: Text("公告"), centerTitle: true, elevation: 0),
       body: Padding(
         padding: EdgeInsets.all(15),
         child: Column(
@@ -54,9 +50,9 @@ class InfoState extends State<InfoPage> {
                       : 'v$version · ${DateUtil.getNowDateStr()}',
                   textAlign: TextAlign.start,
                   style: TextStyle(color: Colors.grey, fontSize: 12),
-                )
+                ),
               ],
-            )
+            ),
           ],
         ),
       ),

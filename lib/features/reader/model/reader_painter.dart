@@ -21,11 +21,15 @@ class ReaderPainter {
 
   ui.Image? bgUI;
 
-  final TextPainter _labelPainter =
-      TextPainter(textDirection: TextDirection.ltr, maxLines: 1);
+  final TextPainter _labelPainter = TextPainter(
+    textDirection: TextDirection.ltr,
+    maxLines: 1,
+  );
 
-  static final TextPainter _measurePainter =
-      TextPainter(textDirection: TextDirection.ltr, maxLines: 1);
+  static final TextPainter _measurePainter = TextPainter(
+    textDirection: TextDirection.ltr,
+    maxLines: 1,
+  );
 
   /// Compute final letterSpacing from justify intent using Flutter metrics.
   static double resolveLetterSpacing({
@@ -69,8 +73,7 @@ class ReaderPainter {
     double padLeft,
     double y,
   ) {
-    final target =
-        line.targetWidth > 0 ? line.targetWidth : contentWidth;
+    final target = line.targetWidth > 0 ? line.targetWidth : contentWidth;
     var ls = resolveLetterSpacing(
       text: line.text,
       style: style,
@@ -80,8 +83,9 @@ class ReaderPainter {
       cached: line.letterSpacing,
     );
 
-    TextStyle lineStyle =
-        ls.abs() > 0.1 ? style.copyWith(letterSpacing: ls) : style;
+    TextStyle lineStyle = ls.abs() > 0.1
+        ? style.copyWith(letterSpacing: ls)
+        : style;
     painter.text = TextSpan(text: line.text, style: lineStyle);
     // Unconstrained single-line layout — never re-wrap.
     painter.layout();
@@ -90,8 +94,9 @@ class ReaderPainter {
       final n = nChars(line.text);
       final shrink = (painter.width - contentWidth) / (n - 1);
       final adjusted = ls - shrink;
-      final clamped =
-          adjusted.isFinite && adjusted.abs() <= fontSize * 0.5 ? adjusted : 0.0;
+      final clamped = adjusted.isFinite && adjusted.abs() <= fontSize * 0.5
+          ? adjusted
+          : 0.0;
       ls = clamped;
       painter.text = TextSpan(
         text: line.text,
@@ -143,7 +148,8 @@ class ReaderPainter {
     int pageIdx, {
     required PaperTheme paperTheme,
   }) {
-    final bool night = paperTheme == PaperTheme.night ||
+    final bool night =
+        paperTheme == PaperTheme.night ||
         SpUtil.getBool(PrefsKeys.dark, defValue: false);
     final effectivePaper = night ? PaperTheme.night : paperTheme;
     final paper = ReadSetting.paperColor(effectivePaper);
@@ -152,8 +158,9 @@ class ReaderPainter {
     final contentPadding = ReadSetting.getPageDis().toDouble();
     final pageW = Screen.width;
     final fontFamily = ReadSetting.getFontFamily();
-    final familyOrNull =
-        (fontFamily.isEmpty || fontFamily == 'Roboto') ? null : fontFamily;
+    final familyOrNull = (fontFamily.isEmpty || fontFamily == 'Roboto')
+        ? null
+        : fontFamily;
     final fontSize = ReadSetting.getFontSize();
     final lineHeight = ReadSetting.getLineHeight();
     final TextStyle style = TextStyle(
@@ -170,8 +177,10 @@ class ReaderPainter {
     canvas.drawRect(Rect.fromLTWH(0, 0, pageW, tileH), Paint()..color = paper);
 
     final maxLineWidth = (pageW - contentPadding * 2).clamp(1.0, pageW);
-    final linePainter =
-        TextPainter(textDirection: TextDirection.ltr, maxLines: 1);
+    final linePainter = TextPainter(
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    );
 
     if (pageIdx < 0 ||
         pageIdx >= readPage.pages.length ||
@@ -228,7 +237,8 @@ class ReaderPainter {
 
     final pageRecorder = ui.PictureRecorder();
 
-    final bool night = paperTheme == PaperTheme.night ||
+    final bool night =
+        paperTheme == PaperTheme.night ||
         SpUtil.getBool(PrefsKeys.dark, defValue: false);
     final effectivePaper = night ? PaperTheme.night : paperTheme;
     final paper = ReadSetting.paperColor(effectivePaper);
@@ -238,8 +248,7 @@ class ReaderPainter {
     final contentPadding = ReadSetting.getPageDis().toDouble();
     final pageW = Screen.width;
     final pageH = Screen.height;
-    final pageCanvas =
-        Canvas(pageRecorder, Rect.fromLTWH(0, 0, pageW, pageH));
+    final pageCanvas = Canvas(pageRecorder, Rect.fromLTWH(0, 0, pageW, pageH));
     pageCanvas.drawRect(
       Rect.fromLTWH(0, 0, pageW, pageH),
       Paint()..color = paper,
@@ -257,8 +266,9 @@ class ReaderPainter {
     }
 
     final fontFamily = ReadSetting.getFontFamily();
-    final familyOrNull =
-        (fontFamily.isEmpty || fontFamily == 'Roboto') ? null : fontFamily;
+    final familyOrNull = (fontFamily.isEmpty || fontFamily == 'Roboto')
+        ? null
+        : fontFamily;
     final fontSize = ReadSetting.getFontSize();
     final TextStyle style = TextStyle(
       color: ink,
@@ -312,16 +322,16 @@ class ReaderPainter {
         style: chromeStyle,
       );
       _labelPainter.layout();
-      final titleY = ReadSetting.chapterTitleBandTop() +
+      final titleY =
+          ReadSetting.chapterTitleBandTop() +
           (ReadSetting.contentTopChrome - _labelPainter.height) / 2;
-      _labelPainter.paint(
-        pageCanvas,
-        Offset(contentPadding, titleY),
-      );
+      _labelPainter.paint(pageCanvas, Offset(contentPadding, titleY));
     }
 
-    final linePainter =
-        TextPainter(textDirection: TextDirection.ltr, maxLines: 1);
+    final linePainter = TextPainter(
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    );
 
     if (readPage.pages.isEmpty) {
       final fallbackPainter = TextPainter(
@@ -334,10 +344,7 @@ class ReaderPainter {
         ),
       );
       fallbackPainter.layout(maxWidth: maxLineWidth);
-      fallbackPainter.paint(
-        pageCanvas,
-        Offset(contentPadding, bodyTop),
-      );
+      fallbackPainter.paint(pageCanvas, Offset(contentPadding, bodyTop));
       final pic = pageRecorder.endRecording();
       _logPaintPage(readPage, i, 0, sw);
       return pic;
@@ -348,10 +355,11 @@ class ReaderPainter {
     // Vertically center short middle pages in the content box (e.g. 560 in
     // 600). Chapter last page stays top-aligned so trailing space is empty.
     final isLastPage = pageIndex >= readPage.pages.length - 1;
-    final contentBoxH = (pageH -
-            ReadSetting.contentTopInset() -
-            ReadSetting.contentBottomInset())
-        .clamp(0.0, pageH);
+    final contentBoxH =
+        (pageH -
+                ReadSetting.contentTopInset() -
+                ReadSetting.contentBottomInset())
+            .clamp(0.0, pageH);
     final contentH = _measuredContentHeight(page, fontSize);
     final centerOffset = !isLastPage && contentBoxH > contentH
         ? (contentBoxH - contentH) / 2.0
@@ -384,17 +392,12 @@ class ReaderPainter {
     );
     _labelPainter.layout();
     final bottomTextY =
-        bottomBandTop + (ReadSetting.contentBottomChrome - _labelPainter.height) / 2;
-    _labelPainter.paint(
-      pageCanvas,
-      Offset(contentPadding, bottomTextY),
-    );
+        bottomBandTop +
+        (ReadSetting.contentBottomChrome - _labelPainter.height) / 2;
+    _labelPainter.paint(pageCanvas, Offset(contentPadding, bottomTextY));
 
     final pageLabel = '${pageIndex + 1}/${readPage.pages.length}';
-    _labelPainter.text = TextSpan(
-      text: pageLabel,
-      style: chromeStyle,
-    );
+    _labelPainter.text = TextSpan(text: pageLabel, style: chromeStyle);
     _labelPainter.layout();
     _labelPainter.paint(
       pageCanvas,

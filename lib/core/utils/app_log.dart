@@ -24,16 +24,13 @@ class AppLog {
   static final ListQueue<_LogEntry> _buffer = ListQueue<_LogEntry>();
   static final List<void Function(_LogEntry)> _listeners = [];
 
-  static bool get _consoleEnabled =>
-      !kReleaseMode || enabledInRelease;
+  static bool get _consoleEnabled => !kReleaseMode || enabledInRelease;
 
   // ---- public API ----------------------------------------------------------
 
-  static void d(String tag, String msg) =>
-      _log(LogLevel.debug, tag, msg);
+  static void d(String tag, String msg) => _log(LogLevel.debug, tag, msg);
 
-  static void i(String tag, String msg) =>
-      _log(LogLevel.info, tag, msg);
+  static void i(String tag, String msg) => _log(LogLevel.info, tag, msg);
 
   static void w(String tag, String msg, {Object? error}) =>
       _log(LogLevel.warn, tag, msg, error: error);
@@ -43,8 +40,7 @@ class AppLog {
     String msg, {
     Object? error,
     StackTrace? stackTrace,
-  }) =>
-      _log(LogLevel.error, tag, msg, error: error, stackTrace: stackTrace);
+  }) => _log(LogLevel.error, tag, msg, error: error, stackTrace: stackTrace);
 
   /// Snapshot of buffered entries (oldest first).
   static List<String> get entries =>

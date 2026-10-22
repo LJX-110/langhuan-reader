@@ -286,16 +286,23 @@ class ReaderPageManager {
           ? Offset(w2 * 0.25, h2 * 0.75)
           : Offset(w2 * 0.75, h2 * 0.75);
     } else {
-      start = goNext ? Offset(w2 * 0.85, h2 * 0.5) : Offset(w2 * 0.15, h2 * 0.5);
+      start = goNext
+          ? Offset(w2 * 0.85, h2 * 0.5)
+          : Offset(w2 * 0.15, h2 * 0.5);
       end = goNext ? Offset(w2 * 0.35, h2 * 0.5) : Offset(w2 * 0.65, h2 * 0.5);
     }
 
-    currentAnimationPage.onTouchEvent(TouchEvent(TouchEvent.ACTION_DOWN, start));
+    currentAnimationPage.onTouchEvent(
+      TouchEvent(TouchEvent.ACTION_DOWN, start),
+    );
     currentAnimationPage.onTouchEvent(TouchEvent(TouchEvent.ACTION_MOVE, end));
     currentTouchData = TouchEvent(TouchEvent.ACTION_MOVE, end);
 
     _log('triggerTapTurn anim dir=$dir size=${w2}x$h2');
-    _perf('tap.anim', 'dir=$dir size=${w2.toStringAsFixed(0)}x${h2.toStringAsFixed(0)}');
+    _perf(
+      'tap.anim',
+      'dir=$dir size=${w2.toStringAsFixed(0)}x${h2.toStringAsFixed(0)}',
+    );
     final ok = startConfirmAnimation(dir);
     if (!ok) {
       // Animation failed to start — still advance page so taps never "die".
@@ -533,8 +540,9 @@ class ReaderPageManager {
     // Start cooldown BEFORE mutating page so any re-entrant busy check sees it.
     _lastCommitAt = DateTime.now();
     _log('COMMIT dir=$direction');
-    final turnId =
-        _activeTurnId == 0 ? PageTurnPerf.nextTurnId() : _activeTurnId;
+    final turnId = _activeTurnId == 0
+        ? PageTurnPerf.nextTurnId()
+        : _activeTurnId;
     if (_activeTurnId == 0) _activeTurnId = turnId;
     final sw = PageTurnPerf.enabled ? (Stopwatch()..start()) : null;
     currentAnimationPage.readerViewModel.commitPageTurn(direction);

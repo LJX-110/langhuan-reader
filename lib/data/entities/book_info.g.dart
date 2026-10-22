@@ -16,7 +16,8 @@ BookInfo _$BookInfoFromJson(Map<String, dynamic> json) {
     updatedAt: json['updatedAt'] as String? ?? '',
     rating: (json['rating'] as num?)?.toDouble() ?? 0,
     ratingCount: json['ratingCount'] as int? ?? 0,
-    relatedBooks: (json['relatedBooks'] as List<dynamic>?)
+    relatedBooks:
+        (json['relatedBooks'] as List<dynamic>?)
             ?.map((e) => Book.fromJson(e as Map<String, dynamic>))
             .toList() ??
         <Book>[],
@@ -28,20 +29,20 @@ BookInfo _$BookInfoFromJson(Map<String, dynamic> json) {
 }
 
 Map<String, dynamic> _$BookInfoToJson(BookInfo instance) => <String, dynamic>{
-      'id': instance.id,
-      'name': instance.name,
-      'author': instance.author,
-      'coverUrl': instance.coverUrl,
-      'category': instance.category,
-      'description': instance.description,
-      'status': instance.status,
-      'latestChapter': instance.latestChapter,
-      'updatedAt': instance.updatedAt,
-      'rating': instance.rating,
-      'ratingCount': instance.ratingCount,
-      'relatedBooks': instance.relatedBooks,
-      'sourceUrl': instance.sourceUrl,
-      'bookUrl': instance.bookUrl,
-      'originName': instance.originName,
-      'tocUrl': instance.tocUrl,
-    };
+  'id': instance.id,
+  'name': instance.name,
+  'author': instance.author,
+  'coverUrl': instance.coverUrl,
+  'category': instance.category,
+  'description': instance.description,
+  'status': instance.status,
+  'latestChapter': instance.latestChapter,
+  'updatedAt': instance.updatedAt,
+  'rating': instance.rating,
+  'ratingCount': instance.ratingCount,
+  'relatedBooks': instance.relatedBooks,
+  'sourceUrl': instance.sourceUrl,
+  'bookUrl': instance.bookUrl,
+  'originName': instance.originName,
+  'tocUrl': instance.tocUrl,
+};

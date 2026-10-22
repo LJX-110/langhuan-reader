@@ -42,8 +42,7 @@ class _FontSetState extends ConsumerState<FontSet> {
   Color get _divider => _dark ? AppColors.dividerDark : AppColors.divider;
   Color get _previewPaper =>
       _dark ? AppColors.paperNight : AppColors.paperCream;
-  Color get _previewInk =>
-      _dark ? AppColors.inkOnNight : AppColors.inkOnLight;
+  Color get _previewInk => _dark ? AppColors.inkOnNight : AppColors.inkOnLight;
 
   @override
   void initState() {
@@ -63,11 +62,13 @@ class _FontSetState extends ConsumerState<FontSet> {
       final isLocal = key.startsWith(FontCatalog.localPrefix);
       final url = isLocal ? '' : FontCatalog.downloadUrl(key);
       final ready = await FontCatalog.isReady(key);
-      next.add(_FontRow(
-        key: key,
-        urlOrPath: isLocal ? (e.value?.toString() ?? '') : url,
-        ready: ready,
-      ));
+      next.add(
+        _FontRow(
+          key: key,
+          urlOrPath: isLocal ? (e.value?.toString() ?? '') : url,
+          ready: ready,
+        ),
+      );
     }
     next.sort((a, b) {
       int rank(_FontRow r) {
@@ -80,8 +81,9 @@ class _FontSetState extends ConsumerState<FontSet> {
 
       final c = rank(a).compareTo(rank(b));
       if (c != 0) return c;
-      return FontCatalog.displayName(a.key)
-          .compareTo(FontCatalog.displayName(b.key));
+      return FontCatalog.displayName(
+        a.key,
+      ).compareTo(FontCatalog.displayName(b.key));
     });
     if (!mounted) return;
     setState(() {
@@ -93,15 +95,16 @@ class _FontSetState extends ConsumerState<FontSet> {
   }
 
   List<_FontRow> get _systemRows => _rows
-      .where((r) =>
-          r.key == 'Roboto' || r.key == ReadSetting.defaultFontFamily)
+      .where((r) => r.key == 'Roboto' || r.key == ReadSetting.defaultFontFamily)
       .toList();
 
   List<_FontRow> get _onlineRows => _rows
-      .where((r) =>
-          r.key != 'Roboto' &&
-          r.key != ReadSetting.defaultFontFamily &&
-          !r.key.startsWith(FontCatalog.localPrefix))
+      .where(
+        (r) =>
+            r.key != 'Roboto' &&
+            r.key != ReadSetting.defaultFontFamily &&
+            !r.key.startsWith(FontCatalog.localPrefix),
+      )
       .toList();
 
   List<_FontRow> get _localRows =>
@@ -142,8 +145,8 @@ class _FontSetState extends ConsumerState<FontSet> {
       );
       await for (final event in stream) {
         if (event is DownloadProgress) {
-          final v = NumUtil.getNumByValueDouble(event.progress, 2)?.toDouble() ??
-              0.0;
+          final v =
+              NumUtil.getNumByValueDouble(event.progress, 2)?.toDouble() ?? 0.0;
           if (mounted) setState(() => _downloadProgress = v.clamp(0.0, 1.0));
         } else if (event is FileInfo) {
           await FontCatalog.persistDownloaded(row.key, event.file);
@@ -374,12 +377,14 @@ class _FontSetState extends ConsumerState<FontSet> {
                   else
                     _sectionCard(
                       _localRows
-                          .map((r) => _fontTile(
-                                context,
-                                r,
-                                colorModel,
-                                canDelete: true,
-                              ))
+                          .map(
+                            (r) => _fontTile(
+                              context,
+                              r,
+                              colorModel,
+                              canDelete: true,
+                            ),
+                          )
                           .toList(),
                     ),
                   const SizedBox(height: 16),
@@ -454,10 +459,7 @@ class _FontSetState extends ConsumerState<FontSet> {
             ),
             child: Text(
               '当前 · $currentName',
-              style: TextStyle(
-                fontSize: 12,
-                color: _secondary,
-              ),
+              style: TextStyle(fontSize: 12, color: _secondary),
             ),
           ),
         ],
@@ -488,13 +490,15 @@ class _FontSetState extends ConsumerState<FontSet> {
     for (var i = 0; i < children.length; i++) {
       items.add(children[i]);
       if (i != children.length - 1) {
-        items.add(Divider(
-          height: 1,
-          thickness: 0.5,
-          indent: 16,
-          endIndent: 16,
-          color: _divider,
-        ));
+        items.add(
+          Divider(
+            height: 1,
+            thickness: 0.5,
+            indent: 16,
+            endIndent: 16,
+            color: _divider,
+          ),
+        );
       }
     }
     return Container(
@@ -520,11 +524,7 @@ class _FontSetState extends ConsumerState<FontSet> {
           padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
           child: Column(
             children: [
-              Icon(
-                Icons.add_circle_outline,
-                size: 28,
-                color: accent,
-              ),
+              Icon(Icons.add_circle_outline, size: 28, color: accent),
               const SizedBox(height: 10),
               Text(
                 '从文件导入字体',
@@ -560,9 +560,8 @@ class _FontSetState extends ConsumerState<FontSet> {
     final selected = colorModel.font == row.key;
     final isLocal = row.key.startsWith(FontCatalog.localPrefix);
     final downloading = _downloading && _downloadingKey == row.key;
-    final family = selected &&
-            row.key != 'Roboto' &&
-            colorModel.isFontLoaded(row.key)
+    final family =
+        selected && row.key != 'Roboto' && colorModel.isFontLoaded(row.key)
         ? row.key
         : null;
 
@@ -647,8 +646,10 @@ class _FontSetState extends ConsumerState<FontSet> {
                 Icon(Icons.check_circle, size: 20, color: accent)
               else if (!downloading && !row.ready && !isLocal)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: accent.withValues(alpha: .08),
                     borderRadius: BorderRadius.circular(14),
@@ -690,11 +691,7 @@ class _FontRow {
     this.ready = false,
   });
 
-  _FontRow copyWith({
-    String? key,
-    String? urlOrPath,
-    bool? ready,
-  }) {
+  _FontRow copyWith({String? key, String? urlOrPath, bool? ready}) {
     return _FontRow(
       key: key ?? this.key,
       urlOrPath: urlOrPath ?? this.urlOrPath,

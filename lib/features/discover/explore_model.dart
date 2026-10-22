@@ -20,6 +20,7 @@ class ExploreModel with ChangeNotifier {
   List<SearchItem> books = [];
   bool loading = false;
   bool bootstrapped = false;
+
   /// True after a page returns empty results — stops further load-more.
   bool noMore = false;
   int page = 1;

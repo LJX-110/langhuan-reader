@@ -209,9 +209,7 @@ class AnalyzeUrl {
     // Do not join JS statements / non-paths onto the host.
     if (!_looksAbsolute(raw) && _looksLikeJsStatement(raw)) {
       if (kDebugMode) {
-        debugPrint(
-          '[AnalyzeUrl] reject non-URL "${_clip(original)}"',
-        );
+        debugPrint('[AnalyzeUrl] reject non-URL "${_clip(original)}"');
       }
       return '';
     }
@@ -243,8 +241,9 @@ class AnalyzeUrl {
       return true;
     }
     if (t.contains(';') &&
-        RegExp(r'\b(let|var|const|function|getArguments|getVariable)\b')
-            .hasMatch(t)) {
+        RegExp(
+          r'\b(let|var|const|function|getArguments|getVariable)\b',
+        ).hasMatch(t)) {
       return true;
     }
     return false;
@@ -311,7 +310,8 @@ class AnalyzeUrl {
     if (name.isEmpty) return false;
     for (var i = 0; i < name.length; i++) {
       final c = name.codeUnitAt(i);
-      final ok = (c >= 0x30 && c <= 0x39) || // 0-9
+      final ok =
+          (c >= 0x30 && c <= 0x39) || // 0-9
           (c >= 0x41 && c <= 0x5a) || // A-Z
           (c >= 0x61 && c <= 0x7a) || // a-z
           c == 0x21 || // !

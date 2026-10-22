@@ -27,7 +27,6 @@ class CoverPageAnimation extends BaseAnimationPage {
     colors: [Colors.black54, Colors.transparent],
   );
 
-
   void _ensureAnimation(AnimationController controller) {
     if (currentAnimation != null) return;
     currentAnimationTween = Tween(begin: Offset.zero, end: Offset.zero);
@@ -43,7 +42,9 @@ class CoverPageAnimation extends BaseAnimationPage {
 
   @override
   Animation<Offset>? getCancelAnimation(
-      AnimationController controller, GlobalKey canvasKey) {
+    AnimationController controller,
+    GlobalKey canvasKey,
+  ) {
     if ((!isTurnNext && !canTurnPrevious()) || (isTurnNext && !canTurnNext())) {
       return null;
     }
@@ -56,7 +57,9 @@ class CoverPageAnimation extends BaseAnimationPage {
 
   @override
   Animation<Offset>? getConfirmAnimation(
-      AnimationController controller, GlobalKey canvasKey) {
+    AnimationController controller,
+    GlobalKey canvasKey,
+  ) {
     if (!isTurnNext && !canTurnPrevious()) {
       BotToast.showText(text: '已经是第一页');
       return null;
@@ -122,14 +125,16 @@ class CoverPageAnimation extends BaseAnimationPage {
         final dx = mTouch.dx - mStartPoint.dx;
         if (dx.abs() < 2) break;
         isTurnNext = dx < 0;
-        if ((!isTurnNext && canTurnPrevious()) || (isTurnNext && canTurnNext())) {
+        if ((!isTurnNext && canTurnPrevious()) ||
+            (isTurnNext && canTurnNext())) {
           isDragging = true;
         }
         break;
       case TouchEvent.ACTION_UP:
         final dx = mTouch.dx - mStartPoint.dx;
         isTurnNext = dx < 0;
-        if ((!isTurnNext && canTurnPrevious()) || (isTurnNext && canTurnNext())) {
+        if ((!isTurnNext && canTurnPrevious()) ||
+            (isTurnNext && canTurnNext())) {
           isDragging = true;
         }
         break;
@@ -183,7 +188,9 @@ class CoverPageAnimation extends BaseAnimationPage {
 
   @override
   Simulation? getFlingAnimationSimulation(
-      AnimationController controller, DragEndDetails details) {
+    AnimationController controller,
+    DragEndDetails details,
+  ) {
     return null;
   }
 

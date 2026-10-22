@@ -21,7 +21,10 @@ class JsonAnalyzer {
     final v = _query(root, p, collectList: false);
     if (v == null) return '';
     if (v is List) {
-      return v.map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).join('\n');
+      return v
+          .map((e) => e?.toString() ?? '')
+          .where((s) => s.isNotEmpty)
+          .join('\n');
     }
     return v.toString();
   }
@@ -32,7 +35,11 @@ class JsonAnalyzer {
     return p;
   }
 
-  static dynamic _query(dynamic root, String path, {required bool collectList}) {
+  static dynamic _query(
+    dynamic root,
+    String path, {
+    required bool collectList,
+  }) {
     // Recursive descent $..key
     if (path.startsWith('\$..')) {
       final key = path.substring(3);
@@ -109,8 +116,11 @@ class JsonAnalyzer {
     return out;
   }
 
-  static void _walk(dynamic node, void Function(String? key, dynamic value) visit,
-      [String? key]) {
+  static void _walk(
+    dynamic node,
+    void Function(String? key, dynamic value) visit, [
+    String? key,
+  ]) {
     visit(key, node);
     if (node is Map) {
       node.forEach((k, v) => _walk(v, visit, k.toString()));

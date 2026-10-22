@@ -66,8 +66,9 @@ class SourceSwitchService {
       book.name = info.name.isNotEmpty ? info.name : book.name;
       book.author = info.author.isNotEmpty ? info.author : book.author;
       book.coverUrl = info.coverUrl.isNotEmpty ? info.coverUrl : book.coverUrl;
-      book.description =
-          info.description.isNotEmpty ? info.description : book.description;
+      book.description = info.description.isNotEmpty
+          ? info.description
+          : book.description;
       book.latestChapter = toc.last.name;
       book.chapterIndex = mapped;
       book.pageIndex = 0;
@@ -88,11 +89,7 @@ class SourceSwitchService {
           .toList();
 
       await ensureBookRow(book);
-      await chapters.replaceToc(
-        tocEntries,
-        book.id,
-        sourceUrl: book.sourceUrl,
-      );
+      await chapters.replaceToc(tocEntries, book.id, sourceUrl: book.sourceUrl);
       await books.updateSource(
         bookId: book.id,
         sourceUrl: book.sourceUrl,
@@ -102,8 +99,8 @@ class SourceSwitchService {
       );
       final readName =
           (book.chapterIndex >= 0 && book.chapterIndex < tocEntries.length)
-              ? tocEntries[book.chapterIndex].title
-              : book.readingChapter;
+          ? tocEntries[book.chapterIndex].title
+          : book.readingChapter;
       book.readingChapter = readName;
       await books.saveProgress(
         bookId: book.id,

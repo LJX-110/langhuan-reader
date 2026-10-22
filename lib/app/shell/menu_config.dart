@@ -9,8 +9,16 @@ class MenuConfig extends StatefulWidget {
   final double min;
   final double max;
 
-  const MenuConfig(this.sub, this.add, this.change, this.value, this.title,
-      {super.key, this.min = .1, this.max = 4.0});
+  const MenuConfig(
+    this.sub,
+    this.add,
+    this.change,
+    this.value,
+    this.title, {
+    super.key,
+    this.min = .1,
+    this.max = 4.0,
+  });
 
   @override
   State<MenuConfig> createState() => _MenuConfigState();
@@ -22,10 +30,7 @@ class _MenuConfigState extends State<MenuConfig> {
     return Row(
       children: [
         Text(widget.title, style: TextStyle(fontSize: 13.0)),
-        IconButton(
-          onPressed: widget.sub,
-          icon: Icon(Icons.remove),
-        ),
+        IconButton(onPressed: widget.sub, icon: Icon(Icons.remove)),
         Expanded(
           child: SizedBox(
             height: 12,
@@ -48,10 +53,7 @@ class _MenuConfigState extends State<MenuConfig> {
             ),
           ),
         ),
-        IconButton(
-          onPressed: widget.add,
-          icon: Icon(Icons.add),
-        ),
+        IconButton(onPressed: widget.add, icon: Icon(Icons.add)),
       ],
     );
   }

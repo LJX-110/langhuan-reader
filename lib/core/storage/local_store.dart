@@ -51,8 +51,7 @@ class SpUtil {
   static Future<bool> putString(String key, String value) =>
       _p.setString(key, value);
 
-  static List<String> getStringList(String key,
-          {List<String>? defValue}) =>
+  static List<String> getStringList(String key, {List<String>? defValue}) =>
       _p.getStringList(key) ?? defValue ?? <String>[];
 
   static Future<bool> putStringList(String key, List<String> value) =>

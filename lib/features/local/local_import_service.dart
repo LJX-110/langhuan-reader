@@ -19,11 +19,9 @@ class LocalImportResult {
 
 /// Imports a TXT file into the existing books/chapters tables.
 class LocalImportService {
-  LocalImportService({
-    BookRepository? books,
-    ChapterRepository? chapters,
-  })  : _books = books ?? BookRepository.instance,
-        _chapters = chapters ?? ChapterRepository.instance;
+  LocalImportService({BookRepository? books, ChapterRepository? chapters})
+    : _books = books ?? BookRepository.instance,
+      _chapters = chapters ?? ChapterRepository.instance;
 
   static const String sourceUrl = 'local://txt';
 
@@ -37,14 +35,10 @@ class LocalImportService {
     }
     final bytes = await File(path).readAsBytes();
     final text = decodeTxtBytes(bytes);
-    final fileName =
-        file.name.isNotEmpty ? file.name : p.basename(path);
+    final fileName = file.name.isNotEmpty ? file.name : p.basename(path);
     final parsed = TxtBookParser.parse(fileName: fileName, text: text);
     final fingerprint = _fnv1a(bytes);
-    final id = makeBookKey(
-      sourceUrl,
-      '$fileName|${bytes.length}|$fingerprint',
-    );
+    final id = makeBookKey(sourceUrl, '$fileName|${bytes.length}|$fingerprint');
     final existing = await _books.getById(id);
     final now = DateTime.now();
 

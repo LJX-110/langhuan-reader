@@ -44,6 +44,7 @@ class PageTurnCommitter {
   final Future<void> Function(String text) showLoading;
   final void Function() hideLoading;
   final void Function() prunePictures;
+
   /// Warm current + schedule prev/next after page/chapter advance.
   ///
   /// [deferHeavy] postpones picture recording when the page is a cache miss
@@ -140,7 +141,10 @@ class PageTurnCommitter {
   /// Prune + warm after the current frame so animation-complete stays smooth.
   void _deferChapterHousekeeping({required int chapterAfter}) {
     final bookId = activeBookId();
-    PageTurnPerf.log('commit.chapter.housekeeping.schedule', 'ch=$chapterAfter');
+    PageTurnPerf.log(
+      'commit.chapter.housekeeping.schedule',
+      'ch=$chapterAfter',
+    );
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (activeBookId() != bookId) return;
       final b = bookOf();
@@ -181,7 +185,9 @@ class PageTurnCommitter {
     setPrePage(curPageOf());
     final following = nextPageOf();
     final needsLoad =
-        following == null || following.chapterName == '-1' || following.pages.isEmpty;
+        following == null ||
+        following.chapterName == '-1' ||
+        following.pages.isEmpty;
     if (needsLoad) {
       showLoading('正在加载下一章…');
       final target = b.chapterIndex;

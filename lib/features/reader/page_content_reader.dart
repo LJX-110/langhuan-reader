@@ -259,8 +259,9 @@ class _PageContentReaderState extends ConsumerState<PageContentReader>
 
   @override
   Widget build(BuildContext context) {
-    final mode =
-        ref.watch(readModelProvider.select((m) => m.currentAnimationMode));
+    final mode = ref.watch(
+      readModelProvider.select((m) => m.currentAnimationMode),
+    );
     if (_boundMode != mode) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;

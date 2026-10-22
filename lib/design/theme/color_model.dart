@@ -115,8 +115,9 @@ class ColorModel with ChangeNotifier {
     var path = await FontCatalog.resolvePath(fontName);
     if (path.isEmpty) {
       try {
-        final info =
-            await CustomCacheManager.instanceFont.getFileFromCache(fontName);
+        final info = await CustomCacheManager.instanceFont.getFileFromCache(
+          fontName,
+        );
         if (info != null) path = info.file.path;
       } catch (_) {}
     }
@@ -141,7 +142,9 @@ class ColorModel with ChangeNotifier {
   Future<void> ensureCurrentFontLoaded() async {
     final name = ReadSetting.getFontFamily();
     await ensureFontLoaded(name);
-    if (ReadSetting.getFontPath().isEmpty && name != 'Roboto' && name.isNotEmpty) {
+    if (ReadSetting.getFontPath().isEmpty &&
+        name != 'Roboto' &&
+        name.isNotEmpty) {
       final path = await FontCatalog.resolvePath(name);
       if (path.isNotEmpty) ReadSetting.setFontPath(path);
     }

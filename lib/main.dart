@@ -7,9 +7,8 @@ import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-void main() => AppInit.init().then(
-      (value) => runApp(const ProviderScope(child: MyApp())),
-    );
+void main() =>
+    AppInit.init().then((value) => runApp(const ProviderScope(child: MyApp())));
 
 class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
@@ -35,9 +34,7 @@ class _MyAppState extends ConsumerState<MyApp> {
       title: AppBrand.name,
       home: const MainShell(),
       builder: BotToastInit(),
-      navigatorObservers: [
-        BotToastNavigatorObserver(),
-      ],
+      navigatorObservers: [BotToastNavigatorObserver()],
       onGenerateRoute: Routes.router.generator,
       theme: model.theme,
     );

@@ -45,9 +45,7 @@ class CssAnalyzer {
 
     // Jsoup index: a.0 / h3.1 / label.2  → tag:eq(n)
     // Must run before class./id. so "a.0" is not treated as class "0".
-    final idx = RegExp(
-      r'^([a-zA-Z][\w-]*)\.(\d+)(.*)$',
-    ).firstMatch(t);
+    final idx = RegExp(r'^([a-zA-Z][\w-]*)\.(\d+)(.*)$').firstMatch(t);
     if (idx != null) {
       final tag = idx.group(1)!;
       final n = idx.group(2)!;
@@ -143,8 +141,10 @@ class CssAnalyzer {
 
     // Jsoup-style child chain: class.foo@tag.a  → .foo a
     if (s.contains('@')) {
-      final parts =
-          s.split('@').map((e) => e.trim()).where((e) => e.isNotEmpty);
+      final parts = s
+          .split('@')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty);
       final converted = <String>[];
       for (final p in parts) {
         if (_isAttrToken(p)) continue;

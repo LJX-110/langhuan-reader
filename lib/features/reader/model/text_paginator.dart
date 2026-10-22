@@ -75,6 +75,7 @@ class TextPaginator {
     bool shouldJustifyHeight = false,
     void Function(List<TextPage> pages, bool complete)? onProgress,
     bool firstPageFirst = true,
+
     /// When true (default for explicit user actions like font change), cancel
     /// any in-flight progressive job. Neighbor preloads pass false so they
     /// do not abort the chapter currently being laid out.
@@ -200,13 +201,15 @@ class TextPaginator {
         final base = all.length;
         for (var i = 0; i < chunk.pages.length; i++) {
           final pg = chunk.pages[i];
-          all.add(TextPage(
-            pg.lines,
-            pg.height,
-            pageIndex: base + i,
-            charStart: pg.charStart,
-            charEnd: pg.charEnd,
-          ));
+          all.add(
+            TextPage(
+              pg.lines,
+              pg.height,
+              pageIndex: base + i,
+              charStart: pg.charStart,
+              charEnd: pg.charEnd,
+            ),
+          );
         }
         startChar = chunk.nextChar;
         complete = chunk.complete;

@@ -54,14 +54,14 @@ class PageTurnPerf {
     int slowUs = slowDrawUs,
   }) {
     if (!enabled) return;
-    final expensive = (ms != null && ms >= slowMs) ||
-        (us != null && us >= slowUs);
+    final expensive =
+        (ms != null && ms >= slowMs) || (us != null && us >= slowUs);
     if (!expensive) return;
     final timing = ms != null
         ? 'ms=$ms'
         : us != null
-            ? 'us=$us'
-            : '';
+        ? 'us=$us'
+        : '';
     log(event, [timing, detail].where((s) => s.isNotEmpty).join(' '));
   }
 

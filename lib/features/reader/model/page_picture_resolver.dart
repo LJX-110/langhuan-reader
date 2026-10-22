@@ -306,10 +306,7 @@ class PagePictureResolver {
         return null;
       }
       if (following.pages.isEmpty) {
-        PageTurnPerf.log(
-          'pic.miss',
-          'role=next key=$key reason=empty_pages',
-        );
+        PageTurnPerf.log('pic.miss', 'role=next key=$key reason=empty_pages');
         return null;
       }
       pic = drawContent(following, 0);

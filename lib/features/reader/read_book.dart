@@ -60,10 +60,15 @@ class _ReadBookState extends ConsumerState<ReadBook>
       AppLog.i(
         'Reader',
         'open_reader book=${widget.book.id} '
-        'source=${widget.book.originName.isNotEmpty ? widget.book.originName : widget.book.sourceUrl}',
+            'source=${widget.book.originName.isNotEmpty ? widget.book.originName : widget.book.sourceUrl}',
       );
     } catch (e, st) {
-      AppLog.e('Reader', 'hydrateReadingSession failed', error: e, stackTrace: st);
+      AppLog.e(
+        'Reader',
+        'hydrateReadingSession failed',
+        error: e,
+        stackTrace: st,
+      );
       if (!readModel.sessionReady) {
         await readModel.failOpen(e);
       }
@@ -107,14 +112,17 @@ class _ReadBookState extends ConsumerState<ReadBook>
         ? readModel.chapters[cur].title
         : b.readingChapter;
     final allowProgressSave = readModel.allowProgressSave == true;
-    final Future<void> done =
-        flush ? readModel.flushProgressSave() : readModel.saveData();
-    unawaited(done.then((_) {
-      if (!allowProgressSave) return;
-      shelfModel.updReadBookProcess(
-        UpdateBookProcess(id, cur, idx, chapterName: name),
-      );
-    }));
+    final Future<void> done = flush
+        ? readModel.flushProgressSave()
+        : readModel.saveData();
+    unawaited(
+      done.then((_) {
+        if (!allowProgressSave) return;
+        shelfModel.updReadBookProcess(
+          UpdateBookProcess(id, cur, idx, chapterName: name),
+        );
+      }),
+    );
   }
 
   bool popWithMenuAndChapterView() {
@@ -144,9 +152,10 @@ class _ReadBookState extends ConsumerState<ReadBook>
   Widget build(BuildContext context) {
     final isScroll = ref.watch(readModelProvider.select((m) => m.isScrollMode));
     final showMenu = ref.watch(readModelProvider.select((m) => m.showMenu));
-    final sessionReady = ref.watch(readModelProvider.select((m) => m.sessionReady));
-    final paperTheme =
-        ref.watch(readModelProvider.select((m) => m.paperTheme));
+    final sessionReady = ref.watch(
+      readModelProvider.select((m) => m.sessionReady),
+    );
+    final paperTheme = ref.watch(readModelProvider.select((m) => m.paperTheme));
     final paper = ReadSetting.paperColor(
       paperTheme == PaperTheme.night ||
               SpUtil.getBool(PrefsKeys.dark, defValue: false)
@@ -160,8 +169,7 @@ class _ReadBookState extends ConsumerState<ReadBook>
         if (didPop) return;
         if (!popWithMenuAndChapterView()) return;
         final bookId = readModel.book?.id;
-        if (bookId != null &&
-            !ref.read(shelfModelProvider).isOnShelf(bookId)) {
+        if (bookId != null && !ref.read(shelfModelProvider).isOnShelf(bookId)) {
           await confirmAddToShelf(context);
         }
         if (context.mounted) {
@@ -176,10 +184,7 @@ class _ReadBookState extends ConsumerState<ReadBook>
         body: Stack(
           children: [
             // Instant paper fill under the canvas (matches reader theme).
-            ColoredBox(
-              color: paper,
-              child: const SizedBox.expand(),
-            ),
+            ColoredBox(color: paper, child: const SizedBox.expand()),
             // Page-turn canvas vs vertical scroll list.
             RepaintBoundary(
               child: isScroll
@@ -210,9 +215,9 @@ class _ReadBookState extends ConsumerState<ReadBook>
           TextButton(
             onPressed: () async {
               readModel.allowProgressSave = false;
-              await ref
-                  .read(shelfModelProvider)
-                  .delLocalCache([widget.book.id]);
+              await ref.read(shelfModelProvider).delLocalCache([
+                widget.book.id,
+              ]);
               if (dialogContext.mounted) {
                 Navigator.pop(dialogContext);
               }

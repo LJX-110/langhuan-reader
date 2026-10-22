@@ -36,10 +36,13 @@ class Routes {
   }
 
   // 对参数进行encode，解决参数中有特殊字符，影响fluro路由匹配
-  static Future navigateTo(BuildContext context, String path,
-      {Map<String, dynamic>? params,
-      TransitionType transition = TransitionType.fadeIn,
-      bool replace = false}) {
+  static Future navigateTo(
+    BuildContext context,
+    String path, {
+    Map<String, dynamic>? params,
+    TransitionType transition = TransitionType.fadeIn,
+    bool replace = false,
+  }) {
     String query = "";
 
     if (params != null) {
@@ -56,7 +59,11 @@ class Routes {
       }
     }
     path = path + query;
-    return router.navigateTo(context, path,
-        transition: transition, replace: replace);
+    return router.navigateTo(
+      context,
+      path,
+      transition: transition,
+      replace: replace,
+    );
   }
 }

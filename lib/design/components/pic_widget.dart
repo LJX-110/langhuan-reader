@@ -11,7 +11,8 @@ class PicWidget extends StatelessWidget {
   final double radius;
 
   const PicWidget(
-    this.url, {super.key, 
+    this.url, {
+    super.key,
     this.height = 115,
     this.width = 97,
     this.fit = BoxFit.cover,
@@ -20,11 +21,11 @@ class PicWidget extends StatelessWidget {
   });
 
   Widget get _placeholder => Image.asset(
-        'images/nocover.jpg',
-        width: width,
-        height: height,
-        fit: BoxFit.cover,
-      );
+    'images/nocover.jpg',
+    width: width,
+    height: height,
+    fit: BoxFit.cover,
+  );
 
   /// Normalize cover URLs: trim, protocol-relative, common placeholders → empty.
   static String normalizeUrl(String raw) {
@@ -51,9 +52,7 @@ class PicWidget extends StatelessWidget {
   Map<String, String> _headersFor(String src) {
     final host = Uri.tryParse(src)?.host ?? '';
     // Many novel CDNs check UA / Accept; some want a same-site referer.
-    final referer = host.isEmpty
-        ? 'https://www.google.com/'
-        : 'https://$host/';
+    final referer = host.isEmpty ? 'https://www.google.com/' : 'https://$host/';
     return {
       'User-Agent':
           'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
@@ -85,8 +84,7 @@ class PicWidget extends StatelessWidget {
     if (src.isEmpty) {
       child = _placeholder;
     } else {
-      final cacheW =
-          (width * MediaQuery.devicePixelRatioOf(context)).round();
+      final cacheW = (width * MediaQuery.devicePixelRatioOf(context)).round();
       child = ExtendedImage.network(
         src,
         width: width,

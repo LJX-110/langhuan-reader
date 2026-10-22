@@ -136,9 +136,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                 TextButton.icon(
                   onPressed: () async {
                     await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const SourceRepoPage(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const SourceRepoPage()),
                     );
                     if (mounted) ref.read(sourceModelProvider).load();
                   },
@@ -160,7 +158,8 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                       // Very large payloads OOM the clipboard MethodChannel.
                       if (json.length > 8 * 1024 * 1024) {
                         BotToast.showText(
-                          text: '书源过大（${(json.length / (1024 * 1024)).toStringAsFixed(1)}MB），'
+                          text:
+                              '书源过大（${(json.length / (1024 * 1024)).toStringAsFixed(1)}MB），'
                               '无法复制到剪贴板，请分批导出或从源文件备份',
                         );
                         return;
@@ -182,94 +181,92 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
       body: model.loading && model.sources.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : model.sources.isEmpty
-              ? _empty(context, model)
-              : ListView.separated(
-                  itemCount: model.sources.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (ctx, i) {
-                    final s = model.sources[i];
-                    final url = s.bookSourceUrl;
-                    final selected = _selected.contains(url);
-                    return ListTile(
-                      onTap: _selectMode
-                          ? () {
-                              setState(() {
-                                if (selected) {
-                                  _selected.remove(url);
-                                } else {
-                                  _selected.add(url);
-                                }
-                              });
+          ? _empty(context, model)
+          : ListView.separated(
+              itemCount: model.sources.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (ctx, i) {
+                final s = model.sources[i];
+                final url = s.bookSourceUrl;
+                final selected = _selected.contains(url);
+                return ListTile(
+                  onTap: _selectMode
+                      ? () {
+                          setState(() {
+                            if (selected) {
+                              _selected.remove(url);
+                            } else {
+                              _selected.add(url);
                             }
-                          : null,
-                      leading: _selectMode
-                          ? Checkbox(
-                              value: selected,
-                              onChanged: (v) {
-                                setState(() {
-                                  if (v == true) {
-                                    _selected.add(url);
-                                  } else {
-                                    _selected.remove(url);
-                                  }
-                                });
-                              },
-                            )
-                          : null,
-                      title: Text(
-                        s.bookSourceName.isEmpty
-                            ? s.bookSourceUrl
-                            : s.bookSourceName,
-                      ),
-                      subtitle: Text(
-                        [
-                          if (s.bookSourceGroup.isNotEmpty) s.bookSourceGroup,
-                          s.bookSourceUrl,
-                        ].where((e) => e.isNotEmpty).join(' · '),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: _selectMode
-                          ? null
-                          : Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Switch(
-                                  value: s.enabled,
-                                  onChanged: (_) => model.toggle(s),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline),
-                                  onPressed: () async {
-                                    final ok = await showDialog<bool>(
-                                      context: context,
-                                      builder: (_) => AlertDialog(
-                                        title: const Text('删除书源'),
-                                        content: Text(
-                                          '确定删除「${s.bookSourceName}」？',
-                                        ),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context, false),
-                                            child: const Text('取消'),
-                                          ),
-                                          TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context, true),
-                                            child: const Text('删除'),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                    if (ok == true) await model.remove(s);
-                                  },
-                                ),
-                              ],
+                          });
+                        }
+                      : null,
+                  leading: _selectMode
+                      ? Checkbox(
+                          value: selected,
+                          onChanged: (v) {
+                            setState(() {
+                              if (v == true) {
+                                _selected.add(url);
+                              } else {
+                                _selected.remove(url);
+                              }
+                            });
+                          },
+                        )
+                      : null,
+                  title: Text(
+                    s.bookSourceName.isEmpty
+                        ? s.bookSourceUrl
+                        : s.bookSourceName,
+                  ),
+                  subtitle: Text(
+                    [
+                      if (s.bookSourceGroup.isNotEmpty) s.bookSourceGroup,
+                      s.bookSourceUrl,
+                    ].where((e) => e.isNotEmpty).join(' · '),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: _selectMode
+                      ? null
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Switch(
+                              value: s.enabled,
+                              onChanged: (_) => model.toggle(s),
                             ),
-                    );
-                  },
-                ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () async {
+                                final ok = await showDialog<bool>(
+                                  context: context,
+                                  builder: (_) => AlertDialog(
+                                    title: const Text('删除书源'),
+                                    content: Text('确定删除「${s.bookSourceName}」？'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, false),
+                                        child: const Text('取消'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, true),
+                                        child: const Text('删除'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (ok == true) await model.remove(s);
+                              },
+                            ),
+                          ],
+                        ),
+                );
+              },
+            ),
       bottomNavigationBar: _selectMode
           ? SafeArea(
               child: Padding(
@@ -311,7 +308,11 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.library_books_outlined, size: 56, color: Colors.grey),
+            const Icon(
+              Icons.library_books_outlined,
+              size: 56,
+              color: Colors.grey,
+            ),
             const SizedBox(height: 12),
             const Text('还没有书源', style: TextStyle(fontSize: 18)),
             const SizedBox(height: 8),
@@ -369,7 +370,10 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                   children: [
                     const Text(
                       '导入书源',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -403,7 +407,10 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                         ),
                         const SizedBox(width: 8),
                         ActionChip(
-                          avatar: const Icon(Icons.cloud_download_outlined, size: 18),
+                          avatar: const Icon(
+                            Icons.cloud_download_outlined,
+                            size: 18,
+                          ),
                           label: const Text('私有仓库'),
                           onPressed: () async {
                             Navigator.pop(ctx);

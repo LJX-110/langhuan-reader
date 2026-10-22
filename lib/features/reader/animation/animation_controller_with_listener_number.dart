@@ -13,9 +13,7 @@ class AnimationControllerWithListenerNumber extends AnimationController {
     super.debugLabel,
     super.animationBehavior,
     required super.vsync,
-  }) : super(
-          lowerBound: 0.0,
-          upperBound: 1.0);
+  }) : super(lowerBound: 0.0, upperBound: 1.0);
 
   /// Creates an animation controller with no upper or lower bound for its value.
   AnimationControllerWithListenerNumber.unbounded({

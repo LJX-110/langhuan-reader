@@ -110,12 +110,7 @@ class ChapterRepository {
       if (oldIds.contains(c.id)) {
         batch.update(
           'chapters',
-          {
-            'title': c.title,
-            'url': c.url,
-            'source_url': sourceUrl,
-            'ord': ord,
-          },
+          {'title': c.title, 'url': c.url, 'source_url': sourceUrl, 'ord': ord},
           where: 'id = ?',
           whereArgs: [c.id],
         );
@@ -152,24 +147,20 @@ class ChapterRepository {
     final db = await _database;
     final batch = db.batch();
     for (final c in chapters) {
-      batch.insert(
-        'chapters',
-        {
-          'id': c.id,
-          'book_id': bookId,
-          'title': c.title,
-          'url': c.url,
-          'source_url': sourceUrl,
-          'ord': c.ord,
-          'body': '',
-          'has_body': 0,
-          'content_len': 0,
-          'pages_json': null,
-          'layout_fp': null,
-          'pages_cached_at': 0,
-        },
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
+      batch.insert('chapters', {
+        'id': c.id,
+        'book_id': bookId,
+        'title': c.title,
+        'url': c.url,
+        'source_url': sourceUrl,
+        'ord': c.ord,
+        'body': '',
+        'has_body': 0,
+        'content_len': 0,
+        'pages_json': null,
+        'layout_fp': null,
+        'pages_cached_at': 0,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
     }
     await batch.commit(noResult: true);
   }
@@ -224,7 +215,7 @@ class ChapterRepository {
 
   /// Batch open path for cur±1 neighbor preload (one SQLite query).
   Future<Map<String, ({String body, String? pagesJson, String? layoutFp})>>
-      getChapterCaches(List<String> chapterIds) async {
+  getChapterCaches(List<String> chapterIds) async {
     final ids = chapterIds.where((e) => e.isNotEmpty).toSet().toList();
     if (ids.isEmpty) return const {};
     final db = await _database;
@@ -306,7 +297,8 @@ class ChapterRepository {
   }
 
   Future<({String? pagesJson, String? layoutFp})> getPageLayout(
-      String chapterId) async {
+    String chapterId,
+  ) async {
     final db = await _database;
     final rows = await db.query(
       'chapters',
@@ -345,11 +337,7 @@ class ChapterRepository {
     final db = await _database;
     await db.update(
       'chapters',
-      {
-        'pages_json': null,
-        'layout_fp': null,
-        'pages_cached_at': 0,
-      },
+      {'pages_json': null, 'layout_fp': null, 'pages_cached_at': 0},
       where: 'id = ?',
       whereArgs: [chapterId],
     );
@@ -452,11 +440,7 @@ class ChapterRepository {
     for (final id in toClear) {
       batch.update(
         'chapters',
-        {
-          'pages_json': null,
-          'layout_fp': null,
-          'pages_cached_at': 0,
-        },
+        {'pages_json': null, 'layout_fp': null, 'pages_cached_at': 0},
         where: 'id = ?',
         whereArgs: [id],
       );

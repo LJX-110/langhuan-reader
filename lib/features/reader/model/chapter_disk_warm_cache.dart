@@ -6,10 +6,7 @@ import 'package:langhuan/features/reader/model/text_paginator.dart';
 
 /// In-memory warm window of disk chapter body + page layout (cur±1).
 class ChapterDiskWarmCache {
-  ChapterDiskWarmCache({
-    required this.chapters,
-    required this.paginator,
-  });
+  ChapterDiskWarmCache({required this.chapters, required this.paginator});
 
   final ChapterRepository chapters;
   final TextPaginator paginator;
@@ -24,10 +21,7 @@ class ChapterDiskWarmCache {
   void remove(String chapterId) => _warm.remove(chapterId);
 
   /// Prefetch disk rows for [centerIdx] and neighbors into [_warm].
-  Future<void> warmAround(
-    List<ChapterTocEntry> toc,
-    int centerIdx,
-  ) async {
+  Future<void> warmAround(List<ChapterTocEntry> toc, int centerIdx) async {
     if (toc.isEmpty) return;
     final ids = <String>[];
     for (final i in [centerIdx - 1, centerIdx, centerIdx + 1]) {
@@ -47,10 +41,7 @@ class ChapterDiskWarmCache {
   }
 
   /// True when chapter body + fingerprinted page layout are both on disk.
-  Future<bool> hasPageCache(
-    List<ChapterTocEntry> toc,
-    int idx,
-  ) async {
+  Future<bool> hasPageCache(List<ChapterTocEntry> toc, int idx) async {
     if (idx < 0 || idx >= toc.length) return false;
     final chapterId = toc[idx].id;
     try {

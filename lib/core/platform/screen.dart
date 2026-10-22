@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 class Screen {
-  static MediaQueryData get _mediaQuery =>
-      MediaQueryData.fromView(WidgetsBinding.instance.platformDispatcher.views.first);
+  static MediaQueryData get _mediaQuery => MediaQueryData.fromView(
+    WidgetsBinding.instance.platformDispatcher.views.first,
+  );
 
   static double get width {
     return _mediaQuery.size.width;

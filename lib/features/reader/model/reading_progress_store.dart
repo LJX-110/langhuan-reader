@@ -90,8 +90,8 @@ class ReadingProgressStore {
     }
     final chapterName =
         (b.readingChapter.isNotEmpty && b.readingChapter != '加载中')
-            ? b.readingChapter
-            : name;
+        ? b.readingChapter
+        : name;
 
     await _ensureBookRow(b);
     if (tocSnapshot.isNotEmpty) {

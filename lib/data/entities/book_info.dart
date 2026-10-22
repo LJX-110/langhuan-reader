@@ -54,19 +54,19 @@ class BookInfo {
   });
 
   BookInfo.id(this.id, this.name, this.coverUrl)
-      : author = '',
-        category = '',
-        description = '',
-        status = '',
-        latestChapter = '',
-        updatedAt = '',
-        rating = 0,
-        ratingCount = 0,
-        relatedBooks = const [],
-        sourceUrl = '',
-        bookUrl = '',
-        originName = '',
-        tocUrl = '';
+    : author = '',
+      category = '',
+      description = '',
+      status = '',
+      latestChapter = '',
+      updatedAt = '',
+      rating = 0,
+      ratingCount = 0,
+      relatedBooks = const [],
+      sourceUrl = '',
+      bookUrl = '',
+      originName = '',
+      tocUrl = '';
 
   Book toBook() {
     return Book(

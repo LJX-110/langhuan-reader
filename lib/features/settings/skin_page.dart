@@ -16,10 +16,7 @@ class Skin extends ConsumerWidget {
           final divider = Theme.of(context).dividerColor;
           final accent = Theme.of(context).colorScheme.primary;
           return Scaffold(
-            appBar: AppBar(
-              title: const Text('主题'),
-              centerTitle: false,
-            ),
+            appBar: AppBar(title: const Text('主题'), centerTitle: false),
             body: ListView.separated(
               padding: const EdgeInsets.symmetric(vertical: 8),
               itemCount: LanghuanThemes.all.length,

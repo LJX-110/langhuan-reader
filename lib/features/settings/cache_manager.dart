@@ -54,18 +54,18 @@ class _CacheManagerState extends State<CacheManager> {
   Future<void> _clearPageLayouts() async {
     await _chapters.clearAllPageLayouts();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已清除分页缓存')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已清除分页缓存')));
     await _reload();
   }
 
   Future<void> _clearBookBodies(String bookId) async {
     await _chapters.clearBook(bookId);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已清除本书章节缓存')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已清除本书章节缓存')));
     await _reload();
   }
 
@@ -111,10 +111,7 @@ class _CacheManagerState extends State<CacheManager> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    '书籍章节缓存',
-                    style: theme.textTheme.titleMedium,
-                  ),
+                  Text('书籍章节缓存', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 8),
                   if (_rows.isEmpty)
                     const Padding(
@@ -134,7 +131,9 @@ class _CacheManagerState extends State<CacheManager> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                row.book.name.isEmpty ? row.book.id : row.book.name,
+                                row.book.name.isEmpty
+                                    ? row.book.id
+                                    : row.book.name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.titleSmall,
@@ -160,7 +159,8 @@ class _CacheManagerState extends State<CacheManager> {
                                   IconButton(
                                     tooltip: '清除章节正文与分页',
                                     icon: const Icon(Icons.delete_outline),
-                                    onPressed: () => _clearBookBodies(row.book.id),
+                                    onPressed: () =>
+                                        _clearBookBodies(row.book.id),
                                   ),
                                 ],
                               ),

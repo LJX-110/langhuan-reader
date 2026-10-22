@@ -139,12 +139,7 @@ class BookRepository {
     if (updatedAt != null) values['updated_at'] = updatedAt;
     if (coverUrl != null) values['cover_url'] = coverUrl;
     if (values.isEmpty) return;
-    await db.update(
-      'books',
-      values,
-      where: 'id = ?',
-      whereArgs: [bookId],
-    );
+    await db.update('books', values, where: 'id = ?', whereArgs: [bookId]);
   }
 
   Future<void> setHasUpdate(String bookId, int hasUpdate) async {
@@ -161,10 +156,7 @@ class BookRepository {
     final db = await _database;
     await db.update(
       'books',
-      {
-        'sort_time': DateUtil.getNowDateMs(),
-        'has_update': 0,
-      },
+      {'sort_time': DateUtil.getNowDateMs(), 'has_update': 0},
       where: 'id = ?',
       whereArgs: [bookId],
     );
@@ -228,8 +220,7 @@ class BookRepository {
       'latest_chapter': book.latestChapter.isNotEmpty
           ? book.latestChapter
           : book.readingChapter,
-      'sort_time':
-          book.sortTime == 0 ? DateUtil.getNowDateMs() : book.sortTime,
+      'sort_time': book.sortTime == 0 ? DateUtil.getNowDateMs() : book.sortTime,
       'has_update': book.hasUpdate,
       'updated_at': book.updatedAt,
     };

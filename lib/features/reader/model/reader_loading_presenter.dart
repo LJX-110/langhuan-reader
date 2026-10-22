@@ -32,10 +32,7 @@ class ReaderLoadingPresenter {
   /// shelf re-open doesn't flash "加载中").
   /// [hint]: body text. Empty keeps a blank paper page — preferred when local
   /// cache is about to paint within a frame or two.
-  static ReadPage syncPlaceholder(
-    String hint, {
-    String chapterTitle = '加载中',
-  }) {
+  static ReadPage syncPlaceholder(String hint, {String chapterTitle = '加载中'}) {
     final page = ReadPage.kong();
     page.chapterName = chapterTitle.isNotEmpty ? chapterTitle : '加载中';
     page.chapterContent = hint;
@@ -63,9 +60,7 @@ class ReaderLoadingPresenter {
     if (page.pages.isEmpty) {
       // Absolute fallback so drawContent never paints a blank canvas.
       page.pages = [
-        TextPage([
-          TextLine.simple(message, height: 24),
-        ], 24),
+        TextPage([TextLine.simple(message, height: 24)], 24),
       ];
     }
     return page;

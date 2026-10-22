@@ -76,7 +76,8 @@ class ChapterContentLoader {
     }
 
     final cached = r.chapterContent;
-    final cacheLooksBad = cached.isEmpty ||
+    final cacheLooksBad =
+        cached.isEmpty ||
         (cached.length < 120 &&
             !cached.startsWith('章节内容加载失败') &&
             !cached.startsWith('书源不存在') &&
@@ -93,12 +94,12 @@ class ChapterContentLoader {
         contentSource = 'network';
         cachedPagesJson = null;
         cachedLayoutFp = null;
-        await _chapters.updateBodies([ChapterNode(r.chapterContent, chapterId)]);
+        await _chapters.updateBodies([
+          ChapterNode(r.chapterContent, chapterId),
+        ]);
         chapters[idx].hasBody = true;
       } else if (r.chapterContent.isEmpty) {
-        r.chapterContent = fresh.isNotEmpty
-            ? fresh
-            : '章节内容加载失败，请检查书源或换源后重试';
+        r.chapterContent = fresh.isNotEmpty ? fresh : '章节内容加载失败，请检查书源或换源后重试';
         contentSource = fresh.isNotEmpty ? 'network-error-text' : 'fail';
       }
     }
@@ -118,8 +119,7 @@ class ChapterContentLoader {
       if (cachedPagesJson != null &&
           cachedPagesJson.isNotEmpty &&
           cachedLayoutFp == fp) {
-        cachedPages =
-            await ChapterRepository.decodePagesJson(cachedPagesJson);
+        cachedPages = await ChapterRepository.decodePagesJson(cachedPagesJson);
         if (cachedPages != null && cachedPages.isNotEmpty) {
           AppLog.i(
             'Read',
@@ -180,8 +180,12 @@ class ChapterContentLoader {
           layoutComplete = r.pages.isNotEmpty;
         }
       } catch (e, st) {
-        AppLog.e('Read', 'paginateProgressive failed idx=$idx',
-            error: e, stackTrace: st);
+        AppLog.e(
+          'Read',
+          'paginateProgressive failed idx=$idx',
+          error: e,
+          stackTrace: st,
+        );
         r.pages = const [];
         layoutComplete = false;
       }
@@ -191,8 +195,12 @@ class ChapterContentLoader {
           r.pages = await _paginator.paginate(r);
           layoutComplete = r.pages.isNotEmpty;
         } catch (e, st) {
-          AppLog.e('Read', 'parseContentAsync retry failed idx=$idx',
-              error: e, stackTrace: st);
+          AppLog.e(
+            'Read',
+            'parseContentAsync retry failed idx=$idx',
+            error: e,
+            stackTrace: st,
+          );
         }
         if (r.pages.isEmpty) {
           r.pages = fallbackPages(r.chapterContent);
@@ -241,7 +249,9 @@ class ChapterContentLoader {
   List<TextPage> fallbackPages(String content) {
     final text = content.trim();
     if (text.isEmpty) {
-      return [TextPage([TextLine.simple('内容为空')], 24)];
+      return [
+        TextPage([TextLine.simple('内容为空')], 24),
+      ];
     }
     try {
       final pages = _paginator.paginateSync(
@@ -251,21 +261,20 @@ class ChapterContentLoader {
       if (pages.isNotEmpty) return pages;
     } catch (_) {}
     // Absolute last resort: one long line page.
-    return [TextPage([TextLine.simple(text)], 24)];
+    return [
+      TextPage([TextLine.simple(text)], 24),
+    ];
   }
 
-  void _logContentDiag(
-    int idx,
-    String name,
-    String content,
-    String source,
-  ) {
+  void _logContentDiag(int idx, String name, String content, String source) {
     final text = content;
     final len = text.length;
     final nl = '\n'.allMatches(text).length;
     final crlf = '\r\n'.allMatches(text).length;
-    final br =
-        RegExp(r'<br\s*/?>', caseSensitive: false).allMatches(text).length;
+    final br = RegExp(
+      r'<br\s*/?>',
+      caseSensitive: false,
+    ).allMatches(text).length;
     final pTag = RegExp(r'</p>', caseSensitive: false).allMatches(text).length;
     final lines = text.split('\n');
     var maxLine = 0;

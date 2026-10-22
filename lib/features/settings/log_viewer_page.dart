@@ -46,9 +46,9 @@ class _LogViewerState extends State<LogViewer> {
     final text = AppLog.dump();
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('日志已复制到剪贴板')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('日志已复制到剪贴板')));
   }
 
   @override
@@ -88,8 +88,8 @@ class _LogViewerState extends State<LogViewer> {
                 final color = line.contains(' E/')
                     ? Colors.red.shade700
                     : line.contains(' W/')
-                        ? Colors.orange.shade800
-                        : null;
+                    ? Colors.orange.shade800
+                    : null;
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 1),
                   child: SelectableText(
