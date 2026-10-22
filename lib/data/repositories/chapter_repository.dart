@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:langhuan/core/database/reader_database.dart';
 import 'package:langhuan/data/entities/chapter_node.dart';
 import 'package:langhuan/data/entities/chapter_toc_entry.dart';
+import 'package:langhuan/data/entities/local_chapter.dart';
 import 'package:langhuan/data/entities/text_page.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
@@ -169,6 +170,36 @@ class ChapterRepository {
         },
         conflictAlgorithm: ConflictAlgorithm.ignore,
       );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// Replace a local book's chapters with parsed TXT bodies in one batch.
+  Future<void> replaceLocalChapters(
+    String bookId,
+    List<LocalChapter> chapters, {
+    String sourceUrl = 'local://txt',
+  }) async {
+    final db = await _database;
+    await db.delete('chapters', where: 'book_id = ?', whereArgs: [bookId]);
+    if (chapters.isEmpty) return;
+    final batch = db.batch();
+    for (var i = 0; i < chapters.length; i++) {
+      final chapter = chapters[i];
+      batch.insert('chapters', {
+        'id': '${bookId}_$i',
+        'book_id': bookId,
+        'title': chapter.title,
+        'url': '',
+        'source_url': sourceUrl,
+        'ord': i,
+        'body': chapter.body,
+        'has_body': chapter.body.isEmpty ? 0 : 1,
+        'content_len': chapter.body.length,
+        'pages_json': null,
+        'layout_fp': null,
+        'pages_cached_at': 0,
+      });
     }
     await batch.commit(noResult: true);
   }

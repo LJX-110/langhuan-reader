@@ -17,8 +17,9 @@ class SealMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = filled ? AppColors.seal : Colors.transparent;
-    final foreground = filled ? AppColors.paperLight : AppColors.seal;
+    final accent = AppColors.gold;
+    final color = filled ? accent : Colors.transparent;
+    final foreground = filled ? AppColors.black : accent;
     return Container(
       width: size,
       height: size,
@@ -28,8 +29,8 @@ class SealMark extends StatelessWidget {
         borderRadius: BorderRadius.circular(3),
         border: Border.all(
           color: filled
-              ? AppColors.seal.withValues(alpha: .35)
-              : AppColors.seal.withValues(alpha: .55),
+              ? accent.withValues(alpha: .35)
+              : accent.withValues(alpha: .55),
           width: .5,
         ),
       ),

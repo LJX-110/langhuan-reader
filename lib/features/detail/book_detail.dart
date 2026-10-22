@@ -7,7 +7,6 @@ import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/core/storage/local_store.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/entities/book_info.dart';
-import 'package:langhuan/core/events/event.dart';
 import 'package:langhuan/app/router/routes.dart';
 import 'package:langhuan/app/providers.dart';
 import 'package:langhuan/features/detail/source_switch_sheet.dart';
@@ -120,19 +119,6 @@ class _BookDetailState extends ConsumerState<BookDetail> {
       foregroundColor: _primary,
       systemOverlayStyle:
           _dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
-      actions: [
-        TextButton(
-          onPressed: () {
-            Navigator.of(context).popUntil(ModalRoute.withName('/'));
-            eventBus.fire(NavEvent(0));
-          },
-          child: Text(
-            '书架',
-            style: TextStyle(color: _primary, fontSize: 15),
-          ),
-        ),
-        const SizedBox(width: 4),
-      ],
     );
   }
 
@@ -141,58 +127,63 @@ class _BookDetailState extends ConsumerState<BookDetail> {
   // ---------------------------------------------------------------------------
 
   Widget _heroCard() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppDimens.pagePadding),
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(AppDimens.cardRadius),
-        boxShadow: AppShadows.softBar,
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Cover
           Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppDimens.coverRadius),
+              borderRadius: BorderRadius.circular(4),
               boxShadow: AppShadows.cover,
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(AppDimens.coverRadius),
-              child: PicWidget(book.coverUrl, height: 128, width: 92),
+              borderRadius: BorderRadius.circular(4),
+              child: PicWidget(book.coverUrl, height: 136, width: 98),
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                _displayText(book.name, fallback: '未知书名'),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  height: 1.3,
-                  color: _primary,
+                  _displayText(book.name, fallback: '未知书名'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                    height: 1.3,
+                    color: _primary,
+                  ),
                 ),
-              ),
-                const SizedBox(height: 8),
-                _metaRow(
-                  Icons.person_outline,
+                const SizedBox(height: 6),
+                Text(
                   _displayText(book.author, fallback: '佚名'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: _secondary),
                 ),
                 if (_hasText(book.category)) ...[
-                  const SizedBox(height: 4),
-                  _metaRow(Icons.category_outlined, book.category.trim()),
+                  const SizedBox(height: 3),
+                  Text(
+                    book.category.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11, color: _secondary),
+                  ),
                 ],
                 if (_hasText(book.originName)) ...[
-                  const SizedBox(height: 4),
-                  _metaRow(Icons.cloud_outlined, book.originName.trim()),
+                  const SizedBox(height: 3),
+                  Text(
+                    book.originName.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11, color: _secondary),
+                  ),
                 ],
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
@@ -200,21 +191,19 @@ class _BookDetailState extends ConsumerState<BookDetail> {
                     if (info.status.isNotEmpty)
                       _chip(
                         info.status,
-                        bg: AppColors.accentSoftOf(context),
+                        bg: AppColors.brandSoft,
                         fg: AppColors.accentOf(context),
                       ),
                     if (info.rating > 0)
                       _chip(
-                        '${info.rating.toStringAsFixed(1)} 分',
-                        bg: const Color(0x1AFA9D3B),
-                        fg: const Color(0xFFFA9D3B),
+                        '评分 ${info.rating.toStringAsFixed(1)}',
+                        bg: AppColors.paperDeep,
+                        fg: _secondary,
                       ),
                     if (info.ratingCount > 0)
                       _chip(
                         '${_formatCount(info.ratingCount)} 人气',
-                        bg: _dark
-                            ? const Color(0x22FFFFFF)
-                            : const Color(0x0F000000),
+                        bg: AppColors.paperDeep,
                         fg: _secondary,
                       ),
                   ],
@@ -227,29 +216,13 @@ class _BookDetailState extends ConsumerState<BookDetail> {
     );
   }
 
-  Widget _metaRow(IconData icon, String text) {
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: _secondary),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Text(
-            text,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 13, color: _secondary, height: 1.2),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _chip(String text, {required Color bg, required Color fg}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: fg.withValues(alpha: .18), width: .5),
       ),
       child: Text(
         text,
@@ -270,11 +243,9 @@ class _BookDetailState extends ConsumerState<BookDetail> {
   }) {
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.symmetric(horizontal: AppDimens.pagePadding),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
       decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(AppDimens.cardRadius),
+        border: Border(top: BorderSide(color: _divider, width: .5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -282,18 +253,15 @@ class _BookDetailState extends ConsumerState<BookDetail> {
           Row(
             children: [
               Container(
-                width: 3,
-                height: 14,
+                width: 5,
+                height: 5,
                 margin: const EdgeInsets.only(right: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.accentOf(context),
-                  borderRadius: BorderRadius.circular(2),
-                ),
+                color: AppColors.accentOf(context),
               ),
               Text(
                 title,
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: 15,
                   fontWeight: FontWeight.w600,
                   color: _primary,
                 ),
@@ -497,13 +465,7 @@ class _BookDetailState extends ConsumerState<BookDetail> {
       child: Container(
         decoration: BoxDecoration(
           color: _surface,
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0x14000000),
-              blurRadius: 12,
-              offset: const Offset(0, -2),
-            ),
-          ],
+          border: Border(top: BorderSide(color: _divider, width: .5)),
         ),
         padding: EdgeInsets.fromLTRB(
           12,
@@ -584,10 +546,10 @@ class _BookDetailState extends ConsumerState<BookDetail> {
                     return ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.accentOf(context),
-                        foregroundColor: Colors.white,
+                        foregroundColor: AppColors.white,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(22),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                       ),
                       onPressed: _openRead,

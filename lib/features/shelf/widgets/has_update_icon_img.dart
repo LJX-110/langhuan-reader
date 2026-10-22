@@ -1,29 +1,26 @@
 import 'package:langhuan/design/components/pic_widget.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/data/entities/book.dart';
-import 'package:langhuan/app/providers.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class HasUpdateIconImg extends ConsumerWidget {
+class HasUpdateIconImg extends StatelessWidget {
+  final Book book;
   final double width;
   final double height;
-  final String type;
-  final int idx;
+  final bool sorting;
+  final bool picked;
 
-  const HasUpdateIconImg(this.width, this.height, this.type, this.idx, {super.key});
+  const HasUpdateIconImg({
+    super.key,
+    required this.book,
+    required this.width,
+    required this.height,
+    this.sorting = false,
+    this.picked = false,
+  });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final shelf = ref.watch(shelfModelProvider);
-    if (shelf.shelf.isEmpty || idx >= shelf.shelf.length) {
-      return SizedBox(width: width, height: height);
-    }
-    final Book book = shelf.shelf.elementAt(idx);
-    final hasUpdate = book.hasUpdate == 1;
-    final sorting = type == 'sort';
-    final picked = sorting && shelf.picks(idx);
-
+  Widget build(BuildContext context) {
     return SizedBox(
       width: width,
       height: height,
@@ -32,8 +29,7 @@ class HasUpdateIconImg extends ConsumerWidget {
           Positioned.fill(
             child: PicWidget(book.coverUrl, height: height, width: width),
           ),
-          // 更新角标
-          if (hasUpdate)
+          if (book.hasUpdate == 1)
             Positioned(
               top: 0,
               right: 0,
@@ -58,7 +54,6 @@ class HasUpdateIconImg extends ConsumerWidget {
                 ),
               ),
             ),
-          // 整理模式勾选
           if (sorting)
             Positioned(
               right: 4,

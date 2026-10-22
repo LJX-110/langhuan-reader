@@ -8,27 +8,32 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  // Paper
-  static const Color paper = Color(0xFFF3F1EA);
-  static const Color paperLight = Color(0xFFFAF8F2);
-  static const Color paperDeep = Color(0xFFE6E1D5);
+  // Five-colour system: white, black, teal, gold, cinnabar.
+  static const Color white = Color(0xFFFFFFFF);
+  static const Color black = Color(0xFF141414);
+  static const Color teal = Color(0xFF1B5C66);
+  static const Color gold = Color(0xFFC9A24B);
+  static const Color cinnabar = Color(0xFFA8483A);
 
-  // Ink
-  static const Color ink = Color(0xFF1F1E1B);
-  static const Color inkSoft = Color(0xFF5E594F);
-  static const Color inkMute = Color(0xFF8A8479);
+  // Neutral surfaces and type, derived from black / white.
+  static const Color paper = white;
+  static const Color paperLight = white;
+  static const Color paperDeep = Color(0xFFF2F2F2);
+  static const Color ink = black;
+  static const Color inkSoft = Color(0xFF4D4D4D);
+  static const Color inkMute = Color(0xFF6E6E6E);
+  static const Color line = Color(0xFFE8E8E8);
+  static const Color lineSoft = Color(0xFFF2F2F2);
 
-  // Accent
-  static const Color qingmo = Color(0xFF2F4A45);
-  static const Color qingmoSoft = Color(0xFF78958C);
-  static const Color seal = Color(0xFF9A3B2E);
-  static const Color line = Color(0xFFD4CFC3);
-  static const Color lineSoft = Color(0xFFE3DED3);
+  // Accent aliases.
+  static const Color qingmo = teal;
+  static const Color qingmoSoft = Color(0xFF6FA8AE);
+  static const Color seal = gold;
 
   // Backward-compatible semantic names used across the existing UI.
   static const Color brand = qingmo;
-  static const Color brandPressed = Color(0xFF263C38);
-  static const Color brandSoft = Color(0x1A2F4A45);
+  static const Color brandPressed = teal;
+  static const Color brandSoft = Color(0x141B5C66);
 
   static Color accentOf(BuildContext context) =>
       Theme.of(context).colorScheme.primary;
@@ -44,11 +49,11 @@ class AppColors {
   static const Color textPrimary = ink;
   static const Color textSecondary = inkSoft;
   static const Color textTertiary = inkMute;
-  static const Color textOnBrand = paperLight;
-  static const Color textOnDark = Color(0xFFEDE7DA);
+  static const Color textOnBrand = white;
+  static const Color textOnDark = Color(0xFFF5F5F5);
 
-  static const Color danger = seal;
-  static const Color updateBadge = seal;
+  static const Color danger = cinnabar;
+  static const Color updateBadge = cinnabar;
 
   // Reader paper (product defaults). Values stay in AppColors so the reader
   // and chrome cannot drift apart.
@@ -62,9 +67,9 @@ class AppColors {
   static const Color inkOnNight = Color(0xFFB9B2A5);
 
   // Dark chrome
-  static const Color scaffoldDark = Color(0xFF141512);
-  static const Color surfaceDark = Color(0xFF1D1F1C);
-  static const Color dividerDark = Color(0xFF34362F);
+  static const Color scaffoldDark = Color(0xFF0E0E0E);
+  static const Color surfaceDark = Color(0xFF181818);
+  static const Color dividerDark = Color(0xFF2A2A2A);
 }
 
 class AppDimens {
@@ -79,7 +84,7 @@ class AppDimens {
   static const int shelfColumns = 3;
   static const double shelfSpacing = 14;
   static const double shelfRunSpacing = 18;
-  static const double dockHeight = 76;
+  static const double dockHeight = 62;
 }
 
 class AppShadows {
@@ -119,16 +124,16 @@ ThemeData buildLanghuanTheme({
   final onSurface = dark ? AppColors.textOnDark : AppColors.textPrimary;
   final primary = dark ? AppColors.qingmoSoft : AppColors.qingmo;
   final line = dark ? AppColors.dividerDark : AppColors.line;
-  final secondary = dark ? const Color(0xFF9BAFA6) : AppColors.inkSoft;
+  final secondary = dark ? const Color(0xFFB3B3B3) : AppColors.inkSoft;
 
   final scheme = ColorScheme(
     brightness: brightness,
     primary: primary,
     onPrimary: dark ? AppColors.ink : AppColors.paperLight,
-    secondary: AppColors.seal,
-    onSecondary: AppColors.paperLight,
-    error: AppColors.seal,
-    onError: AppColors.paperLight,
+    secondary: AppColors.gold,
+    onSecondary: AppColors.black,
+    error: AppColors.cinnabar,
+    onError: AppColors.white,
     surface: surface,
     onSurface: onSurface,
   );

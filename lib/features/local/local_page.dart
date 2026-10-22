@@ -1,0 +1,320 @@
+import 'dart:convert';
+
+import 'package:bot_toast/bot_toast.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+
+import 'package:langhuan/app/router/routes.dart';
+import 'package:langhuan/data/entities/book.dart';
+import 'package:langhuan/data/repositories/book_repository.dart';
+import 'package:langhuan/design/components/archive_header.dart';
+import 'package:langhuan/design/components/pic_widget.dart';
+import 'package:langhuan/design/tokens/app_colors.dart';
+import 'package:langhuan/features/local/local_import_service.dart';
+
+/// Local TXT library: imported files live in reader.db and open in the
+/// existing reader without a book source.
+class LocalPage extends StatefulWidget {
+  const LocalPage({super.key});
+
+  @override
+  State<LocalPage> createState() => _LocalPageState();
+}
+
+class _LocalPageState extends State<LocalPage> {
+  final _books = BookRepository.instance;
+  final _imports = LocalImportService();
+  late Future<List<Book>> _future;
+  bool _importing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _books.getLocal();
+  }
+
+  void _reload() {
+    if (!mounted) return;
+    setState(() => _future = _books.getLocal());
+  }
+
+  Future<void> _importTxt() async {
+    if (_importing) return;
+    FilePickerResult? picked;
+    try {
+      picked = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['txt'],
+        withData: false,
+        allowMultiple: true,
+      );
+    } catch (e) {
+      BotToast.showText(text: '无法打开文件选择器：$e');
+      return;
+    }
+    if (picked == null || picked.files.isEmpty) return;
+
+    setState(() => _importing = true);
+    var ok = 0;
+    String? firstError;
+    LocalImportResult? last;
+    for (final file in picked.files) {
+      try {
+        final result = await _imports.importFile(file);
+        last = result;
+        ok++;
+      } catch (e) {
+        firstError ??= '$e';
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _importing = false;
+      _future = _books.getLocal();
+    });
+    if (ok > 0) {
+      final name = last?.book.name ?? '';
+      BotToast.showText(
+        text: ok == 1 ? '已导入《$name》' : '已导入 $ok 本',
+      );
+    } else {
+      BotToast.showText(text: '导入失败：${firstError ?? '未知错误'}');
+    }
+  }
+
+  Future<void> _open(Book book) async {
+    await Routes.navigateTo(
+      context,
+      Routes.read,
+      params: {'read': jsonEncode(book.toJson())},
+    );
+    _reload();
+  }
+
+  Future<void> _delete(Book book) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('移出本地书库'),
+        content: Text('删除《${book.name}》及其章节缓存？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await _books.delete(book.id);
+    _reload();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final background = dark ? AppColors.scaffoldDark : AppColors.paper;
+    return Scaffold(
+      backgroundColor: background,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            ArchiveBrandBar(
+              actions: [
+                IconButton(
+                  tooltip: '导入 TXT',
+                  onPressed: _importing ? null : _importTxt,
+                  icon: const Icon(Icons.add, size: 21),
+                ),
+              ],
+            ),
+            const ArchiveLabel('01 / 本地'),
+            const ArchiveTitle(
+              title: '本地书库',
+              subtitle: 'TXT 文件 · 只存本机',
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
+              child: Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _importing ? null : _importTxt,
+                    icon: const Icon(Icons.file_open_outlined, size: 17),
+                    label: Text(_importing ? '正在导入…' : '导入 TXT'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.teal,
+                      side: const BorderSide(color: AppColors.line),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      minimumSize: const Size(0, 36),
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    _importing ? '解析章节中' : '支持 UTF-8 / GBK',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: dark ? AppColors.textOnDark : AppColors.inkMute,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_importing)
+              const LinearProgressIndicator(minHeight: 2),
+            Expanded(child: _body(dark)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _body(bool dark) {
+    return FutureBuilder<List<Book>>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              '本地书库加载失败：${snapshot.error}',
+              style: const TextStyle(fontSize: 12, color: AppColors.danger),
+            ),
+          );
+        }
+        final books = snapshot.data ?? const <Book>[];
+        if (books.isEmpty) return _empty(dark);
+        return ListView.separated(
+          padding: const EdgeInsets.only(top: 4, bottom: 24),
+          itemCount: books.length,
+          separatorBuilder: (_, _) => Divider(
+            height: 1,
+            color: dark ? AppColors.dividerDark : AppColors.line,
+          ),
+          itemBuilder: (context, i) => _row(books[i], dark),
+        );
+      },
+    );
+  }
+
+  Widget _empty(bool dark) {
+    final muted = dark ? AppColors.textOnDark : AppColors.inkMute;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.folder_open_outlined,
+              size: 44,
+              color: AppColors.inkMute,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '还没有本地书',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: dark ? AppColors.textOnDark : AppColors.ink,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '导入 TXT 后会出现在这里，不上传、不同步。',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: muted),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _importing ? null : _importTxt,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.teal,
+                foregroundColor: AppColors.white,
+                elevation: 0,
+              ),
+              child: const Text('导入 TXT'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _row(Book book, bool dark) {
+    final primary = dark ? AppColors.textOnDark : AppColors.ink;
+    final muted = dark ? const Color(0xFFB3B3B3) : AppColors.inkMute;
+    final progress = book.readingChapter.isNotEmpty
+        ? book.readingChapter
+        : '第 ${book.chapterIndex + 1} 章';
+    return InkWell(
+      onTap: () => _open(book),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 10, 8, 10),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: PicWidget(
+                book.coverUrl,
+                width: 46,
+                height: 64,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    book.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: primary,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    book.author,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11, color: muted),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    progress,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11, color: muted),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: '删除',
+              onPressed: () => _delete(book),
+              icon: Icon(
+                Icons.delete_outline,
+                size: 19,
+                color: muted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

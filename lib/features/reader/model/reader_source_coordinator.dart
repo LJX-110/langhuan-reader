@@ -43,7 +43,7 @@ class ReaderSourceCoordinator {
 
   Future<void> ensureSource() async {
     final b = bookOf();
-    if (b == null) return;
+    if (b == null || Book.isLocalSource(b.sourceUrl)) return;
     if (activeSource != null &&
         activeSource!.bookSourceUrl == b.sourceUrl) {
       return;
@@ -52,7 +52,8 @@ class ReaderSourceCoordinator {
   }
 
   Future<String> fetchChapterBody(String id, {int? idx}) async {
-    if (bookOf() == null) return '';
+    final b = bookOf();
+    if (b == null || Book.isLocalSource(b.sourceUrl)) return '';
     await ensureSource();
     return downloads.fetchBody(
       source: activeSource,
@@ -63,6 +64,7 @@ class ReaderSourceCoordinator {
   }
 
   Future<void> downloadAll(int start) async {
+    if (Book.isLocalSource(bookOf()?.sourceUrl ?? '')) return;
     if (chaptersOf().isEmpty) {
       await loadToc(init: true);
     }
@@ -83,6 +85,10 @@ class ReaderSourceCoordinator {
   Future<bool> switchSource(BookSource source, SearchBook hit) async {
     final b = bookOf();
     if (b == null) return false;
+    if (Book.isLocalSource(b.sourceUrl)) {
+      BotToast.showText(text: '本地书不支持换源');
+      return false;
+    }
     final chapters = chaptersOf();
     final oldName = (b.chapterIndex >= 0 && b.chapterIndex < chapters.length)
         ? chapters[b.chapterIndex].title

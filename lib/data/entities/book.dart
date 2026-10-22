@@ -5,6 +5,12 @@ part 'book.g.dart';
 /// Local shelf / reading-session book row.
 @JsonSerializable()
 class Book {
+  /// Marker for books imported from a local TXT file.
+  static const String localSourcePrefix = 'local://';
+
+  static bool isLocalSource(String sourceUrl) =>
+      sourceUrl.startsWith(localSourcePrefix);
+
   String id;
   String name;
   String author;

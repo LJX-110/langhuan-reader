@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:langhuan/design/components/archive_header.dart';
+import 'package:langhuan/design/components/bookshelf_3d.dart';
 import 'package:langhuan/design/components/pic_widget.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/data/entities/search_item.dart';
@@ -32,6 +33,20 @@ class _ExplorePageState extends ConsumerState<ExplorePage>
       if (!mounted) return;
       ref.read(exploreModelProvider).ensureLoaded();
     });
+  }
+
+  Future<void> _openBook(
+    BuildContext context,
+    ExploreModel model,
+    SearchItem item,
+  ) async {
+    final book = await model.openDetail(item);
+    if (book == null || !context.mounted) return;
+    Routes.navigateTo(
+      context,
+      Routes.detail,
+      params: {'detail': jsonEncode(book)},
+    );
   }
 
   @override
@@ -75,6 +90,11 @@ class _ExplorePageState extends ConsumerState<ExplorePage>
             const SizedBox(height: 8),
             _ExploreSourceTrigger(model: model, dark: dark),
             if (model.kinds.length > 1) _KindBar(model: model, dark: dark),
+            if (model.books.isNotEmpty)
+              Bookshelf3D(
+                books: model.books.take(8).toList(growable: false),
+                onOpen: (item) => _openBook(context, model, item),
+              ),
             Divider(
               height: 1,
               color: dark ? AppColors.dividerDark : AppColors.divider,
@@ -237,19 +257,7 @@ class _BookList extends StatelessWidget {
     final tertiary = AppColors.textTertiary;
 
     if (model.loading && model.books.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CupertinoActivityIndicator(radius: 14),
-            const SizedBox(height: 12),
-            Text(
-              '加载发现…',
-              style: TextStyle(fontSize: 13, color: secondary),
-            ),
-          ],
-        ),
-      );
+      return _ExploreSkeleton(dark: dark);
     }
 
     if (model.books.isEmpty) {
@@ -334,6 +342,80 @@ class _BookList extends StatelessWidget {
             },
           );
         },
+      ),
+    );
+  }
+}
+
+class _ExploreSkeleton extends StatelessWidget {
+  const _ExploreSkeleton({required this.dark});
+
+  final bool dark;
+
+  @override
+  Widget build(BuildContext context) {
+    final block = dark ? const Color(0xFF232323) : const Color(0xFFF2F2F2);
+    return ListView.builder(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+      itemCount: 5,
+      itemBuilder: (context, i) => Padding(
+        padding: const EdgeInsets.only(bottom: 18),
+        child: Row(
+          children: [
+            Container(
+              width: 72,
+              height: 100,
+              decoration: BoxDecoration(
+                color: block,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 150,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: block,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: 90,
+                    height: 11,
+                    decoration: BoxDecoration(
+                      color: block,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: block,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: 180,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: block,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

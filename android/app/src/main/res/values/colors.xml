@@ -2,6 +2,6 @@
 <resources>
     <color name="orange">#FFAB40</color>
     <color name="transparent">#00000000</color>
-    <color name="paper">#F3F1EA</color>
-    <color name="ink_deep">#14211D</color>
+    <color name="paper">#FFFFFF</color>
+    <color name="brand_deep">#14505B</color>
 </resources>

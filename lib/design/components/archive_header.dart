@@ -36,9 +36,9 @@ class ArchiveBrandBar extends StatelessWidget {
                   style: TextStyle(
                     color: primary,
                     fontFamily: AppType.serif,
-                    fontSize: 19,
+                    fontSize: 18,
                     height: 1.1,
-                    letterSpacing: 3,
+                    letterSpacing: 2.2,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -47,11 +47,11 @@ class ArchiveBrandBar extends StatelessWidget {
                   AppBrand.archiveLabel,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.inkMute,
+                  style: TextStyle(
+                    color: dark ? AppColors.textOnDark : AppColors.inkMute,
                     fontSize: 8,
                     height: 1,
-                    letterSpacing: 1.5,
+                    letterSpacing: 1.2,
                   ),
                 ),
               ],
@@ -81,23 +81,19 @@ class ArchiveLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final line = dark ? AppColors.dividerDark : AppColors.line;
+    final muted = dark ? AppColors.textOnDark : AppColors.inkMute;
+    final square = dark ? AppColors.textOnDark : AppColors.ink;
     return Padding(
       padding: padding,
       child: Row(
         children: [
-          Container(
-            width: 14,
-            height: 1,
-            color: AppColors.seal,
-          ),
-          const SizedBox(width: 9),
           Text(
             text,
-            style: const TextStyle(
-              color: AppColors.inkMute,
+            style: TextStyle(
+              color: muted,
               fontSize: 9,
               height: 1.2,
-              letterSpacing: 2.2,
+              letterSpacing: 1.8,
             ),
           ),
           const SizedBox(width: 9),
@@ -108,12 +104,9 @@ class ArchiveLabel extends StatelessWidget {
             const SizedBox(width: 7),
           ],
           Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: AppColors.seal,
-              borderRadius: BorderRadius.circular(1),
-            ),
+            width: 5,
+            height: 5,
+            color: square,
           ),
         ],
       ),
@@ -153,21 +146,21 @@ class ArchiveTitle extends StatelessWidget {
                   style: TextStyle(
                     color: primary,
                     fontFamily: AppType.serif,
-                    fontSize: 28,
+                    fontSize: 22,
                     height: 1.15,
-                    letterSpacing: 2,
+                    letterSpacing: 1.2,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 if (subtitle != null && subtitle!.isNotEmpty) ...[
-                  const SizedBox(height: 5),
+                  const SizedBox(height: 4),
                   Text(
                     subtitle!,
-                    style: const TextStyle(
-                      color: AppColors.inkMute,
+                    style: TextStyle(
+                      color: dark ? AppColors.textOnDark : AppColors.inkMute,
                       fontSize: 11,
                       height: 1.4,
-                      letterSpacing: .5,
+                      letterSpacing: .3,
                     ),
                   ),
                 ],
@@ -198,24 +191,24 @@ class PaperSearchEntry extends StatelessWidget {
     final surface = dark ? AppColors.surfaceDark : AppColors.paperLight;
     final line = dark ? AppColors.dividerDark : AppColors.line;
     return Material(
-      color: surface.withValues(alpha: .62),
-      borderRadius: BorderRadius.circular(18),
+      color: surface,
+      borderRadius: BorderRadius.circular(8),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(8),
         child: Container(
-          height: AppDimens.searchBarHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: line.withValues(alpha: .9), width: .5),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: line, width: .5),
           ),
           child: Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.search,
-                size: 17,
-                color: AppColors.inkMute,
+                size: 16,
+                color: dark ? AppColors.textOnDark : AppColors.inkMute,
               ),
               const SizedBox(width: 7),
               Expanded(
@@ -223,19 +216,11 @@ class PaperSearchEntry extends StatelessWidget {
                   hint,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.inkMute,
+                  style: TextStyle(
+                    color: dark ? AppColors.textOnDark : AppColors.inkMute,
                     fontSize: 12.5,
-                    letterSpacing: .3,
+                    letterSpacing: .2,
                   ),
-                ),
-              ),
-              const Text(
-                '全域',
-                style: TextStyle(
-                  color: AppColors.inkMute,
-                  fontSize: 9,
-                  letterSpacing: 1,
                 ),
               ),
             ],
