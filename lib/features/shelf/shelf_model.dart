@@ -6,8 +6,41 @@ import 'package:langhuan/core/storage/local_store.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:langhuan/core/storage/prefs_keys.dart';
 
+enum ShelfFilter { all, reading, unread }
+
 class ShelfModel with ChangeNotifier {
   List<Book> shelf = [];
+
+  ShelfFilter filter = ShelfFilter.all;
+
+  /// No schema field for "has read"; chapter/page progress is the signal we
+  /// already persist for every book.
+  List<Book> get visibleShelf {
+    switch (filter) {
+      case ShelfFilter.all:
+        return shelf;
+      case ShelfFilter.reading:
+        return shelf
+            .where((b) =>
+                b.readingChapter.trim().isNotEmpty ||
+                b.chapterIndex > 0 ||
+                b.pageIndex > 0)
+            .toList(growable: false);
+      case ShelfFilter.unread:
+        return shelf
+            .where((b) =>
+                b.readingChapter.trim().isEmpty &&
+                b.chapterIndex <= 0 &&
+                b.pageIndex <= 0)
+            .toList(growable: false);
+    }
+  }
+
+  void setFilter(ShelfFilter value) {
+    if (filter == value) return;
+    filter = value;
+    notifyListeners();
+  }
 
   bool inShelf(Object? id) {
     return shelf.map((f) => f.id).toList().contains(id);
@@ -32,7 +65,7 @@ class ShelfModel with ChangeNotifier {
   }
 
   Future<void> initShelf() async {
-    shelf = await _books.getAll();
+    shelf = await _books.getAll(includeLocal: false);
     notifyListeners();
   }
 
@@ -121,7 +154,7 @@ class ShelfModel with ChangeNotifier {
 
   /// Local-only shelf refresh (no cloud).
   Future<void> refreshShelf() async {
-    shelf = await _books.getAll();
+    shelf = await _books.getAll(includeLocal: false);
     notifyListeners();
   }
 

@@ -32,11 +32,12 @@ Novel/
 │  │  ├─ brand/             应用名与固定文案
 │  │  ├─ components/        页头、印章、封面等展示组件
 │  │  ├─ theme/             明暗模式控制
-│  │  └─ tokens/            纸墨色、尺寸、阴影、字体与 ThemeData
+│  │  └─ tokens/            五色 tokens、尺寸、阴影、字体与 ThemeData
 │  └─ features/
 │     ├─ shelf/             书架
 │     ├─ discover/          发现
 │     ├─ search/            搜索与按书合并
+│     ├─ local/             本地 TXT 导入与本地书库
 │     ├─ detail/            详情与换源
 │     ├─ reader/            阅读器（分页、翻页、设置、缓存）
 │     ├─ profile/           我的
@@ -55,8 +56,8 @@ Novel/
 
 ## 模块边界
 
-- `app/shell/` 只负责三个主页签与 Dock 的装配，不承载业务逻辑。搜索不是第四个页签，从书架 / 发现页头进入 `/search`。
-- `design/tokens/` 只放纸墨色、尺寸、阴影、字体与 `buildLanghuanTheme`，不依赖业务状态。
+- `app/shell/` 只负责四个主页签（书架 / 发现 / 本地 / 我）与 Dock 的装配，不承载业务逻辑。搜索不是页签，从书架 / 发现页头进入 `/search`。
+- `design/tokens/` 只放白 / 黑 / 青 / 鎏金 / 朱砂五色、尺寸、阴影、字体与 `buildLanghuanTheme`，不依赖业务状态。
 - `design/components/` 只做展示：`ArchiveBrandBar`、`ArchiveLabel`、`ArchiveTitle`、`PaperSearchEntry`、`SealMark`。
 - `features/*/` 页面负责展示与交互，模型负责状态与调用；页面不直接写 SQL。
 - `data/repositories/` 是数据库访问边界；书源列表查询不携带 `raw_json`，避免大 payload 过 MethodChannel。
@@ -87,18 +88,27 @@ Novel/
   → 每 8 个书源取一次完整规则
   → BookSourceEngine.search
   → 按「书名 + 作者」合并为 SearchGroup，标出书源数量
+
+本地 TXT
+  → FilePicker（仅 .txt）
+  → TxtBookParser（UTF-8 / GBK、书名作者、章节标题）
+  → LocalImportService
+  → books / chapters（source_url = local://txt，正文已写入）
+  → Reader（跳过书源与远程目录，直接读本地章节）
 ```
 
 ## 设计系统
 
-- 色板：宣纸 `#F3F1EA`、纸白 `#FAF8F2`、墨 `#1F1E1B`、青墨 `#2F4A45`、朱印 `#9A3B2E`。
-- `buildLanghuanTheme(dark:)` 提供明暗两套；主页头图为档案式，底部为三页签 Dock。
-- 低端机默认关闭重模糊；玻璃效果只出现在 header / dock。
-- 布局测试在 `test/design/chrome_layout_test.dart`，覆盖 360 / 411 / 800 宽与 1.3 倍文字缩放。
+- 色板只保留白 `#FFFFFF`、黑 `#141414`、青 `#1B5C66`、鎏金 `#C9A24B`、朱砂 `#A8483A`；灰色只由黑白派生。图标底用更深的青 `#14505B`。
+- `buildLanghuanTheme(dark:)` 提供明暗两套；主页头图为档案式，底部为白底四页签 Dock，选中只变青、不使用胶囊。
+- 发现页使用 `design/components/bookshelf_3d.dart`：书脊、书页厚度、透视、落地阴影与吸附翻页。
+- 不使用重模糊；header / dock 都是实色白。
+- 布局测试在 `test/design/chrome_layout_test.dart` 与 `test/design/bookshelf_layout_test.dart`，覆盖 360 / 411 / 800 宽、明暗两套与 1.3 倍文字缩放。
 
 ## 数据库
 
 - 单文件 `reader.db`，表：`books`、`chapters`、`sources`。
+- 本地 TXT 复用现有 `books` / `chapters`，不新增表；`source_url` 以 `local://` 开头，章节正文直接存入 `chapters.body`。
 - 上游的 `onUpgrade` 会清空所有表，这是数据丢失风险；Phase 4 必须先改成增量迁移。
 - 任何 schema 改动前，先导出/备份数据库，并补迁移测试。
 - 书签、阅读记录依赖新的表和迁移方案，必须等 Phase 4 增量迁移完成后再实现；Phase 1 没有新增表。
@@ -106,6 +116,6 @@ Novel/
 ## 验证
 
 - `flutter analyze`：通过。
-- `flutter test`：66 项通过，其中设计布局 6 项。
+- `flutter test`：75 项通过，其中设计布局 12 项。
 - debug arm64 APK：可构建。
 - Phase 1 真机验收：待补测（构建产物 `build/app/outputs/flutter-apk/app-debug.apk`）。

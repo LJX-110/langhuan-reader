@@ -346,13 +346,13 @@ class ReadModel with ChangeNotifier {
 
   Future<List<ChapterTocEntry>?> fetchRemoteToc() async {
     final b = book;
-    if (b == null) return null;
+    if (b == null || Book.isLocalSource(b.sourceUrl)) return null;
     return _toc.fetchRemote(b);
   }
 
   Future loadToc({bool init = false}) async {
     final b = book;
-    if (b == null) return;
+    if (b == null || Book.isLocalSource(b.sourceUrl)) return;
     final bookId = b.id;
     final updated = await _toc.load(
       book: b,

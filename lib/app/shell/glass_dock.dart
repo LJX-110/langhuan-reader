@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'package:langhuan/design/tokens/app_colors.dart';
 
-/// Three-tab frosted dock used by [MainShell].
+/// Three-tab bottom bar used by [MainShell].
 ///
-/// The dock stays deliberately low: paper surface, hairline, a single
-/// qingmo-tinted pill for the active tab. No fourth tab for search — search
-/// lives in the page header.
+/// White surface, one hairline, and a colour change for the active tab. No
+/// pill, no blur: the dock should disappear behind the page.
 class LanhuanDock extends StatelessWidget {
   const LanhuanDock({
     super.key,
@@ -17,43 +16,44 @@ class LanhuanDock extends StatelessWidget {
   final int index;
   final ValueChanged<int> onTap;
 
-  static const _labels = ['书架', '发现', '我'];
+  static const _labels = ['书架', '发现', '本地', '我'];
 
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final surface = dark ? AppColors.surfaceDark : AppColors.paperLight;
+    final surface = dark ? AppColors.surfaceDark : AppColors.surface;
     final line = dark ? AppColors.dividerDark : AppColors.line;
-    final primary = Theme.of(context).colorScheme.primary;
-    final inactive = AppColors.inkMute;
+    final active = Theme.of(context).colorScheme.primary;
+    final inactive = dark ? const Color(0xFFB3B3B3) : AppColors.inkMute;
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: surface.withValues(alpha: dark ? .94 : .90),
+        color: surface,
         border: Border(top: BorderSide(color: line, width: .5)),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x0A1F1E1B),
-            blurRadius: 18,
-            offset: Offset(0, -6),
+            color: Color(0x08141414),
+            blurRadius: 12,
+            offset: Offset(0, -3),
           ),
         ],
       ),
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: AppDimens.dockHeight,
+          height: 62,
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               for (var i = 0; i < _labels.length; i++)
-                _DockItem(
-                  label: _labels[i],
-                  icon: _DockIcon.values[i],
-                  active: index == i,
-                  activeColor: primary,
-                  inactiveColor: inactive,
-                  onTap: () => onTap(i),
+                Expanded(
+                  child: _DockItem(
+                    label: _labels[i],
+                    icon: _DockIcon.values[i],
+                    active: index == i,
+                    activeColor: active,
+                    inactiveColor: inactive,
+                    onTap: () => onTap(i),
+                  ),
                 ),
             ],
           ),
@@ -63,7 +63,7 @@ class LanhuanDock extends StatelessWidget {
   }
 }
 
-enum _DockIcon { shelf, discover, profile }
+enum _DockIcon { shelf, discover, local, profile }
 
 class _DockItem extends StatelessWidget {
   const _DockItem({
@@ -92,24 +92,8 @@ class _DockItem extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-          width: 86,
-          height: 56,
-          padding: const EdgeInsets.only(top: 6, bottom: 5),
-          decoration: BoxDecoration(
-            color: active
-                ? activeColor.withValues(alpha: 0.095)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: active
-                  ? activeColor.withValues(alpha: 0.16)
-                  : Colors.transparent,
-              width: .5,
-            ),
-          ),
+        child: SizedBox(
+          height: 62,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -117,15 +101,16 @@ class _DockItem extends StatelessWidget {
                 size: const Size(22, 22),
                 painter: _DockIconPainter(icon: icon, color: color),
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 4),
               Text(
                 label,
                 style: TextStyle(
                   color: color,
-                  fontSize: 9,
+                  fontSize: 10,
                   height: 1,
-                  letterSpacing: 1.4,
-                  fontFamily: AppType.serif,
+                  letterSpacing: .4,
+                  fontFamily: AppType.sans,
+                  fontWeight: active ? FontWeight.w600 : FontWeight.w400,
                 ),
               ),
             ],
@@ -195,6 +180,22 @@ class _DockIconPainter extends CustomPainter {
           ..close();
         canvas.drawPath(needle, paint);
         canvas.drawCircle(Offset(w * .5, h * .5), w * .035, paint);
+        break;
+      case _DockIcon.local:
+        final folder = Path()
+          ..moveTo(w * .16, h * .28)
+          ..lineTo(w * .43, h * .28)
+          ..lineTo(w * .51, h * .38)
+          ..lineTo(w * .84, h * .38)
+          ..lineTo(w * .84, h * .80)
+          ..lineTo(w * .16, h * .80)
+          ..close();
+        canvas.drawPath(folder, paint);
+        canvas.drawLine(
+          Offset(w * .16, h * .45),
+          Offset(w * .84, h * .45),
+          paint,
+        );
         break;
       case _DockIcon.profile:
         canvas.drawCircle(Offset(w * .5, h * .34), w * .105, paint);

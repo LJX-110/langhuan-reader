@@ -13,9 +13,25 @@ class BookRepository {
 
   Future<Database> get _database => _db.database;
 
-  Future<List<Book>> getAll() async {
+  Future<List<Book>> getAll({bool includeLocal = true}) async {
     final db = await _database;
-    final rows = await db.query('books', orderBy: 'sort_time DESC');
+    final rows = await db.query(
+      'books',
+      where: includeLocal ? null : 'source_url NOT LIKE ?',
+      whereArgs: includeLocal ? null : ['${Book.localSourcePrefix}%'],
+      orderBy: 'sort_time DESC',
+    );
+    return rows.map(_fromRow).toList();
+  }
+
+  Future<List<Book>> getLocal() async {
+    final db = await _database;
+    final rows = await db.query(
+      'books',
+      where: 'source_url LIKE ?',
+      whereArgs: ['${Book.localSourcePrefix}%'],
+      orderBy: 'sort_time DESC',
+    );
     return rows.map(_fromRow).toList();
   }
 
@@ -177,7 +193,8 @@ class BookRepository {
       coverUrl: s(row['cover_url']),
       category: s(row['category']),
       description: s(row['description']),
-      readingChapter: reading.isNotEmpty ? reading : latest,
+      // Keep "never opened" distinct from "latest chapter known".
+      readingChapter: reading,
       latestChapter: latest,
       chapterIndex: row['chapter_index'] as int? ?? 0,
       pageIndex: row['page_index'] as int? ?? 0,

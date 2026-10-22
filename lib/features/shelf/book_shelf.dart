@@ -5,6 +5,7 @@ import 'package:langhuan/core/storage/prefs_keys.dart';
 import 'package:langhuan/core/storage/local_store.dart';
 import 'package:langhuan/app/router/routes.dart';
 import 'package:langhuan/app/providers.dart';
+import 'package:langhuan/features/shelf/shelf_model.dart';
 import 'package:langhuan/features/shelf/widgets/books_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -41,7 +42,7 @@ class _BookShelfState extends ConsumerState<BookShelf> {
   Widget build(BuildContext context) {
     final shelfModel = ref.watch(shelfModelProvider);
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final count = shelfModel.shelf.length;
+    final count = shelfModel.visibleShelf.length;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
@@ -54,6 +55,8 @@ class _BookShelfState extends ConsumerState<BookShelf> {
               _ShelfHeader(
                 count: count,
                 coverMode: shelfModel.cover,
+                filter: shelfModel.filter,
+                onFilter: shelfModel.setFilter,
                 onSearch: () {
                   Routes.navigateTo(context, Routes.search, params: {
                     'type': 'book',
@@ -77,6 +80,8 @@ class _BookShelfState extends ConsumerState<BookShelf> {
 class _ShelfHeader extends StatelessWidget {
   final int count;
   final bool coverMode;
+  final ShelfFilter filter;
+  final ValueChanged<ShelfFilter> onFilter;
   final VoidCallback onSearch;
   final VoidCallback onToggleMode;
   final VoidCallback onManage;
@@ -84,10 +89,23 @@ class _ShelfHeader extends StatelessWidget {
   const _ShelfHeader({
     required this.count,
     required this.coverMode,
+    required this.filter,
+    required this.onFilter,
     required this.onSearch,
     required this.onToggleMode,
     required this.onManage,
   });
+
+  String _filterLabel(ShelfFilter value) {
+    switch (value) {
+      case ShelfFilter.all:
+        return '全部';
+      case ShelfFilter.reading:
+        return '在读';
+      case ShelfFilter.unread:
+        return '未读';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -123,13 +141,58 @@ class _ShelfHeader extends StatelessWidget {
           const ArchiveLabel('01 / 藏书'),
           ArchiveTitle(
             title: '书架',
-            subtitle: count == 0 ? '暂无藏书' : '共 $count 本 · 私人书阁',
+            subtitle: count == 0
+                ? (filter == ShelfFilter.all ? '暂无藏书' : '这个筛选下暂无藏书')
+                : '共 $count 本 · 私人书阁',
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
             child: PaperSearchEntry(
               onTap: onSearch,
               hint: '搜索书架或全网书籍',
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Row(
+              children: [
+                for (final value in ShelfFilter.values)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 18),
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => onFilter(value),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _filterLabel(value),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: filter == value
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                              color: filter == value
+                                  ? Theme.of(context).colorScheme.primary
+                                  : (dark
+                                      ? AppColors.textOnDark
+                                      : AppColors.inkMute),
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 160),
+                            width: 16,
+                            height: 2,
+                            color: filter == value
+                                ? Theme.of(context).colorScheme.primary
+                                : Colors.transparent,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],

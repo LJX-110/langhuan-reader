@@ -207,8 +207,9 @@ class ReadingSessionOpener {
     b.pageIndex = savedIndex < 0 ? 0 : savedIndex;
 
     // Prefer painting cached body ASAP. Source is only required for network fetch.
+    final isLocal = Book.isLocalSource(b.sourceUrl);
     final canSkipLoading = await hasPageCache(b.chapterIndex);
-    if (!canSkipLoading) {
+    if (!canSkipLoading && !isLocal) {
       await ensureSource();
       if (activeSourceOf() == null) {
         AppLog.e('Read', 'source not found: ${b.sourceUrl} (${b.originName})');
@@ -243,6 +244,9 @@ class ReadingSessionOpener {
           'contentLen=${curPageOf()?.chapterContent.length}',
     );
     notify();
+
+    // Local TXT books have no source or remote catalog to refresh.
+    if (isLocal) return;
 
     // Defer remote TOC refresh until after content is on screen so it cannot
     // contend with SQLite / first paint. Fire-and-forget.

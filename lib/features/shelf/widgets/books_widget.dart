@@ -41,10 +41,15 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
     });
   }
 
+  int get _columns => Screen.width >= 600 ? 3 : 2;
+
+  List<Book> get _books =>
+      isShelf ? _shelfModel.visibleShelf : _shelfModel.shelf;
+
   double get _coverWidth {
     final pad = AppDimens.pagePadding * 2;
-    final gaps = AppDimens.shelfSpacing * (AppDimens.shelfColumns - 1);
-    return (Screen.width - pad - gaps) / AppDimens.shelfColumns;
+    final gaps = AppDimens.shelfSpacing * (_columns - 1);
+    return (Screen.width - pad - gaps) / _columns;
   }
 
   double get _coverHeight => _coverWidth / aspectRatioCover;
@@ -57,7 +62,10 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
   @override
   Widget build(BuildContext context) {
     _shelfModel = ref.watch(shelfModelProvider);
-    if (_shelfModel.shelf.isEmpty) return _emptyShelf();
+    if (_books.isEmpty) {
+      if (isShelf && _shelfModel.shelf.isNotEmpty) return _emptyFilter();
+      return _emptyShelf();
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: AppDimens.pagePadding,
@@ -127,6 +135,29 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
     );
   }
 
+  Widget _emptyFilter() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '这个筛选下还没有书',
+            style: TextStyle(
+              color: _primary,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: () => _shelfModel.setFilter(ShelfFilter.all),
+            child: const Text('查看全部'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Cover grid
   // ---------------------------------------------------------------------------
@@ -140,15 +171,15 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
         parent: BouncingScrollPhysics(),
       ),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: AppDimens.shelfColumns,
+        crossAxisCount: _columns,
         crossAxisSpacing: AppDimens.shelfSpacing,
         mainAxisSpacing: AppDimens.shelfRunSpacing,
-        // cover + title + progress
-        childAspectRatio: w / (h + 52),
+        // cover + title + author + progress
+        childAspectRatio: w / (h + 78),
       ),
-      itemCount: _shelfModel.shelf.length,
+      itemCount: _books.length,
       itemBuilder: (context, i) {
-        final book = _shelfModel.shelf[i];
+        final book = _books[i];
         return bookAction(
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -160,7 +191,13 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(AppDimens.coverRadius),
-                  child: HasUpdateIconImg(w, h, widget.type, i),
+                  child: HasUpdateIconImg(
+                    book: book,
+                    width: w,
+                    height: h,
+                    sorting: widget.type == 'sort',
+                    picked: widget.type == 'sort' && _shelfModel.picks(i),
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -170,12 +207,22 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
-                  fontSize: 13,
+                  fontSize: 14,
                   color: _primary,
                   height: 1.2,
                 ),
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 2),
+              Text(
+                _authorLabel(book),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 2),
               Text(
                 _progressLabel(book),
                 maxLines: 1,
@@ -195,12 +242,8 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
 
   String _progressLabel(Book book) {
     final chapter = book.readingChapter.trim();
-    final last = book.latestChapter.trim();
-    final name = chapter.isNotEmpty
-        ? chapter
-        : (last.isNotEmpty ? last : '');
-    if (name.isEmpty || name == 'null') return '未开始阅读';
-    return '读到 · $name';
+    if (chapter.isEmpty || chapter == 'null') return '未开始阅读';
+    return '读到 · $chapter';
   }
 
   String _authorLabel(Book book) {
@@ -240,7 +283,7 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
       physics: const AlwaysScrollableScrollPhysics(
         parent: BouncingScrollPhysics(),
       ),
-      itemCount: _shelfModel.shelf.length,
+      itemCount: _books.length,
       separatorBuilder: (_, _) => Divider(
         height: 1,
         indent: w + 16,
@@ -251,7 +294,7 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
   }
 
   Future<void> readBook(int i) async {
-    final b = _shelfModel.shelf[i];
+    final b = _books[i];
     // Prefer durable DB progress over possibly-stale in-memory shelf object.
     Book openBook = b;
     try {
@@ -277,7 +320,7 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
   }
 
   Widget getBookItemView(int i, double coverW, double coverH) {
-    final item = _shelfModel.shelf[i];
+    final item = _books[i];
     return Dismissible(
       key: Key(item.id.toString()),
       direction: DismissDirection.endToStart,
@@ -300,7 +343,13 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(AppDimens.coverRadius),
-                child: HasUpdateIconImg(coverW, coverH, widget.type, i),
+                child: HasUpdateIconImg(
+                  book: item,
+                  width: coverW,
+                  height: coverH,
+                  sorting: widget.type == 'sort',
+                  picked: widget.type == 'sort' && _shelfModel.picks(i),
+                ),
               ),
             ),
             Expanded(

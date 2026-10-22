@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 琅嬛阁 launch screen: paper field + ink character. -->
+<!-- 琅嬛阁 launch screen: cool field + 碧海青 book mark. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/paper" />
     <item>

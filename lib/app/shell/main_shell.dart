@@ -3,12 +3,13 @@ import 'dart:async';
 import 'package:langhuan/core/events/event.dart';
 import 'package:langhuan/features/shelf/book_shelf.dart';
 import 'package:langhuan/features/discover/explore_page.dart';
+import 'package:langhuan/features/local/local_page.dart';
 import 'package:langhuan/features/profile/me_page.dart';
 import 'package:flutter/material.dart';
 
 import 'glass_dock.dart';
 
-/// App root shell: 书架 / 发现 / 我.
+/// App root shell: 书架 / 发现 / 本地 / 我.
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -24,7 +25,7 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     _navSub = eventBus.on<NavEvent>().listen((e) {
-      final i = e.idx.clamp(0, 2);
+      final i = e.idx.clamp(0, 3);
       if (mounted && i != _index) {
         setState(() => _index = i);
       }
@@ -45,6 +46,7 @@ class _MainShellState extends State<MainShell> {
         children: [
           BookShelf(),
           const ExplorePage(),
+          const LocalPage(),
           Me(embedded: true),
         ],
       ),
