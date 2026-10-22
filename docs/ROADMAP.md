@@ -129,7 +129,7 @@
 - 低端机与连续阅读性能
 - 自有 release keystore（已生成 `android/app/langhuan-release.jks` 与 `android/key.properties`，均不入库）
 - 隐私 / 权限清理
-- 版本号统一为 `1.0.0+3`
+- 版本号统一为 `1.0.0`
 - README / AGENTS / ARCHITECTURE / ROADMAP 同步
 
 验收：

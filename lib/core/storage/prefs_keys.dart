@@ -9,7 +9,6 @@ class PrefsKeys {
   static const version = 'version';
   static const coverGrid = 'cover';
   static const leftClickNext = 'leftClickNext';
-  static const bgIdx = 'bgIdx';
   static const pageTurnMode = 'turnPageAnima';
   static const readerTextAlign = 'reader_text_align';
   static const bookSearchHistory = 'book_search_history';

@@ -64,7 +64,7 @@ Novel/
 - `data/repositories/` 是数据库访问边界；书源列表查询不携带 `raw_json`，避免大 payload 过 MethodChannel。
 - `features/sources/engine/` 只执行书源规则，不依赖 UI。
 - `features/sources/repo/` 只负责把用户给的 URL 抓成 `SourceParseResult`，不内置地址。
-- 阅读器分页核心在 `features/reader/page_content_reader.dart` 与 `features/reader/pagination/text_composition.dart`；Phase 1 没有改动其算法，后续视觉改造也不得触碰。
+- 阅读器分页核心在 `features/reader/page_content_reader.dart` 与 `features/reader/pagination/text_composition.dart`；后续视觉改造不得触碰。
 - 阅读器正文颜色由 `ReadSetting` 的纸色决定，不跟随 `ThemeData`，避免换肤影响正在阅读的文本。
 - 阅读器浮层拆为 `features/reader/menu/`：顶栏、底栏、章节滑条、下载与设置面板；`reader_menu.dart` 只保留浮层编排与状态。
 - 顶栏显示书名 + 当前章节名；排版设置的连续调整由 `ReaderContentReloader.scheduleRelayout()` 合并为一次重排，避免每次滑动都清缓存、重分页。

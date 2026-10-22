@@ -11,7 +11,7 @@
 
 ## 身份
 
-- 应用名：**琅嬛阁**；当前版本 `1.0.0+3`。
+- 应用名：**琅嬛阁**；当前版本 `1.0.0`。
 - Android 包名：`com.langhuan.reader`；Dart 包名：`langhuan`。
 - 上游底本：Apache-2.0；固定信息见 `docs/UPSTREAM.md`。
 - 必须保留 `LICENSE`、`NOTICE` 和第三方许可文本；界面不保留上游名称、链接、邮箱、截图。许可归属只放在 `NOTICE` 与 `docs/UPSTREAM.md`，其他文档不重复上游链接。
@@ -29,11 +29,12 @@
 
 ```powershell
 flutter pub get
-flutter analyze
+dart analyze
 flutter test
-flutter build apk --debug --target-platform android-arm64
-flutter build apk --release --target-platform android-arm64
+powershell -File tool/build_release.ps1
 ```
+
+项目文件夹含中文：Windows 下 `flutter analyze` 的 LSP 可能崩溃，统一用 `dart analyze`；release 构建用 `tool/build_release.ps1` 映射 ASCII 盘符，否则 AOT 读不了中文路径。
 
 发布签名只使用本项目自己的 keystore；`key.properties`、`*.jks`、`google-services.json` 不入库。
 

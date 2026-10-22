@@ -275,7 +275,6 @@ class TextComposition {
           // locale: Locale('zh_CN'),
           fontFamily: fontFamily,
           fontSize: fontSize,
-          // letterSpacing: ReadSetting.getLatterSpace(),
           height: height,
         ),
         paragraph: paragraph,

@@ -15,10 +15,7 @@ class Search extends ConsumerStatefulWidget {
   final String type;
   final String name;
 
-  /// When true, hosted inside [MainShell] — no back button, keep state.
-  final bool embedded;
-
-  const Search(this.type, this.name, {super.key, this.embedded = false});
+  const Search(this.type, this.name, {super.key});
 
   @override
   ConsumerState<Search> createState() => _SearchState();
@@ -50,12 +47,10 @@ class _SearchState extends ConsumerState<Search> {
 
   @override
   void dispose() {
-    if (!widget.embedded) {
-      try {
-        searchModel.clear();
-      } catch (_) {}
-      controller.dispose();
-    }
+    try {
+      searchModel.clear();
+    } catch (_) {}
+    controller.dispose();
     super.dispose();
   }
 
@@ -93,12 +88,11 @@ class _SearchState extends ConsumerState<Search> {
       padding: const EdgeInsets.fromLTRB(8, 6, 12, 6),
       child: Row(
         children: [
-          if (!widget.embedded)
-            IconButton(
-              tooltip: '返回',
-              icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-              onPressed: () => Navigator.of(context).maybePop(),
-            ),
+          IconButton(
+            tooltip: '返回',
+            icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
           Expanded(
             child: Container(
               height: 38,
@@ -109,7 +103,7 @@ class _SearchState extends ConsumerState<Search> {
               ),
               child: TextField(
                 controller: controller,
-                autofocus: !widget.embedded && widget.name.isEmpty,
+                autofocus: widget.name.isEmpty,
                 textInputAction: TextInputAction.search,
                 onSubmitted: (word) => searchModel.search(word),
                 onChanged: (_) => setState(() {}),
@@ -138,16 +132,8 @@ class _SearchState extends ConsumerState<Search> {
           ),
           const SizedBox(width: 4),
           TextButton(
-            onPressed: () {
-              if (widget.embedded) {
-                controller.clear();
-                searchModel.reset();
-                setState(() {});
-              } else {
-                Navigator.of(context).maybePop();
-              }
-            },
-            child: Text(widget.embedded ? '清除' : '取消'),
+            onPressed: () => Navigator.of(context).maybePop(),
+            child: const Text('取消'),
           ),
         ],
       ),

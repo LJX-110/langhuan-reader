@@ -8,27 +8,12 @@ import 'package:flutter/material.dart';
 enum PaperTheme { white, cream, green, night }
 
 class ReadSetting {
-  /// Legacy texture backgrounds (optional advanced skins).
-  static List<String> bgImg = [
-    "QR_bg_1.jpg",
-    "QR_bg_2.jpg",
-    "QR_bg_3.jpg",
-    "QR_bg_5.jpg",
-    "QR_bg_7.png",
-    "QR_bg_8.png",
-    "QR_bg_4.jpg",
-  ];
-
   static bool isDark() => SpUtil.getBool(PrefsKeys.dark);
-  static String bgsKey = "BGSKEY";
   static String fontSizeKey = "FONT_SIZE";
   static String latterHeight = "LINE_HEIGHT";
-  static String latterLead = "LATTER_LEAD";
-  static String latterSpace = "LATTER_SPACE";
   static String paragraph = "paragraph";
   static String pageDis = "pageDis";
   static String paperKey = "paper_theme";
-  static String useSolidPaperKey = "use_solid_paper";
   static String fontMigratedKey = "font_size_migrated_v19";
   static String fontNameKey = "fontName";
   static String fontPathKey = "fontPath";
@@ -108,12 +93,6 @@ class ReadSetting {
       SpUtil.putBool(PrefsKeys.dark, false);
     }
   }
-
-  /// Prefer solid paper fill over legacy texture images.
-  static bool useSolidPaper() =>
-      SpUtil.getBool(useSolidPaperKey, defValue: true);
-
-  static void setUseSolidPaper(bool v) => SpUtil.putBool(useSolidPaperKey, v);
 
   /// One-shot: old default 26 → calm 19.
   static void migrateFontDefaultsIfNeeded() {
@@ -249,22 +228,6 @@ class ReadSetting {
     SpUtil.putDouble(latterHeight, getLineHeight() - .1);
   }
 
-  static void addLatterSpace() {
-    SpUtil.putDouble(latterSpace, getLatterSpace() + 1);
-  }
-
-  static void subLatterSpace() {
-    SpUtil.putDouble(latterSpace, getLatterSpace() - 1);
-  }
-
-  static double getLatterSpace() {
-    return SpUtil.getDouble(latterSpace, defValue: 3.0);
-  }
-
-  static void setLatterSpace(double v) {
-    SpUtil.putDouble(latterSpace, v);
-  }
-
   static void addParagraph() {
     SpUtil.putDouble(paragraph, getParagraph() + .1);
   }
@@ -279,10 +242,6 @@ class ReadSetting {
 
   static void setParagraph(double v) {
     SpUtil.putDouble(paragraph, v);
-  }
-
-  static double getLatterLead() {
-    return SpUtil.getDouble(latterLead, defValue: 1);
   }
 
   static void setFontSize(double fontSize) {

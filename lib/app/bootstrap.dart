@@ -97,11 +97,11 @@ class AppInit {
     // Version label for「我的」页 (synced dynamically via package_info_plus).
     try {
       final pkg = await PackageInfo.fromPlatform();
-      SpUtil.putString(PrefsKeys.version, '${pkg.version}+${pkg.buildNumber}');
+      SpUtil.putString(PrefsKeys.version, pkg.version);
     } catch (_) {
       if (!SpUtil.haveKey(PrefsKeys.version) ||
           SpUtil.getString(PrefsKeys.version).isEmpty) {
-        SpUtil.putString(PrefsKeys.version, '1.0.0+3');
+        SpUtil.putString(PrefsKeys.version, '1.0.0');
       }
     }
     // Default: visible system bars. Only the reader body goes immersive.

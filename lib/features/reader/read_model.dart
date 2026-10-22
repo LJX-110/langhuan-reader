@@ -75,9 +75,6 @@ class ReadModel with ChangeNotifier {
   GlobalKey? canvasKey;
   final ReaderPainter _painter = ReaderPainter();
 
-  ui.Image? get bgUI => _painter.bgUI;
-  set bgUI(ui.Image? value) => _painter.bgUI = value;
-
   /// 翻页/阅读模式：0 无动画 / 1 仿真 / 2 覆盖 / 3 滚动
   int get currentAnimationMode => _scroll.currentAnimationMode;
   set currentAnimationMode(int value) => _scroll.currentAnimationMode = value;
@@ -193,7 +190,6 @@ class ReadModel with ChangeNotifier {
     notify: notifyListeners,
   );
   late final ReaderThemeController _theme = ReaderThemeController(
-    setBgUI: (image) => bgUI = image,
     clearPictures: pictureCache.clear,
     markNeedsPaint: _markNeedsPaint,
     notify: notifyListeners,
@@ -292,10 +288,6 @@ class ReadModel with ChangeNotifier {
   bool get showMenu => _chrome.showMenu;
   set showMenu(bool value) => _chrome.showMenu = value;
 
-  //背景色索引（legacy texture path; solid paper preferred）
-  String get backgroundImageName => _theme.backgroundImageName;
-  set backgroundImageName(String value) => _theme.backgroundImageName = value;
-
   PaperTheme get paperTheme => _theme.paperTheme;
   set paperTheme(PaperTheme value) => _theme.paperTheme = value;
 
@@ -338,10 +330,6 @@ class ReadModel with ChangeNotifier {
   Future openChapterAt(int idx, bool jump, {bool showLoading = true}) {
     return _window.openAt(idx, jump, showLoadingUi: showLoading);
   }
-
-  Future<void> refreshThemePaint() => _theme.refreshPaint();
-
-  Future<void> setBackgroundImage(Object? i) => _theme.setBackgroundImage(i);
 
   /// WeChat-style solid paper swatch.
   Future<void> setPaperTheme(PaperTheme theme) => _theme.setPaperTheme(theme);
@@ -433,11 +421,7 @@ class ReadModel with ChangeNotifier {
   Future<void> recordHistory() =>
       _progress.recordHistory(book: book, chapters: chapters);
 
-  /*页面点击事件（兼容旧入口） */
-  void tapPage(BuildContext context, TapUpDetails details) {
-    tapPageAt(details.localPosition, MediaQuery.of(context).size);
-  }
-
+  /*页面点击事件 */
   /// Zone tap using local coordinates of the reader canvas.
   /// Returns `true` if a page-turn was started (not for menu-only).
   bool tapPageAt(Offset localPos, Size size) => _input.tapAt(localPos, size);
@@ -512,9 +496,6 @@ class ReadModel with ChangeNotifier {
 
   ui.Picture? paintNextPicture() => _pictures.paintNext();
 
-  Future<ui.Image> loadAssetImage(String asset, {int? width, int? height}) =>
-      _theme.loadAssetImage(asset, width: width, height: height);
-
   /// Paint one page picture.
   ///
   /// [chrome]: when true (page-turn), bake chapter title + time/page.
@@ -581,6 +562,4 @@ class ReadModel with ChangeNotifier {
   bool canTurnNext() => _input.canTurnNext();
 
   bool canTurnPrevious() => _input.canTurnPrevious();
-
-  Future<void> reloadBackgroundImage() => _theme.reloadBackgroundImage();
 }

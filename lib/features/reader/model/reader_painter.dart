@@ -19,8 +19,6 @@ import 'package:flutter/material.dart';
 class ReaderPainter {
   ReaderPainter();
 
-  ui.Image? bgUI;
-
   final TextPainter _labelPainter = TextPainter(
     textDirection: TextDirection.ltr,
     maxLines: 1,
@@ -253,17 +251,6 @@ class ReaderPainter {
       Rect.fromLTWH(0, 0, pageW, pageH),
       Paint()..color = paper,
     );
-    if (!ReadSetting.useSolidPaper()) {
-      final selfPaint = Paint()
-        ..style = PaintingStyle.fill
-        ..isAntiAlias = true
-        ..strokeCap = StrokeCap.butt
-        ..strokeWidth = 30.0;
-      final bg = bgUI;
-      if (bg != null) {
-        pageCanvas.drawImage(bg, const Offset(0, 0), selfPaint);
-      }
-    }
 
     final fontFamily = ReadSetting.getFontFamily();
     final familyOrNull = (fontFamily.isEmpty || fontFamily == 'Roboto')
