@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/data/repositories/chapter_repository.dart';
+import 'package:langhuan/data/repositories/reading_history_repository.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/entities/chapter_toc_entry.dart';
 
@@ -11,11 +12,13 @@ class ReadingProgressStore {
   ReadingProgressStore({
     required this.books,
     required this.chapters,
+    required this.history,
     required this.ensureBookRow,
   });
 
   final BookRepository books;
   final ChapterRepository chapters;
+  final ReadingHistoryRepository history;
   final Future<void> Function(Book book) ensureBookRow;
 
   BookRepository get _books => books;
@@ -131,5 +134,15 @@ class ReadingProgressStore {
       'Read',
       'progress save id=$id cur=$cur idx=$idx name=$chapterName rows=$updated',
     );
+    try {
+      await history.touch(
+        bookId: id,
+        chapterIndex: cur,
+        pageIndex: idx,
+        chapterName: chapterName,
+      );
+    } catch (e) {
+      AppLog.w('Read', 'reading history touch failed', error: e);
+    }
   }
 }

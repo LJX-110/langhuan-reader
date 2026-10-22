@@ -1,8 +1,12 @@
+import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:langhuan/app/providers.dart';
 import 'package:langhuan/core/events/event.dart';
+import 'package:langhuan/data/entities/bookmark.dart';
+import 'package:langhuan/data/entities/read_page.dart';
+import 'package:langhuan/data/repositories/bookmark_repository.dart';
 import 'package:langhuan/design/theme/color_model.dart';
 import 'package:langhuan/features/reader/menu/reader_bottom_bar.dart';
 import 'package:langhuan/features/reader/menu/reader_chapter_panel.dart';
@@ -35,6 +39,10 @@ class _MenuState extends ConsumerState<ReaderMenu> {
   List<({int page, String snippet})> _findMatches = const [];
   int _findIndex = 0;
 
+  final BookmarkRepository _bookmarks = BookmarkRepository.instance;
+  String? _bookmarkKey;
+  bool _bookmarked = false;
+
   @override
   void initState() {
     super.initState();
@@ -53,6 +61,62 @@ class _MenuState extends ConsumerState<ReaderMenu> {
 
   void _refresh() {
     if (mounted) setState(() {});
+  }
+
+  String? get _currentBookmarkId {
+    final b = _readModel.book;
+    if (b == null) return null;
+    return Bookmark.idFor(b.id, b.chapterIndex, b.pageIndex);
+  }
+
+  /// Re-check the bookmark flag only when the book/chapter/page changes.
+  void _syncBookmark() {
+    final id = _currentBookmarkId;
+    if (id == null || id == _bookmarkKey) return;
+    _bookmarkKey = id;
+    _bookmarks.exists(id).then((value) {
+      if (mounted && id == _bookmarkKey) {
+        setState(() => _bookmarked = value);
+      }
+    }, onError: (_) {});
+  }
+
+  Future<void> _toggleBookmark() async {
+    final b = _readModel.book;
+    final page = _readModel.curPage;
+    if (b == null || page == null) return;
+    final id = Bookmark.idFor(b.id, b.chapterIndex, b.pageIndex);
+    try {
+      final exists = await _bookmarks.exists(id);
+      if (exists) {
+        await _bookmarks.remove(id);
+      } else {
+        await _bookmarks.add(
+          Bookmark(
+            id: id,
+            bookId: b.id,
+            chapterIndex: b.chapterIndex,
+            pageIndex: b.pageIndex,
+            chapterName: b.readingChapter,
+            excerpt: _pageExcerpt(page),
+            createdAt: DateTime.now().millisecondsSinceEpoch,
+          ),
+        );
+      }
+      if (!mounted) return;
+      setState(() => _bookmarked = !exists);
+      BotToast.showText(text: exists ? '已取消书签' : '已添加书签');
+    } catch (e) {
+      BotToast.showText(text: '书签操作失败：$e');
+    }
+  }
+
+  String _pageExcerpt(ReadPage page) {
+    final index = _readModel.book?.pageIndex ?? 0;
+    if (index < 0 || index >= page.pages.length) return '';
+    final text = page.pages[index].lines.map((line) => line.text).join().trim();
+    if (text.length <= 80) return text;
+    return '${text.substring(0, 80)}…';
   }
 
   void _openFind() {
@@ -171,6 +235,7 @@ class _MenuState extends ConsumerState<ReaderMenu> {
       readModelProvider.select(
         (m) => (
           m.book?.chapterIndex,
+          m.book?.pageIndex,
           m.book?.name,
           m.tapLeftToAdvance,
           m.paperTheme,
@@ -180,6 +245,7 @@ class _MenuState extends ConsumerState<ReaderMenu> {
       ),
     );
     _readModel = ref.read(readModelProvider);
+    _syncBookmark();
 
     final chrome = _chrome;
     final isNight = _colorModel.dark;
@@ -222,6 +288,8 @@ class _MenuState extends ConsumerState<ReaderMenu> {
                     readModel: _readModel,
                     chrome: chrome,
                     onSearch: _openFind,
+                    bookmarked: _bookmarked,
+                    onBookmark: _toggleBookmark,
                   ),
           ),
           // Bottom panel (settings / chapter / download)

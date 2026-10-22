@@ -13,8 +13,9 @@ class ReaderDatabase {
   ReaderDatabase._();
   static final ReaderDatabase instance = ReaderDatabase._();
 
-  /// Schema version. Bumped when tables change; no upgrade path — wipe+recreate.
-  static const int version = 2;
+  /// Schema version. Bumped when tables change. Upgrades are incremental —
+  /// never drop user data (see [_onUpgrade]).
+  static const int version = 3;
   static const String fileName = 'reader.db';
 
   Database? _db;
@@ -44,14 +45,16 @@ class ReaderDatabase {
     await _createBooks(db);
     await _createChapters(db);
     await _createSources(db);
+    await _createBookmarks(db);
+    await _createReadingHistory(db);
   }
 
-  /// No data migration — rebuild tables when schema version jumps.
+  /// Additive migrations only. Existing books / chapters / sources stay intact.
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    await db.execute('DROP TABLE IF EXISTS chapters');
-    await db.execute('DROP TABLE IF EXISTS books');
-    await db.execute('DROP TABLE IF EXISTS sources');
-    await _onCreate(db, newVersion);
+    if (oldVersion < 3) {
+      await _createBookmarks(db);
+      await _createReadingHistory(db);
+    }
   }
 
   Future<void> _createBooks(Database db) async {
@@ -123,6 +126,40 @@ CREATE TABLE sources (
 )''');
     await db.execute(
       'CREATE INDEX idx_sources_order ON sources (custom_order ASC)',
+    );
+  }
+
+  Future<void> _createBookmarks(Database db) async {
+    await db.execute('''
+CREATE TABLE IF NOT EXISTS bookmarks (
+  id TEXT PRIMARY KEY NOT NULL,
+  book_id TEXT NOT NULL,
+  chapter_index INTEGER NOT NULL DEFAULT 0,
+  page_index INTEGER NOT NULL DEFAULT 0,
+  chapter_name TEXT NOT NULL DEFAULT '',
+  excerpt TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL DEFAULT 0,
+  FOREIGN KEY (book_id) REFERENCES books (id) ON DELETE CASCADE
+)''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_bookmarks_book '
+      'ON bookmarks (book_id, chapter_index, page_index)',
+    );
+  }
+
+  Future<void> _createReadingHistory(Database db) async {
+    await db.execute('''
+CREATE TABLE IF NOT EXISTS reading_history (
+  book_id TEXT PRIMARY KEY NOT NULL,
+  chapter_index INTEGER NOT NULL DEFAULT 0,
+  page_index INTEGER NOT NULL DEFAULT 0,
+  chapter_name TEXT NOT NULL DEFAULT '',
+  read_at INTEGER NOT NULL DEFAULT 0,
+  FOREIGN KEY (book_id) REFERENCES books (id) ON DELETE CASCADE
+)''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_history_read '
+      'ON reading_history (read_at DESC)',
     );
   }
 

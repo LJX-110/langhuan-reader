@@ -12,6 +12,7 @@ import 'package:langhuan/features/sources/source_manage_page.dart';
 import 'package:langhuan/features/settings/cache_manager.dart';
 import 'package:langhuan/features/settings/font_set_page.dart';
 import 'package:langhuan/features/settings/log_viewer_page.dart';
+import 'package:langhuan/features/profile/history_page.dart';
 import 'package:fluro/fluro.dart';
 import 'package:flutter/material.dart';
 
@@ -40,6 +41,12 @@ var fontSetHandler = Handler(
 var sortShelfHandler = Handler(
   handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
     return SortShelf();
+  },
+);
+
+var historyHandler = Handler(
+  handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
+    return const HistoryPage();
   },
 );
 

@@ -67,6 +67,12 @@ class Me extends ConsumerWidget {
                     _section(context, '阅读与整理', [
                       _row(
                         context,
+                        '阅读记录',
+                        () => Routes.navigateTo(context, Routes.history),
+                        line: line,
+                      ),
+                      _row(
+                        context,
                         '字体设置',
                         () => Routes.navigateTo(context, Routes.fontSet),
                         line: line,

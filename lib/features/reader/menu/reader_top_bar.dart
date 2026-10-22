@@ -16,18 +16,22 @@ class ReaderTopBar extends StatelessWidget {
     required this.readModel,
     required this.chrome,
     required this.onSearch,
+    required this.bookmarked,
+    required this.onBookmark,
   });
 
   final ReadModel readModel;
   final ReaderChrome chrome;
   final VoidCallback onSearch;
+  final bool bookmarked;
+  final VoidCallback onBookmark;
 
   /// The reader can be pushed from a replaced route, leaving nothing to pop.
   /// Fall back to the shell so the arrow never looks dead.
   Future<void> _back(BuildContext context) async {
     final popped = await Navigator.maybePop(context);
     if (!popped && context.mounted) {
-      Routes.navigateTo(context, Routes.root, replace: true);
+      Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
 
@@ -123,6 +127,15 @@ class ReaderTopBar extends StatelessWidget {
                 ),
               ),
               IconButton(
+                tooltip: bookmarked ? '取消书签' : '添加书签',
+                icon: Icon(
+                  bookmarked ? Icons.bookmark : Icons.bookmark_border,
+                  size: 22,
+                  color: chrome.fg,
+                ),
+                onPressed: onBookmark,
+              ),
+              IconButton(
                 tooltip: '查找',
                 icon: Icon(Icons.search, size: 22, color: chrome.fg),
                 onPressed: onSearch,
@@ -132,15 +145,17 @@ class ReaderTopBar extends StatelessWidget {
                 icon: Icon(Icons.refresh, size: 22, color: chrome.fg),
                 onPressed: () => readModel.reloadCurrentPage(),
               ),
-              IconButton(
-                tooltip: '打开原网页',
-                icon: Icon(Icons.open_in_browser, size: 22, color: chrome.fg),
-                onPressed: () => _openOriginalPage(context),
-              ),
-              IconButton(
-                tooltip: '详情',
-                icon: Icon(Icons.info_outline, size: 22, color: chrome.fg),
-                onPressed: () => _openDetail(context),
+              PopupMenuButton<String>(
+                tooltip: '更多',
+                icon: Icon(Icons.more_vert, size: 22, color: chrome.fg),
+                onSelected: (value) {
+                  if (value == 'browser') _openOriginalPage(context);
+                  if (value == 'detail') _openDetail(context);
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'browser', child: Text('打开原网页')),
+                  PopupMenuItem(value: 'detail', child: Text('书籍详情')),
+                ],
               ),
             ],
           ),

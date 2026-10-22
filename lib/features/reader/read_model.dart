@@ -5,6 +5,7 @@ import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/core/storage/prefs_keys.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/data/repositories/chapter_repository.dart';
+import 'package:langhuan/data/repositories/reading_history_repository.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/entities/chapter_toc_entry.dart';
 import 'package:langhuan/data/entities/read_page.dart';
@@ -222,6 +223,7 @@ class ReadModel with ChangeNotifier {
   late final ReadingProgressStore _progress = ReadingProgressStore(
     books: _books,
     chapters: _chapters,
+    history: ReadingHistoryRepository.instance,
     ensureBookRow: _ensureBookRow,
   );
   late final ReadingSessionLifecycle _lifecycle = ReadingSessionLifecycle(

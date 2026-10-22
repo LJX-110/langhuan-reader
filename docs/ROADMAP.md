@@ -93,7 +93,9 @@
 
 ## Phase 4 · 引擎加固（3–5 天）
 
-- DB 增量迁移（完成后才排书签、阅读记录）
+- DB 增量迁移（v3：保留 books / chapters / sources，新增 bookmarks / reading_history）
+- 书签：当前页添加/取消已落地；书签列表待补
+- 阅读记录：最近阅读页已落地
 - Cookie
 - 详情/目录/正文 POST
 - Big5
