@@ -125,7 +125,7 @@ class _BookDetailState extends ConsumerState<BookDetail> {
   Future<void> _back(BuildContext context) async {
     final popped = await Navigator.maybePop(context);
     if (!popped && context.mounted) {
-      Routes.navigateTo(context, Routes.root, replace: true);
+      Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
 
