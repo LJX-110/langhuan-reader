@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:langhuan/app/providers.dart';
 import 'package:langhuan/app/router/routes.dart';
 import 'package:langhuan/core/storage/prefs_keys.dart';
-import 'package:langhuan/design/components/archive_header.dart';
 import 'package:langhuan/design/components/pic_widget.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/features/search/search_model.dart';
@@ -171,16 +170,7 @@ class _SearchState extends ConsumerState<Search> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const ArchiveLabel(
-            '01 / 全域搜索',
-            padding: EdgeInsets.zero,
-          ),
-          const ArchiveTitle(
-            title: '搜索',
-            subtitle: '搜索全部已启用书源，结果按书合并',
-            padding: EdgeInsets.fromLTRB(0, 8, 0, 0),
-          ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 8),
           Row(
             children: [
               const Text(
@@ -253,37 +243,15 @@ class _SearchState extends ConsumerState<Search> {
                 ],
               ),
             ),
-          const SizedBox(height: 26),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.paperLight.withValues(alpha: .35),
-              borderRadius: BorderRadius.circular(AppDimens.cardRadius),
-              border: Border.all(color: AppColors.line, width: .5),
-            ),
-            child: const Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '注',
-                  style: TextStyle(
-                    color: AppColors.seal,
-                    fontFamily: AppType.serif,
-                    fontSize: 14,
-                  ),
-                ),
-                SizedBox(width: 9),
-                Expanded(
-                  child: Text(
-                    '搜索只在你启用过的书源里进行。同名书会合并为一条，并标出书源数量。',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      height: 1.7,
-                      color: AppColors.inkMute,
-                    ),
-                  ),
-                ),
-              ],
+          const Padding(
+            padding: EdgeInsets.only(top: 22),
+            child: Text(
+              '搜索只在你启用过的书源里进行，同名书会合并为一条。',
+              style: TextStyle(
+                fontSize: 11.5,
+                height: 1.7,
+                color: AppColors.inkMute,
+              ),
             ),
           ),
         ],
@@ -296,13 +264,27 @@ class _SearchState extends ConsumerState<Search> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const ArchiveLabel('01 / 全域搜索'),
-        ArchiveTitle(
-          title: '搜索结果',
-          subtitle: model.loading && groups.isEmpty
-              ? '正在搜索书源…'
-              : '${groups.length} 本书 · 按书合并',
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 6),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 6, 20, 6),
+          child: Row(
+            children: [
+              Text(
+                groups.isEmpty ? '搜索结果' : '${groups.length} 本书',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                model.loading && groups.isEmpty ? '正在搜索…' : '按书合并',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.inkMute,
+                ),
+              ),
+            ],
+          ),
         ),
         Expanded(
           child: _resultBody(context, model, groups),
@@ -456,14 +438,17 @@ class _SearchState extends ConsumerState<Search> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.qingmo.withValues(alpha: .075),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: .075),
                           borderRadius: BorderRadius.circular(3),
                         ),
                         child: Text(
                           sourceLabel,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 9,
-                            color: AppColors.qingmo,
+                            color: Theme.of(context).colorScheme.primary,
                           ),
                         ),
                       ),

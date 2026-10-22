@@ -5,6 +5,7 @@ class PrefsKeys {
   PrefsKeys._();
 
   static const dark = 'dark';
+  static const themeIndex = 'theme_index';
   static const version = 'version';
   static const coverGrid = 'cover';
   static const leftClickNext = 'leftClickNext';

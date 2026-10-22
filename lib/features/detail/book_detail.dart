@@ -44,7 +44,8 @@ class _BookDetailState extends ConsumerState<BookDetail> {
   Color get _surface => _dark ? AppColors.surfaceDark : AppColors.surface;
   Color get _primary =>
       _dark ? AppColors.textOnDark : AppColors.textPrimary;
-  Color get _secondary => AppColors.textSecondary;
+  Color get _secondary =>
+      _dark ? const Color(0xFFB3B3B3) : AppColors.textSecondary;
   Color get _divider =>
       _dark ? AppColors.dividerDark : AppColors.divider;
 
@@ -191,7 +192,7 @@ class _BookDetailState extends ConsumerState<BookDetail> {
                     if (info.status.isNotEmpty)
                       _chip(
                         info.status,
-                        bg: AppColors.brandSoft,
+                        bg: AppColors.accentOf(context).withValues(alpha: .09),
                         fg: AppColors.accentOf(context),
                       ),
                     if (info.rating > 0)

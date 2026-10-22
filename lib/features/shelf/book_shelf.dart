@@ -1,5 +1,5 @@
 import 'package:langhuan/core/platform/screen.dart';
-import 'package:langhuan/design/components/archive_header.dart';
+import 'package:langhuan/design/components/page_header.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/core/storage/prefs_keys.dart';
 import 'package:langhuan/core/storage/local_store.dart';
@@ -42,7 +42,6 @@ class _BookShelfState extends ConsumerState<BookShelf> {
   Widget build(BuildContext context) {
     final shelfModel = ref.watch(shelfModelProvider);
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final count = shelfModel.visibleShelf.length;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
@@ -53,7 +52,6 @@ class _BookShelfState extends ConsumerState<BookShelf> {
           child: Column(
             children: [
               _ShelfHeader(
-                count: count,
                 coverMode: shelfModel.cover,
                 filter: shelfModel.filter,
                 onFilter: shelfModel.setFilter,
@@ -78,7 +76,6 @@ class _BookShelfState extends ConsumerState<BookShelf> {
 
 /// 顶栏：标题 + 数量 + 搜索 / 视图 / 整理
 class _ShelfHeader extends StatelessWidget {
-  final int count;
   final bool coverMode;
   final ShelfFilter filter;
   final ValueChanged<ShelfFilter> onFilter;
@@ -87,7 +84,6 @@ class _ShelfHeader extends StatelessWidget {
   final VoidCallback onManage;
 
   const _ShelfHeader({
-    required this.count,
     required this.coverMode,
     required this.filter,
     required this.onFilter,
@@ -117,7 +113,8 @@ class _ShelfHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ArchiveBrandBar(
+          PageHeader(
+            title: '书架',
             actions: [
               _HeaderIcon(
                 icon: Icons.search,
@@ -138,15 +135,8 @@ class _ShelfHeader extends StatelessWidget {
               ),
             ],
           ),
-          const ArchiveLabel('01 / 藏书'),
-          ArchiveTitle(
-            title: '书架',
-            subtitle: count == 0
-                ? (filter == ShelfFilter.all ? '暂无藏书' : '这个筛选下暂无藏书')
-                : '共 $count 本 · 私人书阁',
-          ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
             child: PaperSearchEntry(
               onTap: onSearch,
               hint: '搜索书架或全网书籍',

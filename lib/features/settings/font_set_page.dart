@@ -321,13 +321,13 @@ class _FontSetState extends ConsumerState<FontSet> {
                       height: 16,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: AppColors.brand,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     )
                   : Text(
                       '导入',
                       style: TextStyle(
-                        color: AppColors.brand,
+                        color: Theme.of(context).colorScheme.primary,
                         fontSize: 15,
                         fontWeight: FontWeight.w500,
                       ),
@@ -337,20 +337,22 @@ class _FontSetState extends ConsumerState<FontSet> {
           ],
         ),
         body: _loading
-            ? const Center(
-                child: CircularProgressIndicator(color: AppColors.brand),
+            ? Center(
+                child: CircularProgressIndicator(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
               )
             : ListView(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
                 children: [
-                  _previewCard(colorModel, currentName),
+                  _previewCard(context, colorModel, currentName),
                   const SizedBox(height: 20),
                   if (_systemRows.isNotEmpty) ...[
                     _sectionHeader('系统'),
                     const SizedBox(height: 8),
                     _sectionCard(
                       _systemRows
-                          .map((r) => _fontTile(r, colorModel))
+                          .map((r) => _fontTile(context, r, colorModel))
                           .toList(),
                     ),
                     const SizedBox(height: 18),
@@ -360,7 +362,7 @@ class _FontSetState extends ConsumerState<FontSet> {
                     const SizedBox(height: 8),
                     _sectionCard(
                       _onlineRows
-                          .map((r) => _fontTile(r, colorModel))
+                          .map((r) => _fontTile(context, r, colorModel))
                           .toList(),
                     ),
                     const SizedBox(height: 18),
@@ -368,11 +370,16 @@ class _FontSetState extends ConsumerState<FontSet> {
                   _sectionHeader('本地字体'),
                   const SizedBox(height: 8),
                   if (_localRows.isEmpty)
-                    _emptyLocalCard()
+                    _emptyLocalCard(context)
                   else
                     _sectionCard(
                       _localRows
-                          .map((r) => _fontTile(r, colorModel, canDelete: true))
+                          .map((r) => _fontTile(
+                                context,
+                                r,
+                                colorModel,
+                                canDelete: true,
+                              ))
                           .toList(),
                     ),
                   const SizedBox(height: 16),
@@ -395,7 +402,11 @@ class _FontSetState extends ConsumerState<FontSet> {
   // Preview
   // ---------------------------------------------------------------------------
 
-  Widget _previewCard(ColorModel colorModel, String currentName) {
+  Widget _previewCard(
+    BuildContext context,
+    ColorModel colorModel,
+    String currentName,
+  ) {
     final family = colorModel.font == 'Roboto' || colorModel.font.isEmpty
         ? null
         : colorModel.font;
@@ -496,7 +507,8 @@ class _FontSetState extends ConsumerState<FontSet> {
     );
   }
 
-  Widget _emptyLocalCard() {
+  Widget _emptyLocalCard(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
     return Material(
       color: _surface,
       borderRadius: BorderRadius.circular(AppDimens.cardRadius),
@@ -511,7 +523,7 @@ class _FontSetState extends ConsumerState<FontSet> {
               Icon(
                 Icons.add_circle_outline,
                 size: 28,
-                color: AppColors.brand,
+                color: accent,
               ),
               const SizedBox(height: 10),
               Text(
@@ -539,10 +551,12 @@ class _FontSetState extends ConsumerState<FontSet> {
   // ---------------------------------------------------------------------------
 
   Widget _fontTile(
+    BuildContext context,
     _FontRow row,
     ColorModel colorModel, {
     bool canDelete = false,
   }) {
+    final accent = Theme.of(context).colorScheme.primary;
     final selected = colorModel.font == row.key;
     final isLocal = row.key.startsWith(FontCatalog.localPrefix);
     final downloading = _downloading && _downloadingKey == row.key;
@@ -586,7 +600,7 @@ class _FontSetState extends ConsumerState<FontSet> {
                         fontFamily: family,
                         fontSize: 16,
                         fontWeight: FontWeight.w400,
-                        color: selected ? AppColors.brand : _primary,
+                        color: selected ? accent : _primary,
                         height: 1.3,
                       ),
                     ),
@@ -603,7 +617,7 @@ class _FontSetState extends ConsumerState<FontSet> {
                                     : null,
                                 minHeight: 3,
                                 backgroundColor: _divider,
-                                color: AppColors.brand,
+                                color: accent,
                               ),
                             ),
                           ),
@@ -630,20 +644,20 @@ class _FontSetState extends ConsumerState<FontSet> {
               ),
               const SizedBox(width: 12),
               if (selected)
-                const Icon(Icons.check_circle, size: 20, color: AppColors.brand)
+                Icon(Icons.check_circle, size: 20, color: accent)
               else if (!downloading && !row.ready && !isLocal)
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: AppColors.brandSoft,
+                    color: accent.withValues(alpha: .08),
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: const Text(
+                  child: Text(
                     '下载',
                     style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.brand,
+                      color: accent,
                       fontWeight: FontWeight.w500,
                     ),
                   ),

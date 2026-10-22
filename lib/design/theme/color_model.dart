@@ -5,7 +5,7 @@ import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/features/reader/settings/font_catalog.dart';
 import 'package:langhuan/core/storage/local_store.dart';
 import 'package:langhuan/core/cache/custom_cache_manager.dart';
-import 'package:flex_color_scheme/flex_color_scheme.dart';
+import 'package:langhuan/design/theme/theme_presets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:langhuan/core/storage/prefs_keys.dart';
@@ -15,8 +15,12 @@ class ColorModel with ChangeNotifier {
   bool dark = false;
   Map _fonts = {};
 
-  /// When true, use the 琅嬛阁 paper-ink theme (product default).
-  bool useWeReadSkin = SpUtil.getBool('use_weread_skin', defValue: true);
+  int themeIndex = SpUtil.getInt(
+    PrefsKeys.themeIndex,
+    defValue: LanghuanThemes.defaultIndex,
+  ).clamp(0, LanghuanThemes.all.length - 1).toInt();
+
+  LanghuanThemePreset get themePreset => LanghuanThemes.all[themeIndex];
 
   /// Families already registered with [FontLoader] this process.
   final Set<String> _loadedFamilies = {'Roboto', ''};
@@ -35,12 +39,6 @@ class ColorModel with ChangeNotifier {
     notifyListeners();
   }
 
-  List<Color> skins = FlexScheme.values
-      .map((e) => FlexColorScheme.light(scheme: e).toTheme.primaryColor)
-      .toList();
-  String savePath = "";
-  int idx = SpUtil.getInt('skin', defValue: 5);
-
   ThemeData? _theme;
   String font = SpUtil.getString(ReadSetting.fontNameKey, defValue: "Roboto");
 
@@ -48,80 +46,24 @@ class ColorModel with ChangeNotifier {
     if (SpUtil.haveKey("dark")) {
       dark = SpUtil.getBool(PrefsKeys.dark);
     }
-    useWeReadSkin = SpUtil.getBool('use_weread_skin', defValue: true);
     font = ReadSetting.getFontFamily();
     final family = font == "Roboto" || font.isEmpty ? null : font;
-
-    if (useWeReadSkin) {
-      _theme = buildLanghuanTheme(dark: dark, fontFamily: family);
-    } else {
-      final scheme =
-          FlexScheme.values[idx.clamp(0, FlexScheme.values.length - 1)];
-      _theme = dark
-          ? FlexColorScheme.dark(scheme: scheme, fontFamily: family).toTheme
-          : FlexColorScheme.light(scheme: scheme, fontFamily: family).toTheme;
-    }
+    final preset = themePreset;
+    _theme = buildLanghuanTheme(
+      dark: dark,
+      fontFamily: family,
+      accent: preset.accent,
+      secondaryColor: preset.secondary,
+    );
     return _theme!;
   }
 
-  List<Widget> getSkins() {
-    final wds = <Widget>[];
-    wds.add(GestureDetector(
-      onTap: () {
-        useWeReadSkin = true;
-        SpUtil.putBool('use_weread_skin', true);
-        notifyListeners();
-      },
-      child: Stack(
-        children: [
-          Container(color: AppColors.brand),
-          if (useWeReadSkin)
-            const Align(
-              alignment: Alignment.topRight,
-              child: ImageIcon(
-                AssetImage('images/pick.png'),
-                color: Colors.white,
-              ),
-            ),
-          const Align(
-            alignment: Alignment.bottomLeft,
-            child: Padding(
-              padding: EdgeInsets.all(4),
-              child: Text(
-                '默认',
-                style: TextStyle(color: Colors.white, fontSize: 11),
-              ),
-            ),
-          ),
-        ],
-      ),
-    ));
-
-    for (var i = 0; i < skins.length; i++) {
-      wds.add(GestureDetector(
-        onTap: () {
-          idx = i;
-          useWeReadSkin = false;
-          SpUtil.putBool('use_weread_skin', false);
-          notifyListeners();
-          SpUtil.putInt('skin', idx);
-        },
-        child: Stack(
-          children: <Widget>[
-            Container(color: skins[i]),
-            if (!useWeReadSkin && i == idx)
-              const Align(
-                alignment: Alignment.topRight,
-                child: ImageIcon(
-                  AssetImage('images/pick.png'),
-                  color: Colors.white,
-                ),
-              ),
-          ],
-        ),
-      ));
-    }
-    return wds;
+  void selectTheme(int index) {
+    final next = index.clamp(0, LanghuanThemes.all.length - 1).toInt();
+    if (next == themeIndex) return;
+    themeIndex = next;
+    SpUtil.putInt(PrefsKeys.themeIndex, next);
+    notifyListeners();
   }
 
   void switchModel() {

@@ -30,9 +30,9 @@ Novel/
 │  │  └─ repositories/      书、章节、书源的持久化
 │  ├─ design/
 │  │  ├─ brand/             应用名与固定文案
-│  │  ├─ components/        页头、印章、封面等展示组件
-│  │  ├─ theme/             明暗模式控制
-│  │  └─ tokens/            五色 tokens、尺寸、阴影、字体与 ThemeData
+│  │  ├─ components/        PageHeader、搜索、立体书架、封面等展示组件
+│  │  ├─ theme/             12 套主题、明暗控制
+│  │  └─ tokens/            基础中性色、尺寸、阴影、字体与 ThemeData
 │  └─ features/
 │     ├─ shelf/             书架
 │     ├─ discover/          发现
@@ -57,8 +57,9 @@ Novel/
 ## 模块边界
 
 - `app/shell/` 只负责四个主页签（书架 / 发现 / 本地 / 我）与 Dock 的装配，不承载业务逻辑。搜索不是页签，从书架 / 发现页头进入 `/search`。
-- `design/tokens/` 只放白 / 黑 / 青 / 鎏金 / 朱砂五色、尺寸、阴影、字体与 `buildLanghuanTheme`，不依赖业务状态。
-- `design/components/` 只做展示：`ArchiveBrandBar`、`ArchiveLabel`、`ArchiveTitle`、`PaperSearchEntry`、`SealMark`。
+- `design/tokens/` 只放中性色、尺寸、阴影、字体与 `buildLanghuanTheme`，不依赖业务状态。
+- `design/theme/theme_presets.dart` 定义 12 套双色主题；`ColorModel` 只负责选择、持久化和构建 ThemeData。
+- `design/components/` 只做展示：`PageHeader`、`PaperSearchEntry`、`Bookshelf3D`。
 - `features/*/` 页面负责展示与交互，模型负责状态与调用；页面不直接写 SQL。
 - `data/repositories/` 是数据库访问边界；书源列表查询不携带 `raw_json`，避免大 payload 过 MethodChannel。
 - `features/sources/engine/` 只执行书源规则，不依赖 UI。
@@ -99,11 +100,12 @@ Novel/
 
 ## 设计系统
 
-- 色板只保留白 `#FFFFFF`、黑 `#141414`、青 `#1B5C66`、鎏金 `#C9A24B`、朱砂 `#A8483A`；灰色只由黑白派生。图标底用更深的青 `#14505B`。
-- `buildLanghuanTheme(dark:)` 提供明暗两套；主页头图为档案式，底部为白底四页签 Dock，选中只变青、不使用胶囊。
+- 页面固定白 / 黑底；12 套双色主题只切换强调色与辅助色。强调色会做对比度校正，亮黄 / 荧光色不整页铺底。
+- 默认主题「鸢尾蓝 · 流光白」；主题定义在 `design/theme/theme_presets.dart`。
+- 每页只保留一行 `PageHeader`，不保留品牌顶栏、英文副题和档案编号；底部为白底四页签 Dock，不使用胶囊。
 - 发现页使用 `design/components/bookshelf_3d.dart`：书脊、书页厚度、透视、落地阴影与吸附翻页。
 - 不使用重模糊；header / dock 都是实色白。
-- 布局测试在 `test/design/chrome_layout_test.dart` 与 `test/design/bookshelf_layout_test.dart`，覆盖 360 / 411 / 800 宽、明暗两套与 1.3 倍文字缩放。
+- 布局/主题测试在 `test/design/chrome_layout_test.dart`、`bookshelf_layout_test.dart` 与 `theme_preset_test.dart`，覆盖 360 / 411 / 800 宽、明暗两套、1.3 倍文字缩放与主题可读性。
 
 ## 数据库
 
@@ -116,6 +118,6 @@ Novel/
 ## 验证
 
 - `flutter analyze`：通过。
-- `flutter test`：75 项通过，其中设计布局 12 项。
+- `flutter test`：77 项通过，其中设计/主题 14 项。
 - debug arm64 APK：可构建。
 - Phase 1 真机验收：待补测（构建产物 `build/app/outputs/flutter-apk/app-debug.apk`）。

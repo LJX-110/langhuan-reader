@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:langhuan/design/components/archive_header.dart';
+import 'package:langhuan/design/components/page_header.dart';
 import 'package:langhuan/design/components/bookshelf_3d.dart';
 import 'package:langhuan/design/components/pic_widget.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
@@ -63,7 +63,8 @@ class _ExplorePageState extends ConsumerState<ExplorePage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ArchiveBrandBar(
+            PageHeader(
+              title: '发现',
               actions: [
                 IconButton(
                   tooltip: '搜索',
@@ -82,12 +83,7 @@ class _ExplorePageState extends ConsumerState<ExplorePage>
                 ),
               ],
             ),
-            const ArchiveLabel('01 / 寻书'),
-            const ArchiveTitle(
-              title: '发现',
-              subtitle: '从自己的书源里，慢慢找一本书',
-            ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             _ExploreSourceTrigger(model: model, dark: dark),
             if (model.kinds.length > 1) _KindBar(model: model, dark: dark),
             if (model.books.isNotEmpty)
@@ -121,7 +117,8 @@ class _ExploreSourceTrigger extends StatelessWidget {
     final accent = AppColors.accentOf(context);
     final accentSoft = AppColors.accentSoftOf(context);
     final primary = dark ? AppColors.textOnDark : AppColors.textPrimary;
-    final secondary = AppColors.textSecondary;
+    final secondary =
+        dark ? const Color(0xFFB3B3B3) : AppColors.textSecondary;
     final active = model.activeSource;
     final name = (active?.bookSourceName.trim().isNotEmpty ?? false)
         ? active!.bookSourceName
@@ -253,8 +250,9 @@ class _BookList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primary = dark ? AppColors.textOnDark : AppColors.textPrimary;
-    final secondary = AppColors.textSecondary;
-    final tertiary = AppColors.textTertiary;
+    final secondary =
+        dark ? const Color(0xFFB3B3B3) : AppColors.textSecondary;
+    final tertiary = dark ? const Color(0xFF8A8A8A) : AppColors.textTertiary;
 
     if (model.loading && model.books.isEmpty) {
       return _ExploreSkeleton(dark: dark);
@@ -263,28 +261,20 @@ class _BookList extends StatelessWidget {
     if (model.books.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(24, 80, 24, 24),
         children: [
-          const SizedBox(height: 120),
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text(
-                model.error ?? '暂无内容',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: secondary,
-                ),
-              ),
-            ),
+          Text(
+            model.error ?? '暂无内容',
+            style: TextStyle(fontSize: 14, color: secondary, height: 1.5),
           ),
           if ((model.error ?? '').contains('书源'))
-            Center(
-              child: TextButton(
-                onPressed: () =>
-                    Routes.navigateTo(context, Routes.sources),
-                child: const Text('去书源管理'),
+            TextButton(
+              onPressed: () => Routes.navigateTo(context, Routes.sources),
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 32),
               ),
+              child: const Text('去书源管理'),
             ),
         ],
       );

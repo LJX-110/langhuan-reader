@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:langhuan/app/shell/glass_dock.dart';
-import 'package:langhuan/design/components/archive_header.dart';
+import 'package:langhuan/design/components/page_header.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 
 Widget _host({
@@ -36,7 +36,8 @@ Widget _shelfChrome() {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      ArchiveBrandBar(
+      PageHeader(
+        title: '书架',
         actions: [
           IconButton(
             tooltip: '搜索',
@@ -55,10 +56,8 @@ Widget _shelfChrome() {
           ),
         ],
       ),
-      const ArchiveLabel('01 / 藏书'),
-      const ArchiveTitle(title: '书架', subtitle: '共 12 本 · 私人书阁'),
       Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
         child: PaperSearchEntry(onTap: () {}),
       ),
     ],

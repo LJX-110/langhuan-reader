@@ -75,62 +75,42 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
   }
 
   Widget _emptyShelf() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: AppColors.brandSoft,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.menu_book_outlined,
-                size: 36,
-                color: AppColors.brand,
-              ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 80, 24, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '书架还是空的',
+            style: TextStyle(
+              color: _primary,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
             ),
-            const SizedBox(height: 16),
-            Text(
-              '书架空空如也',
-              style: TextStyle(
-                color: _primary,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '去发现页或搜索找一本书。',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 12,
             ),
-            const SizedBox(height: 8),
-            const Text(
-              '去发现页或搜索添加喜欢的书吧',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          ),
+          const SizedBox(height: 6),
+          TextButton(
+            onPressed: () {
+              Routes.navigateTo(context, Routes.search, params: {
+                'type': 'book',
+                'name': '',
+              });
+            },
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, 32),
             ),
-            const SizedBox(height: 20),
-            FilledButton.tonal(
-              onPressed: () {
-                Routes.navigateTo(context, Routes.search, params: {
-                  'type': 'book',
-                  'name': '',
-                });
-              },
-              style: FilledButton.styleFrom(
-                foregroundColor: AppColors.brand,
-                backgroundColor: AppColors.brandSoft,
-                elevation: 0,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-              ),
-              child: const Text('去搜索'),
-            ),
-          ],
-        ),
+            child: const Text('去搜索'),
+          ),
+        ],
       ),
     );
   }
@@ -165,6 +145,7 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
   Widget coverModel() {
     final w = _coverWidth;
     final h = _coverHeight;
+    final secondaryText = Theme.of(context).colorScheme.onSurfaceVariant;
     return GridView.builder(
       padding: const EdgeInsets.only(top: 14, bottom: 28),
       physics: const AlwaysScrollableScrollPhysics(
@@ -217,9 +198,9 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
                 _authorLabel(book),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: AppColors.textSecondary,
+                  color: secondaryText,
                 ),
               ),
               const SizedBox(height: 2),
@@ -227,9 +208,9 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
                 _progressLabel(book),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: AppColors.textSecondary,
+                  color: secondaryText,
                 ),
               ),
             ],
@@ -321,6 +302,7 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
 
   Widget getBookItemView(int i, double coverW, double coverH) {
     final item = _books[i];
+    final secondaryText = Theme.of(context).colorScheme.onSurfaceVariant;
     return Dismissible(
       key: Key(item.id.toString()),
       direction: DismissDirection.endToStart,
@@ -372,9 +354,9 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
                     const SizedBox(height: 6),
                     Text(
                       _authorLabel(item),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.textSecondary,
+                        color: secondaryText,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -382,9 +364,9 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
                     const SizedBox(height: 4),
                     Text(
                       _progressLabel(item),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.textSecondary,
+                        color: secondaryText,
                       ),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
@@ -393,8 +375,8 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
                       const SizedBox(height: 4),
                       Text(
                         item.updatedAt,
-                        style: const TextStyle(
-                          color: AppColors.textTertiary,
+                        style: TextStyle(
+                          color: secondaryText,
                           fontSize: 11,
                         ),
                         maxLines: 1,

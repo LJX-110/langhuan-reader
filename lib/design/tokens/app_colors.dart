@@ -23,17 +23,10 @@ class AppColors {
   static const Color inkSoft = Color(0xFF4D4D4D);
   static const Color inkMute = Color(0xFF6E6E6E);
   static const Color line = Color(0xFFE8E8E8);
-  static const Color lineSoft = Color(0xFFF2F2F2);
 
   // Accent aliases.
   static const Color qingmo = teal;
   static const Color qingmoSoft = Color(0xFF6FA8AE);
-  static const Color seal = gold;
-
-  // Backward-compatible semantic names used across the existing UI.
-  static const Color brand = qingmo;
-  static const Color brandPressed = teal;
-  static const Color brandSoft = Color(0x141B5C66);
 
   static Color accentOf(BuildContext context) =>
       Theme.of(context).colorScheme.primary;
@@ -44,12 +37,10 @@ class AppColors {
   static const Color scaffold = paper;
   static const Color surface = paperLight;
   static const Color divider = line;
-  static const Color cardBorder = lineSoft;
 
   static const Color textPrimary = ink;
   static const Color textSecondary = inkSoft;
   static const Color textTertiary = inkMute;
-  static const Color textOnBrand = white;
   static const Color textOnDark = Color(0xFFF5F5F5);
 
   static const Color danger = cinnabar;
@@ -78,13 +69,10 @@ class AppDimens {
   static const double pagePadding = 16;
   static const double coverRadius = 5;
   static const double cardRadius = 12;
-  static const double searchBarHeight = 38;
   static const double ctaHeight = 44;
   static const double coverAspect = 0.72; // width / height
-  static const int shelfColumns = 3;
   static const double shelfSpacing = 14;
   static const double shelfRunSpacing = 18;
-  static const double dockHeight = 62;
 }
 
 class AppShadows {
@@ -117,25 +105,32 @@ class AppType {
 ThemeData buildLanghuanTheme({
   required bool dark,
   String? fontFamily,
+  Color? accent,
+  Color? secondaryColor,
 }) {
   final brightness = dark ? Brightness.dark : Brightness.light;
   final background = dark ? AppColors.scaffoldDark : AppColors.scaffold;
   final surface = dark ? AppColors.surfaceDark : AppColors.surface;
   final onSurface = dark ? AppColors.textOnDark : AppColors.textPrimary;
-  final primary = dark ? AppColors.qingmoSoft : AppColors.qingmo;
+  final primary = accent == null
+      ? (dark ? AppColors.qingmoSoft : AppColors.qingmo)
+      : _readableAccent(accent, dark);
   final line = dark ? AppColors.dividerDark : AppColors.line;
-  final secondary = dark ? const Color(0xFFB3B3B3) : AppColors.inkSoft;
+  final muted = dark ? const Color(0xFFB3B3B3) : AppColors.inkSoft;
+  final secondary = secondaryColor ?? AppColors.gold;
 
   final scheme = ColorScheme(
     brightness: brightness,
     primary: primary,
-    onPrimary: dark ? AppColors.ink : AppColors.paperLight,
-    secondary: AppColors.gold,
-    onSecondary: AppColors.black,
+    onPrimary: _onColor(primary),
+    secondary: secondary,
+    onSecondary: _onColor(secondary),
     error: AppColors.cinnabar,
     onError: AppColors.white,
     surface: surface,
     onSurface: onSurface,
+    outline: line,
+    onSurfaceVariant: muted,
   );
 
   final baseText = TextTheme(
@@ -322,10 +317,27 @@ ThemeData buildLanghuanTheme({
   );
 }
 
-/// Kept for older call sites while the design system settles.
-ThemeData buildWeReadTheme({
-  required bool dark,
-  String? fontFamily,
-  Color? accent,
-}) =>
-    buildLanghuanTheme(dark: dark, fontFamily: fontFamily);
+Color _onColor(Color color) =>
+    ThemeData.estimateBrightnessForColor(color) == Brightness.dark
+        ? Colors.white
+        : Colors.black;
+
+double _contrast(Color a, Color b) {
+  final la = a.computeLuminance();
+  final lb = b.computeLuminance();
+  final hi = la > lb ? la : lb;
+  final lo = la > lb ? lb : la;
+  return (hi + .05) / (lo + .05);
+}
+
+/// Keep a chosen accent readable as text/icon colour on the page background.
+/// The theme card still shows the raw two colours.
+Color _readableAccent(Color color, bool dark) {
+  final target = dark ? Colors.black : Colors.white;
+  var out = color;
+  for (var i = 0; i < 12; i++) {
+    if (_contrast(out, target) >= 4.5) return out;
+    out = Color.lerp(out, dark ? Colors.white : Colors.black, .12)!;
+  }
+  return out;
+}

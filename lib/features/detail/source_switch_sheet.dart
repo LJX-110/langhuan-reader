@@ -45,7 +45,8 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
   Color get _surface => _dark ? AppColors.surfaceDark : AppColors.surface;
   Color get _primary =>
       _dark ? AppColors.textOnDark : AppColors.textPrimary;
-  Color get _secondary => AppColors.textSecondary;
+  Color get _secondary =>
+      _dark ? const Color(0xFFB3B3B3) : AppColors.textSecondary;
   Color get _divider => _dark ? AppColors.dividerDark : AppColors.divider;
 
   @override
@@ -324,7 +325,9 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
                                     ? Text(
                                         '当前',
                                         style: TextStyle(
-                                          color: AppColors.brand,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
                                           fontSize: 13,
                                           fontWeight: FontWeight.w600,
                                         ),

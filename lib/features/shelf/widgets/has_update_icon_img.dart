@@ -21,6 +21,7 @@ class HasUpdateIconImg extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
     return SizedBox(
       width: width,
       height: height,
@@ -62,10 +63,10 @@ class HasUpdateIconImg extends StatelessWidget {
                 width: 22,
                 height: 22,
                 decoration: BoxDecoration(
-                  color: picked ? AppColors.brand : Colors.white,
+                  color: picked ? accent : Colors.white,
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: picked ? AppColors.brand : Colors.white70,
+                    color: picked ? accent : Colors.white70,
                     width: 1.5,
                   ),
                   boxShadow: const [

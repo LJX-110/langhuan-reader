@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:langhuan/app/router/routes.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
-import 'package:langhuan/design/components/archive_header.dart';
+import 'package:langhuan/design/components/page_header.dart';
 import 'package:langhuan/design/components/pic_widget.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/features/local/local_import_service.dart';
@@ -124,7 +124,8 @@ class _LocalPageState extends State<LocalPage> {
         bottom: false,
         child: Column(
           children: [
-            ArchiveBrandBar(
+            PageHeader(
+              title: '本地',
               actions: [
                 IconButton(
                   tooltip: '导入 TXT',
@@ -133,38 +134,26 @@ class _LocalPageState extends State<LocalPage> {
                 ),
               ],
             ),
-            const ArchiveLabel('01 / 本地'),
-            const ArchiveTitle(
-              title: '本地书库',
-              subtitle: 'TXT 文件 · 只存本机',
-            ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
-              child: Row(
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: _importing ? null : _importTxt,
-                    icon: const Icon(Icons.file_open_outlined, size: 17),
-                    label: Text(_importing ? '正在导入…' : '导入 TXT'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.teal,
-                      side: const BorderSide(color: AppColors.line),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      minimumSize: const Size(0, 36),
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: _importing ? null : _importTxt,
+                  icon: const Icon(Icons.file_open_outlined, size: 17),
+                  label: Text(_importing ? '正在导入…' : '导入 TXT'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.primary,
+                    side: BorderSide(
+                      color: dark ? AppColors.dividerDark : AppColors.line,
                     ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    _importing ? '解析章节中' : '支持 UTF-8 / GBK',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: dark ? AppColors.textOnDark : AppColors.inkMute,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
                     ),
+                    minimumSize: const Size(0, 36),
                   ),
-                ],
+                ),
               ),
             ),
             if (_importing)
@@ -208,44 +197,34 @@ class _LocalPageState extends State<LocalPage> {
 
   Widget _empty(bool dark) {
     final muted = dark ? AppColors.textOnDark : AppColors.inkMute;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.folder_open_outlined,
-              size: 44,
-              color: AppColors.inkMute,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 80, 24, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '还没有本地书',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: dark ? AppColors.textOnDark : AppColors.ink,
             ),
-            const SizedBox(height: 12),
-            Text(
-              '还没有本地书',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: dark ? AppColors.textOnDark : AppColors.ink,
-              ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '导入 TXT 后会出现在这里，不上传、不同步。',
+            style: TextStyle(fontSize: 12, color: muted),
+          ),
+          const SizedBox(height: 6),
+          TextButton(
+            onPressed: _importing ? null : _importTxt,
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, 32),
             ),
-            const SizedBox(height: 6),
-            Text(
-              '导入 TXT 后会出现在这里，不上传、不同步。',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: muted),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: _importing ? null : _importTxt,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.teal,
-                foregroundColor: AppColors.white,
-                elevation: 0,
-              ),
-              child: const Text('导入 TXT'),
-            ),
-          ],
-        ),
+            child: const Text('导入 TXT'),
+          ),
+        ],
       ),
     );
   }

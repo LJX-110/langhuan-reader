@@ -293,10 +293,13 @@ class _BookCard extends StatelessWidget {
                     children: [
                       Container(
                         width: 10,
-                        decoration: const BoxDecoration(
-                          color: AppColors.teal,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary,
                           border: Border(
-                            right: BorderSide(color: AppColors.gold, width: .5),
+                            right: BorderSide(
+                              color: Theme.of(context).colorScheme.secondary,
+                              width: .5,
+                            ),
                           ),
                         ),
                         child: RotatedBox(
@@ -306,11 +309,11 @@ class _BookCard extends StatelessWidget {
                               item.name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 7,
                                 height: 1,
                                 letterSpacing: .4,
-                                color: AppColors.white,
+                                color: Theme.of(context).colorScheme.onPrimary,
                               ),
                             ),
                           ),
