@@ -56,13 +56,6 @@ class TextComposition {
   /// 是否显示动画
   bool showAnimation;
 
-  // final Pattern? linkPattern;
-  // final TextStyle? linkStyle;
-  // final String Function(String s)? linkText;
-
-  // canvas 点击事件不生效
-  // final void Function(String s)? onLinkTap;
-
   /// * 文本排版
   /// * 两端对齐
   /// * 底栏对齐
@@ -100,22 +93,32 @@ class TextComposition {
     // this.linkStyle,
     // this.linkText,
     // this.onLinkTap,
-  })  : pages = pages ?? <TextPage>[],
-        paragraphs = paragraphs ?? text?.split("\n") ?? <String>[],
-        boxSize = boxSize ??
-            (ui.PlatformDispatcher.instance.views.isNotEmpty
-                ? ui.PlatformDispatcher.instance.views.first.physicalSize /
-                    ui.PlatformDispatcher.instance.views.first.devicePixelRatio
-                : const Size(360, 640)),
-        columnWidth = ((boxSize ??
-                    (ui.PlatformDispatcher.instance.views.isNotEmpty
-                        ? ui.PlatformDispatcher.instance.views.first
-                                .physicalSize /
-                            ui.PlatformDispatcher.instance.views.first
-                                .devicePixelRatio
-                        : const Size(360, 640)))
-                .width -
-            (padding?.horizontal ?? 0)) {
+  }) : pages = pages ?? <TextPage>[],
+       paragraphs = paragraphs ?? text?.split("\n") ?? <String>[],
+       boxSize =
+           boxSize ??
+           (ui.PlatformDispatcher.instance.views.isNotEmpty
+               ? ui.PlatformDispatcher.instance.views.first.physicalSize /
+                     ui.PlatformDispatcher.instance.views.first.devicePixelRatio
+               : const Size(360, 640)),
+       columnWidth =
+           ((boxSize ??
+                   (ui.PlatformDispatcher.instance.views.isNotEmpty
+                       ? ui
+                                 .PlatformDispatcher
+                                 .instance
+                                 .views
+                                 .first
+                                 .physicalSize /
+                             ui
+                                 .PlatformDispatcher
+                                 .instance
+                                 .views
+                                 .first
+                                 .devicePixelRatio
+                       : const Size(360, 640)))
+               .width -
+           (padding?.horizontal ?? 0)) {
     // ABI v3 Dart fallback: emit semantic lines (top/height/justify/targetWidth).
     // letterSpacing is computed at paint time by Flutter TextPainter.
     final tp = TextPainter(textDirection: TextDirection.ltr, maxLines: 1);
@@ -175,22 +178,24 @@ class TextComposition {
           final forceEnd = p.isEmpty
               ? 0
               : (p.length > 1 &&
-                      p.codeUnitAt(0) >= 0xD800 &&
-                      p.codeUnitAt(0) <= 0xDBFF
-                  ? 2
-                  : 1)
-                  .clamp(1, p.length);
+                            p.codeUnitAt(0) >= 0xD800 &&
+                            p.codeUnitAt(0) <= 0xDBFF
+                        ? 2
+                        : 1)
+                    .clamp(1, p.length);
           final text = p.substring(0, forceEnd);
           final isEnd = p.length == forceEnd;
-          lines.add(TextLine(
-            text,
-            top: top,
-            height: lineBoxH,
-            justify: false,
-            isLastLine: isEnd,
-            isParagraphEnd: isEnd,
-            targetWidth: width,
-          ));
+          lines.add(
+            TextLine(
+              text,
+              top: top,
+              height: lineBoxH,
+              justify: false,
+              isLastLine: isEnd,
+              isParagraphEnd: isEnd,
+              targetWidth: width,
+            ),
+          );
           top += lineBoxH;
           if (isEnd) {
             newParagraph();
@@ -209,15 +214,17 @@ class TextComposition {
         final nearlyFull = measured > width2 && measured > size * 0.5;
         final doJustify = !isEnd && nearlyFull && n > 1;
         final h = tp.height > 0 ? tp.height : lineBoxH;
-        lines.add(TextLine(
-          text,
-          top: top,
-          height: h,
-          justify: doJustify,
-          isLastLine: isEnd,
-          isParagraphEnd: isEnd,
-          targetWidth: width,
-        ));
+        lines.add(
+          TextLine(
+            text,
+            top: top,
+            height: h,
+            justify: doJustify,
+            isLastLine: isEnd,
+            isParagraphEnd: isEnd,
+            targetWidth: width,
+          ),
+        );
         top += h;
         if (isEnd) {
           newParagraph();
@@ -264,12 +271,13 @@ class TextComposition {
         text: readPage.chapterContent,
         readPage: readPage,
         style: TextStyle(
-            // color: dark == 1 ? darkFont : Colors.black,
-            // locale: Locale('zh_CN'),
-            fontFamily: fontFamily,
-            fontSize: fontSize,
-            // letterSpacing: ReadSetting.getLatterSpace(),
-            height: height),
+          // color: dark == 1 ? darkFont : Colors.black,
+          // locale: Locale('zh_CN'),
+          fontFamily: fontFamily,
+          fontSize: fontSize,
+          // letterSpacing: ReadSetting.getLatterSpace(),
+          height: height,
+        ),
         paragraph: paragraph,
         justRender: true,
         boxSize: Size(w, h),
@@ -286,9 +294,7 @@ class TextComposition {
   }
 
   /// Collect layout metrics on the UI isolate (SpUtil / Screen are main-only).
-  static Map<String, dynamic> layoutParams({
-    bool shouldJustifyHeight = false,
-  }) {
+  static Map<String, dynamic> layoutParams({bool shouldJustifyHeight = false}) {
     final fontSize = ReadSetting.getFontSize();
     final lineHeight = ReadSetting.getLineHeight();
     // Content box uses shared insets from ReadSetting so paint + paginate match.
@@ -296,8 +302,7 @@ class TextComposition {
     final topPad = ReadSetting.contentTopInset();
     final bottomPad = ReadSetting.contentBottomInset();
     final rawH = Screen.height - topPad - bottomPad;
-    final boxH =
-        rawH > 120 ? rawH : (Screen.height * 0.7).clamp(200.0, 2000.0);
+    final boxH = rawH > 120 ? rawH : (Screen.height * 0.7).clamp(200.0, 2000.0);
     final boxW = Screen.width > 0 ? Screen.width : 360.0;
     return <String, dynamic>{
       'fontSize': fontSize,
@@ -311,21 +316,27 @@ class TextComposition {
       'shouldJustifyHeight': shouldJustifyHeight,
       // Bump cache when pager contract changes.
       'abi': bookPagerAbiVersion,
-      'textAlign': 'justify',
+      'textAlign': ReadSetting.getTextAlign(),
     };
   }
 
   /// Sync parse — may block the current isolate. Prefer [parseContentAsync].
-  static List<TextPage> parseContent(ReadPage readPage,
-      {shouldJustifyHeight = true, justRender = false}) {
+  static List<TextPage> parseContent(
+    ReadPage readPage, {
+    shouldJustifyHeight = true,
+    justRender = false,
+  }) {
     final p = layoutParams(shouldJustifyHeight: shouldJustifyHeight == true);
     return _parseWithParams(readPage, p, justRender: justRender == true);
   }
 
   /// Async parse: Rust path runs in a **background isolate**; Dart fallback
   /// stays on the caller isolate (TextPainter needs the Flutter binding).
-  static Future<List<TextPage>> parseContentAsync(ReadPage readPage,
-      {bool shouldJustifyHeight = true, bool justRender = false}) async {
+  static Future<List<TextPage>> parseContentAsync(
+    ReadPage readPage, {
+    bool shouldJustifyHeight = true,
+    bool justRender = false,
+  }) async {
     final p = layoutParams(shouldJustifyHeight: shouldJustifyHeight);
     final fontSize = p['fontSize'] as double;
     final lineHeight = p['lineHeight'] as double;
@@ -368,10 +379,15 @@ class TextComposition {
           shouldJustifyHeight: shouldJustifyHeight,
           fontPath: fontPath,
           fontFamily: fontFamily,
+          textAlign: p['textAlign'] as String,
         );
         final totalLines = pages.fold<int>(0, (n, p) => n + p.lines.length);
         if (!_looksBrokenPagination(
-            pages, readPage.chapterContent, boxW, fontSize)) {
+          pages,
+          readPage.chapterContent,
+          boxW,
+          fontSize,
+        )) {
           debugPrint(
             '[PagerEngine] ENGINE=RUST pages=${pages.length} '
             'lines=$totalLines lines0=${pages.isEmpty ? 0 : pages.first.lines.length}',
@@ -491,18 +507,15 @@ class TextComposition {
           shouldJustifyHeight: shouldJustifyHeight,
           fontPath: fontPath,
           fontFamily: fontFamily,
+          textAlign: p['textAlign'] as String,
         );
       } catch (e, st) {
         AppLog.w('Pager', 'BookPager sync failed, Dart fallback', error: e);
-        debugPrint(
-          '[PagerEngine] ENGINE=DART reason=rust_exception $e',
-        );
+        debugPrint('[PagerEngine] ENGINE=DART reason=rust_exception $e');
         debugPrint('BookPager failed, falling back to Dart: $e\n$st');
       }
     } else if (nativeOkMissingPath(fontPath)) {
-      debugPrint(
-        '[PagerEngine] ENGINE=DART reason=font_path_empty',
-      );
+      debugPrint('[PagerEngine] ENGINE=DART reason=font_path_empty');
     }
     return _dartParse(
       readPage,
@@ -537,12 +550,13 @@ class TextComposition {
       text: readPage.chapterContent,
       readPage: readPage,
       style: TextStyle(
-          locale: Locale('zh_CN'),
-          fontFamily: (fontFamily.isEmpty || fontFamily == 'Roboto')
-              ? ReadSetting.defaultFontFamily
-              : fontFamily,
-          fontSize: fontSize,
-          height: lineHeight),
+        locale: Locale('zh_CN'),
+        fontFamily: (fontFamily.isEmpty || fontFamily == 'Roboto')
+            ? ReadSetting.defaultFontFamily
+            : fontFamily,
+        fontSize: fontSize,
+        height: lineHeight,
+      ),
       paragraph: paragraph,
       justRender: justRender,
       boxSize: Size(boxW, boxH),
@@ -551,151 +565,5 @@ class TextComposition {
       debug: false,
     );
     return textComposition.pages;
-  }
-}
-//  static void painterPage(SendPort sendPort) async {
-//     // 打开ReceivePort①以接收传入的消息
-//     ReceivePort port = ReceivePort();
-
-//     // 通知其他的isolates，本isolate 所监听的端口
-//     sendPort.send(port.sendPort);
-//     // 获取其他端口发送的异步消息 msg② -> ["https://jsonplaceholder.typicode.com/posts", response.sendPort]
-//     await for (var msg in port) {
-//       SendPort replyToPort = msg[0];
-//       ReadPage readPage = ReadPage.fromJson(jsonDecode(msg[1]));
-
-//       double w = double.parse(msg[2].toString());
-//       double h = double.parse(msg[3].toString());
-//       String fontFamily = msg[4].toString();
-//       double fontSize = double.parse(msg[5].toString());
-//       double height = double.parse(msg[6].toString());
-//       double dis = double.parse(msg[7].toString());
-//       double paragraph = double.parse(msg[8].toString());
-
-//       TextComposition textComposition = TextComposition(
-//         text: readPage.chapterContent,
-//         readPage: readPage,
-//         style: TextStyle(
-//             // color: dark == 1 ? darkFont : Colors.black,
-//             // locale: Locale('zh_CN'),
-//             fontFamily: fontFamily,
-//             fontSize: fontSize,
-//             // letterSpacing: ReadSetting.getLatterSpace(),
-//             height: height),
-//         paragraph: paragraph,
-//         justRender: true,
-//         boxSize: Size(w, h),
-//         padding: EdgeInsets.symmetric(horizontal: dis),
-//         shouldJustifyHeight: true,
-//         debug: false,
-//       );
-//       List<TextPage> parseContent2 = textComposition.pages;
-
-//       String result = jsonEncode(parseContent2);
-
-//       replyToPort.send([result]);
-//     }
-//   }
-class SelfForePainter extends CustomPainter {
-  final ui.Image _imageFrame;
-
-  SelfForePainter(this._imageFrame) : super();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    Paint selfPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..isAntiAlias = true
-      ..strokeCap = StrokeCap.butt
-      ..strokeWidth = 30.0;
-    canvas.drawImage(_imageFrame, Offset(0, 0), selfPaint);
-  }
-
-  @override
-  bool shouldRepaint(CustomPainter oldDelegate) {
-    return true;
-  }
-}
-
-class MyPagePainter extends CustomPaint {
-  final ReadPage readPage;
-  final CustomPainter? forePainter;
-  final TextStyle style;
-  final int pageIndex;
-  final bool debug;
-  final TextPage page;
-
-  MyPagePainter(this.pageIndex, this.readPage, this.style, this.forePainter,
-      {super.key, this.debug = false})
-      : page = readPage.pages[pageIndex],
-        super(foregroundPainter: forePainter);
-}
-
-class PagePainter extends CustomPainter {
-  final TextPage page;
-  final TextStyle style;
-  final int pageIndex;
-  final bool debug;
-
-  const PagePainter(this.pageIndex, this.page, this.style,
-      [this.debug = false]);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final lineCount = page.lines.length;
-    final tp = TextPainter(textDirection: TextDirection.ltr, maxLines: 1);
-
-    for (var i = 0; i < lineCount; i++) {
-      final line = page.lines[i];
-      // ABI v3: Flutter computes letterSpacing from justify + targetWidth.
-      final target = line.targetWidth > 0 ? line.targetWidth : size.width;
-      var ls = line.letterSpacing;
-      if (ls == null || !ls.isFinite) {
-        ls = 0;
-        if (line.justify && !line.isLastLine && target > 0) {
-          final n = line.text.characters.length;
-          if (n > 1) {
-            tp.text = TextSpan(text: line.text, style: style);
-            tp.layout();
-            final measured = tp.width;
-            if (measured > 0 &&
-                measured < target &&
-                measured > target - (style.fontSize ?? 14)) {
-              final v = (target - measured) / (n - 1);
-              if (v.isFinite && v.abs() <= (style.fontSize ?? 14) * 0.5) {
-                ls = v;
-              }
-            }
-          }
-        }
-      }
-      final lineStyle =
-          ls.abs() > 0.1 ? style.copyWith(letterSpacing: ls) : style;
-      tp.text = TextSpan(text: line.text, style: lineStyle);
-      tp.layout();
-      if (ls != 0 && tp.width > size.width) {
-        final n = line.text.characters.length;
-        if (n > 1) {
-          final shrink = (tp.width - size.width) / (n - 1);
-          final adjusted = ls - shrink;
-          final clamped =
-              adjusted.isFinite && adjusted.abs() <= (style.fontSize ?? 14) * 0.5
-                  ? adjusted
-                  : 0.0;
-          tp.text = TextSpan(
-            text: line.text,
-            style: style.copyWith(letterSpacing: clamped),
-          );
-          tp.layout();
-        }
-      }
-      // x = padding is already baked into style box; page painter uses pad 0.
-      tp.paint(canvas, Offset(0, line.top));
-    }
-  }
-
-  @override
-  bool shouldRepaint(PagePainter old) {
-    return old.pageIndex != pageIndex;
   }
 }

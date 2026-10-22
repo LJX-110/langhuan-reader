@@ -133,14 +133,14 @@ class ReadSetting {
   static double listPageBottom = Screen.height / 2;
   static String temp_w = "temp_w";
   static String temp_h = "temp_h";
-  static Color textLowColor =
-      SpUtil.getBool(PrefsKeys.dark) ? Colors.white10 : Colors.grey.shade50;
+  static Color textLowColor = SpUtil.getBool(PrefsKeys.dark)
+      ? Colors.white10
+      : Colors.grey.shade50;
 
   static String poet =
       '琅嬛阁是一款自用的网络小说阅读器。书架、阅读进度与书源保存在本机，'
       '不内置、不提供任何书源或公开书源列表。';
-  static String lawWarn =
-      '''书源由使用者自行提供，仅供个人学习与阅读。请只导入你有权访问和使用的书源，
+  static String lawWarn = '''书源由使用者自行提供，仅供个人学习与阅读。请只导入你有权访问和使用的书源，
 不要导入或传播侵犯他人版权的内容。
 
 本应用不内置、不提供、不推荐任何书源，也不绕过付费墙或 DRM。
@@ -184,10 +184,7 @@ class ReadSetting {
   }
 
   static void setFontFamily(String name) {
-    SpUtil.putString(
-      fontNameKey,
-      name.isEmpty ? defaultFontFamily : name,
-    );
+    SpUtil.putString(fontNameKey, name.isEmpty ? defaultFontFamily : name);
   }
 
   /// Path used by Rust book_pager + paint.
@@ -220,6 +217,16 @@ class ReadSetting {
 
   static void setPageTurnMode(int mode) {
     SpUtil.putInt(PrefsKeys.pageTurnMode, mode.clamp(0, 3));
+  }
+
+  /// Body alignment: `justify` (both edges) or `left` (ragged right).
+  static String getTextAlign() {
+    final value = SpUtil.getString(PrefsKeys.readerTextAlign, defValue: '');
+    return value == 'left' ? 'left' : 'justify';
+  }
+
+  static void setTextAlign(String value) {
+    SpUtil.putString(PrefsKeys.readerTextAlign, value == 'left' ? 'left' : 'justify');
   }
 
   static double getLineHeight() {

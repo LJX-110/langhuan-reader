@@ -87,6 +87,7 @@ class _SearchState extends ConsumerState<Search> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final surface = dark ? AppColors.surfaceDark : AppColors.paperLight;
     final line = dark ? AppColors.dividerDark : AppColors.line;
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 6, 12, 6),
@@ -118,24 +119,13 @@ class _SearchState extends ConsumerState<Search> {
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(vertical: 10),
                   hintText: '搜索书名或作者',
-                  hintStyle: const TextStyle(
-                    fontSize: 13,
-                    color: AppColors.inkMute,
-                  ),
-                  prefixIcon: const Icon(
-                    Icons.search,
-                    size: 18,
-                    color: AppColors.inkMute,
-                  ),
+                  hintStyle: TextStyle(fontSize: 13, color: muted),
+                  prefixIcon: Icon(Icons.search, size: 18, color: muted),
                   prefixIconConstraints: const BoxConstraints(minWidth: 38),
                   suffixIcon: controller.text.isEmpty
                       ? null
                       : IconButton(
-                          icon: const Icon(
-                            Icons.close,
-                            size: 17,
-                            color: AppColors.inkMute,
-                          ),
+                          icon: Icon(Icons.close, size: 17, color: muted),
                           onPressed: () {
                             controller.clear();
                             searchModel.reset();
@@ -165,6 +155,10 @@ class _SearchState extends ConsumerState<Search> {
   }
 
   Widget _suggestionView(BuildContext context, SearchModel model) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final line = theme.colorScheme.outline;
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
       child: Column(
@@ -195,15 +189,11 @@ class _SearchState extends ConsumerState<Search> {
             ],
           ),
           if (model.searchHistory.isEmpty)
-            const Padding(
-              padding: EdgeInsets.only(top: 10),
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
               child: Text(
                 '还没有搜索记录。试试书名、作者，或一个关键词。',
-                style: TextStyle(
-                  fontSize: 12,
-                  height: 1.7,
-                  color: AppColors.inkMute,
-                ),
+                style: TextStyle(fontSize: 12, height: 1.7, color: muted),
               ),
             )
           else
@@ -229,19 +219,15 @@ class _SearchState extends ConsumerState<Search> {
                             vertical: 7,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.paperLight.withValues(alpha: .45),
+                            color: dark
+                                ? theme.colorScheme.surface
+                                : AppColors.paperLight.withValues(alpha: .45),
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: AppColors.line,
-                              width: .5,
-                            ),
+                            border: Border.all(color: line, width: .5),
                           ),
                           child: Text(
                             value,
-                            style: const TextStyle(
-                              fontSize: 11.5,
-                              color: AppColors.inkSoft,
-                            ),
+                            style: TextStyle(fontSize: 11.5, color: muted),
                           ),
                         ),
                       ),
@@ -249,15 +235,11 @@ class _SearchState extends ConsumerState<Search> {
                 ],
               ),
             ),
-          const Padding(
-            padding: EdgeInsets.only(top: 22),
+          Padding(
+            padding: const EdgeInsets.only(top: 22),
             child: Text(
               '搜索只在你启用过的书源里进行，同名书会合并为一条。',
-              style: TextStyle(
-                fontSize: 11.5,
-                height: 1.7,
-                color: AppColors.inkMute,
-              ),
+              style: TextStyle(fontSize: 11.5, height: 1.7, color: muted),
             ),
           ),
         ],
@@ -267,6 +249,7 @@ class _SearchState extends ConsumerState<Search> {
 
   Widget _resultView(BuildContext context, SearchModel model) {
     final groups = model.groups;
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -284,7 +267,7 @@ class _SearchState extends ConsumerState<Search> {
               const Spacer(),
               Text(
                 model.loading && groups.isEmpty ? '正在搜索…' : '按书合并',
-                style: const TextStyle(fontSize: 11, color: AppColors.inkMute),
+                style: TextStyle(fontSize: 11, color: muted),
               ),
             ],
           ),
@@ -299,6 +282,8 @@ class _SearchState extends ConsumerState<Search> {
     SearchModel model,
     List<SearchGroup> groups,
   ) {
+    final primary = Theme.of(context).colorScheme.onSurface;
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
     if (model.loading && model.bks.isEmpty) {
       final progress = model.totalSources > 0
           ? '正在搜索书源…（${model.searchedSources}/${model.totalSources}）'
@@ -309,10 +294,7 @@ class _SearchState extends ConsumerState<Search> {
           children: [
             const CupertinoActivityIndicator(radius: 14),
             const SizedBox(height: 12),
-            Text(
-              progress,
-              style: const TextStyle(fontSize: 12, color: AppColors.inkMute),
-            ),
+            Text(progress, style: TextStyle(fontSize: 12, color: muted)),
           ],
         ),
       );
@@ -321,14 +303,18 @@ class _SearchState extends ConsumerState<Search> {
     if (groups.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        children: const [
-          SizedBox(height: 110),
-          Center(
-            child: Text(
-              '暂无搜索结果',
-              style: TextStyle(fontSize: 13, color: AppColors.inkMute),
+        padding: const EdgeInsets.fromLTRB(20, 96, 20, 24),
+        children: [
+          Text(
+            '暂无搜索结果',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: primary,
             ),
           ),
+          const SizedBox(height: 6),
+          Text('换个书名、作者或关键词再试。', style: TextStyle(fontSize: 12, color: muted)),
         ],
       );
     }
@@ -351,13 +337,7 @@ class _SearchState extends ConsumerState<Search> {
               child: Center(
                 child: model.loading
                     ? const CupertinoActivityIndicator(radius: 10)
-                    : const Text(
-                        '到底了',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.inkMute,
-                        ),
-                      ),
+                    : Text('到底了', style: TextStyle(fontSize: 11, color: muted)),
               ),
             );
           }
@@ -373,6 +353,10 @@ class _SearchState extends ConsumerState<Search> {
     SearchModel model,
   ) {
     final item = group.item;
+    final theme = Theme.of(context);
+    final primary = theme.colorScheme.onSurface;
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final line = theme.colorScheme.outline;
     final sourceLabel = group.sourceCount > 1
         ? '${group.sourceCount} 个书源'
         : (item.sourceName.isEmpty ? '书源' : item.sourceName);
@@ -390,10 +374,8 @@ class _SearchState extends ConsumerState<Search> {
         },
         child: Container(
           padding: const EdgeInsets.fromLTRB(20, 11, 14, 11),
-          decoration: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: AppColors.line, width: .5),
-            ),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: line, width: .5)),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -411,12 +393,12 @@ class _SearchState extends ConsumerState<Search> {
                       item.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: AppType.serif,
                         fontSize: 16,
                         height: 1.25,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.ink,
+                        color: primary,
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -424,10 +406,7 @@ class _SearchState extends ConsumerState<Search> {
                       item.author.isEmpty ? '未知作者' : item.author,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        color: AppColors.inkMute,
-                      ),
+                      style: TextStyle(fontSize: 10.5, color: muted),
                     ),
                     const SizedBox(height: 7),
                     Row(
@@ -458,10 +437,7 @@ class _SearchState extends ConsumerState<Search> {
                               group.sourceNames.take(2).join(' / '),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 9,
-                                color: AppColors.inkMute,
-                              ),
+                              style: TextStyle(fontSize: 9, color: muted),
                             ),
                           ),
                         ],
@@ -474,21 +450,14 @@ class _SearchState extends ConsumerState<Search> {
                           : '最新章 · ${item.latestChapter}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 9.5,
-                        color: AppColors.inkMute,
-                      ),
+                      style: TextStyle(fontSize: 9.5, color: muted),
                     ),
                   ],
                 ),
               ),
-              const Padding(
-                padding: EdgeInsets.only(top: 28),
-                child: Icon(
-                  Icons.chevron_right,
-                  size: 18,
-                  color: AppColors.inkMute,
-                ),
+              Padding(
+                padding: const EdgeInsets.only(top: 28),
+                child: Icon(Icons.chevron_right, size: 18, color: muted),
               ),
             ],
           ),

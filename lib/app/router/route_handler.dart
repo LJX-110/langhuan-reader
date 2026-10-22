@@ -16,71 +16,70 @@ import 'package:fluro/fluro.dart';
 import 'package:flutter/material.dart';
 
 // 根目录
-var rootHandler =
-    Handler(handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
-  return BookShelf();
-});
+var rootHandler = Handler(
+  handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
+    return BookShelf();
+  },
+);
 // 根目录
 
 // 设置页 - 示例：不传参数
-var searchHandler =
-    Handler(handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
-  String type = (params['type']![0]);
-  String name = (params['name']![0]);
-  return Search(type, name);
-});
-var fontSetHandler =
-    Handler(handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
-  return FontSet();
-});
+var searchHandler = Handler(
+  handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
+    String type = (params['type']![0]);
+    String name = (params['name']![0]);
+    return Search(type, name);
+  },
+);
+var fontSetHandler = Handler(
+  handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
+    return FontSet();
+  },
+);
 
-var sortShelfHandler =
-    Handler(handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
-  return SortShelf();
-});
-
-//// 网页加载 - 示例：传多个字符串参数
-//var webViewHandler =
-//    Handler(handlerFunc: (BuildContext context, Map<String, dynamic> params) {
-//  // params内容为  {title: [我是标题哈哈哈], url: [https://www.baidu.com/]}
-//  String title = params['title']?.first;
-//  String url = params['url']?.first;
-//  return WebViewUrlPage(
-//    title: title,
-//    url: url,
-//  );
-//});
+var sortShelfHandler = Handler(
+  handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
+    return SortShelf();
+  },
+);
 
 // 示例：传多个model参数
-var readHandler =
-    Handler(handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
-  Book bookInfo = Book.fromJson(convert.jsonDecode(params['read']![0]));
-  return ReadBook(bookInfo);
-});
-var chaptersHandler =
-    Handler(handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
-  return ChapterView();
-});
+var readHandler = Handler(
+  handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
+    Book bookInfo = Book.fromJson(convert.jsonDecode(params['read']![0]));
+    return ReadBook(bookInfo);
+  },
+);
+var chaptersHandler = Handler(
+  handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
+    return ChapterView();
+  },
+);
 
-var detailHandler =
-    Handler(handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
-  BookInfo bookInfo =
-      BookInfo.fromJson(convert.jsonDecode(params['detail']![0]));
+var detailHandler = Handler(
+  handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
+    BookInfo bookInfo = BookInfo.fromJson(
+      convert.jsonDecode(params['detail']![0]),
+    );
 
-  return BookDetail(bookInfo);
-});
+    return BookDetail(bookInfo);
+  },
+);
 
-var sourcesHandler =
-    Handler(handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
-  return SourceManagePage();
-});
+var sourcesHandler = Handler(
+  handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
+    return SourceManagePage();
+  },
+);
 
-var logsHandler =
-    Handler(handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
-  return const LogViewer();
-});
+var logsHandler = Handler(
+  handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
+    return const LogViewer();
+  },
+);
 
-var cacheHandler =
-    Handler(handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
-  return const CacheManager();
-});
+var cacheHandler = Handler(
+  handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
+    return const CacheManager();
+  },
+);

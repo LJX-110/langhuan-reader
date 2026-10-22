@@ -88,8 +88,9 @@ class BookPager {
         _free = null;
         return;
       }
-      _paginate = lib
-          .lookupFunction<_PaginateNative, _PaginateDart>('book_pager_paginate');
+      _paginate = lib.lookupFunction<_PaginateNative, _PaginateDart>(
+        'book_pager_paginate',
+      );
       try {
         _paginateRange = lib.lookupFunction<_PaginateNative, _PaginateDart>(
           'book_pager_paginate_range',
@@ -97,11 +98,13 @@ class BookPager {
       } catch (_) {
         _paginateRange = _paginate;
       }
-      _free =
-          lib.lookupFunction<_FreeNative, _FreeDart>('book_pager_free_string');
+      _free = lib.lookupFunction<_FreeNative, _FreeDart>(
+        'book_pager_free_string',
+      );
       try {
-        _cancel =
-            lib.lookupFunction<_CancelNative, _CancelDart>('book_pager_cancel');
+        _cancel = lib.lookupFunction<_CancelNative, _CancelDart>(
+          'book_pager_cancel',
+        );
       } catch (_) {
         _cancel = null;
       }
@@ -110,7 +113,8 @@ class BookPager {
     } catch (e, st) {
       lastError = '$e';
       final msg = '$e';
-      final missing = msg.contains('not found') ||
+      final missing =
+          msg.contains('not found') ||
           msg.contains('Failed to load dynamic library');
       if (missing) {
         debugPrint(
@@ -137,14 +141,36 @@ class BookPager {
     }
     if (Platform.isWindows) {
       final candidates = <String>[
-        p.join(Directory.current.path, 'native', 'target', 'release',
-            'book_pager.dll'),
-        p.join(Directory.current.path, 'native', 'target', 'debug',
-            'book_pager.dll'),
-        p.join(Directory.current.path, 'native', 'book_pager', 'target',
-            'release', 'book_pager.dll'),
-        p.join(Directory.current.path, 'native', 'book_pager', 'target',
-            'debug', 'book_pager.dll'),
+        p.join(
+          Directory.current.path,
+          'native',
+          'target',
+          'release',
+          'book_pager.dll',
+        ),
+        p.join(
+          Directory.current.path,
+          'native',
+          'target',
+          'debug',
+          'book_pager.dll',
+        ),
+        p.join(
+          Directory.current.path,
+          'native',
+          'book_pager',
+          'target',
+          'release',
+          'book_pager.dll',
+        ),
+        p.join(
+          Directory.current.path,
+          'native',
+          'book_pager',
+          'target',
+          'debug',
+          'book_pager.dll',
+        ),
         'book_pager.dll',
       ];
       for (final c in candidates) {
@@ -218,18 +244,20 @@ class BookPager {
   static TextLine _lineFromMap(Map<String, dynamic> lm) {
     return TextLine(
       lm['text'] as String? ?? '',
-      top: (lm['top'] as num?)?.toDouble() ??
+      top:
+          (lm['top'] as num?)?.toDouble() ??
           (lm['dy'] as num?)?.toDouble() ??
           0,
       height: (lm['height'] as num?)?.toDouble() ?? 0,
       justify: lm['justify'] as bool? ?? false,
-      isLastLine: lm['is_last_line'] as bool? ??
-          lm['isLastLine'] as bool? ??
-          false,
-      isParagraphEnd: lm['is_paragraph_end'] as bool? ??
+      isLastLine:
+          lm['is_last_line'] as bool? ?? lm['isLastLine'] as bool? ?? false,
+      isParagraphEnd:
+          lm['is_paragraph_end'] as bool? ??
           lm['isParagraphEnd'] as bool? ??
           false,
-      targetWidth: (lm['target_width'] as num?)?.toDouble() ??
+      targetWidth:
+          (lm['target_width'] as num?)?.toDouble() ??
           (lm['targetWidth'] as num?)?.toDouble() ??
           0,
       // ABI3: prefer paint-time spacing; ignore rust letter_spacing if present.
@@ -237,16 +265,18 @@ class BookPager {
     );
   }
 
-  static TextPage _pageFromMap(Map<String, dynamic> m, {int fallbackIndex = 0}) {
+  static TextPage _pageFromMap(
+    Map<String, dynamic> m, {
+    int fallbackIndex = 0,
+  }) {
     final lines = (m['lines'] as List? ?? [])
         .map((l) => _lineFromMap(Map<String, dynamic>.from(l as Map)))
         .toList();
     return TextPage(
       lines,
       (m['height'] as num?)?.toDouble() ?? 0,
-      pageIndex: m['page_index'] as int? ??
-          m['pageIndex'] as int? ??
-          fallbackIndex,
+      pageIndex:
+          m['page_index'] as int? ?? m['pageIndex'] as int? ?? fallbackIndex,
       charStart: m['char_start'] as int? ?? m['charStart'] as int? ?? 0,
       charEnd: m['char_end'] as int? ?? m['charEnd'] as int? ?? 0,
     );
@@ -263,16 +293,17 @@ class BookPager {
       final list = decoded['pages'] as List;
       for (var i = 0; i < list.length; i++) {
         pages.add(
-          _pageFromMap(Map<String, dynamic>.from(list[i] as Map),
-              fallbackIndex: i),
+          _pageFromMap(
+            Map<String, dynamic>.from(list[i] as Map),
+            fallbackIndex: i,
+          ),
         );
       }
       return PaginateResult(
         pages: pages,
         complete: decoded['complete'] as bool? ?? true,
-        nextChar: decoded['next_char'] as int? ??
-            decoded['nextChar'] as int? ??
-            0,
+        nextChar:
+            decoded['next_char'] as int? ?? decoded['nextChar'] as int? ?? 0,
         engine: decoded['engine'] as String? ?? 'rust',
         abi: decoded['abi'] as int? ?? loadedAbi,
       );
@@ -282,8 +313,10 @@ class BookPager {
       final pages = <TextPage>[];
       for (var i = 0; i < decoded.length; i++) {
         pages.add(
-          _pageFromMap(Map<String, dynamic>.from(decoded[i] as Map),
-              fallbackIndex: i),
+          _pageFromMap(
+            Map<String, dynamic>.from(decoded[i] as Map),
+            fallbackIndex: i,
+          ),
         );
       }
       return PaginateResult(pages: pages, complete: true, engine: 'rust');
@@ -316,7 +349,8 @@ class BookPager {
     final freeFn = _free;
     if (paginateFn == null || freeFn == null) {
       throw StateError(
-          'BookPager native library not loaded: ${lastError ?? "unknown"}');
+        'BookPager native library not loaded: ${lastError ?? "unknown"}',
+      );
     }
     if (fontPath.isEmpty) {
       throw StateError('BookPager ABI3 requires font_path');
@@ -371,6 +405,7 @@ class BookPager {
     bool shouldJustifyHeight = true,
     String fontPath = '',
     String fontFamily = 'HarmonyOSSansSC',
+    String textAlign = 'justify',
     int jobId = 0,
   }) {
     return paginateResult(
@@ -385,6 +420,7 @@ class BookPager {
       shouldJustifyHeight: shouldJustifyHeight,
       fontPath: fontPath,
       fontFamily: fontFamily,
+      textAlign: textAlign,
       jobId: jobId,
     ).pages;
   }
@@ -402,23 +438,27 @@ class BookPager {
     bool shouldJustifyHeight = true,
     String fontPath = '',
     String fontFamily = 'HarmonyOSSansSC',
+    String textAlign = 'justify',
     int jobId = 0,
   }) {
     if (text.length < 800) {
-      return Future.value(paginate(
-        text: text,
-        fontSize: fontSize,
-        lineHeight: lineHeight,
-        paragraph: paragraph,
-        boxWidth: boxWidth,
-        boxHeight: boxHeight,
-        paddingHorizontal: paddingHorizontal,
-        paddingVertical: paddingVertical,
-        shouldJustifyHeight: shouldJustifyHeight,
-        fontPath: fontPath,
-        fontFamily: fontFamily,
-        jobId: jobId,
-      ));
+      return Future.value(
+        paginate(
+          text: text,
+          fontSize: fontSize,
+          lineHeight: lineHeight,
+          paragraph: paragraph,
+          boxWidth: boxWidth,
+          boxHeight: boxHeight,
+          paddingHorizontal: paddingHorizontal,
+          paddingVertical: paddingVertical,
+          shouldJustifyHeight: shouldJustifyHeight,
+          fontPath: fontPath,
+          fontFamily: fontFamily,
+          textAlign: textAlign,
+          jobId: jobId,
+        ),
+      );
     }
 
     final payload = _inputMap(
@@ -433,6 +473,7 @@ class BookPager {
       shouldJustifyHeight: shouldJustifyHeight,
       fontPath: fontPath,
       fontFamily: fontFamily,
+      textAlign: textAlign,
       jobId: jobId,
     );
     return Isolate.run(() => _paginateFromPayload(payload));
@@ -452,6 +493,7 @@ class BookPager {
     bool shouldJustifyHeight = true,
     String fontPath = '',
     String fontFamily = 'HarmonyOSSansSC',
+    String textAlign = 'justify',
     int jobId = 0,
     bool firstPageOnly = false,
     int startChar = 0,
@@ -469,6 +511,7 @@ class BookPager {
       shouldJustifyHeight: shouldJustifyHeight,
       fontPath: fontPath,
       fontFamily: fontFamily,
+      textAlign: textAlign,
       jobId: jobId,
       firstPageOnly: firstPageOnly,
       startChar: startChar,
@@ -486,13 +529,16 @@ class BookPager {
       text: p['text'] as String? ?? '',
       fontSize: (p['font_size'] as num?)?.toDouble() ?? 26,
       lineHeight: (p['line_height'] as num?)?.toDouble() ?? 1.8,
-      paragraph: (p['paragraph'] as num?)?.toDouble() ??
+      paragraph:
+          (p['paragraph'] as num?)?.toDouble() ??
           (p['paragraph_spacing'] as num?)?.toDouble() ??
           10,
-      boxWidth: (p['box_width'] as num?)?.toDouble() ??
+      boxWidth:
+          (p['box_width'] as num?)?.toDouble() ??
           (p['page_width'] as num?)?.toDouble() ??
           360,
-      boxHeight: (p['box_height'] as num?)?.toDouble() ??
+      boxHeight:
+          (p['box_height'] as num?)?.toDouble() ??
           (p['page_height'] as num?)?.toDouble() ??
           640,
       paddingHorizontal: (p['padding_horizontal'] as num?)?.toDouble() ?? 20,

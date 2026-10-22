@@ -43,10 +43,9 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
   bool get _dark => SpUtil.getBool(PrefsKeys.dark);
 
   Color get _surface => _dark ? AppColors.surfaceDark : AppColors.surface;
-  Color get _primary =>
-      _dark ? AppColors.textOnDark : AppColors.textPrimary;
+  Color get _primary => _dark ? AppColors.textOnDark : AppColors.textPrimary;
   Color get _secondary =>
-      _dark ? const Color(0xFFB3B3B3) : AppColors.textSecondary;
+      _dark ? AppColors.textMutedDark : AppColors.textSecondary;
   Color get _divider => _dark ? AppColors.dividerDark : AppColors.divider;
 
   @override
@@ -144,10 +143,8 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
     // Name must overlap (exact, contains, or strip spaces).
     final bnN = bn.replaceAll(RegExp(r'\s+'), '');
     final hnN = hn.replaceAll(RegExp(r'\s+'), '');
-    final nameOk = bn == hn ||
-        bnN == hnN ||
-        bnN.contains(hnN) ||
-        hnN.contains(bnN);
+    final nameOk =
+        bn == hn || bnN == hnN || bnN.contains(hnN) || hnN.contains(bnN);
     if (!nameOk) return false;
 
     final ha = cleanAuthor(hit.author);
@@ -178,7 +175,8 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
   Future<void> _onPick(_Candidate c) async {
     final book = _book;
     if (book == null) return;
-    final current = c.source.bookSourceUrl == book.sourceUrl &&
+    final current =
+        c.source.bookSourceUrl == book.sourceUrl &&
         (c.hit.bookUrl.isEmpty || c.hit.bookUrl == book.bookUrl);
     if (current) return;
 
@@ -268,78 +266,72 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
                         ),
                       )
                     : candidates.isEmpty
-                        ? Center(
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 32),
-                              child: Text(
-                                error ?? '未找到其它可用书源',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: _secondary,
-                                ),
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Text(
+                            error ?? '未找到其它可用书源',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 14, color: _secondary),
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: candidates.length,
+                        separatorBuilder: (_, _) =>
+                            Divider(height: 1, color: _divider),
+                        itemBuilder: (ctx, i) {
+                          final c = candidates[i];
+                          final isCurrent =
+                              book != null &&
+                              c.source.bookSourceUrl == book.sourceUrl;
+                          final author = cleanAuthor(c.hit.author);
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 4,
+                            ),
+                            title: Text(
+                              c.source.bookSourceName.isNotEmpty
+                                  ? c.source.bookSourceName
+                                  : c.source.bookSourceUrl,
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: _primary,
                               ),
                             ),
-                          )
-                        : ListView.separated(
-                            itemCount: candidates.length,
-                            separatorBuilder: (_, _) =>
-                                Divider(height: 1, color: _divider),
-                            itemBuilder: (ctx, i) {
-                              final c = candidates[i];
-                              final isCurrent = book != null &&
-                                  c.source.bookSourceUrl == book.sourceUrl;
-                              final author = cleanAuthor(c.hit.author);
-                              return ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 4,
-                                ),
-                                title: Text(
-                                  c.source.bookSourceName.isNotEmpty
-                                      ? c.source.bookSourceName
-                                      : c.source.bookSourceUrl,
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    color: _primary,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  [
-                                    c.hit.name,
-                                    if (author.isNotEmpty) author,
-                                    if (c.hit.lastChapter.isNotEmpty)
-                                      c.hit.lastChapter,
-                                  ].join(' · '),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: _secondary,
-                                    height: 1.35,
-                                  ),
-                                ),
-                                trailing: isCurrent
-                                    ? Text(
-                                        '当前',
-                                        style: TextStyle(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      )
-                                    : Icon(
-                                        Icons.chevron_right,
-                                        color: _secondary,
-                                      ),
-                                onTap: isCurrent ? null : () => _onPick(c),
-                              );
-                            },
-                          ),
+                            subtitle: Text(
+                              [
+                                c.hit.name,
+                                if (author.isNotEmpty) author,
+                                if (c.hit.lastChapter.isNotEmpty)
+                                  c.hit.lastChapter,
+                              ].join(' · '),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: _secondary,
+                                height: 1.35,
+                              ),
+                            ),
+                            trailing: isCurrent
+                                ? Text(
+                                    '当前',
+                                    style: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  )
+                                : Icon(Icons.chevron_right, color: _secondary),
+                            onTap: isCurrent ? null : () => _onPick(c),
+                          );
+                        },
+                      ),
               ),
             ],
           ),

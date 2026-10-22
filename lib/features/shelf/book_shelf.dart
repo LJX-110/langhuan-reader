@@ -29,10 +29,7 @@ class _BookShelfState extends ConsumerState<BookShelf> {
     if (!SpUtil.containsKey(PrefsKeys.shimmerNums)) {
       SpUtil.putInt(
         PrefsKeys.shimmerNums,
-        (Screen.height -
-                Screen.topSafeHeight -
-                Screen.bottomSafeHeight -
-                60) ~/
+        (Screen.height - Screen.topSafeHeight - Screen.bottomSafeHeight - 60) ~/
             25,
       );
     }
@@ -56,14 +53,14 @@ class _BookShelfState extends ConsumerState<BookShelf> {
                 filter: shelfModel.filter,
                 onFilter: shelfModel.setFilter,
                 onSearch: () {
-                  Routes.navigateTo(context, Routes.search, params: {
-                    'type': 'book',
-                    'name': '',
-                  });
+                  Routes.navigateTo(
+                    context,
+                    Routes.search,
+                    params: {'type': 'book', 'name': ''},
+                  );
                 },
                 onToggleMode: shelfModel.toggleModel,
-                onManage: () =>
-                    Routes.navigateTo(context, Routes.sortShelf),
+                onManage: () => Routes.navigateTo(context, Routes.sortShelf),
               ),
               Expanded(child: BooksWidget('')),
             ],
@@ -116,11 +113,7 @@ class _ShelfHeader extends StatelessWidget {
           PageHeader(
             title: '书架',
             actions: [
-              _HeaderIcon(
-                icon: Icons.search,
-                tooltip: '搜索',
-                onTap: onSearch,
-              ),
+              _HeaderIcon(icon: Icons.search, tooltip: '搜索', onTap: onSearch),
               _HeaderIcon(
                 icon: coverMode
                     ? Icons.view_list_outlined
@@ -137,10 +130,7 @@ class _ShelfHeader extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-            child: PaperSearchEntry(
-              onTap: onSearch,
-              hint: '搜索书架或全网书籍',
-            ),
+            child: PaperSearchEntry(onTap: onSearch, hint: '搜索书架或全网书籍'),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
@@ -172,8 +162,8 @@ class _ShelfHeader extends StatelessWidget {
                                   color: filter == value
                                       ? Theme.of(context).colorScheme.primary
                                       : (dark
-                                          ? AppColors.textOnDark
-                                          : AppColors.inkMute),
+                                            ? AppColors.textMutedDark
+                                            : AppColors.inkMute),
                                 ),
                               ),
                               const SizedBox(height: 3),

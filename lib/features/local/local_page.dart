@@ -82,9 +82,7 @@ class _LocalPageState extends State<LocalPage> {
     await _reload();
     if (ok > 0) {
       final name = last?.book.name ?? '';
-      BotToast.showText(
-        text: ok == 1 ? '已导入《$name》' : '已导入 $ok 本',
-      );
+      BotToast.showText(text: ok == 1 ? '已导入《$name》' : '已导入 $ok 本');
     } else {
       BotToast.showText(text: '导入失败：${firstError ?? '未知错误'}');
     }
@@ -171,8 +169,7 @@ class _LocalPageState extends State<LocalPage> {
                 ),
               ),
             ),
-            if (_importing)
-              const LinearProgressIndicator(minHeight: 2),
+            if (_importing) const LinearProgressIndicator(minHeight: 2),
             Expanded(child: _body(dark)),
           ],
         ),
@@ -192,15 +189,13 @@ class _LocalPageState extends State<LocalPage> {
         height: 1,
         color: dark ? AppColors.dividerDark : AppColors.line,
       ),
-      itemBuilder: (context, i) => Material(
-        color: Colors.transparent,
-        child: _row(_list[i], dark),
-      ),
+      itemBuilder: (context, i) =>
+          Material(color: Colors.transparent, child: _row(_list[i], dark)),
     );
   }
 
   Widget _empty(bool dark) {
-    final muted = dark ? AppColors.textOnDark : AppColors.inkMute;
+    final muted = dark ? AppColors.textMutedDark : AppColors.inkMute;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 80, 24, 24),
       child: Column(
@@ -235,7 +230,7 @@ class _LocalPageState extends State<LocalPage> {
 
   Widget _row(Book book, bool dark) {
     final primary = dark ? AppColors.textOnDark : AppColors.ink;
-    final muted = dark ? const Color(0xFFB3B3B3) : AppColors.inkMute;
+    final muted = dark ? AppColors.textMutedDark : AppColors.inkMute;
     final progress = book.readingChapter.isNotEmpty
         ? book.readingChapter
         : '第 ${book.chapterIndex + 1} 章';
@@ -289,11 +284,7 @@ class _LocalPageState extends State<LocalPage> {
             IconButton(
               tooltip: '删除',
               onPressed: () => _delete(book),
-              icon: Icon(
-                Icons.delete_outline,
-                size: 19,
-                color: muted,
-              ),
+              icon: Icon(Icons.delete_outline, size: 19, color: muted),
             ),
           ],
         ),

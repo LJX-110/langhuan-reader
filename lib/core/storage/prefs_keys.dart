@@ -11,6 +11,7 @@ class PrefsKeys {
   static const leftClickNext = 'leftClickNext';
   static const bgIdx = 'bgIdx';
   static const pageTurnMode = 'turnPageAnima';
+  static const readerTextAlign = 'reader_text_align';
   static const bookSearchHistory = 'book_search_history';
   static const readingStyle = 'READINGSTYLE';
   static const fonts = 'fonts';
@@ -22,4 +23,3 @@ class PrefsKeys {
   static const sourceRepoName = 'source_repo_name';
   static const sourceRepoLastSync = 'source_repo_last_sync';
 }
-

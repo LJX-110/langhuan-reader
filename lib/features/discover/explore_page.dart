@@ -120,7 +120,7 @@ class _ExploreSourceTrigger extends StatelessWidget {
     final accent = AppColors.accentOf(context);
     final accentSoft = AppColors.accentSoftOf(context);
     final primary = dark ? AppColors.textOnDark : AppColors.textPrimary;
-    final secondary = dark ? const Color(0xFFB3B3B3) : AppColors.textSecondary;
+    final secondary = dark ? AppColors.textMutedDark : AppColors.textSecondary;
     final active = model.activeSource;
     final name = (active?.bookSourceName.trim().isNotEmpty ?? false)
         ? active!.bookSourceName
@@ -247,7 +247,7 @@ class _BookList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primary = dark ? AppColors.textOnDark : AppColors.textPrimary;
-    final secondary = dark ? const Color(0xFFB3B3B3) : AppColors.textSecondary;
+    final secondary = dark ? AppColors.textMutedDark : AppColors.textSecondary;
     final tertiary = dark ? const Color(0xFF8A8A8A) : AppColors.textTertiary;
 
     if (model.loading && model.books.isEmpty) {

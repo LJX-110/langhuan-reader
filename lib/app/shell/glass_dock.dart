@@ -7,11 +7,7 @@ import 'package:langhuan/design/tokens/app_colors.dart';
 /// White surface, one hairline, and a colour change for the active tab. No
 /// pill, no blur: the dock should disappear behind the page.
 class LanhuanDock extends StatelessWidget {
-  const LanhuanDock({
-    super.key,
-    required this.index,
-    required this.onTap,
-  });
+  const LanhuanDock({super.key, required this.index, required this.onTap});
 
   final int index;
   final ValueChanged<int> onTap;
@@ -24,7 +20,7 @@ class LanhuanDock extends StatelessWidget {
     final surface = dark ? AppColors.surfaceDark : AppColors.surface;
     final line = dark ? AppColors.dividerDark : AppColors.line;
     final active = Theme.of(context).colorScheme.primary;
-    final inactive = dark ? const Color(0xFFB3B3B3) : AppColors.inkMute;
+    final inactive = dark ? AppColors.textMutedDark : AppColors.inkMute;
 
     return DecoratedBox(
       decoration: BoxDecoration(

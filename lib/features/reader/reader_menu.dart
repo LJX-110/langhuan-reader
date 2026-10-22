@@ -39,6 +39,10 @@ class _MenuState extends ConsumerState<ReaderMenu> {
   /// Match reader paper so chrome doesn't clash with the page underneath.
   ReaderChrome get _chrome => ReaderChrome(_readModel.paperTheme);
 
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
   Widget _bottomHead(ReaderChrome chrome) {
     switch (type) {
       case Type.MORE_SETTING:
@@ -46,14 +50,14 @@ class _MenuState extends ConsumerState<ReaderMenu> {
           readModel: _readModel,
           colorModel: _colorModel,
           chrome: chrome,
-          onChanged: () => setState(() {}),
+          onChanged: _refresh,
           onOpenLayout: () => setState(() => type = Type.LAYOUT),
         );
       case Type.LAYOUT:
         return ReaderLayoutPanel(
           readModel: _readModel,
           chrome: chrome,
-          onChanged: () => setState(() {}),
+          onChanged: _refresh,
           onBack: () => setState(() => type = Type.MORE_SETTING),
         );
       case Type.DOWNLOAD:
@@ -62,7 +66,7 @@ class _MenuState extends ConsumerState<ReaderMenu> {
         return ReaderChapterPanel(
           readModel: _readModel,
           chrome: chrome,
-          onChanged: () => setState(() {}),
+          onChanged: _refresh,
         );
     }
   }
@@ -175,7 +179,7 @@ class _MenuState extends ConsumerState<ReaderMenu> {
                           await _readModel.setPaperTheme(
                             night ? PaperTheme.night : PaperTheme.cream,
                           );
-                          setState(() {});
+                          _refresh();
                         },
                         onDownload: () {
                           setState(() {

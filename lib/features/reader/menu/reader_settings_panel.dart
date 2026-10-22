@@ -257,10 +257,66 @@ class ReaderLayoutPanel extends StatelessWidget {
               },
             ),
           ),
+          const SizedBox(height: 10),
+          _alignRow(context, chrome, readModel, onChanged),
         ],
       ),
     );
   }
+}
+
+Widget _alignRow(
+  BuildContext context,
+  ReaderChrome chrome,
+  ReadModel readModel,
+  VoidCallback onChanged,
+) {
+  final current = ReadSetting.getTextAlign();
+  const options = <(String, String)>[('justify', '两端对齐'), ('left', '左对齐')];
+  final accent = AppColors.accentOf(context);
+  final accentSoft = AppColors.accentSoftOf(context);
+  return Row(
+    children: [
+      SizedBox(
+        width: 36,
+        child: Text('对齐', style: TextStyle(fontSize: 13, color: chrome.fg)),
+      ),
+      for (final option in options)
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Material(
+              color: current == option.$1 ? accentSoft : chrome.chipBg,
+              borderRadius: BorderRadius.circular(8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () {
+                  if (current == option.$1) return;
+                  ReadSetting.setTextAlign(option.$1);
+                  readModel.relayoutPages();
+                  onChanged();
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  child: Center(
+                    child: Text(
+                      option.$2,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: current == option.$1
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        color: current == option.$1 ? accent : chrome.fg,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+    ],
+  );
 }
 
 Widget _sectionLabel(String text, ReaderChrome chrome) {

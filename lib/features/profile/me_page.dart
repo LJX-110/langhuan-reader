@@ -24,7 +24,7 @@ class Me extends ConsumerWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final background = dark ? AppColors.scaffoldDark : AppColors.paper;
     final line = dark ? AppColors.dividerDark : AppColors.line;
-    final muted = dark ? AppColors.textOnDark : AppColors.inkMute;
+    final muted = dark ? AppColors.textMutedDark : AppColors.inkMute;
     final count = ref.watch(shelfModelProvider).shelf.length;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -80,9 +80,9 @@ class Me extends ConsumerWidget {
                       _row(
                         context,
                         '主题',
-                        () => Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const Skin()),
-                        ),
+                        () => Navigator.of(
+                          context,
+                        ).push(MaterialPageRoute(builder: (_) => const Skin())),
                         line: line,
                         last: true,
                       ),
@@ -152,11 +152,7 @@ class Me extends ConsumerWidget {
     );
   }
 
-  Widget _section(
-    BuildContext context,
-    String title,
-    List<Widget> rows,
-  ) {
+  Widget _section(BuildContext context, String title, List<Widget> rows) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -185,7 +181,7 @@ class Me extends ConsumerWidget {
   }) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final primary = dark ? AppColors.textOnDark : AppColors.ink;
-    final muted = dark ? AppColors.textOnDark : AppColors.inkMute;
+    final muted = dark ? AppColors.textMutedDark : AppColors.inkMute;
     return Column(
       children: [
         Material(
@@ -222,9 +218,7 @@ class Me extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('免责声明'),
-        content: SingleChildScrollView(
-          child: Text(ReadSetting.lawWarn),
-        ),
+        content: SingleChildScrollView(child: Text(ReadSetting.lawWarn)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),

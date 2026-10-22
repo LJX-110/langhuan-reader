@@ -162,8 +162,10 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
 
     _bootstrapped = true;
     final bookId = b.id;
-    final cur =
-        b.chapterIndex.clamp(0, model.chapters.isEmpty ? 0 : model.chapters.length - 1);
+    final cur = b.chapterIndex.clamp(
+      0,
+      model.chapters.isEmpty ? 0 : model.chapters.length - 1,
+    );
     final pageIdx = b.pageIndex < 0 ? 0 : b.pageIndex;
     _lastChapter = cur;
     _lastPage = pageIdx;
@@ -258,14 +260,13 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
     final holdChapter = _lastChapter;
     final holdPage = _lastPage;
     final c = _controller;
-    final oldOffset =
-        (c != null && c.hasClients) ? c.offset : 0.0;
+    final oldOffset = (c != null && c.hasClients) ? c.offset : 0.0;
     // Content-space offset of the held page (excludes top padding).
     final heldItemBefore = _indexOf(holdChapter, holdPage);
     final heldContentBefore =
         heldItemBefore >= 0 && heldItemBefore < _offsets.length
-            ? _offsets[heldItemBefore]
-            : 0.0;
+        ? _offsets[heldItemBefore]
+        : 0.0;
     try {
       final model = ref.read(readModelProvider);
       if (forward) {
@@ -292,8 +293,8 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
       final heldItemAfter = _indexOf(holdChapter, holdPage);
       final heldContentAfter =
           heldItemAfter >= 0 && heldItemAfter < _offsets.length
-              ? _offsets[heldItemAfter]
-              : 0.0;
+          ? _offsets[heldItemAfter]
+          : 0.0;
       final delta = heldContentAfter - heldContentBefore;
 
       // Keep the same controller so fling/ballistics survive chapter edges.
@@ -348,13 +349,15 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
     for (final c in keys) {
       final rp = _chapters[c]!;
       for (var p = 0; p < rp.pages.length; p++) {
-        out.add(_ScrollItem(
-          chapterIndex: c,
-          pageIndex: p,
-          chapterName: rp.chapterName,
-          readPage: rp,
-          height: model.scrollPageHeight(rp, p),
-        ));
+        out.add(
+          _ScrollItem(
+            chapterIndex: c,
+            pageIndex: p,
+            chapterName: rp.chapterName,
+            readPage: rp,
+            height: model.scrollPageHeight(rp, p),
+          ),
+        );
       }
     }
     _items = out;
@@ -528,7 +531,9 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
     final size = MediaQuery.sizeOf(context);
     final x = e.localPosition.dx;
     final y = e.localPosition.dy;
-    if (x > size.width / 3 && x < 2 * size.width / 3 && y < size.height * 0.75) {
+    if (x > size.width / 3 &&
+        x < 2 * size.width / 3 &&
+        y < size.height * 0.75) {
       ref.read(readModelProvider).toggleShowMenu();
     }
   }
@@ -541,9 +546,7 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
 
   @override
   Widget build(BuildContext context) {
-    final paperTheme = ref.watch(
-      readModelProvider.select((m) => m.paperTheme),
-    );
+    final paperTheme = ref.watch(readModelProvider.select((m) => m.paperTheme));
     final loadingHint = ref.watch(
       readModelProvider.select((m) => m.loadingHint),
     );
@@ -553,14 +556,11 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
     final modelChapter = ref.watch(
       readModelProvider.select((m) => m.book?.chapterIndex),
     );
-    final dark = paperTheme == PaperTheme.night ||
+    final dark =
+        paperTheme == PaperTheme.night ||
         SpUtil.getBool(PrefsKeys.dark, defValue: false);
-    final paper = ReadSetting.paperColor(
-      dark ? PaperTheme.night : paperTheme,
-    );
-    final meta = ReadSetting.metaColor(
-      dark ? PaperTheme.night : paperTheme,
-    );
+    final paper = ReadSetting.paperColor(dark ? PaperTheme.night : paperTheme);
+    final meta = ReadSetting.metaColor(dark ? PaperTheme.night : paperTheme);
 
     // openChapterAt / switchSource update model chapterIndex without rebuilding
     // this State; rebootstrap when the jump was not driven by our scroll progress.
@@ -609,13 +609,13 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
           },
           child: (_items.isEmpty || c == null)
               ? (loadingHint.isEmpty
-                  ? const SizedBox.expand()
-                  : Center(
-                      child: Text(
-                        loadingHint,
-                        style: TextStyle(color: meta, fontSize: 15),
-                      ),
-                    ))
+                    ? const SizedBox.expand()
+                    : Center(
+                        child: Text(
+                          loadingHint,
+                          style: TextStyle(color: meta, fontSize: 15),
+                        ),
+                      ))
               : ListView.builder(
                   controller: c,
                   padding: const EdgeInsets.only(
@@ -640,7 +640,9 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
                     final idx = _indexOf(ch, pg);
                     if (idx < 0 || idx >= _items.length) return null;
                     final it = _items[idx];
-                    if (it.chapterIndex != ch || it.pageIndex != pg) return null;
+                    if (it.chapterIndex != ch || it.pageIndex != pg) {
+                      return null;
+                    }
                     return idx;
                   },
                   itemBuilder: (context, index) {

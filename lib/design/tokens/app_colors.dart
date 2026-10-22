@@ -42,6 +42,7 @@ class AppColors {
   static const Color textSecondary = inkSoft;
   static const Color textTertiary = inkMute;
   static const Color textOnDark = Color(0xFFF5F5F5);
+  static const Color textMutedDark = Color(0xFFB3B3B3);
 
   static const Color danger = cinnabar;
   static const Color updateBadge = cinnabar;
@@ -79,19 +80,11 @@ class AppShadows {
   AppShadows._();
 
   static const List<BoxShadow> cover = [
-    BoxShadow(
-      color: Color(0x1F1F1E1B),
-      blurRadius: 10,
-      offset: Offset(0, 4),
-    ),
+    BoxShadow(color: Color(0x1F1F1E1B), blurRadius: 10, offset: Offset(0, 4)),
   ];
 
   static const List<BoxShadow> softBar = [
-    BoxShadow(
-      color: Color(0x0D1F1E1B),
-      blurRadius: 10,
-      offset: Offset(0, -2),
-    ),
+    BoxShadow(color: Color(0x0D1F1E1B), blurRadius: 10, offset: Offset(0, -2)),
   ];
 }
 
@@ -116,7 +109,7 @@ ThemeData buildLanghuanTheme({
       ? (dark ? AppColors.qingmoSoft : AppColors.qingmo)
       : _readableAccent(accent, dark);
   final line = dark ? AppColors.dividerDark : AppColors.line;
-  final muted = dark ? const Color(0xFFB3B3B3) : AppColors.inkSoft;
+  final muted = dark ? AppColors.textMutedDark : AppColors.inkSoft;
   final secondary = secondaryColor ?? AppColors.gold;
 
   final scheme = ColorScheme(
@@ -158,10 +151,7 @@ ThemeData buildLanghuanTheme({
       fontWeight: FontWeight.w600,
       letterSpacing: .8,
     ),
-    titleMedium: TextStyle(
-      color: onSurface,
-      fontWeight: FontWeight.w600,
-    ),
+    titleMedium: TextStyle(color: onSurface, fontWeight: FontWeight.w600),
     bodyLarge: TextStyle(color: onSurface, height: 1.5),
     bodyMedium: TextStyle(color: onSurface, height: 1.5),
     bodySmall: TextStyle(color: secondary, height: 1.5),
@@ -170,10 +160,7 @@ ThemeData buildLanghuanTheme({
       fontWeight: FontWeight.w600,
       letterSpacing: .4,
     ),
-    labelSmall: TextStyle(
-      color: secondary,
-      letterSpacing: 1.2,
-    ),
+    labelSmall: TextStyle(color: secondary, letterSpacing: 1.2),
   );
 
   return ThemeData(
@@ -238,9 +225,7 @@ ThemeData buildLanghuanTheme({
         foregroundColor: AppColors.paperLight,
         elevation: 0,
         minimumSize: const Size(0, AppDimens.ctaHeight),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     ),
     sliderTheme: SliderThemeData(
@@ -303,9 +288,7 @@ ThemeData buildLanghuanTheme({
     dialogTheme: DialogThemeData(
       backgroundColor: surface,
       surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       titleTextStyle: TextStyle(
         color: onSurface,
         fontSize: 18,
@@ -319,8 +302,8 @@ ThemeData buildLanghuanTheme({
 
 Color _onColor(Color color) =>
     ThemeData.estimateBrightnessForColor(color) == Brightness.dark
-        ? Colors.white
-        : Colors.black;
+    ? Colors.white
+    : Colors.black;
 
 double _contrast(Color a, Color b) {
   final la = a.computeLuminance();

@@ -10,11 +10,7 @@ import 'package:langhuan/design/tokens/app_colors.dart';
 /// reader, neighbours turn away with perspective. Visual reference only; the
 /// interaction is a plain [PageView] with snapping.
 class Bookshelf3D extends StatefulWidget {
-  const Bookshelf3D({
-    super.key,
-    required this.books,
-    required this.onOpen,
-  });
+  const Bookshelf3D({super.key, required this.books, required this.onOpen});
 
   final List<SearchItem> books;
   final ValueChanged<SearchItem> onOpen;
@@ -31,16 +27,14 @@ class _Bookshelf3DState extends State<Bookshelf3D> {
   void initState() {
     super.initState();
     _index = 0;
-    _controller = PageController(
-      viewportFraction: .42,
-      initialPage: 0,
-    );
+    _controller = PageController(viewportFraction: .42, initialPage: 0);
   }
 
   @override
   void didUpdateWidget(covariant Bookshelf3D oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.books.length != oldWidget.books.length && widget.books.isNotEmpty) {
+    if (widget.books.length != oldWidget.books.length &&
+        widget.books.isNotEmpty) {
       _index = _index.clamp(0, widget.books.length - 1);
     }
   }
@@ -57,7 +51,7 @@ class _Bookshelf3DState extends State<Bookshelf3D> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final line = dark ? AppColors.dividerDark : AppColors.line;
     final primary = dark ? AppColors.textOnDark : AppColors.textPrimary;
-    final muted = dark ? const Color(0xFFB3B3B3) : AppColors.inkMute;
+    final muted = dark ? AppColors.textMutedDark : AppColors.inkMute;
     final item = widget.books[_index.clamp(0, widget.books.length - 1)];
 
     return SizedBox(
@@ -156,14 +150,10 @@ class _Bookshelf3DState extends State<Bookshelf3D> {
                   onPressed: _index == 0
                       ? null
                       : () => _controller.previousPage(
-                            duration: const Duration(milliseconds: 240),
-                            curve: Curves.easeOutCubic,
-                          ),
-                  icon: Icon(
-                    Icons.chevron_left,
-                    size: 19,
-                    color: muted,
-                  ),
+                          duration: const Duration(milliseconds: 240),
+                          curve: Curves.easeOutCubic,
+                        ),
+                  icon: Icon(Icons.chevron_left, size: 19, color: muted),
                 ),
                 Text(
                   '${(_index + 1).toString().padLeft(2, '0')} / ${widget.books.length.toString().padLeft(2, '0')}',
@@ -179,14 +169,10 @@ class _Bookshelf3DState extends State<Bookshelf3D> {
                   onPressed: _index >= widget.books.length - 1
                       ? null
                       : () => _controller.nextPage(
-                            duration: const Duration(milliseconds: 240),
-                            curve: Curves.easeOutCubic,
-                          ),
-                  icon: Icon(
-                    Icons.chevron_right,
-                    size: 19,
-                    color: muted,
-                  ),
+                          duration: const Duration(milliseconds: 240),
+                          curve: Curves.easeOutCubic,
+                        ),
+                  icon: Icon(Icons.chevron_right, size: 19, color: muted),
                 ),
               ],
             ),
