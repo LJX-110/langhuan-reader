@@ -101,7 +101,7 @@ class AppInit {
     } catch (_) {
       if (!SpUtil.haveKey(PrefsKeys.version) ||
           SpUtil.getString(PrefsKeys.version).isEmpty) {
-        SpUtil.putString(PrefsKeys.version, '1.0.0+1');
+        SpUtil.putString(PrefsKeys.version, '1.0.0+2');
       }
     }
     // Default: visible system bars. Only the reader body goes immersive.

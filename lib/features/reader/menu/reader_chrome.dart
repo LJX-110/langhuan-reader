@@ -28,13 +28,13 @@ class ReaderChrome {
 }
 
 SliderThemeData readerSliderTheme(BuildContext context, ReaderChrome chrome) {
-  final accent = AppColors.accentOf(context);
+  final accent = AppColors.accentOn(context, chrome.panelBg);
   return SliderTheme.of(context).copyWith(
     trackHeight: 3,
     activeTrackColor: accent,
     inactiveTrackColor: chrome.divider,
     thumbColor: accent,
-    overlayColor: AppColors.accentSoftOf(context, alpha: 0.12),
+    overlayColor: accent.withValues(alpha: 0.12),
     thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
     overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
   );

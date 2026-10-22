@@ -1,4 +1,5 @@
 import 'package:langhuan/app/providers.dart';
+import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/design/theme/theme_presets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,9 +15,12 @@ class Skin extends ConsumerWidget {
       child: Builder(
         builder: (context) {
           final divider = Theme.of(context).dividerColor;
-          final accent = Theme.of(context).colorScheme.primary;
+          final accent = AppColors.accentOf(context);
           return Scaffold(
-            appBar: AppBar(title: const Text('主题'), centerTitle: false),
+            appBar: AppBar(
+              title: Text('主题', style: TextStyle(color: accent)),
+              centerTitle: false,
+            ),
             body: ListView.separated(
               padding: const EdgeInsets.symmetric(vertical: 8),
               itemCount: LanghuanThemes.all.length,
@@ -29,30 +33,35 @@ class Skin extends ConsumerWidget {
               itemBuilder: (context, i) {
                 final preset = LanghuanThemes.all[i];
                 final selected = data.themeIndex == i;
-                return InkWell(
-                  onTap: () => data.selectTheme(i),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 13, 20, 13),
-                    child: Row(
-                      children: [
-                        _swatch(preset.accent, divider),
-                        const SizedBox(width: 6),
-                        _swatch(preset.secondary, divider),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            preset.name,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: selected
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
+                return Material(
+                  color: selected
+                      ? accent.withValues(alpha: .06)
+                      : Colors.transparent,
+                  child: InkWell(
+                    onTap: () => data.selectTheme(i),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 13, 20, 13),
+                      child: Row(
+                        children: [
+                          _swatch(preset.accent, divider),
+                          const SizedBox(width: 6),
+                          _swatch(preset.secondary, divider),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              preset.name,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: selected
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                              ),
                             ),
                           ),
-                        ),
-                        if (selected)
-                          Icon(Icons.check, size: 18, color: accent),
-                      ],
+                          if (selected)
+                            Icon(Icons.check, size: 18, color: accent),
+                        ],
+                      ),
                     ),
                   ),
                 );

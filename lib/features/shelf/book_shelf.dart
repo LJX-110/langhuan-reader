@@ -104,6 +104,8 @@ class _ShelfHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final background = dark ? AppColors.scaffoldDark : AppColors.paper;
+    final accent = AppColors.accentOf(context);
+    final companion = AppColors.companionOf(context);
 
     return Container(
       color: background,
@@ -160,7 +162,7 @@ class _ShelfHeader extends StatelessWidget {
                                       ? FontWeight.w600
                                       : FontWeight.w400,
                                   color: filter == value
-                                      ? Theme.of(context).colorScheme.primary
+                                      ? accent
                                       : (dark
                                             ? AppColors.textMutedDark
                                             : AppColors.inkMute),
@@ -172,7 +174,7 @@ class _ShelfHeader extends StatelessWidget {
                                 width: 16,
                                 height: 2,
                                 color: filter == value
-                                    ? Theme.of(context).colorScheme.primary
+                                    ? companion
                                     : Colors.transparent,
                               ),
                             ],

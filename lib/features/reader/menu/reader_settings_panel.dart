@@ -108,7 +108,10 @@ class ReaderSettingsPanel extends StatelessWidget {
                     height: 24,
                     child: Switch.adaptive(
                       value: readModel.tapLeftToAdvance,
-                      activeTrackColor: AppColors.accentOf(context),
+                      activeTrackColor: AppColors.accentOn(
+                        context,
+                        chrome.panelBg,
+                      ),
                       onChanged: (_) {
                         readModel.toggleTapLeftToAdvance();
                         onChanged();
@@ -273,8 +276,8 @@ Widget _alignRow(
 ) {
   final current = ReadSetting.getTextAlign();
   const options = <(String, String)>[('justify', '两端对齐'), ('left', '左对齐')];
-  final accent = AppColors.accentOf(context);
-  final accentSoft = AppColors.accentSoftOf(context);
+  final accent = AppColors.accentOn(context, chrome.panelBg);
+  final accentSoft = accent.withValues(alpha: .10);
   return Row(
     children: [
       SizedBox(
@@ -344,8 +347,8 @@ Widget _pageTurnModeRow(
     (3, '滚动', Icons.swap_vert),
   ];
   final current = readModel.currentAnimationMode;
-  final accent = AppColors.accentOf(context);
-  final accentSoft = AppColors.accentSoftOf(context);
+  final accent = AppColors.accentOn(context, chrome.panelBg);
+  final accentSoft = accent.withValues(alpha: .10);
   return Row(
     children: modes.map((m) {
       final selected = current == m.$1;
@@ -463,7 +466,7 @@ Widget _paperSwatchRow({
   required VoidCallback onChanged,
 }) {
   final current = ReadSetting.getPaperTheme();
-  final accent = AppColors.accentOf(context);
+  final accent = AppColors.accentOn(context, chrome.panelBg);
   return Row(
     mainAxisAlignment: MainAxisAlignment.spaceAround,
     children: ReadSetting.solidPapers.map((t) {

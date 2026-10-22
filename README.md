@@ -1,6 +1,6 @@
 # 琅嬛阁
 
-琅嬛阁是一个自用的 Android 网络小说阅读器，基于 Flutter。Phase 0 与 Phase 1 已完成，进入 Phase 2 的发现 / 书架 / 详情打磨。
+琅嬛阁是一个自用的 Android 网络小说阅读器，基于 Flutter。当前版本 `1.0.0+2`，Phase 0–4 已完成并通过真机验收，Phase 5 质量与发布进行中。
 
 - 目标设备：Redmi K90 至尊版
 - 产物：单个 arm64 APK
@@ -11,16 +11,17 @@
 
 - 书架 / 发现 / 本地 / 我 四栏主页，单行页面标题 + 白底四页签 Dock
 - 书架 2 / 3 列自适应大封面，显示作者、阅读进度，支持全部 / 在读 / 未读筛选
-- 12 套双色主题：页面保持白 / 黑底，强调色随主题切换，默认「鸢尾蓝 · 流光白」
-- 发现页立体书架：书脊、书页厚度、透视与吸附翻页
+- 12 套双色主题：页面保持白 / 黑底，强调色用于填充、标题、底栏与筛选；文字使用同色相的可读色，亮色主题不再出现看不清的按钮
+- 发现页立体书架：书脊、书页厚度、顶面、落地阴影、透视与吸附翻页
 - 详情页编辑式布局：白底分区、缺失字段降级、加入书架 / 换源 / 继续阅读
+- 搜索按「书名 + 作者」合并多源结果，标出书源数量；逐源返回，不再等整批
 - 本地 TXT 导入：UTF-8 / GBK，自动分章，存入本机数据库
-- 本地书源引擎（Legado 规则子集）
-- 搜索按「书名 + 作者」合并多源结果，标出书源数量
-- 仿真 / 覆盖 / 无动画 / 纵向滚动四种阅读方式
-- 纸张主题、自定义字体、章节缓存、阅读进度
-- 私有书源仓库：手动同步自己维护的 JSON
-- P1 图标与启动图（双页书）
+- 阅读器：仿真 / 覆盖 / 无动画 / 纵向滚动四种翻页，章内查找、纸张、字号、行距、段距、边距、对齐、字体、章节缓存、进度恢复
+- 书签与阅读记录：当前页加书签、全部书签列表、最近阅读页续读
+- 书源引擎（Legado 规则子集）：CSS / XPath / JSON、详情 / 目录 / 正文 POST、按 host 复用 Cookie、Big5 解码、`replaceRegex` 捕获组、正文清洗、书源测试与健康度
+- 私有书源仓库：手动同步自己维护的 JSON；应用不联网自动更新，不保存默认地址
+- 数据库 v3：`books` / `chapters` / `sources` / `bookmarks` / `reading_history`，升级只做增量建表，不清空已有数据
+- 双页书图标与启动图
 
 ## 不做的范围
 
@@ -42,7 +43,10 @@ flutter pub get
 flutter analyze
 flutter test
 flutter build apk --debug --target-platform android-arm64
+flutter build apk --release --target-platform android-arm64
 ```
+
+release 构建启用 R8 与 `shrinkResources`，并剔除其他 ABI。自有签名配置见 [`docs/SIGNING.md`](docs/SIGNING.md)。
 
 ## 私有书源仓库
 
@@ -89,25 +93,21 @@ Wenku8 仅作为视觉参考，未复制其 GPL-3.0 代码。
 
 ## 状态
 
-- [x] Android / Flutter 工具链
-- [x] 上游底本清理，移除 Firebase、OTA、公开书源仓库
-- [x] 私有书源仓库接口
-- [x] Phase 0 实机安装启动验证（Redmi K90 至尊版）
-- [x] Phase 1 12 套双色主题与明暗模式
-- [x] Phase 1 单行页面标题 + 四页签 Dock
-- [x] Phase 1 书架 / 发现 / 我的 主页重构
-- [x] Phase 1 发现页立体书架与白底底栏
-- [x] Phase 1 搜索按书合并、多源计数
-- [x] Phase 1 图标与启动图
-- [x] Phase 2 本地 TXT 导入与四页签（真机待测）
-- [x] Phase 2 单行页头、12 套主题与“我的”简化
-- [x] 修复书源导入按钮反馈、本地书删除即时刷新、底栏/筛选涟漪
-- [x] 清理旧皮肤组件、旧图片与 `flex_color_scheme` 依赖
+- [x] Phase 0 工具链、底本清理与实机启动
+- [x] Phase 1 设计系统、12 套双色主题、四页签 Dock、搜索合并
+- [x] Phase 1 真机 UI / 明暗 / 字号 / 滚动验收
+- [x] Phase 2 发现 / 书架 / 详情 / 搜索 / 本地与真机验收
+- [x] Phase 3 阅读器、章内查找与真机验收
+- [x] Phase 4 数据库增量迁移、书签、阅读记录、Cookie、POST、Big5、捕获组、健康度与真机验收
+- [x] 修复书源导入刷新、书源详情、发现页超时、阅读器返回、正文刷新卡死
+- [x] 主题修订：原始色填充 + 同色相可读文字色，标题 / 底栏 / 筛选随主题变化
 - [x] `flutter analyze` 通过
-- [x] `flutter test` 通过（78 项，含 14 项布局/主题测试）
+- [x] `flutter test` 79 项通过（含 15 项布局 / 主题测试）
 - [x] debug arm64 APK 构建通过
-- [ ] Phase 1 真机 UI / 性能验收（待补测）
+- [x] release arm64 APK 构建通过（29.7MB，R8 + `shrinkResources`；debug 为 99.6MB）
+- [ ] Phase 5：集成测试、golden 测试、低端机性能
 - [ ] 自有 release keystore
-- [ ] Phase 2 书架与详情打磨
+- [ ] 最终真机验收（P1–P4 全项回归）
 
 debug APK：`build/app/outputs/flutter-apk/app-debug.apk`
+release APK：`build/app/outputs/flutter-apk/app-release.apk`

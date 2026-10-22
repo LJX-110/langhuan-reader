@@ -1,14 +1,15 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:langhuan/data/entities/search_item.dart';
 import 'package:langhuan/design/components/pic_widget.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 
 /// A compact 3D shelf: books stand on a hairline, the centred one faces the
-/// reader, neighbours turn away with perspective. Visual reference only; the
-/// interaction is a plain [PageView] with snapping.
+/// reader, neighbours turn away with perspective. Each volume has a spine,
+/// a page edge and a top face so it reads as a solid, not a flat card.
 class Bookshelf3D extends StatefulWidget {
   const Bookshelf3D({super.key, required this.books, required this.onOpen});
 
@@ -27,7 +28,7 @@ class _Bookshelf3DState extends State<Bookshelf3D> {
   void initState() {
     super.initState();
     _index = 0;
-    _controller = PageController(viewportFraction: .42, initialPage: 0);
+    _controller = PageController(viewportFraction: .40, initialPage: 0);
   }
 
   @override
@@ -50,12 +51,12 @@ class _Bookshelf3DState extends State<Bookshelf3D> {
     if (widget.books.isEmpty) return const SizedBox.shrink();
     final dark = Theme.of(context).brightness == Brightness.dark;
     final line = dark ? AppColors.dividerDark : AppColors.line;
-    final primary = dark ? AppColors.textOnDark : AppColors.textPrimary;
     final muted = dark ? AppColors.textMutedDark : AppColors.inkMute;
+    final accent = AppColors.accentOf(context);
     final item = widget.books[_index.clamp(0, widget.books.length - 1)];
 
     return SizedBox(
-      height: 212,
+      height: 252,
       child: Column(
         children: [
           Expanded(
@@ -86,7 +87,10 @@ class _Bookshelf3DState extends State<Bookshelf3D> {
                     controller: _controller,
                     clipBehavior: Clip.none,
                     physics: const PageScrollPhysics(),
-                    onPageChanged: (i) => setState(() => _index = i),
+                    onPageChanged: (i) {
+                      HapticFeedback.selectionClick();
+                      setState(() => _index = i);
+                    },
                     itemCount: widget.books.length,
                     itemBuilder: (context, i) {
                       return _ShelfBook(
@@ -127,7 +131,7 @@ class _Bookshelf3DState extends State<Bookshelf3D> {
                           fontSize: 15,
                           height: 1.3,
                           fontWeight: FontWeight.w600,
-                          color: primary,
+                          color: accent,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -205,19 +209,19 @@ class _ShelfBook extends StatelessWidget {
             ? (controller.page ?? controller.initialPage.toDouble())
             : controller.initialPage.toDouble();
         final delta = (index - page).clamp(-2.0, 2.0).toDouble();
-        final angle = delta * .55;
-        final scale = 1.0 - math.min(delta.abs() * .12, .24);
+        final angle = delta * .62;
+        final scale = 1.0 - math.min(delta.abs() * .14, .30);
         return Align(
           alignment: Alignment.bottomCenter,
           child: Transform.translate(
-            offset: Offset(0, delta.abs() * 5),
+            offset: Offset(0, delta.abs() * 8),
             child: Transform.scale(
               scale: scale,
               alignment: Alignment.bottomCenter,
               child: Transform(
                 alignment: Alignment.bottomCenter,
                 transform: Matrix4.identity()
-                  ..setEntry(3, 2, .0014)
+                  ..setEntry(3, 2, .0016)
                   ..rotateY(angle),
                 child: child,
               ),
@@ -241,91 +245,139 @@ class _BookCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final accent = AppColors.accentOf(context);
+    final companion = AppColors.companionOf(context);
+    final onAccent = AppColors.onColorOf(accent);
+    final topFace = dark ? const Color(0xFF2C2C2C) : const Color(0xFFEFEDE6);
+    final topEdge = dark ? const Color(0xFF3D3D3D) : const Color(0xFFD8D4C8);
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        final height = math.min(144.0, constraints.maxHeight - 10);
-        final width = height * .75;
+        final maxH = math.max(0.0, constraints.maxHeight - 18);
+        final maxW = math.max(0.0, constraints.maxWidth - 10);
+        var height = math.min(178.0, maxH);
+        var width = height * .74;
+        if (width > maxW) {
+          width = maxW;
+          height = width / .74;
+        }
+        const top = 8.0;
+
         return SizedBox(
-          width: width,
-          height: height + 10,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.end,
+          width: width + 10,
+          height: height + top + 8,
+          child: Stack(
+            clipBehavior: Clip.none,
             children: [
-              Container(
-                width: width - 12,
-                height: 7,
-                decoration: const BoxDecoration(
-                  color: Color(0x14141414),
-                  borderRadius: BorderRadius.all(Radius.elliptical(48, 5)),
+              Positioned(
+                left: 10,
+                right: 0,
+                bottom: 0,
+                height: 9,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: dark ? .30 : .10),
+                    borderRadius: const BorderRadius.all(
+                      Radius.elliptical(80, 7),
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(height: 3),
-              Container(
+              // Top face: the block of pages seen from slightly above.
+              Positioned(
+                left: 14,
+                top: 0,
+                width: math.max(0.0, width - 4),
+                height: top,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [topEdge, topFace],
+                    ),
+                    border: Border.all(color: topEdge, width: .5),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 4,
+                top: top,
                 width: width,
                 height: height,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(3),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x24141414),
-                      blurRadius: 12,
-                      offset: Offset(0, 7),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(3),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 10,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary,
-                          border: Border(
-                            right: BorderSide(
-                              color: Theme.of(context).colorScheme.secondary,
-                              width: .5,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(2.5),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x2A141414),
+                        blurRadius: 14,
+                        offset: Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(2.5),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 12,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                              colors: [
+                                Color.alphaBlend(
+                                  Colors.black.withValues(alpha: .24),
+                                  accent,
+                                ),
+                                accent,
+                                Color.alphaBlend(
+                                  Colors.white.withValues(alpha: .14),
+                                  accent,
+                                ),
+                              ],
+                            ),
+                            border: Border(
+                              right: BorderSide(
+                                color: companion.withValues(alpha: .75),
+                                width: .8,
+                              ),
                             ),
                           ),
-                        ),
-                        child: RotatedBox(
-                          quarterTurns: 3,
-                          child: Center(
-                            child: Text(
-                              item.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 7,
-                                height: 1,
-                                letterSpacing: .4,
-                                color: Theme.of(context).colorScheme.onPrimary,
+                          child: RotatedBox(
+                            quarterTurns: 3,
+                            child: Center(
+                              child: Text(
+                                item.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 7.5,
+                                  height: 1,
+                                  letterSpacing: .3,
+                                  color: onAccent,
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                      Expanded(
-                        child: PicWidget(
-                          item.coverUrl,
-                          width: width - 14,
-                          height: height,
-                          radius: 0,
-                        ),
-                      ),
-                      Container(
-                        width: 4,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFE8E8E8),
-                          border: Border(
-                            left: BorderSide(
-                              color: Color(0xFFDADADA),
-                              width: .5,
-                            ),
+                        Expanded(
+                          child: PicWidget(
+                            item.coverUrl,
+                            width: width - 17,
+                            height: height,
+                            radius: 0,
                           ),
                         ),
-                      ),
-                    ],
+                        SizedBox(
+                          width: 5,
+                          height: height,
+                          child: CustomPaint(painter: _PageEdgePainter(dark)),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -335,4 +387,29 @@ class _BookCard extends StatelessWidget {
       },
     );
   }
+}
+
+/// Hairline stack on the fore-edge so the volume reads as paper, not a slab.
+class _PageEdgePainter extends CustomPainter {
+  const _PageEdgePainter(this.dark);
+
+  final bool dark;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = dark ? const Color(0xFFD6D1C4) : const Color(0xFFF7F4EC),
+    );
+    final line = Paint()
+      ..color = const Color(0x22141414)
+      ..strokeWidth = .5;
+    for (var y = 2.0; y < size.height; y += 3) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PageEdgePainter oldDelegate) =>
+      oldDelegate.dark != dark;
 }

@@ -324,13 +324,13 @@ class _FontSetState extends ConsumerState<FontSet> {
                       height: 16,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Theme.of(context).colorScheme.primary,
+                        color: AppColors.accentOf(context),
                       ),
                     )
                   : Text(
                       '导入',
                       style: TextStyle(
-                        color: Theme.of(context).colorScheme.primary,
+                        color: AppColors.accentOf(context),
                         fontSize: 15,
                         fontWeight: FontWeight.w500,
                       ),
@@ -342,7 +342,7 @@ class _FontSetState extends ConsumerState<FontSet> {
         body: _loading
             ? Center(
                 child: CircularProgressIndicator(
-                  color: Theme.of(context).colorScheme.primary,
+                  color: AppColors.accentOf(context),
                 ),
               )
             : ListView(
@@ -512,7 +512,7 @@ class _FontSetState extends ConsumerState<FontSet> {
   }
 
   Widget _emptyLocalCard(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.primary;
+    final accent = AppColors.accentOf(context);
     return Material(
       color: _surface,
       borderRadius: BorderRadius.circular(AppDimens.cardRadius),
@@ -556,7 +556,7 @@ class _FontSetState extends ConsumerState<FontSet> {
     ColorModel colorModel, {
     bool canDelete = false,
   }) {
-    final accent = Theme.of(context).colorScheme.primary;
+    final accent = AppColors.accentOf(context);
     final selected = colorModel.font == row.key;
     final isLocal = row.key.startsWith(FontCatalog.localPrefix);
     final downloading = _downloading && _downloadingKey == row.key;

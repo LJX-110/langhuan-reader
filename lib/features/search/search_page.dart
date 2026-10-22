@@ -362,6 +362,7 @@ class _SearchState extends ConsumerState<Search> {
     final primary = theme.colorScheme.onSurface;
     final muted = theme.colorScheme.onSurfaceVariant;
     final line = theme.colorScheme.outline;
+    final accent = AppColors.accentOf(context);
     final sourceLabel = group.sourceCount > 1
         ? '${group.sourceCount} 个书源'
         : (item.sourceName.isEmpty ? '书源' : item.sourceName);
@@ -422,17 +423,12 @@ class _SearchState extends ConsumerState<Search> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: .075),
+                            color: AppColors.accentSoftOf(context, alpha: .075),
                             borderRadius: BorderRadius.circular(3),
                           ),
                           child: Text(
                             sourceLabel,
-                            style: TextStyle(
-                              fontSize: 9,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
+                            style: TextStyle(fontSize: 9, color: accent),
                           ),
                         ),
                         if (group.sourceNames.isNotEmpty) ...[

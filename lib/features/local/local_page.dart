@@ -156,7 +156,7 @@ class _LocalPageState extends State<LocalPage> {
                   icon: const Icon(Icons.file_open_outlined, size: 17),
                   label: Text(_importing ? '正在导入…' : '导入 TXT'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: AppColors.accentOf(context),
                     side: BorderSide(
                       color: dark ? AppColors.dividerDark : AppColors.line,
                     ),

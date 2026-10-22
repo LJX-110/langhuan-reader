@@ -100,7 +100,7 @@ class _ExplorePageState extends ConsumerState<ExplorePage>
             if (model.kinds.length > 1) _KindBar(model: model, dark: dark),
             if (model.books.isNotEmpty)
               Bookshelf3D(
-                books: model.books.take(8).toList(growable: false),
+                books: model.books.take(12).toList(growable: false),
                 onOpen: (item) => _openBook(context, model, item),
               ),
             Divider(

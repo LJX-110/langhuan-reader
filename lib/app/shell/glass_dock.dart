@@ -19,7 +19,8 @@ class LanhuanDock extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final surface = dark ? AppColors.surfaceDark : AppColors.surface;
     final line = dark ? AppColors.dividerDark : AppColors.line;
-    final active = Theme.of(context).colorScheme.primary;
+    final active = AppColors.accentOf(context);
+    final companion = AppColors.companionOf(context);
     final inactive = dark ? AppColors.textMutedDark : AppColors.inkMute;
 
     return DecoratedBox(
@@ -47,6 +48,7 @@ class LanhuanDock extends StatelessWidget {
                     icon: _DockIcon.values[i],
                     active: index == i,
                     activeColor: active,
+                    companionColor: companion,
                     inactiveColor: inactive,
                     onTap: () => onTap(i),
                   ),
@@ -67,6 +69,7 @@ class _DockItem extends StatelessWidget {
     required this.icon,
     required this.active,
     required this.activeColor,
+    required this.companionColor,
     required this.inactiveColor,
     required this.onTap,
   });
@@ -75,6 +78,7 @@ class _DockItem extends StatelessWidget {
   final _DockIcon icon;
   final bool active;
   final Color activeColor;
+  final Color companionColor;
   final Color inactiveColor;
   final VoidCallback onTap;
 
@@ -111,6 +115,13 @@ class _DockItem extends StatelessWidget {
                     fontFamily: AppType.sans,
                     fontWeight: active ? FontWeight.w600 : FontWeight.w400,
                   ),
+                ),
+                const SizedBox(height: 3),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: active ? 14 : 0,
+                  height: 2,
+                  color: companionColor,
                 ),
               ],
             ),

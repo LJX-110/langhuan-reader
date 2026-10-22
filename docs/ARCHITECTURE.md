@@ -2,7 +2,7 @@
 
 ## 当前结构
 
-Phase 1 已按功能重排 `lib/`，新代码优先落在对应 `features/` 目录。
+`lib/` 已按功能重排，新代码优先落在对应 `features/` 目录。Phase 0–4 已完成，Phase 5 做质量与发布。
 
 ```text
 Novel/
@@ -88,9 +88,10 @@ Novel/
 搜索
   → SearchModel
   → SourceRepository.getEnabled()（只取元数据）
-  → 每 8 个书源取一次完整规则
+  → 每个书源取完整规则（并发 10）
   → BookSourceEngine.search
   → 按「书名 + 作者」合并为 SearchGroup，标出书源数量
+  → 每完成一个源就增量通知 UI
 
 本地 TXT
   → FilePicker（仅 .txt）
@@ -102,24 +103,27 @@ Novel/
 
 ## 设计系统
 
-- 页面固定白 / 黑底；12 套双色主题只切换强调色与辅助色。强调色会做对比度校正，亮黄 / 荧光色不整页铺底。
+- 页面固定白 / 黑底；12 套双色主题只切换强调色与辅助色。
+- `ColorScheme.primary` 保留主题原始色，用于按钮、书脊等填充；亮黄 / 荧光色不整页铺底。
+- 文字与图标使用 `AppColors.accentOf`：保持色相，按背景亮度调整明度到 WCAG AA 4.5:1；辅助色接近底色时用 `AppColors.companionOf` 做小面积点缀。主题色块展示原始双色，不再与界面显示对不上。
 - 默认主题「鸢尾蓝 · 流光白」；主题定义在 `design/theme/theme_presets.dart`。
 - 每页只保留一行 `PageHeader`，不保留品牌顶栏、英文副题和档案编号；底部为白底四页签 Dock，不使用胶囊。
-- 发现页使用 `design/components/bookshelf_3d.dart`：书脊、书页厚度、透视、落地阴影与吸附翻页。
+- 发现页使用 `design/components/bookshelf_3d.dart`：书脊、书页厚度、顶面、透视、落地阴影与吸附翻页。
+- 每页标题、底栏选中项、书架筛选使用主题强调色；底栏与筛选的下划线使用辅助色。
 - 不使用重模糊；header / dock 都是实色白。
 - 布局/主题测试在 `test/design/chrome_layout_test.dart`、`bookshelf_layout_test.dart` 与 `theme_preset_test.dart`，覆盖 360 / 411 / 800 宽、明暗两套、1.3 倍文字缩放与主题可读性。
 
 ## 数据库
 
-- 单文件 `reader.db`，表：`books`、`chapters`、`sources`。
+- 单文件 `reader.db`，表：`books`、`chapters`、`sources`、`bookmarks`、`reading_history`。
+- schema 版本为 3；`onUpgrade` 只增量建表，`bookmarks` / `reading_history` 通过 `book_id` 外键级联删除，不清空用户数据。
 - 本地 TXT 复用现有 `books` / `chapters`，不新增表；`source_url` 以 `local://` 开头，章节正文直接存入 `chapters.body`。
-- 上游的 `onUpgrade` 会清空所有表，这是数据丢失风险；Phase 4 必须先改成增量迁移。
-- 任何 schema 改动前，先导出/备份数据库，并补迁移测试。
-- 书签、阅读记录依赖新的表和迁移方案，必须等 Phase 4 增量迁移完成后再实现；Phase 1 没有新增表。
+- 书签与阅读记录已落地；任何后续 schema 改动仍必须先补增量迁移与迁移测试。
 
 ## 验证
 
 - `flutter analyze`：通过。
-- `flutter test`：78 项通过，其中设计/主题 14 项。
-- debug arm64 APK：可构建。
-- Phase 1 真机验收：待补测（构建产物 `build/app/outputs/flutter-apk/app-debug.apk`）。
+- `flutter test`：79 项通过，其中设计/主题 15 项。
+- debug arm64 APK：99.6MB；release arm64 APK：29.7MB（R8 + `shrinkResources`）。
+- Phase 1–4 真机验收：已通过。
+- Phase 5 最终真机验收：待执行。

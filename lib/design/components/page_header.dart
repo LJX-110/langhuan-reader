@@ -11,8 +11,7 @@ class PageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final color = dark ? AppColors.textOnDark : AppColors.ink;
+    final color = AppColors.accentOf(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 8, 4),
       child: Row(

@@ -320,9 +320,7 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
                                 ? Text(
                                     '当前',
                                     style: TextStyle(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.primary,
+                                      color: AppColors.accentOf(context),
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
                                     ),

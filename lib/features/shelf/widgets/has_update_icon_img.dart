@@ -21,7 +21,8 @@ class HasUpdateIconImg extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.primary;
+    final accent = AppColors.accentOf(context);
+    final onAccent = AppColors.onColorOf(accent);
     return SizedBox(
       width: width,
       height: height,
@@ -77,7 +78,7 @@ class HasUpdateIconImg extends StatelessWidget {
                   ],
                 ),
                 child: picked
-                    ? const Icon(Icons.check, size: 14, color: Colors.white)
+                    ? Icon(Icons.check, size: 14, color: onAccent)
                     : null,
               ),
             ),

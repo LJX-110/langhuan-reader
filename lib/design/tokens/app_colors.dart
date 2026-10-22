@@ -28,11 +28,67 @@ class AppColors {
   static const Color qingmo = teal;
   static const Color qingmoSoft = Color(0xFF6FA8AE);
 
-  static Color accentOf(BuildContext context) =>
-      Theme.of(context).colorScheme.primary;
+  /// Accent for text and icons: keeps the hue of the chosen theme colour but
+  /// darkens or lightens it until it reads on the page background. Fills keep
+  /// the raw colour in [ColorScheme.primary], so theme swatches stay honest.
+  static Color accentOf(BuildContext context) {
+    final theme = Theme.of(context);
+    return readableAccent(theme.colorScheme.primary, theme.brightness);
+  }
 
   static Color accentSoftOf(BuildContext context, {double alpha = 0.10}) =>
-      Theme.of(context).colorScheme.primary.withValues(alpha: alpha);
+      accentOf(context).withValues(alpha: alpha);
+
+  /// Companion colour for small marks (dock underline, filter rules). Raw
+  /// colour when it is visible; near-white companions fall back to a readable
+  /// tone of the same hue instead of disappearing into the page.
+  static Color companionOf(BuildContext context) {
+    final theme = Theme.of(context);
+    final page = theme.brightness == Brightness.dark ? scaffoldDark : scaffold;
+    final raw = theme.colorScheme.secondary;
+    return contrastRatio(raw, page) >= 1.6
+        ? raw
+        : readableAccent(raw, theme.brightness);
+  }
+
+  /// Accent readable on an explicit background such as reader paper.
+  static Color accentOn(BuildContext context, Color background) =>
+      readableAccent(
+        Theme.of(context).colorScheme.primary,
+        ThemeData.estimateBrightnessForColor(background),
+      );
+
+  static Color onColorOf(Color color) =>
+      ThemeData.estimateBrightnessForColor(color) == Brightness.dark
+      ? white
+      : black;
+
+  static double contrastRatio(Color a, Color b) {
+    final la = a.computeLuminance();
+    final lb = b.computeLuminance();
+    final hi = la > lb ? la : lb;
+    final lo = la > lb ? lb : la;
+    return (hi + .05) / (lo + .05);
+  }
+
+  /// Move lightness away from the page until WCAG AA (4.5:1) is reached.
+  /// Hue and saturation stay put, so a gold theme still looks gold instead of
+  /// turning into grey.
+  static Color readableAccent(Color color, Brightness background) {
+    final target = background == Brightness.dark ? black : white;
+    final hsl = HSLColor.fromColor(color);
+    var lightness = hsl.lightness;
+    var out = color;
+    final step = background == Brightness.dark ? .05 : -.05;
+    for (var i = 0; i < 20; i++) {
+      if (contrastRatio(out, target) >= 4.5) return out;
+      final next = (lightness + step).clamp(0.0, 1.0);
+      if (next == lightness) break;
+      lightness = next;
+      out = hsl.withLightness(lightness).toColor();
+    }
+    return out;
+  }
 
   static const Color scaffold = paper;
   static const Color surface = paperLight;
@@ -105,19 +161,19 @@ ThemeData buildLanghuanTheme({
   final background = dark ? AppColors.scaffoldDark : AppColors.scaffold;
   final surface = dark ? AppColors.surfaceDark : AppColors.surface;
   final onSurface = dark ? AppColors.textOnDark : AppColors.textPrimary;
-  final primary = accent == null
-      ? (dark ? AppColors.qingmoSoft : AppColors.qingmo)
-      : _readableAccent(accent, dark);
+  final primary = accent ?? (dark ? AppColors.qingmoSoft : AppColors.qingmo);
+  final secondary = secondaryColor ?? AppColors.gold;
+  final accentInk = AppColors.readableAccent(primary, brightness);
+  final companionInk = AppColors.readableAccent(secondary, brightness);
   final line = dark ? AppColors.dividerDark : AppColors.line;
   final muted = dark ? AppColors.textMutedDark : AppColors.inkSoft;
-  final secondary = secondaryColor ?? AppColors.gold;
 
   final scheme = ColorScheme(
     brightness: brightness,
     primary: primary,
-    onPrimary: _onColor(primary),
+    onPrimary: AppColors.onColorOf(primary),
     secondary: secondary,
-    onSecondary: _onColor(secondary),
+    onSecondary: AppColors.onColorOf(secondary),
     error: AppColors.cinnabar,
     onError: AppColors.white,
     surface: surface,
@@ -154,13 +210,13 @@ ThemeData buildLanghuanTheme({
     titleMedium: TextStyle(color: onSurface, fontWeight: FontWeight.w600),
     bodyLarge: TextStyle(color: onSurface, height: 1.5),
     bodyMedium: TextStyle(color: onSurface, height: 1.5),
-    bodySmall: TextStyle(color: secondary, height: 1.5),
+    bodySmall: TextStyle(color: companionInk, height: 1.5),
     labelLarge: TextStyle(
       color: onSurface,
       fontWeight: FontWeight.w600,
       letterSpacing: .4,
     ),
-    labelSmall: TextStyle(color: secondary, letterSpacing: 1.2),
+    labelSmall: TextStyle(color: companionInk, letterSpacing: 1.2),
   );
 
   return ThemeData(
@@ -193,7 +249,7 @@ ThemeData buildLanghuanTheme({
     ),
     bottomNavigationBarTheme: BottomNavigationBarThemeData(
       backgroundColor: surface,
-      selectedItemColor: primary,
+      selectedItemColor: accentInk,
       unselectedItemColor: AppColors.inkMute,
       type: BottomNavigationBarType.fixed,
       elevation: 0,
@@ -214,15 +270,15 @@ ThemeData buildLanghuanTheme({
     iconTheme: IconThemeData(color: onSurface),
     floatingActionButtonTheme: FloatingActionButtonThemeData(
       backgroundColor: primary,
-      foregroundColor: AppColors.paperLight,
+      foregroundColor: AppColors.onColorOf(primary),
     ),
     textButtonTheme: TextButtonThemeData(
-      style: TextButton.styleFrom(foregroundColor: primary),
+      style: TextButton.styleFrom(foregroundColor: accentInk),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: primary,
-        foregroundColor: AppColors.paperLight,
+        foregroundColor: AppColors.onColorOf(primary),
         elevation: 0,
         minimumSize: const Size(0, AppDimens.ctaHeight),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -249,14 +305,14 @@ ThemeData buildLanghuanTheme({
     chipTheme: ChipThemeData(
       backgroundColor: dark ? AppColors.surfaceDark : AppColors.paper,
       selectedColor: primary.withValues(alpha: 0.10),
-      checkmarkColor: primary,
+      checkmarkColor: accentInk,
       labelStyle: TextStyle(
         color: onSurface,
         fontSize: 12,
         fontFamily: fontFamily,
       ),
       secondaryLabelStyle: TextStyle(
-        color: primary,
+        color: accentInk,
         fontSize: 12,
         fontWeight: FontWeight.w600,
         fontFamily: fontFamily,
@@ -298,29 +354,4 @@ ThemeData buildLanghuanTheme({
       ),
     ),
   );
-}
-
-Color _onColor(Color color) =>
-    ThemeData.estimateBrightnessForColor(color) == Brightness.dark
-    ? Colors.white
-    : Colors.black;
-
-double _contrast(Color a, Color b) {
-  final la = a.computeLuminance();
-  final lb = b.computeLuminance();
-  final hi = la > lb ? la : lb;
-  final lo = la > lb ? lb : la;
-  return (hi + .05) / (lo + .05);
-}
-
-/// Keep a chosen accent readable as text/icon colour on the page background.
-/// The theme card still shows the raw two colours.
-Color _readableAccent(Color color, bool dark) {
-  final target = dark ? Colors.black : Colors.white;
-  var out = color;
-  for (var i = 0; i < 12; i++) {
-    if (_contrast(out, target) >= 4.5) return out;
-    out = Color.lerp(out, dark ? Colors.white : Colors.black, .12)!;
-  }
-  return out;
 }

@@ -29,8 +29,8 @@ jobs:
       - name: Pub get
         run: flutter pub get
 
-      - name: Build arm64 debug APK
-        run: flutter build apk --debug --target-platform android-arm64
+      - name: Build arm64 release APK
+        run: flutter build apk --release --target-platform android-arm64
 
       - name: Publish preview release
         uses: softprops/action-gh-release@v2
@@ -39,9 +39,9 @@ jobs:
           name: 琅嬛阁预览
           prerelease: true
           body: |
-            琅嬛阁 arm64 debug APK，仅用于真机预览。
+            琅嬛阁 arm64 release APK，仅用于真机预览。
 
+            - 未配置自有 keystore 时使用 debug 签名，覆盖安装前先卸载旧版（会清数据）
             - 书源由使用者自行提供，应用不内置任何书源
             - 安装时如提示未知来源，请允许
-            - 覆盖安装失败时先卸载旧版（会清数据）
-          files: build/app/outputs/flutter-apk/app-debug.apk
+          files: build/app/outputs/flutter-apk/app-release.apk
