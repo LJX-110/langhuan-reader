@@ -123,7 +123,7 @@ class ExploreModel with ChangeNotifier {
       final hits = await _engine.explore(src, kind.url, page: page);
       if (hits.isEmpty) {
         if (page == 1) {
-          error = '该分类暂无内容';
+          error = '该分类没有解析到内容，可能书源失效或站点拦截';
         }
         noMore = true;
       } else {

@@ -1,32 +1,71 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/features/sources/net/analyze_url.dart';
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:fast_gbk/fast_gbk.dart';
 
 /// Shared Dio client for book-source fetches (independent of official API).
 class SourceHttp {
   SourceHttp._() {
-    _dio = Dio(
-      BaseOptions(
-        connectTimeout: const Duration(seconds: 12),
-        receiveTimeout: const Duration(seconds: 20),
-        sendTimeout: const Duration(seconds: 12),
-        responseType: ResponseType.bytes,
-        validateStatus: (c) => c != null && c < 500,
-        headers: {
-          'User-Agent':
-              'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-          'Accept':
-              'text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8',
-          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        },
-      ),
+    BaseOptions options() => BaseOptions(
+      connectTimeout: const Duration(seconds: 12),
+      receiveTimeout: const Duration(seconds: 20),
+      sendTimeout: const Duration(seconds: 12),
+      responseType: ResponseType.bytes,
+      validateStatus: (c) => c != null && c < 500,
+      headers: {
+        'User-Agent':
+            'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        'Accept':
+            'text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      },
     );
+    _dio = Dio(options());
+    // Many novel sites ship an incomplete TLS chain that Dart's bundled root
+    // store rejects. Retry only after a handshake failure, never pre-emptively.
+    _lenientDio = Dio(options())
+      ..httpClientAdapter = IOHttpClientAdapter(
+        createHttpClient: () {
+          final client = HttpClient();
+          client.badCertificateCallback = (_, _, _) => true;
+          return client;
+        },
+      );
   }
 
   static final SourceHttp instance = SourceHttp._();
   late final Dio _dio;
+  late final Dio _lenientDio;
+
+  Future<Response<List<int>>> _send(
+    String url,
+    Options options,
+    Object? data,
+  ) async {
+    try {
+      return await _dio.request<List<int>>(url, data: data, options: options);
+    } on DioException catch (e) {
+      if (!_isTlsError(e)) rethrow;
+      AppLog.w(
+        'SourceNet',
+        'TLS chain rejected, retrying lenient: $url',
+        error: e.error,
+      );
+      return _lenientDio.request<List<int>>(url, data: data, options: options);
+    }
+  }
+
+  bool _isTlsError(DioException e) {
+    final err = e.error;
+    if (err is HandshakeException) return true;
+    final text = '${err ?? ''} ${e.message ?? ''}';
+    return text.contains('CERTIFICATE_VERIFY_FAILED') ||
+        text.contains('HandshakeException');
+  }
 
   Future<SourceResponse> fetch(AnalyzeRequest req) async {
     final url = req.url.trim();
@@ -46,11 +85,7 @@ class SourceHttp {
           ? Headers.formUrlEncodedContentType
           : null,
     );
-    final response = await _dio.request<List<int>>(
-      url,
-      data: req.body,
-      options: options,
-    );
+    final response = await _send(url, options, req.body);
     final bytes = response.data ?? <int>[];
     final ctype =
         response.headers.value(Headers.contentTypeHeader)?.toLowerCase() ?? '';
