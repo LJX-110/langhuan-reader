@@ -89,9 +89,9 @@ class ReaderTopBar extends StatelessWidget {
     final bookName = readModel.book?.name ?? '';
     final chapter = readModel.book?.readingChapter.trim() ?? '';
     final pageChapter = readModel.curPage?.chapterName.trim() ?? '';
-    final chapterName = (chapter.isEmpty || chapter == '加载中')
-        ? pageChapter
-        : chapter;
+    final chapterName = (pageChapter.isEmpty || pageChapter == '加载中')
+        ? chapter
+        : pageChapter;
 
     // Color outside SafeArea so the bar fills status-bar / notch; content
     // still respects the inset. Otherwise the page text peeks through above.
