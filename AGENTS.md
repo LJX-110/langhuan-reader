@@ -47,4 +47,4 @@ flutter build apk --release --target-platform android-arm64
 
 ## 阶段性验收
 
-详见 `docs/ROADMAP.md`。当前阶段：Phase 3 阅读器。
+详见 `docs/ROADMAP.md`。当前阶段：Phase 4 引擎加固。
