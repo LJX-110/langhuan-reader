@@ -7,6 +7,7 @@ import 'package:langhuan/features/sources/source_model.dart';
 import 'package:langhuan/features/sources/engine/book_source_engine.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
+import 'package:langhuan/features/sources/net/analyze_url.dart';
 import 'package:langhuan/features/sources/util/book_id.dart';
 import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
@@ -24,6 +25,10 @@ class ExploreModel with ChangeNotifier {
   bool loading = false;
   bool bootstrapped = false;
 
+  /// A reload requested while another one is in flight (e.g. import finishes
+  /// during the initial discovery load).
+  bool _reloadQueued = false;
+
   /// True after a page returns empty results — stops further load-more.
   bool noMore = false;
   int page = 1;
@@ -35,7 +40,10 @@ class ExploreModel with ChangeNotifier {
   }
 
   Future<void> reloadSources() async {
-    if (loading) return;
+    if (loading) {
+      _reloadQueued = true;
+      return;
+    }
     loading = true;
     error = null;
     noMore = false;
@@ -51,7 +59,9 @@ class ExploreModel with ChangeNotifier {
         kinds = [];
         activeKind = null;
         books = [];
-        error = '暂无可用发现书源，请在「书源管理」导入并启用带 explore 的书源';
+        error =
+            '暂无可用发现书源。只有启用且带 exploreUrl 的书源会出现在这里；'
+            '仅搜索源请用书架搜索。';
         return;
       }
 
@@ -70,6 +80,10 @@ class ExploreModel with ChangeNotifier {
     } finally {
       loading = false;
       notifyListeners();
+      if (_reloadQueued) {
+        _reloadQueued = false;
+        unawaited(reloadSources());
+      }
     }
   }
 
@@ -167,8 +181,9 @@ class ExploreModel with ChangeNotifier {
   }
 
   Future<BookInfo?> openDetail(SearchItem item) async {
-    if (item.sourceUrl.isEmpty || item.bookUrl.isEmpty) {
-      BotToast.showText(text: '该书缺少书源信息');
+    final resolved = AnalyzeUrl.sanitizeUrl(item.bookUrl, base: item.sourceUrl);
+    if (item.sourceUrl.isEmpty || resolved.isEmpty) {
+      BotToast.showText(text: '该书详情地址无效，可能书源规则不完整');
       return null;
     }
     final src = await SourceModel().findByUrl(item.sourceUrl);
@@ -184,13 +199,13 @@ class ExploreModel with ChangeNotifier {
         coverUrl: item.coverUrl,
         lastChapter: item.latestChapter,
         kind: item.category,
-        bookUrl: item.bookUrl,
+        bookUrl: resolved,
         sourceUrl: item.sourceUrl,
         sourceName: item.sourceName,
       );
-      return await _engine.bookInfo(src, item.bookUrl, seed: seed);
+      return await _engine.bookInfo(src, resolved, seed: seed);
     } catch (e) {
-      BotToast.showText(text: '获取详情失败：$e');
+      BotToast.showText(text: '获取详情失败，请稍后重试');
       return null;
     }
   }

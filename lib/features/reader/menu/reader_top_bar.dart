@@ -18,6 +18,7 @@ class ReaderTopBar extends StatelessWidget {
     required this.onSearch,
     required this.bookmarked,
     required this.onBookmark,
+    required this.onExit,
   });
 
   final ReadModel readModel;
@@ -25,15 +26,7 @@ class ReaderTopBar extends StatelessWidget {
   final VoidCallback onSearch;
   final bool bookmarked;
   final VoidCallback onBookmark;
-
-  /// The reader can be pushed from a replaced route, leaving nothing to pop.
-  /// Fall back to the shell so the arrow never looks dead.
-  Future<void> _back(BuildContext context) async {
-    final popped = await Navigator.maybePop(context);
-    if (!popped && context.mounted) {
-      Navigator.of(context).popUntil((route) => route.isFirst);
-    }
-  }
+  final VoidCallback onExit;
 
   /// Open the source-site page in an external browser.
   /// Prefer current chapter URL; fall back to book detail / toc.
@@ -107,12 +100,13 @@ class ReaderTopBar extends StatelessWidget {
           child: Row(
             children: [
               IconButton(
+                tooltip: '返回',
                 icon: Icon(
                   Icons.arrow_back_ios_new,
                   size: 18,
                   color: chrome.fg,
                 ),
-                onPressed: () => _back(context),
+                onPressed: onExit,
               ),
               Expanded(
                 child: Text(

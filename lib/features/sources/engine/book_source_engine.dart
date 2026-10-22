@@ -146,8 +146,25 @@ class BookSourceEngine {
           bookUrl = item.querySelector('a')?.attributes['href'] ?? '';
         }
       }
-      bookUrl = urlJoin(resp.url, bookUrl);
-      if (bookUrl.isEmpty) continue;
+      bookUrl = AnalyzeUrl.sanitizeUrl(
+        urlJoin(resp.url, bookUrl),
+        base: resp.url,
+      );
+      if (bookUrl.isEmpty && item is Element) {
+        // Some sites keep the real link in data-href instead of href.
+        final dataUrl =
+            item.attributes['data-href'] ?? item.attributes['data-url'] ?? '';
+        if (dataUrl.isNotEmpty) {
+          bookUrl = AnalyzeUrl.sanitizeUrl(
+            urlJoin(resp.url, dataUrl),
+            base: resp.url,
+          );
+        }
+      }
+      if (bookUrl.isEmpty) {
+        AppLog.d('RuleMiss', 'skip item without usable bookUrl name=$name');
+        continue;
+      }
       var cover = rule.getString(coverRule, scope: item);
       if ((cover.isEmpty || _isPlaceholderCover(cover)) && item is Element) {
         final img = item.localName == 'img' ? item : item.querySelector('img');

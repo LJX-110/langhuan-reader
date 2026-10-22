@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/data/repositories/chapter_repository.dart';
 import 'package:langhuan/data/entities/book.dart';
@@ -52,6 +54,8 @@ class ReaderContentReloader {
   /// Cancel in-flight Rust/Dart progressive pagination (ABI v3).
   final void Function()? cancelPagination;
 
+  bool _refreshing = false;
+
   Future<void> reloadChapters() async {
     final b = bookOf();
     if (b == null) return;
@@ -71,6 +75,7 @@ class ReaderContentReloader {
   }
 
   Future<void> reloadCurrentPage() async {
+    if (_refreshing) return;
     final b = bookOf();
     if (b == null) return;
     final chapters = chaptersOf();
@@ -79,28 +84,40 @@ class ReaderContentReloader {
         b.chapterIndex >= chapters.length) {
       return;
     }
+    _refreshing = true;
     toggleMenu();
     final chapter = chapters[b.chapterIndex];
     await showLoading('正在刷新正文…');
     try {
-      var content = await fetchChapterBody(chapter.id, idx: b.chapterIndex);
+      var content = await fetchChapterBody(chapter.id, idx: b.chapterIndex)
+          .timeout(
+            const Duration(seconds: 25),
+            onTimeout: () => '章节内容加载超时，请检查网络或换源',
+          );
       if (content.isEmpty) {
         content = '章节内容加载失败，请检查书源或换源后重试';
       }
       final looksOk =
           !content.startsWith('章节内容加载失败') &&
+          !content.startsWith('章节内容加载超时') &&
           !content.startsWith('书源不存在') &&
           !content.startsWith('章节地址为空');
       if (looksOk) {
         await chaptersRepo.updateBodies([ChapterNode(content, chapter.id)]);
         chapter.hasBody = true;
+      } else {
+        BotToast.showText(text: '刷新失败，请检查书源或网络');
       }
       // Drop warm snapshot so loadChapter hits DB (updateBodies only clears SQLite).
       removeWarm(chapter.id);
       setCurPage(await loadChapter(b.chapterIndex));
       markNeedsPaint();
       notify();
+    } catch (e) {
+      AppLog.w('Read', 'reload current page failed', error: e);
+      BotToast.showText(text: '刷新失败，请稍后重试');
     } finally {
+      _refreshing = false;
       hideLoading();
     }
   }

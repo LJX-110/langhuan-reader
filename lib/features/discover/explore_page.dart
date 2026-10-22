@@ -59,8 +59,10 @@ class _ExplorePageState extends ConsumerState<ExplorePage>
     // Importing / deleting sources should refresh the discover entry points
     // without needing to restart the app.
     ref.listen(sourceModelProvider, (previous, next) {
-      final before = previous?.sources.length ?? 0;
-      if (before != next.sources.length) {
+      final before =
+          previous?.sources.where((s) => s.enabled && s.canExplore).length ?? 0;
+      final after = next.sources.where((s) => s.enabled && s.canExplore).length;
+      if (before != after) {
         ref.read(exploreModelProvider).reloadSources();
       }
     });

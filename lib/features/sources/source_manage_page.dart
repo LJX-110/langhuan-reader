@@ -245,10 +245,11 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                   subtitle: Text(
                     [
                       if (s.bookSourceGroup.isNotEmpty) s.bookSourceGroup,
-                      if (s.respondTime > 0)
-                        '${s.respondTime}ms'
-                      else if (s.respondTime < 0)
-                        '测试失败',
+                      if (s.lastCheckTime > 0)
+                        s.respondTime > 0 ? '${s.respondTime}ms' : '测试失败'
+                      else if (s.respondTime > 0 && s.respondTime < 60000)
+                        '${s.respondTime}ms',
+                      s.canExplore ? '可发现' : '仅搜索',
                       s.bookSourceUrl,
                     ].where((e) => e.isNotEmpty).join(' · '),
                     maxLines: 2,

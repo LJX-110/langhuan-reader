@@ -191,11 +191,21 @@ class _ReadBookState extends ConsumerState<ReadBook>
                   ? const ScrollContentReader()
                   : const PageContentReader(),
             ),
-            if (sessionReady && showMenu) const ReaderMenu(),
+            if (sessionReady && showMenu) ReaderMenu(onExit: _exitReader),
           ],
         ),
       ),
     );
+  }
+
+  /// Explicit top-bar back. Unlike [PopScope], this exits the reader even
+  /// while the menu is open (the system back first closes the menu).
+  Future<void> _exitReader() async {
+    final bookId = readModel.book?.id;
+    if (bookId != null && !ref.read(shelfModelProvider).isOnShelf(bookId)) {
+      await confirmAddToShelf(context);
+    }
+    if (mounted) Navigator.of(context).pop();
   }
 
   Future<void> confirmAddToShelf(BuildContext context) async {

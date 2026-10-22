@@ -21,7 +21,9 @@ import 'package:langhuan/features/reader/settings/read_setting.dart';
 /// Reader chrome overlay: top bar plus a bottom panel whose content switches
 /// between chapters, settings, layout and download.
 class ReaderMenu extends ConsumerStatefulWidget {
-  const ReaderMenu({super.key});
+  const ReaderMenu({super.key, required this.onExit});
+
+  final VoidCallback onExit;
 
   @override
   ConsumerState<ReaderMenu> createState() => _MenuState();
@@ -290,6 +292,7 @@ class _MenuState extends ConsumerState<ReaderMenu> {
                     onSearch: _openFind,
                     bookmarked: _bookmarked,
                     onBookmark: _toggleBookmark,
+                    onExit: widget.onExit,
                   ),
           ),
           // Bottom panel (settings / chapter / download)

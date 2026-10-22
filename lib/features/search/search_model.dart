@@ -3,6 +3,7 @@ import 'package:langhuan/data/entities/book_info.dart';
 import 'package:langhuan/data/entities/search_item.dart';
 import 'package:langhuan/features/sources/engine/book_source_engine.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
+import 'package:langhuan/features/sources/net/analyze_url.dart';
 import 'package:langhuan/features/sources/util/book_id.dart';
 import 'package:langhuan/core/storage/local_store.dart';
 import 'package:bot_toast/bot_toast.dart';
@@ -176,8 +177,9 @@ class SearchModel with ChangeNotifier {
 
   /// Open book detail via local source rules.
   Future<BookInfo?> openDetail(SearchItem item) async {
-    if (item.sourceUrl.isEmpty || item.bookUrl.isEmpty) {
-      BotToast.showText(text: '该书缺少书源信息，请重新搜索');
+    final resolved = AnalyzeUrl.sanitizeUrl(item.bookUrl, base: item.sourceUrl);
+    if (item.sourceUrl.isEmpty || resolved.isEmpty) {
+      BotToast.showText(text: '该书详情地址无效，可能书源规则不完整');
       return null;
     }
     final src = await _sources.getByUrl(item.sourceUrl);
@@ -193,14 +195,14 @@ class SearchModel with ChangeNotifier {
         coverUrl: item.coverUrl,
         lastChapter: item.latestChapter,
         kind: item.category,
-        bookUrl: item.bookUrl,
+        bookUrl: resolved,
         sourceUrl: item.sourceUrl,
         sourceName: item.sourceName,
       );
-      final info = await _engine.bookInfo(src, item.bookUrl, seed: seed);
+      final info = await _engine.bookInfo(src, resolved, seed: seed);
       return info;
     } catch (e) {
-      BotToast.showText(text: '获取详情失败：$e');
+      BotToast.showText(text: '获取详情失败，请稍后重试');
       return null;
     }
   }
