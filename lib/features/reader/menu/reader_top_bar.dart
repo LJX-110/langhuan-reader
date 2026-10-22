@@ -22,6 +22,15 @@ class ReaderTopBar extends StatelessWidget {
   final ReaderChrome chrome;
   final VoidCallback onSearch;
 
+  /// The reader can be pushed from a replaced route, leaving nothing to pop.
+  /// Fall back to the shell so the arrow never looks dead.
+  Future<void> _back(BuildContext context) async {
+    final popped = await Navigator.maybePop(context);
+    if (!popped && context.mounted) {
+      Routes.navigateTo(context, Routes.root, replace: true);
+    }
+  }
+
   /// Open the source-site page in an external browser.
   /// Prefer current chapter URL; fall back to book detail / toc.
   Future<void> _openOriginalPage(BuildContext context) async {
@@ -99,7 +108,7 @@ class ReaderTopBar extends StatelessWidget {
                   size: 18,
                   color: chrome.fg,
                 ),
-                onPressed: () => Navigator.maybePop(context),
+                onPressed: () => _back(context),
               ),
               Expanded(
                 child: Text(

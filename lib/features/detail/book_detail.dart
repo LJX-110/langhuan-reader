@@ -109,10 +109,24 @@ class _BookDetailState extends ConsumerState<BookDetail> {
       scrolledUnderElevation: 0.5,
       backgroundColor: _scaffold,
       foregroundColor: _primary,
+      leading: IconButton(
+        tooltip: '返回',
+        icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+        onPressed: () => _back(context),
+      ),
       systemOverlayStyle: _dark
           ? SystemUiOverlayStyle.light
           : SystemUiOverlayStyle.dark,
     );
+  }
+
+  /// Detail can be reached from a replaced reader route, so fall back to the
+  /// shell when there is nothing to pop.
+  Future<void> _back(BuildContext context) async {
+    final popped = await Navigator.maybePop(context);
+    if (!popped && context.mounted) {
+      Routes.navigateTo(context, Routes.root, replace: true);
+    }
   }
 
   // ---------------------------------------------------------------------------

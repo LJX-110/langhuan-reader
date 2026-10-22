@@ -46,41 +46,47 @@ class _SortShelfState extends ConsumerState<SortShelf> {
         ],
       ),
       body: BooksWidget("sort"),
-      bottomNavigationBar: OverflowBar(
-        alignment: MainAxisAlignment.spaceAround,
-        children: [
-          TextButton(
-            onPressed: shelfModel.hasPick()
-                ? () async {
-                    var alertDialog = ConfirmDialog(
-                      "确定要删除所选书籍吗?",
-                      () {
-                        // 展示 SnackBar
-                        Navigator.of(context).pop(true);
-                      },
-                      () {
-                        Navigator.of(context).pop(false);
-                      },
-                    );
-                    var isDismiss = await showDialog(
-                      context: context,
-                      builder: (context) {
-                        return alertDialog;
-                      },
-                    );
-                    if (isDismiss == true) {
-                      shelfModel.removePicks();
-                    }
-                  }
-                : null,
-            child: Text(
-              '删除',
-              style: TextStyle(
-                color: shelfModel.hasPick() ? Colors.red : Colors.grey,
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: OverflowBar(
+            alignment: MainAxisAlignment.spaceAround,
+            children: [
+              TextButton(
+                style: TextButton.styleFrom(minimumSize: const Size(96, 44)),
+                onPressed: shelfModel.hasPick()
+                    ? () async {
+                        var alertDialog = ConfirmDialog(
+                          "确定要删除所选书籍吗?",
+                          () {
+                            Navigator.of(context).pop(true);
+                          },
+                          () {
+                            Navigator.of(context).pop(false);
+                          },
+                        );
+                        var isDismiss = await showDialog(
+                          context: context,
+                          builder: (context) {
+                            return alertDialog;
+                          },
+                        );
+                        if (isDismiss == true) {
+                          shelfModel.removePicks();
+                        }
+                      }
+                    : null,
+                child: Text(
+                  '删除',
+                  style: TextStyle(
+                    color: shelfModel.hasPick() ? Colors.red : Colors.grey,
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

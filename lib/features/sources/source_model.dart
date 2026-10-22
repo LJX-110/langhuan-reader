@@ -133,6 +133,22 @@ class SourceModel with ChangeNotifier {
       if (!silent) BotToast.showText(text: '未解析到有效书源');
       return 0;
     }
+    final usable = parsed.sources
+        .where(
+          (s) =>
+              s.searchUrl.trim().isNotEmpty || s.exploreUrl.trim().isNotEmpty,
+        )
+        .length;
+    if (usable == 0) {
+      if (!silent) {
+        BotToast.showText(
+          text:
+              '这是订阅源（RSS），不能用于搜书或阅读。'
+              '请从源仓库导入「书源」JSON（地址含 shuyuans/json）。',
+        );
+      }
+      return 0;
+    }
     final stats = await _commitImport(parsed);
     if (!silent) {
       await load();
