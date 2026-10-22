@@ -36,12 +36,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: P2 预览
+          name: P3 预览
           prerelease: true
           body: |
-            琅嬛阁 P2 预览，arm64 debug APK。
+            琅嬛阁 P3 预览，arm64 debug APK。
 
-            - 白底五色、四页签、立体书架、本地 TXT、详情页与书架筛选
-            - 仅用于预览，未做真机验收
+            - 阅读器菜单拆分、两端对齐 / 左对齐、章内查找
+            - 搜索页与暗色副文本修复
+            - 仅用于真机预览，未完成正式验收
             - 安装时如提示未知来源，请允许
           files: build/app/outputs/flutter-apk/app-debug.apk
