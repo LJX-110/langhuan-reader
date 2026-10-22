@@ -55,6 +55,22 @@ class ReaderContentReloader {
   final void Function()? cancelPagination;
 
   bool _refreshing = false;
+  Timer? _relayoutTimer;
+
+  /// Coalesce slider drags / repeated +/- taps into one relayout. The value
+  /// label still updates immediately; only the expensive pagination waits.
+  void scheduleRelayout() {
+    _relayoutTimer?.cancel();
+    _relayoutTimer = Timer(const Duration(milliseconds: 260), () {
+      _relayoutTimer = null;
+      unawaited(relayoutPages());
+    });
+  }
+
+  void cancelScheduledRelayout() {
+    _relayoutTimer?.cancel();
+    _relayoutTimer = null;
+  }
 
   Future<void> reloadChapters() async {
     final b = bookOf();
@@ -123,21 +139,20 @@ class ReaderContentReloader {
   }
 
   Future<void> relayoutPages() async {
+    final b = bookOf();
+    if (b == null) return;
     cancelPagination?.call();
     clearPictures();
     // Font/metrics changed — drop disk page layouts for the active book only.
-    final b = bookOf();
     try {
-      await chaptersRepo.clearAllPageLayouts(bookId: b?.id);
-      AppLog.i('Read', 'cleared page cache on layout change book=${b?.id}');
+      await chaptersRepo.clearAllPageLayouts(bookId: b.id);
+      AppLog.i('Read', 'cleared page cache on layout change book=${b.id}');
     } catch (e) {
       AppLog.w('Read', 'clearAllPageLayouts failed', error: e);
     }
-    final keepIndex = b?.pageIndex ?? 0;
-    await openChapterAt(b?.chapterIndex ?? 0, false, showLoading: false);
-    if (b != null) {
-      restorePageIndex(keepIndex);
-    }
+    final keepIndex = b.pageIndex;
+    await openChapterAt(b.chapterIndex, false, showLoading: false);
+    restorePageIndex(keepIndex);
     markNeedsPaint();
     notify();
   }

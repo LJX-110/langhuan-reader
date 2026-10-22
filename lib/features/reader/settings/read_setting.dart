@@ -226,7 +226,10 @@ class ReadSetting {
   }
 
   static void setTextAlign(String value) {
-    SpUtil.putString(PrefsKeys.readerTextAlign, value == 'left' ? 'left' : 'justify');
+    SpUtil.putString(
+      PrefsKeys.readerTextAlign,
+      value == 'left' ? 'left' : 'justify',
+    );
   }
 
   static double getLineHeight() {

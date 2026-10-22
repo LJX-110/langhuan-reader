@@ -715,6 +715,19 @@ function cfCheck(html, targetUrl) {
       expect(RegExp(r'^\d+$', multiLine: true).hasMatch(plain), false);
     });
 
+    test('htmlToPlainText keeps breaks when closing p tags are omitted', () {
+      const html = '<div><p>第一段<p>第二段<p>第三段</div>';
+      final plain = htmlToPlainText(html);
+      expect(plain.split('\n'), ['第一段', '第二段', '第三段']);
+    });
+
+    test('normalizeChapterBody indents every paragraph and is idempotent', () {
+      const raw = '<p>第一段文字。<br>第二行</p><p>第二段文字。</p>';
+      final body = normalizeChapterBody(raw);
+      expect(body, '　　第一段文字。\n　　第二行\n　　第二段文字。');
+      expect(normalizeChapterBody(body), body);
+    });
+
     test('parseExploreKinds multi-line and json', () {
       final multi = parseExploreKinds(
         '玄幻::https://ex.com/x/{{page}}\n都市&&https://ex.com/d/{page}',

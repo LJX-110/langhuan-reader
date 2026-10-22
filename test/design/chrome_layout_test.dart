@@ -5,28 +5,20 @@ import 'package:langhuan/app/shell/glass_dock.dart';
 import 'package:langhuan/design/components/page_header.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 
-Widget _host({
-  required Widget child,
-  required Brightness brightness,
-}) {
+Widget _host({required Widget child, required Brightness brightness}) {
   return MaterialApp(
     theme: buildLanghuanTheme(dark: brightness == Brightness.dark),
     builder: (context, child) {
       return MediaQuery(
-        data: MediaQuery.of(context).copyWith(
-          textScaler: const TextScaler.linear(1.3),
-        ),
+        data: MediaQuery.of(
+          context,
+        ).copyWith(textScaler: const TextScaler.linear(1.3)),
         child: child!,
       );
     },
     home: Scaffold(
       body: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 8),
-            child,
-          ],
-        ),
+        child: Column(children: [const SizedBox(height: 8), child]),
       ),
     ),
   );
@@ -67,7 +59,9 @@ Widget _shelfChrome() {
 void main() {
   for (final width in [360.0, 411.0, 800.0]) {
     for (final brightness in [Brightness.light, Brightness.dark]) {
-      testWidgets('chrome fits ${width.toInt()} / ${brightness.name}', (tester) async {
+      testWidgets('chrome fits ${width.toInt()} / ${brightness.name}', (
+        tester,
+      ) async {
         tester.view.devicePixelRatio = 1.0;
         tester.view.physicalSize = Size(width, 800);
         addTearDown(tester.view.reset);

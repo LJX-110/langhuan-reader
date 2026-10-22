@@ -310,9 +310,10 @@ class ReaderPainter {
     }
 
     final chromeStyle = TextStyle(
-      fontSize: 12 / Screen.textScaleFactor,
+      fontSize: 13 / Screen.textScaleFactor,
       color: meta,
       fontFamily: familyOrNull,
+      letterSpacing: .2,
     );
 
     if (chrome) {

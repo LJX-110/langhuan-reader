@@ -394,6 +394,9 @@ class ReadModel with ChangeNotifier {
 
   Future<void> relayoutPages() => _reloader.relayoutPages();
 
+  /// Debounced sibling of [relayoutPages] for settings sliders / steppers.
+  void scheduleRelayout() => _reloader.scheduleRelayout();
+
   /// Jump inside the current chapter without a page-turn animation.
   void jumpToPage(int index) {
     final b = book;
@@ -425,6 +428,10 @@ class ReadModel with ChangeNotifier {
 
   /*状态保存 */
   Future<void> saveData() => _progress.save(book: book, chapters: chapters);
+
+  /// Always update the history list, independent of shelf/progress gates.
+  Future<void> recordHistory() =>
+      _progress.recordHistory(book: book, chapters: chapters);
 
   /*页面点击事件（兼容旧入口） */
   void tapPage(BuildContext context, TapUpDetails details) {
@@ -525,6 +532,7 @@ class ReadModel with ChangeNotifier {
   /// Caller must flush progress first (ReadBook.dispose / lifecycle).
   Future<void> clear() {
     scrollProgressSync = null;
+    _reloader.cancelScheduledRelayout();
     return _lifecycle.clear();
   }
 

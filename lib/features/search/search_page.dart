@@ -68,7 +68,7 @@ class _SearchState extends ConsumerState<Search> {
     return Scaffold(
       backgroundColor: background,
       body: SafeArea(
-        bottom: false,
+        bottom: true,
         child: Column(
           children: [
             _searchBar(context),
@@ -388,7 +388,13 @@ class _SearchState extends ConsumerState<Search> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(AppDimens.coverRadius),
-                child: PicWidget(item.coverUrl, width: 58, height: 84),
+                child: PicWidget(
+                  item.coverUrl,
+                  width: 58,
+                  height: 84,
+                  referer: item.bookUrl,
+                  title: item.name,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(

@@ -286,8 +286,7 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
     }
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: (_dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
-          .copyWith(statusBarColor: Colors.transparent),
+      value: SystemUiHelper.overlayStyle(context),
       child: Scaffold(
         backgroundColor: _scaffold,
         body: Column(

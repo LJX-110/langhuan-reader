@@ -298,7 +298,7 @@ class _FontSetState extends ConsumerState<FontSet> {
     );
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: _dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+      value: SystemUiHelper.overlayStyle(context),
       child: Scaffold(
         backgroundColor: _scaffold,
         appBar: AppBar(
@@ -346,7 +346,12 @@ class _FontSetState extends ConsumerState<FontSet> {
                 ),
               )
             : ListView(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  4,
+                  16,
+                  28 + MediaQuery.viewPaddingOf(context).bottom,
+                ),
                 children: [
                   _previewCard(context, colorModel, currentName),
                   const SizedBox(height: 20),

@@ -9,6 +9,7 @@ import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/entities/book_info.dart';
 import 'package:langhuan/app/router/routes.dart';
 import 'package:langhuan/app/providers.dart';
+import 'package:langhuan/core/platform/system_ui.dart';
 import 'package:langhuan/features/detail/source_switch_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -51,7 +52,7 @@ class _BookDetailState extends ConsumerState<BookDetail> {
     final bottomBarH = AppDimens.ctaHeight + Screen.bottomSafeHeight + 20;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: _dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+      value: SystemUiHelper.overlayStyle(context),
       child: Scaffold(
         backgroundColor: _scaffold,
         body: Stack(
@@ -146,7 +147,13 @@ class _BookDetailState extends ConsumerState<BookDetail> {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(4),
-              child: PicWidget(book.coverUrl, height: 136, width: 98),
+              child: PicWidget(
+                book.coverUrl,
+                height: 136,
+                width: 98,
+                referer: book.bookUrl,
+                title: book.name,
+              ),
             ),
           ),
           const SizedBox(width: 16),
@@ -412,7 +419,13 @@ class _BookDetailState extends ConsumerState<BookDetail> {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(AppDimens.coverRadius),
-                  child: PicWidget(list[i].coverUrl, height: 72, width: 52),
+                  child: PicWidget(
+                    list[i].coverUrl,
+                    height: 72,
+                    width: 52,
+                    referer: list[i].bookUrl,
+                    title: list[i].name,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(

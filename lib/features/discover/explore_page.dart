@@ -470,7 +470,13 @@ class _BookRow extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(AppDimens.coverRadius),
-                child: PicWidget(item.coverUrl, width: picW, height: picH),
+                child: PicWidget(
+                  item.coverUrl,
+                  width: picW,
+                  height: picH,
+                  referer: item.bookUrl,
+                  title: item.name,
+                ),
               ),
               Expanded(
                 child: Padding(

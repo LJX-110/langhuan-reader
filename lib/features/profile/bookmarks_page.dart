@@ -112,7 +112,9 @@ class _BookmarksPageState extends State<BookmarksPage> {
               ),
             )
           : ListView.separated(
-              padding: const EdgeInsets.only(bottom: 24),
+              padding: EdgeInsets.only(
+                bottom: 24 + MediaQuery.viewPaddingOf(context).bottom,
+              ),
               itemCount: _records.length,
               separatorBuilder: (_, _) => Divider(height: .5, color: line),
               itemBuilder: (context, i) {
@@ -131,8 +133,9 @@ class _BookmarksPageState extends State<BookmarksPage> {
                             ),
                             child: PicWidget(
                               record.coverUrl,
-                              width: 42,
-                              height: 58,
+                              width: 46,
+                              height: 62,
+                              title: record.bookName,
                             ),
                           ),
                           const SizedBox(width: 12),

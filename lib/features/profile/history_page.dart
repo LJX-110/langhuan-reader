@@ -97,7 +97,9 @@ class _HistoryPageState extends State<HistoryPage> {
               ),
             )
           : ListView.separated(
-              padding: const EdgeInsets.only(bottom: 24),
+              padding: EdgeInsets.only(
+                bottom: 24 + MediaQuery.viewPaddingOf(context).bottom,
+              ),
               itemCount: _records.length,
               separatorBuilder: (_, _) => Divider(height: .5, color: line),
               itemBuilder: (context, i) {
@@ -118,6 +120,7 @@ class _HistoryPageState extends State<HistoryPage> {
                               record.coverUrl,
                               width: 46,
                               height: 62,
+                              title: record.bookName,
                             ),
                           ),
                           const SizedBox(width: 12),

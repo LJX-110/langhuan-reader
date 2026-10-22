@@ -369,6 +369,7 @@ class _BookCard extends StatelessWidget {
                             width: width - 17,
                             height: height,
                             radius: 0,
+                            referer: item.bookUrl,
                           ),
                         ),
                         SizedBox(

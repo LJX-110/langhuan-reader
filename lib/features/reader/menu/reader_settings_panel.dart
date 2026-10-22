@@ -40,12 +40,12 @@ class ReaderSettingsPanel extends StatelessWidget {
             valueText: ReadSetting.getFontSize().round().toString(),
             onMinus: () {
               ReadSetting.calcFontSize(-1);
-              readModel.relayoutPages();
+              readModel.scheduleRelayout();
               onChanged();
             },
             onPlus: () {
               ReadSetting.calcFontSize(1);
-              readModel.relayoutPages();
+              readModel.scheduleRelayout();
               onChanged();
             },
             child: _buildSlider(
@@ -56,7 +56,7 @@ class ReaderSettingsPanel extends StatelessWidget {
               max: 60,
               onChanged: (v) {
                 ReadSetting.setFontSize(v);
-                readModel.relayoutPages();
+                readModel.scheduleRelayout();
                 onChanged();
               },
             ),
@@ -183,12 +183,12 @@ class ReaderLayoutPanel extends StatelessWidget {
             valueText: ReadSetting.getLineHeight().toStringAsFixed(1),
             onMinus: () {
               ReadSetting.subLineHeight();
-              readModel.relayoutPages();
+              readModel.scheduleRelayout();
               onChanged();
             },
             onPlus: () {
               ReadSetting.addLineHeight();
-              readModel.relayoutPages();
+              readModel.scheduleRelayout();
               onChanged();
             },
             child: _buildSlider(
@@ -199,7 +199,7 @@ class ReaderLayoutPanel extends StatelessWidget {
               max: 4.0,
               onChanged: (v) {
                 ReadSetting.setLineHeight(v);
-                readModel.relayoutPages();
+                readModel.scheduleRelayout();
                 onChanged();
               },
             ),
@@ -211,12 +211,12 @@ class ReaderLayoutPanel extends StatelessWidget {
             valueText: ReadSetting.getParagraph().toStringAsFixed(1),
             onMinus: () {
               ReadSetting.subParagraph();
-              readModel.relayoutPages();
+              readModel.scheduleRelayout();
               onChanged();
             },
             onPlus: () {
               ReadSetting.addParagraph();
-              readModel.relayoutPages();
+              readModel.scheduleRelayout();
               onChanged();
             },
             child: _buildSlider(
@@ -227,7 +227,7 @@ class ReaderLayoutPanel extends StatelessWidget {
               max: 2.0,
               onChanged: (v) {
                 ReadSetting.setParagraph(v);
-                readModel.relayoutPages();
+                readModel.scheduleRelayout();
                 onChanged();
               },
             ),
@@ -239,12 +239,12 @@ class ReaderLayoutPanel extends StatelessWidget {
             valueText: '${ReadSetting.getPageDis()}',
             onMinus: () {
               ReadSetting.calcPageDis(-1);
-              readModel.relayoutPages();
+              readModel.scheduleRelayout();
               onChanged();
             },
             onPlus: () {
               ReadSetting.calcPageDis(1);
-              readModel.relayoutPages();
+              readModel.scheduleRelayout();
               onChanged();
             },
             child: _buildSlider(
@@ -255,7 +255,7 @@ class ReaderLayoutPanel extends StatelessWidget {
               max: 50,
               onChanged: (v) {
                 ReadSetting.setPageDis(v.toInt());
-                readModel.relayoutPages();
+                readModel.scheduleRelayout();
                 onChanged();
               },
             ),
@@ -296,7 +296,7 @@ Widget _alignRow(
                 onTap: () {
                   if (current == option.$1) return;
                   ReadSetting.setTextAlign(option.$1);
-                  readModel.relayoutPages();
+                  readModel.scheduleRelayout();
                   onChanged();
                 },
                 child: Padding(

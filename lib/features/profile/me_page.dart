@@ -1,4 +1,5 @@
 import 'package:langhuan/app/providers.dart';
+import 'package:langhuan/core/platform/system_ui.dart';
 import 'package:langhuan/app/router/routes.dart';
 import 'package:langhuan/core/storage/local_store.dart';
 import 'package:langhuan/core/storage/prefs_keys.dart';
@@ -28,7 +29,7 @@ class Me extends ConsumerWidget {
     final count = ref.watch(shelfModelProvider).shelf.length;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+      value: SystemUiHelper.overlayStyle(context),
       child: Scaffold(
         backgroundColor: background,
         body: SafeArea(

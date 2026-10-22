@@ -564,5 +564,5 @@ class _ParsedRule {
 String finalizeContent(String rawHtmlOrText, String replaceRegex) {
   var t = htmlToPlainText(rawHtmlOrText);
   t = applyReplaceRegex(t, replaceRegex);
-  return t.trim();
+  return normalizeChapterBody(t);
 }

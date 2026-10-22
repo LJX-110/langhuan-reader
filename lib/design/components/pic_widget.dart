@@ -10,6 +10,13 @@ class PicWidget extends StatelessWidget {
   final bool roll;
   final double radius;
 
+  /// Page URL that hosts the cover. Some CDNs reject a request whose referer
+  /// is only the image host, so callers should pass the book detail page.
+  final String referer;
+
+  /// Shown over the placeholder when the cover cannot be loaded.
+  final String title;
+
   const PicWidget(
     this.url, {
     super.key,
@@ -18,14 +25,44 @@ class PicWidget extends StatelessWidget {
     this.fit = BoxFit.cover,
     this.roll = false,
     this.radius = 0,
+    this.referer = '',
+    this.title = '',
   });
 
-  Widget get _placeholder => Image.asset(
-    'images/nocover.jpg',
-    width: width,
-    height: height,
-    fit: BoxFit.cover,
-  );
+  Widget get _placeholder {
+    final image = Image.asset(
+      'images/nocover.jpg',
+      width: width,
+      height: height,
+      fit: BoxFit.cover,
+    );
+    final name = title.trim();
+    if (name.isEmpty) return image;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        image,
+        Positioned(
+          left: 6,
+          right: 6,
+          bottom: 10,
+          child: Text(
+            name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: 'serif',
+              fontSize: height > 90 ? 13 : 10,
+              height: 1.3,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF5B5B5B),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   /// Normalize cover URLs: trim, protocol-relative, common placeholders → empty.
   static String normalizeUrl(String raw) {
@@ -52,13 +89,19 @@ class PicWidget extends StatelessWidget {
   Map<String, String> _headersFor(String src) {
     final host = Uri.tryParse(src)?.host ?? '';
     // Many novel CDNs check UA / Accept; some want a same-site referer.
-    final referer = host.isEmpty ? 'https://www.google.com/' : 'https://$host/';
+    final ref = referer.trim();
+    final refererValue =
+        (ref.startsWith('http://') || ref.startsWith('https://'))
+        ? ref
+        : (host.isEmpty ? 'https://www.google.com/' : 'https://$host/');
+    // Header values must stay ASCII — percent-encode CJK paths.
+    final safeReferer = Uri.tryParse(refererValue)?.toString() ?? refererValue;
     return {
       'User-Agent':
           'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
       'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
       'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-      'Referer': referer,
+      'Referer': safeReferer,
     };
   }
 

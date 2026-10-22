@@ -36,13 +36,7 @@ void main() {
     test('TextPage round-trip', () {
       final page = TextPage(
         [
-          TextLine(
-            '第一行',
-            top: 0,
-            height: 28,
-            justify: true,
-            targetWidth: 300,
-          ),
+          TextLine('第一行', top: 0, height: 28, justify: true, targetWidth: 300),
           TextLine.simple('段末', top: 28, height: 28, targetWidth: 300),
         ],
         56,

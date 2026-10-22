@@ -128,7 +128,12 @@ class _SourceRepoPageState extends ConsumerState<SourceRepoPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('私有书源仓库')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        padding: EdgeInsets.fromLTRB(
+          16,
+          16,
+          16,
+          32 + MediaQuery.viewPaddingOf(context).bottom,
+        ),
         children: [
           Text(
             '应用不内置、不提供任何书源。这里只保存你自己的仓库地址，'

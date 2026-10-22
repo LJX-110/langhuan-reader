@@ -10,6 +10,7 @@ import 'package:langhuan/data/entities/read_page.dart';
 import 'package:langhuan/data/entities/text_line.dart';
 import 'package:langhuan/data/entities/text_page.dart';
 import 'package:langhuan/features/reader/model/text_paginator.dart';
+import 'package:langhuan/features/sources/util/text_clean.dart';
 import 'package:flutter/foundation.dart';
 
 typedef ChapterDiskCache = ({String body, String? pagesJson, String? layoutFp});
@@ -102,6 +103,13 @@ class ChapterContentLoader {
         r.chapterContent = fresh.isNotEmpty ? fresh : '章节内容加载失败，请检查书源或换源后重试';
         contentSource = fresh.isNotEmpty ? 'network-error-text' : 'fail';
       }
+    }
+
+    // Normalize once before pagination: block tags become paragraph breaks and
+    // every paragraph gets a two-character indent. Old cached bodies written
+    // before this rule are fixed here as well.
+    if (!_isMessageContent(r.chapterContent)) {
+      r.chapterContent = normalizeChapterBody(r.chapterContent);
     }
 
     _logContentDiag(idx, r.chapterName, r.chapterContent, contentSource);
@@ -265,6 +273,13 @@ class ChapterContentLoader {
       TextPage([TextLine.simple(text)], 24),
     ];
   }
+
+  static bool _isMessageContent(String text) =>
+      text.startsWith('章节内容加载失败') ||
+      text.startsWith('章节内容加载超时') ||
+      text.startsWith('书源不存在') ||
+      text.startsWith('章节地址为空') ||
+      text.startsWith('内容为空');
 
   void _logContentDiag(int idx, String name, String content, String source) {
     final text = content;

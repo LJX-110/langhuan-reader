@@ -1,6 +1,6 @@
 # 琅嬛阁
 
-琅嬛阁是一个自用的 Android 网络小说阅读器，基于 Flutter。当前版本 `1.0.0+2`，Phase 0–4 已完成并通过真机验收，Phase 5 质量与发布进行中。
+琅嬛阁是一个自用的 Android 网络小说阅读器，基于 Flutter。当前版本 `1.0.0+3`，Phase 0–4 已完成并通过真机验收，Phase 5 质量与发布进行中。
 
 - 目标设备：Redmi K90 至尊版
 - 产物：单个 arm64 APK
@@ -17,7 +17,9 @@
 - 搜索按「书名 + 作者」合并多源结果，标出书源数量；逐源返回，不再等整批
 - 本地 TXT 导入：UTF-8 / GBK，自动分章，存入本机数据库
 - 阅读器：仿真 / 覆盖 / 无动画 / 纵向滚动四种翻页，章内查找、纸张、字号、行距、段距、边距、对齐、字体、章节缓存、进度恢复
-- 书签与阅读记录：当前页加书签、全部书签列表、最近阅读页续读
+- 正文按段落排版，每段首行缩进两格；顶栏显示书名与当前章节名；排版设置合并刷新，连续点按不再卡顿
+- 书签与阅读记录：当前页加书签、全部书签列表、最近阅读页续读；书架顶栏可直接进入阅读记录
+- 封面加载带页面 Referer 与重试，失败时显示书名占位，不再是一片空白
 - 书源引擎（Legado 规则子集）：CSS / XPath / JSON、详情 / 目录 / 正文 POST、按 host 复用 Cookie、Big5 解码、`replaceRegex` 捕获组、正文清洗、书源测试与健康度
 - 私有书源仓库：手动同步自己维护的 JSON；应用不联网自动更新，不保存默认地址
 - 数据库 v3：`books` / `chapters` / `sources` / `bookmarks` / `reading_history`，升级只做增量建表，不清空已有数据
@@ -102,11 +104,11 @@ Wenku8 仅作为视觉参考，未复制其 GPL-3.0 代码。
 - [x] 修复书源导入刷新、书源详情、发现页超时、阅读器返回、正文刷新卡死
 - [x] 主题修订：原始色填充 + 同色相可读文字色，标题 / 底栏 / 筛选随主题变化
 - [x] `flutter analyze` 通过
-- [x] `flutter test` 79 项通过（含 15 项布局 / 主题测试）
+- [x] `flutter test` 81 项通过（含 15 项布局 / 主题测试）
 - [x] debug arm64 APK 构建通过
 - [x] release arm64 APK 构建通过（29.7MB，R8 + `shrinkResources`；debug 为 99.6MB）
+- [x] 自有 release keystore（`android/key.properties` + `android/app/langhuan-release.jks`，均已 gitignore）
 - [ ] Phase 5：集成测试、golden 测试、低端机性能
-- [ ] 自有 release keystore
 - [ ] 最终真机验收（P1–P4 全项回归）
 
 debug APK：`build/app/outputs/flutter-apk/app-debug.apk`

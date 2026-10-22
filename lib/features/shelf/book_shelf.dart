@@ -5,6 +5,7 @@ import 'package:langhuan/core/storage/prefs_keys.dart';
 import 'package:langhuan/core/storage/local_store.dart';
 import 'package:langhuan/app/router/routes.dart';
 import 'package:langhuan/app/providers.dart';
+import 'package:langhuan/core/platform/system_ui.dart';
 import 'package:langhuan/features/shelf/shelf_model.dart';
 import 'package:langhuan/features/shelf/widgets/books_widget.dart';
 import 'package:flutter/material.dart';
@@ -41,7 +42,7 @@ class _BookShelfState extends ConsumerState<BookShelf> {
     final dark = Theme.of(context).brightness == Brightness.dark;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+      value: SystemUiHelper.overlayStyle(context),
       child: Scaffold(
         backgroundColor: dark ? AppColors.scaffoldDark : AppColors.scaffold,
         body: SafeArea(
@@ -61,6 +62,7 @@ class _BookShelfState extends ConsumerState<BookShelf> {
                 },
                 onToggleMode: shelfModel.toggleModel,
                 onManage: () => Routes.navigateTo(context, Routes.sortShelf),
+                onHistory: () => Routes.navigateTo(context, Routes.history),
               ),
               Expanded(child: BooksWidget('')),
             ],
@@ -79,6 +81,7 @@ class _ShelfHeader extends StatelessWidget {
   final VoidCallback onSearch;
   final VoidCallback onToggleMode;
   final VoidCallback onManage;
+  final VoidCallback onHistory;
 
   const _ShelfHeader({
     required this.coverMode,
@@ -87,6 +90,7 @@ class _ShelfHeader extends StatelessWidget {
     required this.onSearch,
     required this.onToggleMode,
     required this.onManage,
+    required this.onHistory,
   });
 
   String _filterLabel(ShelfFilter value) {
@@ -115,7 +119,11 @@ class _ShelfHeader extends StatelessWidget {
           PageHeader(
             title: '书架',
             actions: [
-              _HeaderIcon(icon: Icons.search, tooltip: '搜索', onTap: onSearch),
+              _HeaderIcon(
+                icon: Icons.history,
+                tooltip: '阅读记录',
+                onTap: onHistory,
+              ),
               _HeaderIcon(
                 icon: coverMode
                     ? Icons.view_list_outlined

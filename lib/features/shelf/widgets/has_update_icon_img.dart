@@ -29,7 +29,13 @@ class HasUpdateIconImg extends StatelessWidget {
       child: Stack(
         children: <Widget>[
           Positioned.fill(
-            child: PicWidget(book.coverUrl, height: height, width: width),
+            child: PicWidget(
+              book.coverUrl,
+              height: height,
+              width: width,
+              referer: book.bookUrl,
+              title: book.name,
+            ),
           ),
           if (book.hasUpdate == 1)
             Positioned(

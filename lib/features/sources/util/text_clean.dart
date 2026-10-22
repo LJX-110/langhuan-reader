@@ -57,9 +57,14 @@ String htmlToPlainText(String html) {
       );
   t = t
       .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
-      .replaceAll(RegExp(r'</p\s*>', caseSensitive: false), '\n')
-      .replaceAll(RegExp(r'</div\s*>', caseSensitive: false), '\n')
-      .replaceAll(RegExp(r'</h[1-6]\s*>', caseSensitive: false), '\n')
+      // Sources often omit `</p>`; treat opening block tags as breaks too.
+      .replaceAll(
+        RegExp(
+          r'</?(?:p|div|h[1-6]|li|section|article|blockquote)[^>]*>',
+          caseSensitive: false,
+        ),
+        '\n',
+      )
       .replaceAll(RegExp(r'<[^>]+>'), '')
       .replaceAll('&nbsp;', ' ')
       .replaceAll('&lt;', '<')
@@ -79,6 +84,39 @@ String htmlToPlainText(String html) {
       .where((e) => e.isNotEmpty && !RegExp(r'^\d{1,4}$').hasMatch(e))
       .toList();
   return lines.join('\n').trim();
+}
+
+/// Reader-ready body: block boundaries become paragraphs and every paragraph
+/// gets the conventional two-character indent. Idempotent, so it is safe to
+/// run on freshly fetched bodies and on bodies cached before this rule existed.
+String normalizeChapterBody(String input) {
+  if (input.isEmpty) return input;
+  var t = input.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+  if (t.contains('<')) {
+    t = t
+        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+        .replaceAll(
+          RegExp(
+            r'</?(?:p|div|h[1-6]|li|section|article|blockquote)[^>]*>',
+            caseSensitive: false,
+          ),
+          '\n',
+        )
+        .replaceAll(RegExp(r'<[^>]+>'), '')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'");
+  }
+  final lines = t
+      .split('\n')
+      .map((e) => e.replaceAll(RegExp(r'[ \t\u00A0\u3000]+'), ' ').trim())
+      .where((e) => e.isNotEmpty && !RegExp(r'^\d{1,4}$').hasMatch(e))
+      .toList();
+  if (lines.isEmpty) return '';
+  return lines.map((line) => '　　$line').join('\n');
 }
 
 /// Normalize chapter titles for fuzzy matching.

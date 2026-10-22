@@ -54,9 +54,27 @@ class SystemUiHelper {
           statusBarColor: Colors.transparent,
           systemNavigationBarColor: Colors.transparent,
           systemNavigationBarDividerColor: Colors.transparent,
+          systemNavigationBarContrastEnforced: false,
         ),
       );
     }
+  }
+
+  /// Per-page overlay style: transparent bars, icons flipped for the page
+  /// brightness, and no forced contrast scrim over the app's own dock.
+  static SystemUiOverlayStyle overlayStyle(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+      systemNavigationBarIconBrightness: dark
+          ? Brightness.light
+          : Brightness.dark,
+      systemNavigationBarContrastEnforced: false,
+    );
   }
 
   /// After a temporary overlay page pops: re-hide bars if the reader is still

@@ -11,7 +11,7 @@
 
 ## 身份
 
-- 应用名：**琅嬛阁**；当前版本 `1.0.0+2`。
+- 应用名：**琅嬛阁**；当前版本 `1.0.0+3`。
 - Android 包名：`com.langhuan.reader`；Dart 包名：`langhuan`。
 - 上游底本：Apache-2.0；固定信息见 `docs/UPSTREAM.md`。
 - 必须保留 `LICENSE`、`NOTICE` 和第三方许可文本；界面不保留上游名称、链接、邮箱、截图。许可归属只放在 `NOTICE` 与 `docs/UPSTREAM.md`，其他文档不重复上游链接。

@@ -22,7 +22,10 @@ class Skin extends ConsumerWidget {
               centerTitle: false,
             ),
             body: ListView.separated(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: EdgeInsets.only(
+                top: 8,
+                bottom: 8 + MediaQuery.viewPaddingOf(context).bottom,
+              ),
               itemCount: LanghuanThemes.all.length,
               separatorBuilder: (_, _) => Divider(
                 height: .5,

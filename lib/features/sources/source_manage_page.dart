@@ -205,6 +205,9 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
           : model.sources.isEmpty
           ? _empty(context, model)
           : ListView.separated(
+              padding: EdgeInsets.only(
+                bottom: 12 + MediaQuery.viewPaddingOf(context).bottom,
+              ),
               itemCount: model.sources.length,
               separatorBuilder: (_, _) => const Divider(height: 1),
               itemBuilder: (ctx, i) {

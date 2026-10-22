@@ -81,7 +81,12 @@ class _LogViewerState extends State<LogViewer> {
           ? const Center(child: Text('暂无日志'))
           : ListView.builder(
               controller: _scroll,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: EdgeInsets.fromLTRB(
+                8,
+                4,
+                8,
+                4 + MediaQuery.viewPaddingOf(context).bottom,
+              ),
               itemCount: _lines.length,
               itemBuilder: (_, i) {
                 final line = _lines[i];

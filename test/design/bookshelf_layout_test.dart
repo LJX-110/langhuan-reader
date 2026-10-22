@@ -14,9 +14,9 @@ Widget _host(Brightness brightness) {
     theme: buildLanghuanTheme(dark: brightness == Brightness.dark),
     builder: (context, child) {
       return MediaQuery(
-        data: MediaQuery.of(context).copyWith(
-          textScaler: const TextScaler.linear(1.3),
-        ),
+        data: MediaQuery.of(
+          context,
+        ).copyWith(textScaler: const TextScaler.linear(1.3)),
         child: child!,
       );
     },
@@ -31,19 +31,18 @@ Widget _host(Brightness brightness) {
 void main() {
   for (final width in [360.0, 411.0, 800.0]) {
     for (final brightness in [Brightness.light, Brightness.dark]) {
-      testWidgets(
-        '3d shelf fits ${width.toInt()} / ${brightness.name}',
-        (tester) async {
-          tester.view.devicePixelRatio = 1.0;
-          tester.view.physicalSize = Size(width, 800);
-          addTearDown(tester.view.reset);
+      testWidgets('3d shelf fits ${width.toInt()} / ${brightness.name}', (
+        tester,
+      ) async {
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.physicalSize = Size(width, 800);
+        addTearDown(tester.view.reset);
 
-          await tester.pumpWidget(_host(brightness));
-          await tester.pump();
+        await tester.pumpWidget(_host(brightness));
+        await tester.pump();
 
-          expect(tester.takeException(), isNull);
-        },
-      );
+        expect(tester.takeException(), isNull);
+      });
     }
   }
 }

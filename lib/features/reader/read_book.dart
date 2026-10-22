@@ -112,6 +112,7 @@ class _ReadBookState extends ConsumerState<ReadBook>
         ? readModel.chapters[cur].title
         : b.readingChapter;
     final allowProgressSave = readModel.allowProgressSave == true;
+    unawaited(readModel.recordHistory());
     final Future<void> done = flush
         ? readModel.flushProgressSave()
         : readModel.saveData();

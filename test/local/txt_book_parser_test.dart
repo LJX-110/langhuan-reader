@@ -30,10 +30,7 @@ void main() {
   });
 
   test('falls back to one chapter when no headings exist', () {
-    final parsed = TxtBookParser.parse(
-      fileName: '短篇.txt',
-      text: '只有一段正文。',
-    );
+    final parsed = TxtBookParser.parse(fileName: '短篇.txt', text: '只有一段正文。');
 
     expect(parsed.title, '短篇');
     expect(parsed.chapters, hasLength(1));

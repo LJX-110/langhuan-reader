@@ -86,6 +86,13 @@ class ReaderTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bookName = readModel.book?.name ?? '';
+    final chapter = readModel.book?.readingChapter.trim() ?? '';
+    final pageChapter = readModel.curPage?.chapterName.trim() ?? '';
+    final chapterName = (chapter.isEmpty || chapter == '加载中')
+        ? pageChapter
+        : chapter;
+
     // Color outside SafeArea so the bar fills status-bar / notch; content
     // still respects the inset. Otherwise the page text peeks through above.
     return Container(
@@ -109,15 +116,33 @@ class ReaderTopBar extends StatelessWidget {
                 onPressed: onExit,
               ),
               Expanded(
-                child: Text(
-                  readModel.book?.name ?? '',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 16,
-                    color: chrome.fg,
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (bookName.isNotEmpty)
+                      Text(
+                        bookName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1.2,
+                          color: chrome.muted,
+                        ),
+                      ),
+                    Text(
+                      chapterName.isEmpty ? '正文' : chapterName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        height: 1.3,
+                        color: chrome.fg,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               IconButton(
@@ -134,19 +159,16 @@ class ReaderTopBar extends StatelessWidget {
                 icon: Icon(Icons.search, size: 22, color: chrome.fg),
                 onPressed: onSearch,
               ),
-              IconButton(
-                tooltip: '刷新',
-                icon: Icon(Icons.refresh, size: 22, color: chrome.fg),
-                onPressed: () => readModel.reloadCurrentPage(),
-              ),
               PopupMenuButton<String>(
                 tooltip: '更多',
                 icon: Icon(Icons.more_vert, size: 22, color: chrome.fg),
                 onSelected: (value) {
                   if (value == 'browser') _openOriginalPage(context);
                   if (value == 'detail') _openDetail(context);
+                  if (value == 'reload') readModel.reloadCurrentPage();
                 },
                 itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'reload', child: Text('刷新正文')),
                   PopupMenuItem(value: 'browser', child: Text('打开原网页')),
                   PopupMenuItem(value: 'detail', child: Text('书籍详情')),
                 ],

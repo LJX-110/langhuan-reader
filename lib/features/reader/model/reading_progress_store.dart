@@ -64,6 +64,33 @@ class ReadingProgressStore {
     return save(book: book, chapters: chapters);
   }
 
+  /// Record the last position for the history list even when progress saving
+  /// is disabled (book opened from search but not added to the shelf).
+  Future<void> recordHistory({
+    required Book? book,
+    required List<ChapterTocEntry> chapters,
+  }) async {
+    if (!ready) return;
+    final b = book;
+    if (b == null || b.id.isEmpty) return;
+    final cur = b.chapterIndex;
+    final rawName = (cur >= 0 && cur < chapters.length)
+        ? chapters[cur].title
+        : b.readingChapter;
+    final chapterName = rawName == '加载中' ? '' : rawName;
+    await _ensureBookRow(b);
+    try {
+      await history.touch(
+        bookId: b.id,
+        chapterIndex: cur,
+        pageIndex: b.pageIndex,
+        chapterName: chapterName,
+      );
+    } catch (e) {
+      AppLog.w('Read', 'reading history touch failed', error: e);
+    }
+  }
+
   Future<void> save({
     required Book? book,
     required List<ChapterTocEntry> chapters,

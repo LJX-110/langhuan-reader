@@ -18,7 +18,12 @@ void main() {
   group('PagePictureResolver Lookahead Pre-warming', () {
     test('preloadNeighbors warms forward +1, +2, and +3 pages', () {
       final cache = PagePictureCache();
-      final book = Book(id: 'test_book', name: 'Test Book', chapterIndex: 0, pageIndex: 0);
+      final book = Book(
+        id: 'test_book',
+        name: 'Test Book',
+        chapterIndex: 0,
+        pageIndex: 0,
+      );
 
       // Create a chapter with 5 pages
       final readPage = ReadPage(
@@ -27,7 +32,8 @@ void main() {
         0,
         List.generate(
           5,
-          (i) => TextPage([TextLine.simple('Line in page $i')], 24, pageIndex: i),
+          (i) =>
+              TextPage([TextLine.simple('Line in page $i')], 24, pageIndex: i),
         ),
       );
 
@@ -62,14 +68,17 @@ void main() {
   });
 
   group('ReaderPageManager Rapid Tap & Static Mode', () {
-    test('Static mode is never blocked by cooldown and commits immediately', () {
-      final manager = ReaderPageManager();
-      manager.setCurrentAnimation(ReaderPageManager.TYPE_ANIMATION_NONE);
-      expect(manager.isBusy, isFalse);
+    test(
+      'Static mode is never blocked by cooldown and commits immediately',
+      () {
+        final manager = ReaderPageManager();
+        manager.setCurrentAnimation(ReaderPageManager.TYPE_ANIMATION_NONE);
+        expect(manager.isBusy, isFalse);
 
-      final page = manager.currentAnimationPage;
-      expect(page, isA<StaticPageTurn>());
-    });
+        final page = manager.currentAnimationPage;
+        expect(page, isA<StaticPageTurn>());
+      },
+    );
 
     test('Cooldown is disabled in static mode', () {
       final manager = ReaderPageManager();

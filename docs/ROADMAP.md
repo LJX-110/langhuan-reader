@@ -119,13 +119,17 @@
 
 - 主题修订：保留原始强调色作为填充色；文字 / 图标使用同色相的 AA 对比度色；标题、底栏、筛选随主题变化
 - 3D 书架打磨：书脊、书页厚度、顶面、落地阴影、透视与吸附翻页
+- 阅读体验修订：正文段落规范化、首行缩进两格、顶栏书名 + 章节名、排版设置合并刷新
+- 封面加载：页面 Referer、重试与书名占位
+- 系统栏适配：透明状态栏 / 导航栏、底部安全区、页面主题图标色
+- 阅读记录：书架顶栏入口，阅读时始终记录最近位置
 - 安装包体积：release + R8 + `shrinkResources`，只保留 arm64；当前 release 29.7MB（debug 99.6MB）
 - Widget / golden 测试补强
 - 集成测试
 - 低端机与连续阅读性能
-- 自有 release keystore（需要密钥文件与密码）
+- 自有 release keystore（已生成 `android/app/langhuan-release.jks` 与 `android/key.properties`，均不入库）
 - 隐私 / 权限清理
-- 版本号统一为 `1.0.0+2`
+- 版本号统一为 `1.0.0+3`
 - README / AGENTS / ARCHITECTURE / ROADMAP 同步
 
 验收：

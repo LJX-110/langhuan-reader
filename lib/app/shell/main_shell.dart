@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:langhuan/core/events/event.dart';
+import 'package:langhuan/core/platform/system_ui.dart';
 import 'package:langhuan/features/shelf/book_shelf.dart';
 import 'package:langhuan/features/discover/explore_page.dart';
 import 'package:langhuan/features/local/local_page.dart';
 import 'package:langhuan/features/profile/me_page.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'glass_dock.dart';
 
@@ -40,19 +42,22 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(
-        index: _index,
-        children: [
-          BookShelf(),
-          const ExplorePage(),
-          const LocalPage(),
-          Me(embedded: true),
-        ],
-      ),
-      bottomNavigationBar: LanhuanDock(
-        index: _index,
-        onTap: (i) => setState(() => _index = i),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiHelper.overlayStyle(context),
+      child: Scaffold(
+        body: IndexedStack(
+          index: _index,
+          children: [
+            BookShelf(),
+            const ExplorePage(),
+            const LocalPage(),
+            Me(embedded: true),
+          ],
+        ),
+        bottomNavigationBar: LanhuanDock(
+          index: _index,
+          onTap: (i) => setState(() => _index = i),
+        ),
       ),
     );
   }

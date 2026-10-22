@@ -67,6 +67,8 @@ Novel/
 - 阅读器分页核心在 `features/reader/page_content_reader.dart` 与 `features/reader/pagination/text_composition.dart`；Phase 1 没有改动其算法，后续视觉改造也不得触碰。
 - 阅读器正文颜色由 `ReadSetting` 的纸色决定，不跟随 `ThemeData`，避免换肤影响正在阅读的文本。
 - 阅读器浮层拆为 `features/reader/menu/`：顶栏、底栏、章节滑条、下载与设置面板；`reader_menu.dart` 只保留浮层编排与状态。
+- 顶栏显示书名 + 当前章节名；排版设置的连续调整由 `ReaderContentReloader.scheduleRelayout()` 合并为一次重排，避免每次滑动都清缓存、重分页。
+- 系统栏统一走 `SystemUiHelper.overlayStyle(context)`：透明状态栏 / 导航栏、按页面明暗切换图标色并关闭导航栏对比度遮罩；列表页与底部栏自行叠加 `viewPadding.bottom`，避免被系统导航条盖住。
 - 书源请求统一走 `features/sources/net/source_http.dart`；只有证书链不完整导致握手失败时，才对同一次请求降级重试，正常证书仍严格校验。
 
 ## 数据流
@@ -101,6 +103,10 @@ Novel/
   → Reader（跳过书源与远程目录，直接读本地章节）
 ```
 
+正文统一在 `ChapterContentLoader` 进入分页前做一次规范化：
+`htmlToPlainText`（把 `<br>`、`<p>`、`<div>` 等块级标签转成换行）→ `replaceRegex` 清洗 →
+`normalizeChapterBody`（合并空行、每段加两个全角空格）。旧缓存也会在读取时被修正。
+
 ## 设计系统
 
 - 页面固定白 / 黑底；12 套双色主题只切换强调色与辅助色。
@@ -123,7 +129,7 @@ Novel/
 ## 验证
 
 - `flutter analyze`：通过。
-- `flutter test`：79 项通过，其中设计/主题 15 项。
-- debug arm64 APK：99.6MB；release arm64 APK：29.7MB（R8 + `shrinkResources`）。
+- `flutter test`：81 项通过，其中设计/主题 15 项。
+- release arm64 APK：R8 + `shrinkResources`，使用项目自有 keystore 签名。
 - Phase 1–4 真机验收：已通过。
 - Phase 5 最终真机验收：待执行。
