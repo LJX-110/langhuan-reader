@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:langhuan/data/repositories/source_repository.dart';
+import 'package:langhuan/features/sources/engine/book_source_engine.dart';
 import 'package:langhuan/features/sources/import/source_importer.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:bot_toast/bot_toast.dart';
@@ -36,6 +37,34 @@ class SourceModel with ChangeNotifier {
     source.enabled = !source.enabled;
     await _sources.setEnabled(source.bookSourceUrl, source.enabled);
     notifyListeners();
+  }
+
+  /// Run one search and store latency / failure for the health column.
+  Future<void> testSource(BookSource source) async {
+    if (source.searchUrl.trim().isEmpty) {
+      BotToast.showText(text: '该源没有搜索规则，无法测试');
+      return;
+    }
+    BotToast.showText(text: '正在测试「${source.bookSourceName}」…');
+    final stopwatch = Stopwatch()..start();
+    var ok = true;
+    try {
+      final hydrated = await _sources.getByUrl(source.bookSourceUrl) ?? source;
+      await BookSourceEngine().search(hydrated, '测试', 1);
+    } catch (_) {
+      ok = false;
+    }
+    stopwatch.stop();
+    final elapsed = stopwatch.elapsedMilliseconds;
+    source.respondTime = ok ? elapsed : -1;
+    source.lastCheckTime = DateTime.now().millisecondsSinceEpoch;
+    await _sources.updateHealth(
+      source.bookSourceUrl,
+      respondTime: source.respondTime,
+      lastCheckTime: source.lastCheckTime,
+    );
+    notifyListeners();
+    BotToast.showText(text: ok ? '测试完成：${elapsed}ms' : '测试失败：书源不可用');
   }
 
   Future<void> remove(BookSource source) async {

@@ -83,7 +83,8 @@ void main() {
       final source = BookSource(
         bookSourceUrl: 'https://example.com',
         bookSourceName: 't',
-        header: '{"User-Agent":"UA-TEST","@js":"java.ajax(\'x\')","Referer":"https://example.com/"}',
+        header:
+            '{"User-Agent":"UA-TEST","@js":"java.ajax(\'x\')","Referer":"https://example.com/"}',
         searchUrl: 'https://example.com/s?q={{key}}',
       );
       final req = AnalyzeUrl.build(source, source.searchUrl, key: 'hello');
@@ -113,7 +114,10 @@ void main() {
             '{{cookie.removeCookie(source.getKey())}}http://www.kkbiquge.net/search2c.html?searchkey={{key}}',
       );
       final req = AnalyzeUrl.build(source, source.searchUrl, key: '斗破');
-      expect(req.url.startsWith('http://www.kkbiquge.net/search2c.html'), isTrue);
+      expect(
+        req.url.startsWith('http://www.kkbiquge.net/search2c.html'),
+        isTrue,
+      );
       expect(req.url.contains('cookie'), isFalse);
       expect(req.url.contains('{{'), isFalse);
       expect(req.url, contains(Uri.encodeQueryComponent('斗破')));
@@ -245,7 +249,9 @@ void main() {
 ''';
       final rule = AnalyzeRule(content: html, baseUrl: 'https://ex.com');
       // Jsoup-style: class.chapter_list@tag.a
-      final list = rule.getList('class.missing@tag.a||class.chapter_list@tag.a');
+      final list = rule.getList(
+        'class.missing@tag.a||class.chapter_list@tag.a',
+      );
       expect(list.length, 2);
       expect(rule.getString('text', scope: list.first), contains('第1章'));
       expect(rule.getString('href', scope: list.first), '/novel/x/1');
@@ -427,10 +433,7 @@ void main() {
       const page = '''
 <html><script>var data={"name":"书A","author":"甲"};</script></html>
 ''';
-      final json = RegexAnalyzer.getString(
-        page,
-        r'var data=(\{[\s\S]*?\});',
-      );
+      final json = RegexAnalyzer.getString(page, r'var data=(\{[\s\S]*?\});');
       expect(json, contains('"name":"书A"'));
       final rule = AnalyzeRule(
         content: json,
@@ -447,7 +450,11 @@ void main() {
       const body = '''
 {"data":[{"name":"N1","url":"/1"},{"name":"N2","url":"/2"}]}
 ''';
-      final rule = AnalyzeRule(content: body, baseUrl: 'https://ex.com', isJson: true);
+      final rule = AnalyzeRule(
+        content: body,
+        baseUrl: 'https://ex.com',
+        isJson: true,
+      );
       final list = rule.getList(r'$.data');
       expect(list.length, 2);
       expect(rule.getString(r'$.name', scope: list.first), 'N1');
@@ -468,7 +475,10 @@ void main() {
 <meta property="og:novel:latest_chapter_name" content="1234.第1234章 终局"/>
 </head><body></body></html>
 ''';
-      final rule = AnalyzeRule(content: html, baseUrl: 'https://www.69shuba.com');
+      final rule = AnalyzeRule(
+        content: html,
+        baseUrl: 'https://www.69shuba.com',
+      );
       expect(
         rule.getString("//meta[@property='og:novel:book_name']/@content"),
         '剑来',
@@ -660,10 +670,7 @@ function cfCheck(html, targetUrl) {
       expect(cleanAuthor('作者 李四'), '李四');
       expect(cleanAuthor('原著：王五'), '王五');
       expect(cleanAuthor('张三 分类：玄幻 状态：连载'), '张三');
-      expect(
-        cleanAuthor('书名一\n作者：赵六 分类：都市\n简介xxx'),
-        '赵六',
-      );
+      expect(cleanAuthor('书名一\n作者：赵六 分类：都市\n简介xxx'), '赵六');
       expect(cleanAuthor(''), '');
       expect(cleanAuthor('123'), '');
     });
@@ -685,6 +692,11 @@ function cfCheck(html, targetUrl) {
 
     test('replaceRegex', () {
       expect(applyReplaceRegex('abc123', r'\d+##'), 'abc');
+    });
+
+    test('replaceRegex expands capture groups', () {
+      expect(applyReplaceRegex('第12章 标题', r'第(\d+)章##第$1节'), '第12节 标题');
+      expect(applyReplaceRegex('abc123', r'([a-z]+)(\d+)##$2-$1'), '123-abc');
     });
 
     test('htmlToPlainText drops comment spans and keeps paragraphs', () {

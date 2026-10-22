@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/features/sources/net/analyze_url.dart';
 import 'package:dio/dio.dart';
@@ -41,13 +42,41 @@ class SourceHttp {
   late final Dio _dio;
   late final Dio _lenientDio;
 
+  /// Big5 has no Dart codec; Android decodes it via java.nio.charset.
+  static const MethodChannel _charsetChannel = MethodChannel(
+    'langhuan/charset',
+  );
+
+  /// Session cookies per host. Legado sources often need the search page's
+  /// cookie when fetching detail / toc / content.
+  final Map<String, Map<String, String>> _cookieJar = {};
+
   Future<Response<List<int>>> _send(
     String url,
     Options options,
     Object? data,
   ) async {
+    final host = Uri.tryParse(url)?.host ?? '';
+    final headers = Map<String, String>.from(options.headers ?? const {});
+    final hasCookie = headers.keys.any((key) => key.toLowerCase() == 'cookie');
+    if (!hasCookie && host.isNotEmpty) {
+      final jar = _cookieJar[host];
+      if (jar != null && jar.isNotEmpty) {
+        headers['cookie'] = jar.entries
+            .map((entry) => '${entry.key}=${entry.value}')
+            .join('; ');
+      }
+    }
+    options.headers = headers;
+
     try {
-      return await _dio.request<List<int>>(url, data: data, options: options);
+      final response = await _dio.request<List<int>>(
+        url,
+        data: data,
+        options: options,
+      );
+      _saveCookies(host, response.headers);
+      return response;
     } on DioException catch (e) {
       if (!_isTlsError(e)) rethrow;
       AppLog.w(
@@ -55,7 +84,37 @@ class SourceHttp {
         'TLS chain rejected, retrying lenient: $url',
         error: e.error,
       );
-      return _lenientDio.request<List<int>>(url, data: data, options: options);
+      final response = await _lenientDio.request<List<int>>(
+        url,
+        data: data,
+        options: options,
+      );
+      _saveCookies(host, response.headers);
+      return response;
+    }
+  }
+
+  void _saveCookies(String host, Headers headers) {
+    if (host.isEmpty) return;
+    final rawList = headers['set-cookie'];
+    if (rawList == null || rawList.isEmpty) return;
+    final jar = _cookieJar.putIfAbsent(host, () => <String, String>{});
+    for (final raw in rawList) {
+      final pair = raw.split(';').first.trim();
+      final eq = pair.indexOf('=');
+      if (eq <= 0) continue;
+      final name = pair.substring(0, eq).trim();
+      final value = pair.substring(eq + 1).trim();
+      if (name.isEmpty) continue;
+      final lower = raw.toLowerCase();
+      final expired =
+          lower.contains('max-age=0') ||
+          lower.contains('expires=thu, 01 jan 1970');
+      if (expired || value.isEmpty) {
+        jar.remove(name);
+      } else {
+        jar[name] = value;
+      }
     }
   }
 
@@ -97,7 +156,7 @@ class SourceHttp {
     if (charset.isEmpty) {
       charset = _sniffCharset(bytes) ?? 'utf-8';
     }
-    final body = _decode(bytes, charset);
+    final body = await _decode(bytes, charset);
     return SourceResponse(
       url: response.realUri.toString(),
       body: body,
@@ -139,8 +198,23 @@ class SourceHttp {
     return null;
   }
 
-  String _decode(List<int> bytes, String charset) {
+  Future<String> _decode(List<int> bytes, String charset) async {
     final c = charset.toLowerCase().replaceAll('_', '-');
+    if (c.contains('big5')) {
+      try {
+        final text = await _charsetChannel.invokeMethod<String>('decode', {
+          'bytes': Uint8List.fromList(bytes),
+          'charset': c.contains('hkscs') ? 'Big5-HKSCS' : 'Big5',
+        });
+        if (text != null && text.isNotEmpty) return text;
+      } catch (_) {
+        // Fall through to the legacy best-effort decode.
+      }
+    }
+    return _decodeSync(bytes, c);
+  }
+
+  String _decodeSync(List<int> bytes, String c) {
     try {
       if (c.contains('gb2312') ||
           c.contains('gbk') ||
@@ -152,12 +226,6 @@ class SourceHttp {
         } catch (_) {
           // fall through
         }
-      }
-      if (c.contains('big5')) {
-        // no dedicated codec; try gbk as best-effort then utf8
-        try {
-          return gbk.decode(bytes);
-        } catch (_) {}
       }
       if (c.contains('latin') || c.contains('iso-8859-1') || c == 'ascii') {
         return latin1.decode(bytes, allowInvalid: true);

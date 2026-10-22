@@ -19,6 +19,7 @@ class Routes {
   static String logs = '/logs';
   static String cache = '/cache';
   static String history = '/history';
+  static String bookmarks = '/bookmarks';
 
   // 配置route
   static void configureRoutes(FluroRouter router) {
@@ -35,6 +36,7 @@ class Routes {
     router.define(logs, handler: logsHandler);
     router.define(cache, handler: cacheHandler);
     router.define(history, handler: historyHandler);
+    router.define(bookmarks, handler: bookmarksHandler);
   }
 
   // 对参数进行encode，解决参数中有特殊字符，影响fluro路由匹配

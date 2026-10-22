@@ -1,4 +1,5 @@
 import 'package:langhuan/features/sources/source_model.dart';
+import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/app/providers.dart';
 import 'package:langhuan/features/sources/source_repo_page.dart';
 import 'package:bot_toast/bot_toast.dart';
@@ -106,6 +107,27 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
     await model.removeMany(_selected.toList());
     BotToast.showText(text: '已删除 $n 个书源');
     _exitSelectMode();
+  }
+
+  Future<void> _deleteSource(SourceModel model, BookSource source) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('删除书源'),
+        content: Text('确定删除「${source.bookSourceName}」？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await model.remove(source);
   }
 
   @override
@@ -223,6 +245,10 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                   subtitle: Text(
                     [
                       if (s.bookSourceGroup.isNotEmpty) s.bookSourceGroup,
+                      if (s.respondTime > 0)
+                        '${s.respondTime}ms'
+                      else if (s.respondTime < 0)
+                        '测试失败',
                       s.bookSourceUrl,
                     ].where((e) => e.isNotEmpty).join(' · '),
                     maxLines: 2,
@@ -237,30 +263,25 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                               value: s.enabled,
                               onChanged: (_) => model.toggle(s),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: () async {
-                                final ok = await showDialog<bool>(
-                                  context: context,
-                                  builder: (_) => AlertDialog(
-                                    title: const Text('删除书源'),
-                                    content: Text('确定删除「${s.bookSourceName}」？'),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(context, false),
-                                        child: const Text('取消'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(context, true),
-                                        child: const Text('删除'),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                                if (ok == true) await model.remove(s);
+                            PopupMenuButton<String>(
+                              tooltip: '更多',
+                              icon: const Icon(Icons.more_vert),
+                              onSelected: (value) {
+                                if (value == 'test') model.testSource(s);
+                                if (value == 'delete') {
+                                  _deleteSource(model, s);
+                                }
                               },
+                              itemBuilder: (_) => const [
+                                PopupMenuItem(
+                                  value: 'test',
+                                  child: Text('测试书源'),
+                                ),
+                                PopupMenuItem(
+                                  value: 'delete',
+                                  child: Text('删除'),
+                                ),
+                              ],
                             ),
                           ],
                         ),

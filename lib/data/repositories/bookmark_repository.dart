@@ -1,5 +1,6 @@
 import 'package:langhuan/core/database/reader_database.dart';
 import 'package:langhuan/data/entities/bookmark.dart';
+import 'package:langhuan/data/entities/bookmark_record.dart';
 import 'package:sqflite/sqflite.dart';
 
 /// Page bookmarks, persisted per book.
@@ -48,5 +49,16 @@ class BookmarkRepository {
       orderBy: 'chapter_index ASC, page_index ASC',
     );
     return rows.map(Bookmark.fromRow).toList(growable: false);
+  }
+
+  Future<List<BookmarkRecord>> allWithBook({int limit = 200}) async {
+    final db = await _database;
+    final rows = await db.rawQuery(
+      'SELECT m.*, b.name AS book_name, b.cover_url '
+      'FROM bookmarks m JOIN books b ON b.id = m.book_id '
+      'ORDER BY m.created_at DESC LIMIT ?',
+      [limit],
+    );
+    return rows.map(BookmarkRecord.fromRow).toList(growable: false);
   }
 }

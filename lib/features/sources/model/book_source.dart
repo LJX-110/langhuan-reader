@@ -18,6 +18,9 @@ class BookSource {
   int weight;
   int lastUpdateTime;
   int respondTime;
+
+  /// Local-only: last manual health check (not part of Legado JSON).
+  int lastCheckTime;
   SearchRule ruleSearch;
   BookInfoRule ruleBookInfo;
   SearchRule ruleExplore;
@@ -40,6 +43,7 @@ class BookSource {
     this.weight = 0,
     this.lastUpdateTime = 0,
     this.respondTime = 0,
+    this.lastCheckTime = 0,
     SearchRule? ruleSearch,
     BookInfoRule? ruleBookInfo,
     SearchRule? ruleExplore,

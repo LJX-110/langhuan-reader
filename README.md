@@ -104,7 +104,7 @@ Wenku8 仅作为视觉参考，未复制其 GPL-3.0 代码。
 - [x] 修复书源导入按钮反馈、本地书删除即时刷新、底栏/筛选涟漪
 - [x] 清理旧皮肤组件、旧图片与 `flex_color_scheme` 依赖
 - [x] `flutter analyze` 通过
-- [x] `flutter test` 通过（77 项，含 14 项布局/主题测试）
+- [x] `flutter test` 通过（78 项，含 14 项布局/主题测试）
 - [x] debug arm64 APK 构建通过
 - [ ] Phase 1 真机 UI / 性能验收（待补测）
 - [ ] 自有 release keystore

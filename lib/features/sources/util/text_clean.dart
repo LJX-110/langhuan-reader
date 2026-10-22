@@ -12,15 +12,27 @@ String applyReplaceRegex(String input, String replaceRule) {
     final pattern = parts[0];
     final replacement = parts.length > 1 ? parts[1] : '';
     try {
-      text = text.replaceAll(
+      text = text.replaceAllMapped(
         RegExp(pattern, multiLine: true, dotAll: true),
-        replacement,
+        (match) => _expandReplacement(replacement, match),
       );
     } catch (_) {
       // ignore invalid regex
     }
   }
   return text;
+}
+
+/// Legado replacements may reference capture groups with `$1`, `$2`…
+String _expandReplacement(String template, Match match) {
+  if (!template.contains(r'$')) return template;
+  return template.replaceAllMapped(RegExp(r'\$(\d+)'), (m) {
+    final index = int.tryParse(m.group(1) ?? '');
+    if (index == null || index > match.groupCount) {
+      return m.group(0) ?? '';
+    }
+    return match.group(index) ?? '';
+  });
 }
 
 /// Strip tags and normalize whitespace for chapter body.

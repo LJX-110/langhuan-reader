@@ -180,6 +180,21 @@ class SourceRepository {
     );
   }
 
+  /// Persist a manual health check (negative [respondTime] means failure).
+  Future<void> updateHealth(
+    String url, {
+    required int respondTime,
+    required int lastCheckTime,
+  }) async {
+    final db = await _database;
+    await db.update(
+      'sources',
+      {'respond_time': respondTime, 'last_check_time': lastCheckTime},
+      where: 'book_source_url = ?',
+      whereArgs: [url],
+    );
+  }
+
   Future<void> setEnabledMany(List<String> urls, bool enabled) async {
     if (urls.isEmpty) return;
     final db = await _database;
@@ -298,6 +313,7 @@ class SourceRepository {
       header: row['header'] as String? ?? '',
       lastUpdateTime: row['last_update_time'] as int? ?? 0,
       respondTime: row['respond_time'] as int? ?? 0,
+      lastCheckTime: row['last_check_time'] as int? ?? 0,
       rawJson: '',
     );
   }
@@ -329,6 +345,7 @@ class SourceRepository {
     source.weight = row['weight'] as int? ?? 0;
     source.lastUpdateTime = row['last_update_time'] as int? ?? 0;
     source.respondTime = row['respond_time'] as int? ?? 0;
+    source.lastCheckTime = row['last_check_time'] as int? ?? 0;
     source.rawJson = raw;
     source.bookSourceUrl =
         row['book_source_url'] as String? ?? source.bookSourceUrl;
@@ -361,7 +378,7 @@ class SourceRepository {
       'raw_json': raw,
       'last_update_time': source.lastUpdateTime,
       'respond_time': source.respondTime,
-      'last_check_time': 0,
+      'last_check_time': source.lastCheckTime,
     };
   }
 }

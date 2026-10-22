@@ -120,6 +120,6 @@ Novel/
 ## 验证
 
 - `flutter analyze`：通过。
-- `flutter test`：77 项通过，其中设计/主题 14 项。
+- `flutter test`：78 项通过，其中设计/主题 14 项。
 - debug arm64 APK：可构建。
 - Phase 1 真机验收：待补测（构建产物 `build/app/outputs/flutter-apk/app-debug.apk`）。

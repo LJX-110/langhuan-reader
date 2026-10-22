@@ -73,6 +73,12 @@ class Me extends ConsumerWidget {
                       ),
                       _row(
                         context,
+                        '书签',
+                        () => Routes.navigateTo(context, Routes.bookmarks),
+                        line: line,
+                      ),
+                      _row(
+                        context,
                         '字体设置',
                         () => Routes.navigateTo(context, Routes.fontSet),
                         line: line,
