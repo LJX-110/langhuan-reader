@@ -89,31 +89,35 @@ class _DockItem extends StatelessWidget {
       button: true,
       selected: active,
       label: label,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: SizedBox(
-          height: 62,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CustomPaint(
-                size: const Size(22, 22),
-                painter: _DockIconPainter(icon: icon, color: color),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 10,
-                  height: 1,
-                  letterSpacing: .4,
-                  fontFamily: AppType.sans,
-                  fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          splashColor: activeColor.withValues(alpha: .08),
+          highlightColor: activeColor.withValues(alpha: .04),
+          child: SizedBox(
+            height: 62,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CustomPaint(
+                  size: const Size(22, 22),
+                  painter: _DockIconPainter(icon: icon, color: color),
                 ),
-              ),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    height: 1,
+                    letterSpacing: .4,
+                    fontFamily: AppType.sans,
+                    fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

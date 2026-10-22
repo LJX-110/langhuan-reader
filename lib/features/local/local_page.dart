@@ -24,18 +24,28 @@ class LocalPage extends StatefulWidget {
 class _LocalPageState extends State<LocalPage> {
   final _books = BookRepository.instance;
   final _imports = LocalImportService();
-  late Future<List<Book>> _future;
+  List<Book> _list = const [];
+  bool _loading = true;
   bool _importing = false;
 
   @override
   void initState() {
     super.initState();
-    _future = _books.getLocal();
+    _reload();
   }
 
-  void _reload() {
-    if (!mounted) return;
-    setState(() => _future = _books.getLocal());
+  Future<void> _reload() async {
+    try {
+      final list = await _books.getLocal();
+      if (!mounted) return;
+      setState(() {
+        _list = list;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
   }
 
   Future<void> _importTxt() async {
@@ -68,10 +78,8 @@ class _LocalPageState extends State<LocalPage> {
       }
     }
     if (!mounted) return;
-    setState(() {
-      _importing = false;
-      _future = _books.getLocal();
-    });
+    setState(() => _importing = false);
+    await _reload();
     if (ok > 0) {
       final name = last?.book.name ?? '';
       BotToast.showText(
@@ -110,8 +118,15 @@ class _LocalPageState extends State<LocalPage> {
       ),
     );
     if (ok != true) return;
-    await _books.delete(book.id);
-    _reload();
+    setState(() {
+      _list = _list.where((b) => b.id != book.id).toList(growable: false);
+    });
+    try {
+      await _books.delete(book.id);
+    } catch (e) {
+      BotToast.showText(text: '删除失败：$e');
+      await _reload();
+    }
   }
 
   @override
@@ -166,32 +181,21 @@ class _LocalPageState extends State<LocalPage> {
   }
 
   Widget _body(bool dark) {
-    return FutureBuilder<List<Book>>(
-      future: _future,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return Center(
-            child: Text(
-              '本地书库加载失败：${snapshot.error}',
-              style: const TextStyle(fontSize: 12, color: AppColors.danger),
-            ),
-          );
-        }
-        final books = snapshot.data ?? const <Book>[];
-        if (books.isEmpty) return _empty(dark);
-        return ListView.separated(
-          padding: const EdgeInsets.only(top: 4, bottom: 24),
-          itemCount: books.length,
-          separatorBuilder: (_, _) => Divider(
-            height: 1,
-            color: dark ? AppColors.dividerDark : AppColors.line,
-          ),
-          itemBuilder: (context, i) => _row(books[i], dark),
-        );
-      },
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_list.isEmpty) return _empty(dark);
+    return ListView.separated(
+      padding: const EdgeInsets.only(top: 4, bottom: 24),
+      itemCount: _list.length,
+      separatorBuilder: (_, _) => Divider(
+        height: 1,
+        color: dark ? AppColors.dividerDark : AppColors.line,
+      ),
+      itemBuilder: (context, i) => Material(
+        color: Colors.transparent,
+        child: _row(_list[i], dark),
+      ),
     );
   }
 

@@ -149,36 +149,45 @@ class _ShelfHeader extends StatelessWidget {
                 for (final value in ShelfFilter.values)
                   Padding(
                     padding: const EdgeInsets.only(right: 18),
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => onFilter(value),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            _filterLabel(value),
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: filter == value
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                              color: filter == value
-                                  ? Theme.of(context).colorScheme.primary
-                                  : (dark
-                                      ? AppColors.textOnDark
-                                      : AppColors.inkMute),
-                            ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => onFilter(value),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 2,
+                            vertical: 4,
                           ),
-                          const SizedBox(height: 3),
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 160),
-                            width: 16,
-                            height: 2,
-                            color: filter == value
-                                ? Theme.of(context).colorScheme.primary
-                                : Colors.transparent,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _filterLabel(value),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: filter == value
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                  color: filter == value
+                                      ? Theme.of(context).colorScheme.primary
+                                      : (dark
+                                          ? AppColors.textOnDark
+                                          : AppColors.inkMute),
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 160),
+                                width: 16,
+                                height: 2,
+                                color: filter == value
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Colors.transparent,
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),

@@ -101,6 +101,7 @@ Wenku8 仅作为视觉参考，未复制其 GPL-3.0 代码。
 - [x] Phase 1 图标与启动图
 - [x] Phase 2 本地 TXT 导入与四页签（真机待测）
 - [x] Phase 2 单行页头、12 套主题与“我的”简化
+- [x] 修复书源导入按钮反馈、本地书删除即时刷新、底栏/筛选涟漪
 - [x] 清理旧皮肤组件、旧图片与 `flex_color_scheme` 依赖
 - [x] `flutter analyze` 通过
 - [x] `flutter test` 通过（77 项，含 14 项布局/主题测试）

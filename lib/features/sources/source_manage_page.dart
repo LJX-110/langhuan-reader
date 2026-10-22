@@ -439,26 +439,28 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                       ),
                     const SizedBox(height: 12),
                     ElevatedButton(
-                      onPressed: !agreed
-                          ? null
-                          : () async {
-                              try {
-                                if (tab == 0) {
-                                  await model.importJsonText(
-                                    textCtrl.text,
-                                    agreed: agreed,
-                                  );
-                                } else {
-                                  await model.importFromUrl(
-                                    urlCtrl.text.trim(),
-                                    agreed: agreed,
-                                  );
-                                }
-                                if (ctx.mounted) Navigator.pop(ctx);
-                              } catch (e) {
-                                BotToast.showText(text: e.toString());
-                              }
-                            },
+                      onPressed: () async {
+                        if (!agreed) {
+                          BotToast.showText(text: '请先勾选同意上述声明');
+                          return;
+                        }
+                        try {
+                          if (tab == 0) {
+                            await model.importJsonText(
+                              textCtrl.text,
+                              agreed: agreed,
+                            );
+                          } else {
+                            await model.importFromUrl(
+                              urlCtrl.text.trim(),
+                              agreed: agreed,
+                            );
+                          }
+                          if (ctx.mounted) Navigator.pop(ctx);
+                        } catch (e) {
+                          BotToast.showText(text: e.toString());
+                        }
+                      },
                       child: const Text('导入'),
                     ),
                   ],
