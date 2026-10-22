@@ -56,6 +56,15 @@ class _ExplorePageState extends ConsumerState<ExplorePage>
     final dark = theme.brightness == Brightness.dark;
     final model = ref.watch(exploreModelProvider);
 
+    // Importing / deleting sources should refresh the discover entry points
+    // without needing to restart the app.
+    ref.listen(sourceModelProvider, (previous, next) {
+      final before = previous?.sources.length ?? 0;
+      if (before != next.sources.length) {
+        ref.read(exploreModelProvider).reloadSources();
+      }
+    });
+
     return Scaffold(
       backgroundColor: dark ? AppColors.scaffoldDark : AppColors.paper,
       body: SafeArea(
@@ -271,6 +280,17 @@ class _BookList extends StatelessWidget {
                 minimumSize: const Size(0, 32),
               ),
               child: const Text('去书源管理'),
+            )
+          else if ((model.error ?? '').contains('重试'))
+            TextButton(
+              onPressed: model.loading
+                  ? null
+                  : () => model.loadBooks(refresh: true),
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 32),
+              ),
+              child: const Text('重试'),
             ),
         ],
       );

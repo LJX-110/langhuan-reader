@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/data/entities/book_info.dart';
 import 'package:langhuan/data/entities/search_item.dart';
 import 'package:langhuan/features/sources/source_model.dart';
@@ -32,6 +35,7 @@ class ExploreModel with ChangeNotifier {
   }
 
   Future<void> reloadSources() async {
+    if (loading) return;
     loading = true;
     error = null;
     noMore = false;
@@ -128,7 +132,12 @@ class ExploreModel with ChangeNotifier {
         }
       }
     } catch (e) {
-      error = '加载失败：$e';
+      AppLog.w('Explore', 'load books failed', error: e);
+      if (e is TimeoutException) {
+        error = '加载超时，请重试或换一个书源';
+      } else {
+        error = '加载失败，请重试或换一个书源';
+      }
     } finally {
       loading = false;
       notifyListeners();

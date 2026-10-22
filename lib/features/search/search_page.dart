@@ -314,7 +314,12 @@ class _SearchState extends ConsumerState<Search> {
             ),
           ),
           const SizedBox(height: 6),
-          Text('换个书名、作者或关键词再试。', style: TextStyle(fontSize: 12, color: muted)),
+          Text(
+            model.failedSources > 0
+                ? '${model.failedSources} 个书源请求失败，可能网络不稳定或书源已失效。'
+                : '换个书名、作者或关键词再试。',
+            style: TextStyle(fontSize: 12, color: muted, height: 1.6),
+          ),
         ],
       );
     }

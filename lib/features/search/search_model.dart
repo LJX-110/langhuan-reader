@@ -35,6 +35,9 @@ class SearchModel with ChangeNotifier {
   /// Total searchable sources for the current page sweep.
   int totalSources = 0;
 
+  /// Sources that timed out or failed in the current sweep.
+  int failedSources = 0;
+
   String historyKey = "";
   int page = 1;
   var word = "";
@@ -44,7 +47,7 @@ class SearchModel with ChangeNotifier {
   final SourceRepository _sources = SourceRepository.instance;
 
   /// Concurrent source search pool size.
-  static const int poolSize = 8;
+  static const int poolSize = 10;
 
   /// Bumps on each new search/loadMore so stale chunks are discarded.
   int _searchGen = 0;
@@ -80,6 +83,7 @@ class SearchModel with ChangeNotifier {
     loading = false;
     searchedSources = 0;
     totalSources = 0;
+    failedSources = 0;
     _searchGen++;
   }
 
@@ -106,6 +110,7 @@ class SearchModel with ChangeNotifier {
 
     totalSources = searchable.length;
     searchedSources = 0;
+    failedSources = 0;
     notifyListeners();
 
     try {
@@ -117,27 +122,31 @@ class SearchModel with ChangeNotifier {
           chunkMeta.map((e) => e.bookSourceUrl).toList(),
         );
         if (gen != _searchGen) return;
+        // Notify per source, not per chunk: the first reply should show up
+        // immediately even when other sources are still timing out.
         final futures = chunk.map((s) async {
+          List<SearchBook> hits = const [];
           try {
-            return await _engine
+            hits = await _engine
                 .search(s, word, page)
                 .timeout(BookSourceEngine.sourceTimeout);
           } catch (_) {
-            return <SearchBook>[];
+            if (gen != _searchGen) return;
+            failedSources++;
+            searchedSources = (searchedSources + 1).clamp(0, totalSources);
+            notifyListeners();
+            return;
           }
-        });
-        final lists = await Future.wait(futures);
-        if (gen != _searchGen) return;
-
-        searchedSources = (i + chunkMeta.length).clamp(0, searchable.length);
-        for (final list in lists) {
-          pageHits += list.length;
-          for (final h in list) {
+          if (gen != _searchGen) return;
+          pageHits += hits.length;
+          for (final h in hits) {
             bks.add(_toSearchItem(h));
           }
-        }
-        // Progressive UI: leave full-screen spinner as soon as first hits arrive.
-        notifyListeners();
+          searchedSources = (searchedSources + 1).clamp(0, totalSources);
+          notifyListeners();
+        });
+        await Future.wait(futures);
+        if (gen != _searchGen) return;
       }
       if (gen != _searchGen) return;
       if (pageHits == 0) {
@@ -252,6 +261,7 @@ class SearchModel with ChangeNotifier {
     loading = false;
     searchedSources = 0;
     totalSources = 0;
+    failedSources = 0;
     _searchGen++;
     notifyListeners();
   }
@@ -266,6 +276,7 @@ class SearchModel with ChangeNotifier {
     noMore = false;
     searchedSources = 0;
     totalSources = 0;
+    failedSources = 0;
     final gen = ++_searchGen;
     loading = true;
     notifyListeners(); // UI shows loading spinner
