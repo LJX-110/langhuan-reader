@@ -93,8 +93,9 @@ class SearchModel with ChangeNotifier {
     final meta = await _sources.getEnabled();
     if (gen != _searchGen) return;
 
-    final searchable =
-        meta.where((s) => s.searchUrl.isNotEmpty && s.enabled).toList();
+    final searchable = meta
+        .where((s) => s.searchUrl.isNotEmpty && s.enabled)
+        .toList();
     if (searchable.isEmpty) {
       if (gen != _searchGen) return;
       noMore = true;
@@ -128,8 +129,7 @@ class SearchModel with ChangeNotifier {
         final lists = await Future.wait(futures);
         if (gen != _searchGen) return;
 
-        searchedSources =
-            (i + chunkMeta.length).clamp(0, searchable.length);
+        searchedSources = (i + chunkMeta.length).clamp(0, searchable.length);
         for (final list in lists) {
           pageHits += list.length;
           for (final h in list) {
@@ -210,26 +210,6 @@ class SearchModel with ChangeNotifier {
         notifyListeners();
       }
     }
-  }
-
-  List<Widget> getHistory() {
-    List<Widget> wds = [];
-    for (var value in searchHistory) {
-      wds.add(GestureDetector(
-        onTap: () {
-          word = value;
-          controller?.text = value;
-          search(value);
-          notifyListeners();
-        },
-        child: Chip(
-          label: Text(value),
-          padding: EdgeInsets.all(2),
-        ),
-      ));
-    }
-
-    return wds;
   }
 
   void setHistory(String value) {

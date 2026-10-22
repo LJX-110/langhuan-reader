@@ -56,8 +56,7 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
 
   bool get _dark => Theme.of(context).brightness == Brightness.dark;
 
-  Color get _primary =>
-      _dark ? AppColors.textOnDark : AppColors.textPrimary;
+  Color get _primary => _dark ? AppColors.textOnDark : AppColors.textPrimary;
 
   @override
   Widget build(BuildContext context) {
@@ -67,9 +66,7 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
       return _emptyShelf();
     }
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppDimens.pagePadding,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: AppDimens.pagePadding),
       child: _shelfModel.cover ? coverModel() : listModel(),
     );
   }
@@ -99,10 +96,11 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
           const SizedBox(height: 6),
           TextButton(
             onPressed: () {
-              Routes.navigateTo(context, Routes.search, params: {
-                'type': 'book',
-                'name': '',
-              });
+              Routes.navigateTo(
+                context,
+                Routes.search,
+                params: {'type': 'book', 'name': ''},
+              );
             },
             style: TextButton.styleFrom(
               padding: EdgeInsets.zero,
@@ -198,20 +196,14 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
                 _authorLabel(book),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: secondaryText,
-                ),
+                style: TextStyle(fontSize: 11, color: secondaryText),
               ),
               const SizedBox(height: 2),
               Text(
                 _progressLabel(book),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: secondaryText,
-                ),
+                style: TextStyle(fontSize: 11, color: secondaryText),
               ),
             ],
           ),
@@ -240,15 +232,17 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
   }
 
   Widget bookAction(Widget child, int i) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () async {
-        widget.type == 'sort' ? _shelfModel.changePick(i) : await readBook(i);
-      },
-      onLongPress: () {
-        Routes.navigateTo(context, Routes.sortShelf);
-      },
-      child: child,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () async {
+          widget.type == 'sort' ? _shelfModel.changePick(i) : await readBook(i);
+        },
+        onLongPress: () {
+          Routes.navigateTo(context, Routes.sortShelf);
+        },
+        child: child,
+      ),
     );
   }
 
@@ -354,31 +348,23 @@ class _BooksWidgetState extends ConsumerState<BooksWidget> {
                     const SizedBox(height: 6),
                     Text(
                       _authorLabel(item),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: secondaryText,
-                      ),
+                      style: TextStyle(fontSize: 12, color: secondaryText),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
                     Text(
                       _progressLabel(item),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: secondaryText,
-                      ),
+                      style: TextStyle(fontSize: 12, color: secondaryText),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                     ),
-                    if (item.updatedAt.isNotEmpty && item.updatedAt != 'null') ...[
+                    if (item.updatedAt.isNotEmpty &&
+                        item.updatedAt != 'null') ...[
                       const SizedBox(height: 4),
                       Text(
                         item.updatedAt,
-                        style: TextStyle(
-                          color: secondaryText,
-                          fontSize: 11,
-                        ),
+                        style: TextStyle(color: secondaryText, fontSize: 11),
                         maxLines: 1,
                       ),
                     ],

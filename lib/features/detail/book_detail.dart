@@ -39,15 +39,12 @@ class _BookDetailState extends ConsumerState<BookDetail> {
 
   bool get _dark => SpUtil.getBool(PrefsKeys.dark);
 
-  Color get _scaffold =>
-      _dark ? AppColors.scaffoldDark : AppColors.scaffold;
+  Color get _scaffold => _dark ? AppColors.scaffoldDark : AppColors.scaffold;
   Color get _surface => _dark ? AppColors.surfaceDark : AppColors.surface;
-  Color get _primary =>
-      _dark ? AppColors.textOnDark : AppColors.textPrimary;
+  Color get _primary => _dark ? AppColors.textOnDark : AppColors.textPrimary;
   Color get _secondary =>
       _dark ? const Color(0xFFB3B3B3) : AppColors.textSecondary;
-  Color get _divider =>
-      _dark ? AppColors.dividerDark : AppColors.divider;
+  Color get _divider => _dark ? AppColors.dividerDark : AppColors.divider;
 
   @override
   Widget build(BuildContext context) {
@@ -69,10 +66,7 @@ class _BookDetailState extends ConsumerState<BookDetail> {
                       const SizedBox(height: 8),
                       _heroCard(),
                       const SizedBox(height: 12),
-                      _sectionCard(
-                        title: '简介',
-                        child: _descBody(),
-                      ),
+                      _sectionCard(title: '简介', child: _descBody()),
                       const SizedBox(height: 12),
                       _sectionCard(
                         title: '目录',
@@ -89,10 +83,7 @@ class _BookDetailState extends ConsumerState<BookDetail> {
                       ),
                       if (info.relatedBooks.isNotEmpty) ...[
                         const SizedBox(height: 12),
-                        _sectionCard(
-                          title: '作者还写过',
-                          child: _sameAuthorBody(),
-                        ),
+                        _sectionCard(title: '作者还写过', child: _sameAuthorBody()),
                       ],
                       SizedBox(height: bottomBarH + 16),
                     ],
@@ -118,8 +109,9 @@ class _BookDetailState extends ConsumerState<BookDetail> {
       scrolledUnderElevation: 0.5,
       backgroundColor: _scaffold,
       foregroundColor: _primary,
-      systemOverlayStyle:
-          _dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+      systemOverlayStyle: _dark
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
     );
   }
 
@@ -269,10 +261,13 @@ class _BookDetailState extends ConsumerState<BookDetail> {
               ),
               const Spacer(),
               if (trailing != null)
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: onTrailingTap,
-                  child: trailing,
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: onTrailingTap,
+                    borderRadius: BorderRadius.circular(6),
+                    child: trailing,
+                  ),
                 ),
             ],
           ),
@@ -328,57 +323,60 @@ class _BookDetailState extends ConsumerState<BookDetail> {
   Widget _catalogBody() {
     final latest = info.latestChapter.trim();
     final time = info.updatedAt.trim();
-    return InkWell(
-      onTap: _openRead,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: AppColors.accentSoftOf(context),
-                borderRadius: BorderRadius.circular(8),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _openRead,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.accentSoftOf(context),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.menu_book_outlined,
+                  size: 18,
+                  color: AppColors.accentOf(context),
+                ),
               ),
-              child: Icon(
-                Icons.menu_book_outlined,
-                size: 18,
-                color: AppColors.accentOf(context),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    latest.isEmpty ? '暂无章节信息' : latest,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: _primary,
-                    ),
-                  ),
-                  if (time.isNotEmpty) ...[
-                    const SizedBox(height: 4),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      '更新于 $time',
-                      style: TextStyle(fontSize: 12, color: _secondary),
+                      latest.isEmpty ? '暂无章节信息' : latest,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: _primary,
+                      ),
                     ),
-                  ] else
-                    Text(
-                      '最新章节',
-                      style: TextStyle(fontSize: 12, color: _secondary),
-                    ),
-                ],
+                    if (time.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        '更新于 $time',
+                        style: TextStyle(fontSize: 12, color: _secondary),
+                      ),
+                    ] else
+                      Text(
+                        '最新章节',
+                        style: TextStyle(fontSize: 12, color: _secondary),
+                      ),
+                  ],
+                ),
               ),
-            ),
-            Icon(Icons.chevron_right, color: _secondary, size: 20),
-          ],
+              Icon(Icons.chevron_right, color: _secondary, size: 20),
+            ],
+          ),
         ),
       ),
     );
@@ -393,20 +391,14 @@ class _BookDetailState extends ConsumerState<BookDetail> {
     return Column(
       children: [
         for (var i = 0; i < list.length; i++) ...[
-          if (i > 0)
-            Divider(height: 1, color: _divider),
+          if (i > 0) Divider(height: 1, color: _divider),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Row(
               children: [
                 ClipRRect(
-                  borderRadius:
-                      BorderRadius.circular(AppDimens.coverRadius),
-                  child: PicWidget(
-                    list[i].coverUrl,
-                    height: 72,
-                    width: 52,
-                  ),
+                  borderRadius: BorderRadius.circular(AppDimens.coverRadius),
+                  child: PicWidget(list[i].coverUrl, height: 72, width: 52),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -468,12 +460,7 @@ class _BookDetailState extends ConsumerState<BookDetail> {
           color: _surface,
           border: Border(top: BorderSide(color: _divider, width: .5)),
         ),
-        padding: EdgeInsets.fromLTRB(
-          12,
-          10,
-          12,
-          Screen.bottomSafeHeight + 10,
-        ),
+        padding: EdgeInsets.fromLTRB(12, 10, 12, Screen.bottomSafeHeight + 10),
         child: Row(
           children: [
             _barIconBtn(
@@ -491,8 +478,7 @@ class _BookDetailState extends ConsumerState<BookDetail> {
               onTap: () async {
                 final readModel = ref.read(readModelProvider);
                 // Seed only when idle — don't clobber an active reading session.
-                if (!readModel.sessionReady ||
-                    readModel.book?.id != book.id) {
+                if (!readModel.sessionReady || readModel.book?.id != book.id) {
                   readModel.book = book;
                 }
                 final ok = await showModalBottomSheet<bool>(
@@ -509,10 +495,10 @@ class _BookDetailState extends ConsumerState<BookDetail> {
                         ..originName = b.originName
                         ..tocUrl = b.tocUrl
                         ..name = b.name.isNotEmpty ? b.name : book.name
-                        ..author =
-                            b.author.isNotEmpty ? b.author : book.author
-                        ..coverUrl =
-                            b.coverUrl.isNotEmpty ? b.coverUrl : book.coverUrl
+                        ..author = b.author.isNotEmpty ? b.author : book.author
+                        ..coverUrl = b.coverUrl.isNotEmpty
+                            ? b.coverUrl
+                            : book.coverUrl
                         ..description = b.description.isNotEmpty
                             ? b.description
                             : book.description
@@ -577,21 +563,21 @@ class _BookDetailState extends ConsumerState<BookDetail> {
     required String label,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: SizedBox(
-        width: 56,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 22, color: _primary),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(fontSize: 11, color: _secondary),
-            ),
-          ],
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          width: 56,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 22, color: _primary),
+              const SizedBox(height: 2),
+              Text(label, style: TextStyle(fontSize: 11, color: _secondary)),
+            ],
+          ),
         ),
       ),
     );
@@ -607,9 +593,7 @@ class _BookDetailState extends ConsumerState<BookDetail> {
     Routes.navigateTo(
       context,
       Routes.read,
-      params: {
-        'read': jsonEncode(b ?? book),
-      },
+      params: {'read': jsonEncode(b ?? book)},
     );
   }
 

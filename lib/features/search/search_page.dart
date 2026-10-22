@@ -214,28 +214,34 @@ class _SearchState extends ConsumerState<Search> {
                 runSpacing: 8,
                 children: [
                   for (final value in model.searchHistory)
-                    InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: () {
-                        controller.text = value;
-                        searchModel.search(value);
-                        setState(() {});
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 11,
-                          vertical: 7,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.paperLight.withValues(alpha: .45),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppColors.line, width: .5),
-                        ),
-                        child: Text(
-                          value,
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            color: AppColors.inkSoft,
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () {
+                          controller.text = value;
+                          searchModel.search(value);
+                          setState(() {});
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 11,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.paperLight.withValues(alpha: .45),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: AppColors.line,
+                              width: .5,
+                            ),
+                          ),
+                          child: Text(
+                            value,
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              color: AppColors.inkSoft,
+                            ),
                           ),
                         ),
                       ),
@@ -278,17 +284,12 @@ class _SearchState extends ConsumerState<Search> {
               const Spacer(),
               Text(
                 model.loading && groups.isEmpty ? '正在搜索…' : '按书合并',
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: AppColors.inkMute,
-                ),
+                style: const TextStyle(fontSize: 11, color: AppColors.inkMute),
               ),
             ],
           ),
         ),
-        Expanded(
-          child: _resultBody(context, model, groups),
-        ),
+        Expanded(child: _resultBody(context, model, groups)),
       ],
     );
   }
@@ -310,10 +311,7 @@ class _SearchState extends ConsumerState<Search> {
             const SizedBox(height: 12),
             Text(
               progress,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.inkMute,
-              ),
+              style: const TextStyle(fontSize: 12, color: AppColors.inkMute),
             ),
           ],
         ),
@@ -378,120 +376,122 @@ class _SearchState extends ConsumerState<Search> {
     final sourceLabel = group.sourceCount > 1
         ? '${group.sourceCount} 个书源'
         : (item.sourceName.isEmpty ? '书源' : item.sourceName);
-    return InkWell(
-      onTap: () async {
-        final book = await model.openDetail(item);
-        if (book == null || !context.mounted) return;
-        Routes.navigateTo(
-          context,
-          Routes.detail,
-          params: {'detail': jsonEncode(book)},
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 11, 14, 11),
-        decoration: const BoxDecoration(
-          border: Border(
-            bottom: BorderSide(color: AppColors.line, width: .5),
-          ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppDimens.coverRadius),
-              child: PicWidget(item.coverUrl, width: 58, height: 84),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () async {
+          final book = await model.openDetail(item);
+          if (book == null || !context.mounted) return;
+          Routes.navigateTo(
+            context,
+            Routes.detail,
+            params: {'detail': jsonEncode(book)},
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 11, 14, 11),
+          decoration: const BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: AppColors.line, width: .5),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: AppType.serif,
-                      fontSize: 16,
-                      height: 1.25,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.ink,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    item.author.isEmpty ? '未知作者' : item.author,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      color: AppColors.inkMute,
-                    ),
-                  ),
-                  const SizedBox(height: 7),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .primary
-                              .withValues(alpha: .075),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        child: Text(
-                          sourceLabel,
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppDimens.coverRadius),
+                child: PicWidget(item.coverUrl, width: 58, height: 84),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: AppType.serif,
+                        fontSize: 16,
+                        height: 1.25,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.ink,
                       ),
-                      if (group.sourceNames.isNotEmpty) ...[
-                        const SizedBox(width: 6),
-                        Expanded(
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      item.author.isEmpty ? '未知作者' : item.author,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 10.5,
+                        color: AppColors.inkMute,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: .075),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
                           child: Text(
-                            group.sourceNames.take(2).join(' / '),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            sourceLabel,
+                            style: TextStyle(
                               fontSize: 9,
-                              color: AppColors.inkMute,
+                              color: Theme.of(context).colorScheme.primary,
                             ),
                           ),
                         ),
+                        if (group.sourceNames.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              group.sourceNames.take(2).join(' / '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 9,
+                                color: AppColors.inkMute,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    item.latestChapter.isEmpty
-                        ? '暂无章节信息'
-                        : '最新章 · ${item.latestChapter}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 9.5,
-                      color: AppColors.inkMute,
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 6),
+                    Text(
+                      item.latestChapter.isEmpty
+                          ? '暂无章节信息'
+                          : '最新章 · ${item.latestChapter}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 9.5,
+                        color: AppColors.inkMute,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const Padding(
-              padding: EdgeInsets.only(top: 28),
-              child: Icon(
-                Icons.chevron_right,
-                size: 18,
-                color: AppColors.inkMute,
+              const Padding(
+                padding: EdgeInsets.only(top: 28),
+                child: Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: AppColors.inkMute,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

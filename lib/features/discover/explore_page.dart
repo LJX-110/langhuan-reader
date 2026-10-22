@@ -70,10 +70,11 @@ class _ExplorePageState extends ConsumerState<ExplorePage>
                   tooltip: '搜索',
                   icon: const Icon(Icons.search, size: 21),
                   onPressed: () {
-                    Routes.navigateTo(context, Routes.search, params: {
-                      'type': 'book',
-                      'name': '',
-                    });
+                    Routes.navigateTo(
+                      context,
+                      Routes.search,
+                      params: {'type': 'book', 'name': ''},
+                    );
                   },
                 ),
                 IconButton(
@@ -95,7 +96,9 @@ class _ExplorePageState extends ConsumerState<ExplorePage>
               height: 1,
               color: dark ? AppColors.dividerDark : AppColors.divider,
             ),
-            Expanded(child: _BookList(model: model, dark: dark)),
+            Expanded(
+              child: _BookList(model: model, dark: dark),
+            ),
           ],
         ),
       ),
@@ -117,8 +120,7 @@ class _ExploreSourceTrigger extends StatelessWidget {
     final accent = AppColors.accentOf(context);
     final accentSoft = AppColors.accentSoftOf(context);
     final primary = dark ? AppColors.textOnDark : AppColors.textPrimary;
-    final secondary =
-        dark ? const Color(0xFFB3B3B3) : AppColors.textSecondary;
+    final secondary = dark ? const Color(0xFFB3B3B3) : AppColors.textSecondary;
     final active = model.activeSource;
     final name = (active?.bookSourceName.trim().isNotEmpty ?? false)
         ? active!.bookSourceName
@@ -147,10 +149,7 @@ class _ExploreSourceTrigger extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: [
-                  Text(
-                    '书源',
-                    style: TextStyle(fontSize: 12, color: secondary),
-                  ),
+                  Text('书源', style: TextStyle(fontSize: 12, color: secondary)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -184,11 +183,7 @@ class _ExploreSourceTrigger extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Icon(
-                    Icons.keyboard_arrow_down,
-                    size: 20,
-                    color: secondary,
-                  ),
+                  Icon(Icons.keyboard_arrow_down, size: 20, color: secondary),
                 ],
               ),
             ),
@@ -218,15 +213,17 @@ class _KindBar extends StatelessWidget {
         separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, i) {
           final k = model.kinds[i];
-          final selected = model.activeKind?.title == k.title &&
+          final selected =
+              model.activeKind?.title == k.title &&
               model.activeKind?.url == k.url;
           return FilterChip(
             label: Text(k.title),
             selected: selected,
             onSelected: (_) => model.selectKind(k),
             selectedColor: accentSoft,
-            backgroundColor:
-                dark ? const Color(0xFF2A2A2A) : const Color(0xFFF3F3F3),
+            backgroundColor: dark
+                ? const Color(0xFF2A2A2A)
+                : const Color(0xFFF3F3F3),
             checkmarkColor: accent,
             side: BorderSide.none,
             labelStyle: TextStyle(
@@ -250,8 +247,7 @@ class _BookList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primary = dark ? AppColors.textOnDark : AppColors.textPrimary;
-    final secondary =
-        dark ? const Color(0xFFB3B3B3) : AppColors.textSecondary;
+    final secondary = dark ? const Color(0xFFB3B3B3) : AppColors.textSecondary;
     final tertiary = dark ? const Color(0xFF8A8A8A) : AppColors.textTertiary;
 
     if (model.loading && model.books.isEmpty) {
@@ -304,10 +300,7 @@ class _BookList extends StatelessWidget {
                     ? const CupertinoActivityIndicator()
                     : Text(
                         '没有更多了',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: tertiary,
-                        ),
+                        style: TextStyle(fontSize: 12, color: tertiary),
                       ),
               ),
             );
@@ -434,101 +427,94 @@ class _BookRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        height: rowH,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? AppColors.dividerDark
-                  : AppColors.line,
-              width: .5,
-            ),
-          ),
-        ),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppDimens.coverRadius),
-              child: PicWidget(item.coverUrl, width: picW, height: picH),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: primary,
-                      ),
-                    ),
-                    Text(
-                      item.author.isEmpty ? '未知作者' : item.author,
-                      maxLines: 1,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: secondary,
-                      ),
-                    ),
-                    Text(
-                      item.description.isEmpty ? '暂无简介' : item.description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: secondary,
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        if (item.sourceName.isNotEmpty)
-                          Container(
-                            margin: const EdgeInsets.only(right: 6),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.accentSoftOf(context),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              item.sourceName,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: AppColors.accentOf(context),
-                              ),
-                            ),
-                          ),
-                        Expanded(
-                          child: Text(
-                            item.latestChapter,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: tertiary,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          height: rowH,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? AppColors.dividerDark
+                    : AppColors.line,
+                width: .5,
               ),
             ),
-          ],
+          ),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppDimens.coverRadius),
+                child: PicWidget(item.coverUrl, width: picW, height: picH),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: primary,
+                        ),
+                      ),
+                      Text(
+                        item.author.isEmpty ? '未知作者' : item.author,
+                        maxLines: 1,
+                        style: TextStyle(fontSize: 12, color: secondary),
+                      ),
+                      Text(
+                        item.description.isEmpty ? '暂无简介' : item.description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12, color: secondary),
+                      ),
+                      Row(
+                        children: [
+                          if (item.sourceName.isNotEmpty)
+                            Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.accentSoftOf(context),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                item.sourceName,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.accentOf(context),
+                                ),
+                              ),
+                            ),
+                          Expanded(
+                            child: Text(
+                              item.latestChapter,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 12, color: tertiary),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
