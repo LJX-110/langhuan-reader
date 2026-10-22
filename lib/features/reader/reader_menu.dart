@@ -8,6 +8,7 @@ import 'package:langhuan/features/reader/menu/reader_bottom_bar.dart';
 import 'package:langhuan/features/reader/menu/reader_chapter_panel.dart';
 import 'package:langhuan/features/reader/menu/reader_chrome.dart';
 import 'package:langhuan/features/reader/menu/reader_download_panel.dart';
+import 'package:langhuan/features/reader/menu/reader_find_bar.dart';
 import 'package:langhuan/features/reader/menu/reader_settings_panel.dart';
 import 'package:langhuan/features/reader/menu/reader_top_bar.dart';
 import 'package:langhuan/features/reader/read_model.dart';
@@ -29,6 +30,11 @@ class _MenuState extends ConsumerState<ReaderMenu> {
   late ReadModel _readModel;
   late ColorModel _colorModel;
 
+  bool _finding = false;
+  final TextEditingController _findCtrl = TextEditingController();
+  List<({int page, String snippet})> _findMatches = const [];
+  int _findIndex = 0;
+
   @override
   void initState() {
     super.initState();
@@ -36,11 +42,85 @@ class _MenuState extends ConsumerState<ReaderMenu> {
     _colorModel = ref.read(colorModelProvider);
   }
 
+  @override
+  void dispose() {
+    _findCtrl.dispose();
+    super.dispose();
+  }
+
   /// Match reader paper so chrome doesn't clash with the page underneath.
   ReaderChrome get _chrome => ReaderChrome(_readModel.paperTheme);
 
   void _refresh() {
     if (mounted) setState(() {});
+  }
+
+  void _openFind() {
+    setState(() {
+      _finding = true;
+      _findCtrl.clear();
+      _findMatches = const [];
+      _findIndex = 0;
+    });
+  }
+
+  void _closeFind() {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _finding = false;
+      _findCtrl.clear();
+      _findMatches = const [];
+      _findIndex = 0;
+    });
+  }
+
+  void _onFindChanged(String value) {
+    final query = value.trim();
+    final List<({int page, String snippet})> matches = query.isEmpty
+        ? const []
+        : _collectMatches(query);
+    setState(() {
+      _findMatches = matches;
+      _findIndex = 0;
+    });
+    if (matches.isNotEmpty) _jumpToMatch(0);
+  }
+
+  /// Search each rendered line so results map to pages without relying on the
+  /// pager's byte offsets.
+  List<({int page, String snippet})> _collectMatches(String query) {
+    final pages = _readModel.curPage?.pages ?? const [];
+    final needle = query.toLowerCase();
+    final matches = <({int page, String snippet})>[];
+    for (var p = 0; p < pages.length; p++) {
+      for (final line in pages[p].lines) {
+        final text = line.text;
+        final lower = text.toLowerCase();
+        var from = 0;
+        while (true) {
+          final at = lower.indexOf(needle, from);
+          if (at < 0) break;
+          final start = (at - 8).clamp(0, text.length);
+          final end = (at + query.length + 8).clamp(0, text.length);
+          matches.add((page: p, snippet: text.substring(start, end).trim()));
+          from = at + needle.length;
+        }
+      }
+    }
+    return matches;
+  }
+
+  void _jumpToMatch(int index) {
+    if (_findMatches.isEmpty) return;
+    _readModel.jumpToPage(_findMatches[index].page);
+  }
+
+  void _stepFind(int delta) {
+    if (_findMatches.isEmpty) return;
+    final next = (_findIndex + delta) % _findMatches.length;
+    final wrapped = next < 0 ? next + _findMatches.length : next;
+    setState(() => _findIndex = wrapped);
+    _jumpToMatch(wrapped);
   }
 
   Widget _bottomHead(ReaderChrome chrome) {
@@ -72,6 +152,11 @@ class _MenuState extends ConsumerState<ReaderMenu> {
   }
 
   void _dismissMenu() {
+    _finding = false;
+    _findCtrl.clear();
+    _findMatches = const [];
+    _findIndex = 0;
+    FocusScope.of(context).unfocus();
     type = Type.SLIDE;
     if (_readModel.showMenu) {
       _readModel.toggleShowMenu();
@@ -119,7 +204,25 @@ class _MenuState extends ConsumerState<ReaderMenu> {
             left: 0,
             right: 0,
             top: 0,
-            child: ReaderTopBar(readModel: _readModel, chrome: chrome),
+            child: _finding
+                ? ReaderFindBar(
+                    chrome: chrome,
+                    controller: _findCtrl,
+                    index: _findIndex,
+                    total: _findMatches.length,
+                    snippet: _findMatches.isEmpty
+                        ? ''
+                        : _findMatches[_findIndex].snippet,
+                    onChanged: _onFindChanged,
+                    onPrev: () => _stepFind(-1),
+                    onNext: () => _stepFind(1),
+                    onClose: _closeFind,
+                  )
+                : ReaderTopBar(
+                    readModel: _readModel,
+                    chrome: chrome,
+                    onSearch: _openFind,
+                  ),
           ),
           // Bottom panel (settings / chapter / download)
           Positioned(

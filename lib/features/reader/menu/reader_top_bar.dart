@@ -15,10 +15,12 @@ class ReaderTopBar extends StatelessWidget {
     super.key,
     required this.readModel,
     required this.chrome,
+    required this.onSearch,
   });
 
   final ReadModel readModel;
   final ReaderChrome chrome;
+  final VoidCallback onSearch;
 
   /// Open the source-site page in an external browser.
   /// Prefer current chapter URL; fall back to book detail / toc.
@@ -110,6 +112,11 @@ class ReaderTopBar extends StatelessWidget {
                     color: chrome.fg,
                   ),
                 ),
+              ),
+              IconButton(
+                tooltip: '查找',
+                icon: Icon(Icons.search, size: 22, color: chrome.fg),
+                onPressed: onSearch,
               ),
               IconButton(
                 tooltip: '刷新',

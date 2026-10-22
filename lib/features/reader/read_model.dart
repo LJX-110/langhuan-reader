@@ -392,6 +392,20 @@ class ReadModel with ChangeNotifier {
 
   Future<void> relayoutPages() => _reloader.relayoutPages();
 
+  /// Jump inside the current chapter without a page-turn animation.
+  void jumpToPage(int index) {
+    final b = book;
+    final page = curPage;
+    if (b == null || page == null || page.pages.isEmpty) return;
+    final next = index.clamp(0, page.pages.length - 1).toInt();
+    if (next == b.pageIndex) return;
+    b.pageIndex = next;
+    _pictures.warmAroundCurrent(deferHeavy: false);
+    _markNeedsPaint();
+    scheduleProgressSave(delay: Duration.zero);
+    notifyListeners();
+  }
+
   void _markNeedsPaint() {
     canvasKey?.currentContext?.findRenderObject()?.markNeedsPaint();
   }
