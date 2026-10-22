@@ -1,0 +1,135 @@
+import 'dart:convert';
+
+import 'package:bot_toast/bot_toast.dart';
+import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import 'package:langhuan/app/router/routes.dart';
+import 'package:langhuan/data/entities/book_info.dart';
+import 'package:langhuan/design/tokens/app_colors.dart';
+import 'package:langhuan/features/reader/menu/reader_chrome.dart';
+import 'package:langhuan/features/reader/read_model.dart';
+
+class ReaderTopBar extends StatelessWidget {
+  const ReaderTopBar({
+    super.key,
+    required this.readModel,
+    required this.chrome,
+  });
+
+  final ReadModel readModel;
+  final ReaderChrome chrome;
+
+  /// Open the source-site page in an external browser.
+  /// Prefer current chapter URL; fall back to book detail / toc.
+  Future<void> _openOriginalPage(BuildContext context) async {
+    final b = readModel.book;
+    if (b == null) {
+      BotToast.showText(text: '暂无书籍信息');
+      return;
+    }
+    final chapters = readModel.chapters;
+    final idx = b.chapterIndex;
+    String raw = '';
+    if (idx >= 0 && idx < chapters.length) {
+      raw = chapters[idx].url.trim();
+    }
+    if (raw.isEmpty) raw = b.bookUrl.trim();
+    if (raw.isEmpty) raw = b.tocUrl.trim();
+    if (raw.isEmpty) {
+      BotToast.showText(text: '暂无原网页地址');
+      return;
+    }
+    final uri = Uri.tryParse(raw);
+    if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
+      BotToast.showText(text: '原网页地址无效');
+      return;
+    }
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok) {
+      BotToast.showText(text: '无法打开浏览器');
+    }
+  }
+
+  void _openDetail(BuildContext context) {
+    final b = readModel.book;
+    if (b == null) return;
+    final info = BookInfo(
+      id: b.id,
+      name: b.name,
+      author: b.author,
+      coverUrl: b.coverUrl,
+      category: b.category,
+      description: b.description,
+      latestChapter: b.latestChapter,
+      updatedAt: b.updatedAt,
+      sourceUrl: b.sourceUrl,
+      bookUrl: b.bookUrl,
+      originName: b.originName,
+      tocUrl: b.tocUrl,
+    );
+    Routes.navigateTo(
+      context,
+      Routes.detail,
+      params: {'detail': jsonEncode(info)},
+      replace: true,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Color outside SafeArea so the bar fills status-bar / notch; content
+    // still respects the inset. Otherwise the page text peeks through above.
+    return Container(
+      decoration: BoxDecoration(
+        color: chrome.panelBg,
+        boxShadow: AppShadows.softBar,
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            children: [
+              IconButton(
+                icon: Icon(
+                  Icons.arrow_back_ios_new,
+                  size: 18,
+                  color: chrome.fg,
+                ),
+                onPressed: () => Navigator.maybePop(context),
+              ),
+              Expanded(
+                child: Text(
+                  readModel.book?.name ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                    color: chrome.fg,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: '刷新',
+                icon: Icon(Icons.refresh, size: 22, color: chrome.fg),
+                onPressed: () => readModel.reloadCurrentPage(),
+              ),
+              IconButton(
+                tooltip: '打开原网页',
+                icon: Icon(Icons.open_in_browser, size: 22, color: chrome.fg),
+                onPressed: () => _openOriginalPage(context),
+              ),
+              IconButton(
+                tooltip: '详情',
+                icon: Icon(Icons.info_outline, size: 22, color: chrome.fg),
+                onPressed: () => _openDetail(context),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

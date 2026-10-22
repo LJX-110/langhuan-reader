@@ -77,7 +77,7 @@
 
 ## Phase 3 · 阅读器（当前）
 
-- 拆分 `reader_menu.dart` 为顶栏/底栏/设置 sheet/目录 sheet
+- 拆分 `reader_menu.dart` 为顶栏/底栏/设置 sheet/目录 sheet（已落地）
 - 纸张、字号、行距、段距、边距、缩进、对齐、字体
 - 保留 4 种翻页
 - 加章内查找
