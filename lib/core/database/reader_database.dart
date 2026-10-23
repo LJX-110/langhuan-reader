@@ -28,6 +28,8 @@ class ReaderDatabase {
 
   Future<Database> _open() async {
     final dir = await getApplicationDocumentsDirectory();
+    // A failed import leaves reader.db.migration_pending; the next launch
+    // merges the legacy rows into the freshly created reader.db.
     await LegacyDatabaseMigrator(
       backend: SqfliteLegacyMigrationBackend(
         createSchema: createSchema,

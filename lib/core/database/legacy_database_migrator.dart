@@ -5,7 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 /// Outcome of one legacy-database migration attempt.
-enum LegacyMigrationStatus { targetExists, noLegacy, migrated, failed }
+enum LegacyMigrationStatus { targetExists, noLegacy, migrated, merged, failed }
 
 class LegacyMigrationResult {
   const LegacyMigrationResult(
@@ -51,6 +51,9 @@ abstract class LegacyMigrationBackend {
     List<Map<String, Object?>> rows,
   );
 
+  /// Write a small marker file (used to retry a failed import next launch).
+  Future<void> writeText(String path, String text);
+
   Future<void> closeAll();
 }
 
@@ -66,6 +69,7 @@ class LegacyDatabaseMigrator {
   final LegacyMigrationBackend backend;
 
   static const String targetFileName = 'reader.db';
+  static const String pendingFileName = 'reader.db.migration_pending';
   static const String tempSuffix = '.migrating';
 
   /// Parent-first order keeps foreign-key relationships valid.
@@ -85,16 +89,29 @@ class LegacyDatabaseMigrator {
 
   Future<LegacyMigrationResult> migrate(String directory) async {
     final target = p.join(directory, targetFileName);
-    if (await backend.exists(target)) {
-      return const LegacyMigrationResult(LegacyMigrationStatus.targetExists);
-    }
-
+    final marker = p.join(directory, pendingFileName);
     final legacy = <String>[];
     for (final name in legacyFileNames) {
       final path = p.join(directory, name);
       if (await backend.exists(path)) legacy.add(path);
     }
+
+    if (await backend.exists(target)) {
+      if (await backend.exists(marker)) {
+        if (legacy.isEmpty) {
+          await _deleteQuietly(marker);
+          return const LegacyMigrationResult(
+            LegacyMigrationStatus.targetExists,
+          );
+        }
+        return _mergeInto(target, marker, legacy);
+      }
+      return const LegacyMigrationResult(LegacyMigrationStatus.targetExists);
+    }
+
     if (legacy.isEmpty) {
+      // A marker without legacy files means there is nothing left to import.
+      await _deleteQuietly(marker);
       return const LegacyMigrationResult(LegacyMigrationStatus.noLegacy);
     }
 
@@ -113,9 +130,11 @@ class LegacyDatabaseMigrator {
         copiedRows += await _copyDatabase(source, temp, targetTables);
       }
 
-      // Another isolated open won the race; keep the established database.
+      // Another isolated open won the race; keep the established database,
+      // but leave a retry marker because its target may be freshly created.
       if (await backend.exists(target)) {
         await backend.delete(temp);
+        await _writePending(marker, 'target appeared during migration');
         return LegacyMigrationResult(
           LegacyMigrationStatus.targetExists,
           copiedRows: copiedRows,
@@ -123,6 +142,7 @@ class LegacyDatabaseMigrator {
         );
       }
       await backend.rename(temp, target);
+      await _deleteQuietly(marker);
       AppLog.i(
         'Database',
         'legacy migration ok files=${legacy.length} rows=$copiedRows',
@@ -135,7 +155,7 @@ class LegacyDatabaseMigrator {
     } catch (e, st) {
       AppLog.e(
         'Database',
-        'legacy migration failed; source files kept untouched',
+        'legacy migration failed; source files kept untouched, retry next launch',
         error: e,
         stackTrace: st,
       );
@@ -143,6 +163,7 @@ class LegacyDatabaseMigrator {
         await backend.closeAll();
         if (await backend.exists(temp)) await backend.delete(temp);
       } catch (_) {}
+      await _writePending(marker, e);
       return LegacyMigrationResult(
         LegacyMigrationStatus.failed,
         copiedRows: copiedRows,
@@ -154,6 +175,70 @@ class LegacyDatabaseMigrator {
         await backend.closeAll();
       } catch (_) {}
     }
+  }
+
+  /// Import legacy rows into an existing database after a failed first attempt.
+  ///
+  /// [LegacyMigrationBackend.insertIgnore] makes this idempotent: rows the user
+  /// has already created in reader.db win, and a retry can run safely on every
+  /// launch until it succeeds.
+  Future<LegacyMigrationResult> _mergeInto(
+    String target,
+    String marker,
+    List<String> legacy,
+  ) async {
+    var copiedRows = 0;
+    try {
+      final targetTables = (await backend.tables(target)).toSet();
+      for (final source in legacy) {
+        copiedRows += await _copyDatabase(source, target, targetTables);
+      }
+      await _deleteQuietly(marker);
+      AppLog.i(
+        'Database',
+        'legacy retry merge ok files=${legacy.length} rows=$copiedRows',
+      );
+      return LegacyMigrationResult(
+        LegacyMigrationStatus.merged,
+        copiedRows: copiedRows,
+        legacyFiles: legacy,
+      );
+    } catch (e, st) {
+      AppLog.e(
+        'Database',
+        'legacy retry merge failed; retry marker kept',
+        error: e,
+        stackTrace: st,
+      );
+      await _writePending(marker, e);
+      return LegacyMigrationResult(
+        LegacyMigrationStatus.failed,
+        copiedRows: copiedRows,
+        legacyFiles: legacy,
+        error: e,
+      );
+    } finally {
+      try {
+        await backend.closeAll();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _writePending(String marker, Object error) async {
+    try {
+      await backend.writeText(
+        marker,
+        '${DateTime.now().toUtc().toIso8601String()}\n$error',
+      );
+    } catch (e) {
+      AppLog.w('Database', 'could not write migration marker', error: e);
+    }
+  }
+
+  Future<void> _deleteQuietly(String path) async {
+    try {
+      if (await backend.exists(path)) await backend.delete(path);
+    } catch (_) {}
   }
 
   Future<int> _copyDatabase(
@@ -282,6 +367,11 @@ class SqfliteLegacyMigrationBackend implements LegacyMigrationBackend {
       } catch (_) {}
     }
     _open.clear();
+  }
+
+  @override
+  Future<void> writeText(String path, String text) async {
+    await File(path).writeAsString(text, flush: true);
   }
 
   Future<Database> _database(String path) async {

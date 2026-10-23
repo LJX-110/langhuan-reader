@@ -1,8 +1,8 @@
 """Generate the 琅嬛阁 app icon and launch mark.
 
-Direction B · 双页书: a deep 碧海青 field, an open book in cool white, and one
-鎏金 seal. The mark is drawn once at 1024 px and downsampled so every density
-keeps the same proportions.
+Direction C · 月照琅嬛: a deep ink field, a moon-white disc, and a single
+dark-gold pavilion. The mark is drawn at 4x and downsampled so every density
+keeps clean edges, including the 48 px legacy icon.
 """
 
 from __future__ import annotations
@@ -13,10 +13,11 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
 
-DEEP = (20, 80, 91, 255)        # #14505B 碧海青
-PAGE = (244, 248, 247, 255)     # #F4F8F7 cool white
-SHADOW = (4, 30, 35, 70)
-GOLD = (201, 162, 75, 255)      # #C9A24B 鎏金
+INK = (15, 27, 43, 255)          # #0F1B2B 深墨蓝
+MOON = (241, 236, 223, 255)      # #F1ECDF 月白
+GOLD = (176, 138, 74, 255)       # #B08A4A 暗金
+CLEAR = (0, 0, 0, 0)
+WHITE = (255, 255, 255, 255)
 
 MIPMAPS = {
     "mdpi": (48, 108),
@@ -26,113 +27,222 @@ MIPMAPS = {
     "xxxhdpi": (192, 432),
 }
 
+# Composition geometry in a 1024 x 1024 design box.
+ROOF_TIPS = ((128, 620), (896, 620))
+MOON_CENTER = (512, 410)
+MOON_RADIUS = 238
 
-def _quadratic(
+
+def _cubic(
     start: tuple[float, float],
-    control: tuple[float, float],
+    control1: tuple[float, float],
+    control2: tuple[float, float],
     end: tuple[float, float],
-    steps: int = 18,
+    steps: int = 24,
 ) -> list[tuple[float, float]]:
     points = []
     for i in range(steps + 1):
         t = i / steps
-        x = (1 - t) ** 2 * start[0] + 2 * (1 - t) * t * control[0] + t**2 * end[0]
-        y = (1 - t) ** 2 * start[1] + 2 * (1 - t) * t * control[1] + t**2 * end[1]
+        u = 1 - t
+        x = (
+            u**3 * start[0]
+            + 3 * u**2 * t * control1[0]
+            + 3 * u * t**2 * control2[0]
+            + t**3 * end[0]
+        )
+        y = (
+            u**3 * start[1]
+            + 3 * u**2 * t * control1[1]
+            + 3 * u * t**2 * control2[1]
+            + t**3 * end[1]
+        )
         points.append((x, y))
     return points
 
 
-def _page(mirror: bool = False) -> list[tuple[float, float]]:
-    """One open page: a V-shaped wedge with a curved outer edge and spine."""
-    points = _quadratic((512, 430), (390, 398), (252, 380))
-    points += _quadratic((252, 380), (232, 500), (252, 620))
-    points += _quadratic((252, 620), (390, 662), (512, 690))
-    if mirror:
-        points = [(1024 - x, y) for x, y in points]
+def _roof_points() -> list[tuple[float, float]]:
+    """Single-eave roof with upturned tips and a flat ridge."""
+    points = _cubic((128, 620), (240, 620), (300, 575), (356, 520))
+    points += [(400, 500), (624, 500), (668, 520)]
+    points += _cubic((668, 520), (724, 575), (784, 620), (896, 620))
+    points += _cubic((896, 620), (820, 665), (730, 680), (640, 680))
+    points += [(384, 680)]
+    points += _cubic((384, 680), (294, 680), (204, 665), (128, 620))
     return points
 
 
-def _draw_book(
+class _Pen:
+    """Maps 1024-box coordinates onto a 4x render canvas."""
+
+    def __init__(self, size: int, scale: float):
+        self.size = size
+        self.scale = scale
+        self.supersample = 4
+        self.canvas = size * self.supersample
+        self.unit = self.canvas / 1024
+
+    def xy(self, x: float, y: float) -> tuple[float, float]:
+        return (
+            (512 + (x - 512) * self.scale) * self.unit,
+            (512 + (y - 512) * self.scale) * self.unit,
+        )
+
+    def points(self, points: list[tuple[float, float]]) -> list[tuple[float, float]]:
+        return [self.xy(x, y) for x, y in points]
+
+    def width(self, width: float) -> int:
+        return max(1, round(width * self.scale * self.unit))
+
+
+def _draw_pavilion(
     draw: ImageDraw.ImageDraw,
-    page_fill: tuple[int, int, int, int],
-    spine_fill: tuple[int, int, int, int],
-    seal_fill: tuple[int, int, int, int],
-    seal_inner: tuple[int, int, int, int],
+    pen: _Pen,
+    *,
+    simplify: bool,
+    mono: bool = False,
+    draw_moon: bool = True,
 ) -> None:
-    left = _page()
-    right = _page(mirror=True)
+    roof_fill = WHITE if mono else INK
+    body_fill = WHITE if mono else INK
+    line_fill = WHITE if mono else GOLD
+    door_fill = CLEAR if mono else GOLD
 
-    for outline in (left, right):
-        draw.polygon([(x, y + 14) for x, y in outline], fill=SHADOW)
+    if draw_moon:
+        cx, cy = pen.xy(*MOON_CENTER)
+        radius = MOON_RADIUS * pen.scale * pen.unit
+        draw.ellipse(
+            (cx - radius, cy - radius, cx + radius, cy + radius),
+            fill=WHITE if mono else MOON,
+        )
 
-    for outline in (left, right):
-        draw.polygon(outline, fill=page_fill)
+    roof = pen.points(_roof_points())
+    draw.polygon(roof, fill=roof_fill)
+    draw.line(roof + [roof[0]], fill=line_fill, width=pen.width(14), joint="curve")
 
-    # A gold outer edge and a single spine keep the mark clean at 48 px.
-    for edge in (
-        _quadratic((252, 380), (232, 500), (252, 620)),
-        _quadratic((772, 380), (792, 500), (772, 620)),
-    ):
-        draw.line(edge, fill=GOLD, width=3, joint="curve")
-    draw.line([(512, 432), (512, 688)], fill=spine_fill, width=5)
+    # Ridge finial: a small diamond, still visible as a gold dot at 48 px.
+    finial = pen.points([(512, 472), (530, 490), (512, 508), (494, 490)])
+    draw.polygon(finial, fill=line_fill)
 
-    draw.rounded_rectangle((632, 470, 696, 534), radius=6, fill=seal_fill)
-    draw.rounded_rectangle(
-        (640, 478, 688, 526),
-        radius=3,
-        outline=seal_inner,
-        width=4,
+    body = [pen.xy(340, 680), pen.xy(684, 840)]
+    draw.rectangle(body, fill=body_fill)
+    draw.rectangle(body, outline=line_fill, width=pen.width(12))
+
+    if not simplify:
+        for x in (400, 624):
+            draw.line(
+                [pen.xy(x, 680), pen.xy(x, 840)],
+                fill=door_fill if mono else line_fill,
+                width=pen.width(8),
+            )
+
+    # Door: a solid gold spine in colour, an opening in monochrome.
+    draw.rectangle(
+        [pen.xy(476, 716), pen.xy(548, 840)],
+        fill=door_fill,
     )
+
+    draw.line(
+        [pen.xy(270, 858), pen.xy(754, 858)],
+        fill=line_fill,
+        width=pen.width(14),
+    )
+    if not simplify:
+        draw.line(
+            [pen.xy(310, 880), pen.xy(714, 880)],
+            fill=line_fill,
+            width=pen.width(8),
+        )
+
+
+def _render(
+    size: int,
+    *,
+    scale: float = 1.0,
+    circular: bool = False,
+    background: bool = True,
+    mono: bool = False,
+    draw_moon: bool = True,
+    simplify: bool | None = None,
+) -> Image.Image:
+    pen = _Pen(size, scale)
+    canvas = Image.new("RGBA", (pen.canvas, pen.canvas), CLEAR)
+    draw = ImageDraw.Draw(canvas)
+
+    if background:
+        if circular:
+            draw.ellipse((0, 0, pen.canvas - 1, pen.canvas - 1), fill=INK)
+        else:
+            draw.rounded_rectangle(
+                (0, 0, pen.canvas - 1, pen.canvas - 1),
+                radius=round(pen.canvas * 0.215),
+                fill=INK,
+            )
+
+    if simplify is None:
+        simplify = size <= 96
+    _draw_pavilion(
+        draw,
+        pen,
+        simplify=simplify,
+        mono=mono,
+        draw_moon=draw_moon,
+    )
+    return canvas.resize((size, size), Image.LANCZOS)
 
 
 def _icon(size: int = 1024, circular: bool = False) -> Image.Image:
-    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    if circular:
-        draw.ellipse((0, 0, size - 1, size - 1), fill=DEEP)
-    else:
-        draw.rounded_rectangle(
-            (0, 0, size - 1, size - 1),
-            radius=round(size * 0.215),
-            fill=DEEP,
-        )
-    _draw_book(draw, PAGE, DEEP, GOLD, DEEP)
-    return image
+    return _render(size, circular=circular)
 
 
 def _foreground(size: int = 1024) -> Image.Image:
-    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    _draw_book(ImageDraw.Draw(image), PAGE, DEEP, GOLD, DEEP)
-    return image
+    # Adaptive foregrounds are cropped to the 66/108 safe zone; 0.78 keeps the
+    # eave tips inside it while leaving the mark large enough to read.
+    return _render(size, scale=0.78, background=False)
+
+
+def _monochrome(size: int = 1024) -> Image.Image:
+    return _render(
+        size,
+        scale=0.78,
+        background=False,
+        mono=True,
+        draw_moon=False,
+    )
 
 
 def _splash(size: int = 512) -> Image.Image:
-    image = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
-    _draw_book(ImageDraw.Draw(image), DEEP, GOLD, GOLD, DEEP)
-    return image.resize((size, size), Image.LANCZOS)
+    # Inverted mark for the paper-white launch screen: a gold moon ring and an
+    # ink pavilion, no solid field.
+    canvas = Image.new("RGBA", (2048, 2048), CLEAR)
+    draw = ImageDraw.Draw(canvas)
+    pen = _Pen(512, 0.62)
+    # _Pen renders at 4x; use the same helper on the 512 design box.
+    ring = pen.xy(512, 512)
+    radius = 360 * pen.scale * pen.unit
+    draw.ellipse(
+        (ring[0] - radius, ring[1] - radius, ring[0] + radius, ring[1] + radius),
+        outline=GOLD,
+        width=pen.width(8),
+    )
+    _draw_pavilion(draw, pen, simplify=False, draw_moon=False)
+    return canvas.resize((size, size), Image.LANCZOS)
 
 
 def main() -> None:
     brand = ROOT / "assets" / "brand"
     brand.mkdir(parents=True, exist_ok=True)
 
-    master = _icon()
-    master.save(brand / "icon_master.png")
+    _icon().save(brand / "icon_master.png")
     _foreground().save(brand / "icon_foreground.png")
     _splash().save(brand / "launch_logo.png")
 
     for density, (icon_size, fg_size) in MIPMAPS.items():
         out = ROOT / "android" / "app" / "src" / "main" / "res" / f"mipmap-{density}"
         out.mkdir(parents=True, exist_ok=True)
-        master.resize((icon_size, icon_size), Image.LANCZOS).save(
-            out / "ic_launcher.png"
-        )
-        _icon(circular=True).resize((icon_size, icon_size), Image.LANCZOS).save(
-            out / "ic_launcher_round.png"
-        )
-        _foreground().resize((fg_size, fg_size), Image.LANCZOS).save(
-            out / "ic_launcher_foreground.png"
-        )
+        _icon(icon_size).save(out / "ic_launcher.png")
+        _icon(icon_size, circular=True).save(out / "ic_launcher_round.png")
+        _foreground(fg_size).save(out / "ic_launcher_foreground.png")
+        _monochrome(fg_size).save(out / "ic_launcher_monochrome.png")
 
     nodpi = ROOT / "android" / "app" / "src" / "main" / "res" / "drawable-nodpi"
     nodpi.mkdir(parents=True, exist_ok=True)

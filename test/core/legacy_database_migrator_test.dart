@@ -14,6 +14,7 @@ class _FakeBackend implements LegacyMigrationBackend {
   final List<String> renameLog = [];
   final List<String> insertLog = [];
   final Map<String, List<Map<String, Object?>>> inserted = {};
+  final Map<String, String> texts = {};
 
   bool failInsert = false;
 
@@ -37,6 +38,7 @@ class _FakeBackend implements LegacyMigrationBackend {
     files.remove(path);
     schema.remove(path);
     data.remove(path);
+    texts.remove(path);
   }
 
   @override
@@ -48,6 +50,8 @@ class _FakeBackend implements LegacyMigrationBackend {
     final d = data.remove(from);
     if (s != null) schema[to] = s;
     if (d != null) data[to] = d;
+    final t = texts.remove(from);
+    if (t != null) texts[to] = t;
   }
 
   @override
@@ -92,6 +96,12 @@ class _FakeBackend implements LegacyMigrationBackend {
     if (failInsert) throw StateError('insert failed');
     insertLog.add(table);
     inserted.putIfAbsent(table, () => []).addAll(rows);
+  }
+
+  @override
+  Future<void> writeText(String path, String text) async {
+    files.add(path);
+    texts[path] = text;
   }
 
   @override
@@ -210,7 +220,110 @@ void main() {
       expect(backend.files, isNot(contains(_path('reader.db'))));
       expect(backend.files, isNot(contains(_path('reader.db.migrating'))));
       expect(backend.files, contains(_path('books.db')));
+      expect(
+        backend.files,
+        contains(_path(LegacyDatabaseMigrator.pendingFileName)),
+      );
+      expect(
+        backend.texts[_path(LegacyDatabaseMigrator.pendingFileName)],
+        contains('insert failed'),
+      );
       expect(backend.renameLog, isEmpty);
     });
+
+    test(
+      'retry after failure merges into the newly created database',
+      () async {
+        final backend = _FakeBackend()
+          ..addDatabase(
+            'books.db',
+            columns: {
+              'books': ['id', 'name'],
+            },
+            rows: {
+              'books': [
+                {'id': 'b1', 'name': '书一'},
+              ],
+            },
+          )
+          ..failInsert = true;
+        final migrator = LegacyDatabaseMigrator(backend: backend);
+
+        final first = await migrator.migrate('root');
+        expect(first.status, LegacyMigrationStatus.failed);
+
+        // ReaderDatabase opens a fresh reader.db after the failed import.
+        await backend.createReaderDatabase(_path('reader.db'));
+        backend.failInsert = false;
+
+        final second = await migrator.migrate('root');
+
+        expect(second.status, LegacyMigrationStatus.merged);
+        expect(second.copiedRows, 1);
+        expect(backend.files, contains(_path('reader.db')));
+        expect(
+          backend.files,
+          isNot(contains(_path(LegacyDatabaseMigrator.pendingFileName))),
+        );
+        expect(backend.inserted['books']!.single, {'id': 'b1', 'name': '书一'});
+      },
+    );
+
+    test('stale marker is cleared when no legacy file remains', () async {
+      final backend = _FakeBackend()
+        ..addDatabase(
+          'reader.db',
+          columns: {
+            'books': ['id', 'name'],
+          },
+        );
+      await backend.writeText(
+        _path(LegacyDatabaseMigrator.pendingFileName),
+        'old failure',
+      );
+
+      final result = await LegacyDatabaseMigrator(
+        backend: backend,
+      ).migrate('root');
+
+      expect(result.status, LegacyMigrationStatus.targetExists);
+      expect(
+        backend.files,
+        isNot(contains(_path(LegacyDatabaseMigrator.pendingFileName))),
+      );
+      expect(backend.insertLog, isEmpty);
+    });
+
+    test(
+      'successful import clears a marker left before reader.db existed',
+      () async {
+        final backend = _FakeBackend()
+          ..addDatabase(
+            'books.db',
+            columns: {
+              'books': ['id', 'name'],
+            },
+            rows: {
+              'books': [
+                {'id': 'b1', 'name': '书一'},
+              ],
+            },
+          );
+        await backend.writeText(
+          _path(LegacyDatabaseMigrator.pendingFileName),
+          'old failure',
+        );
+
+        final result = await LegacyDatabaseMigrator(
+          backend: backend,
+        ).migrate('root');
+
+        expect(result.status, LegacyMigrationStatus.migrated);
+        expect(
+          backend.files,
+          isNot(contains(_path(LegacyDatabaseMigrator.pendingFileName))),
+        );
+      },
+    );
   });
 }

@@ -1,7 +1,7 @@
 name: langhuan
 description: 琅嬛阁 — 个人自用的 Flutter 网络小说阅读器。
 publish_to: 'none'
-version: 1.0.0
+version: 1.0.0+5
 
 environment:
   sdk: ^3.12.0
