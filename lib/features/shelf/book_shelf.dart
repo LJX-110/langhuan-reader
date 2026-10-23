@@ -148,16 +148,23 @@ class _ShelfHeader extends StatelessWidget {
               children: [
                 for (final value in ShelfFilter.values)
                   Padding(
-                    padding: const EdgeInsets.only(right: 18),
+                    padding: const EdgeInsets.only(right: 8),
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
                         onTap: () => onFilter(value),
-                        borderRadius: BorderRadius.circular(6),
-                        child: Padding(
+                        borderRadius: BorderRadius.circular(8),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 160),
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 2,
-                            vertical: 4,
+                            horizontal: 9,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: filter == value
+                                ? accent.withValues(alpha: .10)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
                           ),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,

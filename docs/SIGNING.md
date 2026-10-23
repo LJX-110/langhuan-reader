@@ -32,8 +32,25 @@ flutter build apk --release --target-platform android-arm64
 
 产物：`build/app/outputs/flutter-apk/app-release.apk`。
 
+## 4. GitHub Actions 自动发布
+
+仓库 Secrets 需要四项：
+
+- `ANDROID_KEYSTORE_BASE64`：`android/app/langhuan-release.jks` 的 Base64
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+
+生成 Base64：
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("android/app/langhuan-release.jks"))
+```
+
+推送 `v*` 标签后，`.github/workflows/release-apk.yml` 会构建并上传签名 APK。
+
 ## 注意
 
 - 备份 `.jks` 和密码；丢失后无法用同一包名覆盖升级。
 - 未配置 `key.properties` 时，当前 Gradle 会回退到 debug 签名，只适合本地测试，不要发布。
-- 每次发布前确认 `versionCode` 已递增。
+- 每次发布前确认 `versionCode` 已递增；`version` 省略 `+N` 时 Flutter 默认 `versionCode = 1`。

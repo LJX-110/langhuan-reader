@@ -66,10 +66,10 @@
 
 ## 代码位置
 
-- 抓取与清单解析：`lib/source/repo/source_repo.dart`
-- JSON 解析：`lib/source/import/source_importer.dart`
-- 入库：`lib/model/source_model.dart` → `SourceRepository`
-- 页面：`lib/view/person/source_repo_page.dart`
+- 抓取与清单解析：`lib/features/sources/repo/source_repo.dart`
+- JSON 解析：`lib/features/sources/import/source_importer.dart`
+- 入库：`lib/features/sources/source_model.dart` → `SourceRepository`
+- 页面：`lib/features/sources/source_repo_page.dart`
 - 入口：`我的 → 私有书源仓库`、`书源管理 → 私有仓库`
 
 ## 合规边界

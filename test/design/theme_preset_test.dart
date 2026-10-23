@@ -18,12 +18,12 @@ void main() {
     expect(LanghuanThemes.defaultIndex, inInclusiveRange(0, 11));
   });
 
-  test('theme keeps the chosen accent and a readable ink', () {
+  test('theme uses the visible accent and a readable ink', () {
     final light = buildLanghuanTheme(
       dark: false,
       accent: const Color(0xFFFFFF00),
     );
-    // Swatches and filled buttons use the raw colour…
+    // A vivid accent stays as the fill colour…
     expect(light.colorScheme.primary, const Color(0xFFFFFF00));
     expect(light.colorScheme.onPrimary, AppColors.black);
     // …while text and icons use a readable tone of the same hue.
@@ -33,36 +33,50 @@ void main() {
     );
     expect(_contrast(lightInk, Colors.white), greaterThan(4.4));
 
+    // A near-page accent (dark burgundy on a dark page) falls back to the
+    // companion so buttons and progress indicators stay visible.
     final dark = buildLanghuanTheme(
       dark: true,
       accent: const Color(0xFF470125),
     );
-    expect(dark.colorScheme.primary, const Color(0xFF470125));
-    final darkInk = AppColors.readableAccent(
-      dark.colorScheme.primary,
+    final darkFill = AppColors.themeAccentFor(
+      const Color(0xFF470125),
+      AppColors.gold,
       Brightness.dark,
     );
+    expect(dark.colorScheme.primary, darkFill);
+    expect(dark.colorScheme.onPrimary, AppColors.onColorOf(darkFill));
+    final darkInk = AppColors.readableAccent(darkFill, Brightness.dark);
     expect(_contrast(darkInk, Colors.black), greaterThan(4.4));
   });
 
   test('every preset keeps a readable accent on both pages', () {
     for (final preset in LanghuanThemes.all) {
       for (final dark in [false, true]) {
-        final theme = buildLanghuanTheme(
-          dark: dark,
-          accent: preset.accent,
-          secondaryColor: preset.secondary,
-        );
+        final brightness = dark ? Brightness.dark : Brightness.light;
         final page = dark ? AppColors.scaffoldDark : AppColors.scaffold;
-        final ink = AppColors.readableAccent(
-          theme.colorScheme.primary,
-          theme.brightness,
+        final reason = '${preset.name} ${dark ? 'dark' : 'light'}';
+        final accent = AppColors.themeAccentFor(
+          preset.accent,
+          preset.secondary,
+          brightness,
         );
-        expect(
-          _contrast(ink, page),
-          greaterThan(4.4),
-          reason: '${preset.name} ${dark ? 'dark' : 'light'}',
+        final ink = AppColors.readableAccent(accent, brightness);
+        expect(_contrast(ink, page), greaterThan(4.4), reason: reason);
+
+        final large = AppColors.readableAccent(
+          accent,
+          brightness,
+          minRatio: 3,
         );
+        expect(_contrast(large, page), greaterThan(2.9), reason: reason);
+
+        final companion = AppColors.companionFor(
+          preset.accent,
+          preset.secondary,
+          brightness,
+        );
+        expect(_contrast(companion, page), greaterThan(1.55), reason: reason);
       }
     }
   });

@@ -5,6 +5,7 @@ class ReadingRecord {
     required this.bookName,
     required this.author,
     required this.coverUrl,
+    required this.bookUrl,
     required this.chapterIndex,
     required this.pageIndex,
     required this.chapterName,
@@ -15,6 +16,7 @@ class ReadingRecord {
   final String bookName;
   final String author;
   final String coverUrl;
+  final String bookUrl;
   final int chapterIndex;
   final int pageIndex;
   final String chapterName;
@@ -31,6 +33,7 @@ class ReadingRecord {
     bookName: row['book_name'] as String? ?? '',
     author: row['author'] as String? ?? '',
     coverUrl: row['cover_url'] as String? ?? '',
+    bookUrl: row['book_url'] as String? ?? '',
     chapterIndex: row['chapter_index'] as int? ?? 0,
     pageIndex: row['page_index'] as int? ?? 0,
     chapterName: row['chapter_name'] as String? ?? '',

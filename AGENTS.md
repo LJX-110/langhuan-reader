@@ -29,14 +29,12 @@
 
 ```powershell
 flutter pub get
-dart analyze
+flutter analyze
 flutter test
-powershell -File tool/build_release.ps1
+flutter build apk --release --target-platform android-arm64
 ```
 
-项目文件夹含中文：Windows 下 `flutter analyze` 的 LSP 可能崩溃，统一用 `dart analyze`；release 构建用 `tool/build_release.ps1` 映射 ASCII 盘符，否则 AOT 读不了中文路径。
-
-发布签名只使用本项目自己的 keystore；`key.properties`、`*.jks`、`google-services.json` 不入库。
+发布签名只使用本项目自己的 keystore；`key.properties`、`*.jks`、`google-services.json` 不入库。GitHub Actions 通过仓库 Secrets 获取同一份 keystore，配置见 `docs/SIGNING.md`。
 
 ## 提交
 
@@ -48,11 +46,11 @@ powershell -File tool/build_release.ps1
 - 4 个主页签：书架 / 发现 / 本地 / 我。
 - 视觉方向：白 / 黑底 + 12 套双色主题；每页只留一行页面标题，不保留品牌顶栏、英文副题和档案编号；发现页立体书架。
 - 主题只改强调色与辅助色，页面正文仍用白 / 黑底；荧光色不整页铺底，保证正文可读。
-- 主题色分两种用法：`ColorScheme.primary` 保留原始色用于填充；文字 / 图标一律用 `AppColors.accentOf` 的同色相校正色，不得直接把原始亮色当文字色。
+- 主题色分两种用法：`ColorScheme.primary` 使用当前背景上可见的主题色，强调色接近底色时自动换用辅助色；文字 / 图标一律用 `AppColors.accentOf` 的同色相校正色，不得直接把原始亮色当文字色。
 - 辅助色用于底栏下划线、筛选下划线、书脊边线等小面积点缀；接近底色的辅助色用 `AppColors.companionOf` 校正后再使用。
 - 阅读器优先保证分页、进度恢复、目录与换源稳定；视觉改造不得碰坏 `PageContentReader` 的核心分页逻辑。
 - 不使用重模糊或玻璃效果；header / dock 都是实色。
 
-## 阶段性验收
+## 版本
 
-详见 `docs/ROADMAP.md`。当前阶段：Phase 5 质量与发布；最后一项是最终真机验收。
+当前发布版 `1.0.0`；下一里程碑 `2.0.0`，范围与退出标准见 `docs/ROADMAP.md`。

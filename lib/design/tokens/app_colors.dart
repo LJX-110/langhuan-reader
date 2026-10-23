@@ -29,32 +29,91 @@ class AppColors {
   static const Color qingmoSoft = Color(0xFF6FA8AE);
 
   /// Accent for text and icons: keeps the hue of the chosen theme colour but
-  /// darkens or lightens it until it reads on the page background. Fills keep
-  /// the raw colour in [ColorScheme.primary], so theme swatches stay honest.
+  /// darkens or lightens it until it reads on the page background. Fills use
+  /// the visible theme colour in [ColorScheme.primary]; a near-page swatch
+  /// falls back to the companion instead of disappearing.
   static Color accentOf(BuildContext context) {
     final theme = Theme.of(context);
-    return readableAccent(theme.colorScheme.primary, theme.brightness);
+    return readableAccent(themeAccentOf(context), theme.brightness);
+  }
+
+  /// Accent for large text (22px page titles). Large text only needs 3:1, so
+  /// vivid colours stay closer to the chosen swatch than [accentOf].
+  static Color accentLargeOf(BuildContext context) {
+    final theme = Theme.of(context);
+    return readableAccent(
+      themeAccentOf(context),
+      theme.brightness,
+      minRatio: 3,
+    );
   }
 
   static Color accentSoftOf(BuildContext context, {double alpha = 0.10}) =>
       accentOf(context).withValues(alpha: alpha);
 
+  /// The theme colour that can lead on the page. A near-white primary
+  /// (e.g. 米白 · 凝液紫) cannot lead on a white page, so the companion
+  /// becomes the identity colour instead of turning muddy.
+  static Color themeAccentOf(BuildContext context) {
+    final theme = Theme.of(context);
+    return themeAccentFor(
+      theme.colorScheme.primary,
+      theme.colorScheme.secondary,
+      theme.brightness,
+    );
+  }
+
+  static Color themeAccentFor(
+    Color primary,
+    Color secondary,
+    Brightness background,
+  ) {
+    final page = background == Brightness.dark ? scaffoldDark : scaffold;
+    final pageLightness = HSLColor.fromColor(page).lightness;
+    final primaryLightness = HSLColor.fromColor(primary).lightness;
+    final nearPage =
+        contrastRatio(primary, page) < 1.6 &&
+        (primaryLightness - pageLightness).abs() < .18;
+    if (!nearPage) return primary;
+
+    final secondaryLightness = HSLColor.fromColor(secondary).lightness;
+    final secondaryNearPage =
+        contrastRatio(secondary, page) < 1.6 &&
+        (secondaryLightness - pageLightness).abs() < .18;
+    if (!secondaryNearPage) return secondary;
+
+    return readableAccent(primary, background);
+  }
+
   /// Companion colour for small marks (dock underline, filter rules). Raw
-  /// colour when it is visible; near-white companions fall back to a readable
-  /// tone of the same hue instead of disappearing into the page.
+  /// colour when it is visible; a near-white companion falls back to the
+  /// visible accent instead of darkening into an unrelated olive tone.
   static Color companionOf(BuildContext context) {
     final theme = Theme.of(context);
-    final page = theme.brightness == Brightness.dark ? scaffoldDark : scaffold;
-    final raw = theme.colorScheme.secondary;
-    return contrastRatio(raw, page) >= 1.6
-        ? raw
-        : readableAccent(raw, theme.brightness);
+    return companionFor(
+      theme.colorScheme.primary,
+      theme.colorScheme.secondary,
+      theme.brightness,
+    );
+  }
+
+  static Color companionFor(
+    Color primary,
+    Color secondary,
+    Brightness background,
+  ) {
+    final page = background == Brightness.dark ? scaffoldDark : scaffold;
+    if (contrastRatio(secondary, page) >= 1.6) return secondary;
+    return readableAccent(
+      themeAccentFor(primary, secondary, background),
+      background,
+    );
   }
 
   /// Accent readable on an explicit background such as reader paper.
   static Color accentOn(BuildContext context, Color background) =>
       readableAccent(
-        Theme.of(context).colorScheme.primary,
+        themeAccentOf(context),
         ThemeData.estimateBrightnessForColor(background),
       );
 
@@ -71,17 +130,21 @@ class AppColors {
     return (hi + .05) / (lo + .05);
   }
 
-  /// Move lightness away from the page until WCAG AA (4.5:1) is reached.
+  /// Move lightness away from the page until [minRatio] is reached.
   /// Hue and saturation stay put, so a gold theme still looks gold instead of
   /// turning into grey.
-  static Color readableAccent(Color color, Brightness background) {
+  static Color readableAccent(
+    Color color,
+    Brightness background, {
+    double minRatio = 4.5,
+  }) {
     final target = background == Brightness.dark ? black : white;
     final hsl = HSLColor.fromColor(color);
     var lightness = hsl.lightness;
     var out = color;
     final step = background == Brightness.dark ? .05 : -.05;
     for (var i = 0; i < 20; i++) {
-      if (contrastRatio(out, target) >= 4.5) return out;
+      if (contrastRatio(out, target) >= minRatio) return out;
       final next = (lightness + step).clamp(0.0, 1.0);
       if (next == lightness) break;
       lightness = next;
@@ -163,15 +226,20 @@ ThemeData buildLanghuanTheme({
   final onSurface = dark ? AppColors.textOnDark : AppColors.textPrimary;
   final primary = accent ?? (dark ? AppColors.qingmoSoft : AppColors.qingmo);
   final secondary = secondaryColor ?? AppColors.gold;
-  final accentInk = AppColors.readableAccent(primary, brightness);
-  final companionInk = AppColors.readableAccent(secondary, brightness);
+  final fill = AppColors.themeAccentFor(primary, secondary, brightness);
+  final onFill = AppColors.onColorOf(fill);
+  final accentInk = AppColors.readableAccent(fill, brightness);
+  final companionInk = AppColors.readableAccent(
+    AppColors.companionFor(primary, secondary, brightness),
+    brightness,
+  );
   final line = dark ? AppColors.dividerDark : AppColors.line;
   final muted = dark ? AppColors.textMutedDark : AppColors.inkSoft;
 
   final scheme = ColorScheme(
     brightness: brightness,
-    primary: primary,
-    onPrimary: AppColors.onColorOf(primary),
+    primary: fill,
+    onPrimary: onFill,
     secondary: secondary,
     onSecondary: AppColors.onColorOf(secondary),
     error: AppColors.cinnabar,
@@ -269,42 +337,42 @@ ThemeData buildLanghuanTheme({
     ),
     iconTheme: IconThemeData(color: onSurface),
     floatingActionButtonTheme: FloatingActionButtonThemeData(
-      backgroundColor: primary,
-      foregroundColor: AppColors.onColorOf(primary),
+      backgroundColor: fill,
+      foregroundColor: onFill,
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(foregroundColor: accentInk),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: primary,
-        foregroundColor: AppColors.onColorOf(primary),
+        backgroundColor: fill,
+        foregroundColor: onFill,
         elevation: 0,
         minimumSize: const Size(0, AppDimens.ctaHeight),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     ),
     sliderTheme: SliderThemeData(
-      activeTrackColor: primary,
-      thumbColor: primary,
-      inactiveTrackColor: primary.withValues(alpha: 0.18),
-      overlayColor: primary.withValues(alpha: 0.10),
+      activeTrackColor: fill,
+      thumbColor: fill,
+      inactiveTrackColor: fill.withValues(alpha: 0.18),
+      overlayColor: fill.withValues(alpha: 0.10),
     ),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith((s) {
-        if (s.contains(WidgetState.selected)) return primary;
+        if (s.contains(WidgetState.selected)) return fill;
         return null;
       }),
       trackColor: WidgetStateProperty.resolveWith((s) {
         if (s.contains(WidgetState.selected)) {
-          return primary.withValues(alpha: 0.42);
+          return fill.withValues(alpha: 0.42);
         }
         return null;
       }),
     ),
     chipTheme: ChipThemeData(
       backgroundColor: dark ? AppColors.surfaceDark : AppColors.paper,
-      selectedColor: primary.withValues(alpha: 0.10),
+      selectedColor: fill.withValues(alpha: 0.10),
       checkmarkColor: accentInk,
       labelStyle: TextStyle(
         color: onSurface,
@@ -338,7 +406,7 @@ ThemeData buildLanghuanTheme({
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(18),
-        borderSide: BorderSide(color: primary, width: 1),
+        borderSide: BorderSide(color: fill, width: 1),
       ),
     ),
     dialogTheme: DialogThemeData(

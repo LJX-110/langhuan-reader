@@ -135,6 +135,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
                               record.coverUrl,
                               width: 46,
                               height: 62,
+                              referer: record.bookUrl,
                               title: record.bookName,
                             ),
                           ),

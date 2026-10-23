@@ -80,12 +80,7 @@ class ReaderFontBootstrap {
         AppLog.i('Font', 'bundled font ready path=$outPath family=$family');
       }
     } catch (e, st) {
-      AppLog.w('Font', 'bootstrap failed', error: e);
-      assert(() {
-        // ignore: avoid_print
-        print('ReaderFontBootstrap failed: $e\n$st');
-        return true;
-      }());
+      AppLog.e('Font', 'bootstrap failed', error: e, stackTrace: st);
     }
   }
 }

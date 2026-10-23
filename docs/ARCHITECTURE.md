@@ -2,10 +2,10 @@
 
 ## 当前结构
 
-`lib/` 已按功能重排，新代码优先落在对应 `features/` 目录。Phase 0–4 已完成，Phase 5 做质量与发布。
+`lib/` 已按功能重排，新代码优先落在对应 `features/` 目录。当前发布版 1.0.0，下一里程碑 2.0.0。
 
 ```text
-Novel/
+langhuan/
 ├─ android/                 Android 壳、签名配置、MainActivity
 ├─ assets/
 │  ├─ brand/                图标、启动图形源文件
@@ -48,7 +48,6 @@ Novel/
 ├─ test/                    Dart/Flutter 测试
 ├─ tool/                    品牌图生成等开发脚本
 ├─ docs/                    架构、路线、品牌、书源仓库、上游说明
-├─ 备份/                    本地备份，不入库
 ├─ AGENTS.md                项目约定
 ├─ NOTICE                   上游归属
 └─ LICENSE                  Apache-2.0
@@ -110,7 +109,7 @@ Novel/
 ## 设计系统
 
 - 页面固定白 / 黑底；12 套双色主题只切换强调色与辅助色。
-- `ColorScheme.primary` 保留主题原始色，用于按钮、书脊等填充；亮黄 / 荧光色不整页铺底。
+- `ColorScheme.primary` 使用当前背景上可见的主题色，用于按钮、书脊等填充；强调色接近底色时自动换用辅助色，亮黄 / 荧光色不整页铺底。
 - 文字与图标使用 `AppColors.accentOf`：保持色相，按背景亮度调整明度到 WCAG AA 4.5:1；辅助色接近底色时用 `AppColors.companionOf` 做小面积点缀。主题色块展示原始双色，不再与界面显示对不上。
 - 默认主题「鸢尾蓝 · 流光白」；主题定义在 `design/theme/theme_presets.dart`。
 - 每页只保留一行 `PageHeader`，不保留品牌顶栏、英文副题和档案编号；底部为白底四页签 Dock，不使用胶囊。
@@ -129,7 +128,6 @@ Novel/
 ## 验证
 
 - `flutter analyze`：通过。
-- `flutter test`：81 项通过，其中设计/主题 15 项。
+- `flutter test`：80 项通过，其中设计/主题 15 项；JS 引擎相关用例在缺少宿主原生库时跳过。
 - release arm64 APK：R8 + `shrinkResources`，使用项目自有 keystore 签名。
-- Phase 1–4 真机验收：已通过。
-- Phase 5 最终真机验收：待执行。
+- 最终真机验收：列入 2.0.0 退出标准，见 `docs/ROADMAP.md`。

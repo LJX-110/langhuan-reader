@@ -54,7 +54,7 @@ class BookmarkRepository {
   Future<List<BookmarkRecord>> allWithBook({int limit = 200}) async {
     final db = await _database;
     final rows = await db.rawQuery(
-      'SELECT m.*, b.name AS book_name, b.cover_url '
+      'SELECT m.*, b.name AS book_name, b.cover_url, b.book_url '
       'FROM bookmarks m JOIN books b ON b.id = m.book_id '
       'ORDER BY m.created_at DESC LIMIT ?',
       [limit],

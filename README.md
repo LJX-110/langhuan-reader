@@ -45,16 +45,16 @@ tool/           品牌图生成脚本
 
 ```powershell
 flutter pub get
-dart analyze
+flutter analyze
 flutter test
-powershell -File tool/build_release.ps1
+flutter build apk --release --target-platform android-arm64
 ```
-
-`tool/build_release.ps1` 会把中文目录映射到 ASCII 盘符后再构建；Flutter 的 AOT 在 Windows 上无法直接读取中文路径。
 
 产物：`build/app/outputs/flutter-apk/app-release.apk`。
 
 发布签名使用本机 `android/key.properties` 与 `android/app/*.jks`，两者都不入库。没有配置 keystore 时会回退到 debug 签名，只适合本地测试。
+
+推送 `v*` 标签时，GitHub Actions 会使用仓库 Secrets 里的 keystore 构建并上传签名 APK；配置步骤见 [`docs/SIGNING.md`](docs/SIGNING.md)。
 
 ## 私有书源仓库
 
@@ -81,5 +81,3 @@ powershell -File tool/build_release.ps1
 ## 许可
 
 项目基于 Apache-2.0 底本整理和重写。许可归属与第三方许可见 [`NOTICE`](NOTICE)、[`LICENSE`](LICENSE) 和 [`docs/UPSTREAM.md`](docs/UPSTREAM.md)。
-
-Wenku8 仅作为视觉参考，未复制其 GPL-3.0 代码。

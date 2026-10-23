@@ -95,35 +95,41 @@ class _DockItem extends StatelessWidget {
           onTap: onTap,
           splashColor: activeColor.withValues(alpha: .08),
           highlightColor: activeColor.withValues(alpha: .04),
-          child: SizedBox(
-            height: 62,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CustomPaint(
-                  size: const Size(22, 22),
-                  painter: _DockIconPainter(icon: icon, color: color),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 10,
-                    height: 1,
-                    letterSpacing: .4,
-                    fontFamily: AppType.sans,
-                    fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            color: active
+                ? activeColor.withValues(alpha: .06)
+                : Colors.transparent,
+            child: SizedBox(
+              height: 62,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CustomPaint(
+                    size: const Size(22, 22),
+                    painter: _DockIconPainter(icon: icon, color: color),
                   ),
-                ),
-                const SizedBox(height: 3),
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  width: active ? 14 : 0,
-                  height: 2,
-                  color: companionColor,
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 10,
+                      height: 1,
+                      letterSpacing: .4,
+                      fontFamily: AppType.sans,
+                      fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: active ? 18 : 0,
+                    height: 2,
+                    color: companionColor,
+                  ),
+                ],
+              ),
             ),
           ),
         ),

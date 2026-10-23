@@ -11,11 +11,21 @@ class PageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = AppColors.accentOf(context);
+    final color = AppColors.accentLargeOf(context);
+    final mark = AppColors.themeAccentOf(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 8, 4),
       child: Row(
         children: [
+          Container(
+            width: 3,
+            height: 18,
+            decoration: BoxDecoration(
+              color: mark,
+              borderRadius: BorderRadius.circular(1.5),
+            ),
+          ),
+          const SizedBox(width: 8),
           Text(
             title,
             style: TextStyle(

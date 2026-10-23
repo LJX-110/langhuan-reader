@@ -33,7 +33,7 @@ class ReadingHistoryRepository {
   Future<List<ReadingRecord>> recent({int limit = 100}) async {
     final db = await _database;
     final rows = await db.rawQuery(
-      'SELECT h.*, b.name AS book_name, b.author, b.cover_url '
+      'SELECT h.*, b.name AS book_name, b.author, b.cover_url, b.book_url '
       'FROM reading_history h JOIN books b ON b.id = h.book_id '
       'ORDER BY h.read_at DESC LIMIT ?',
       [limit],

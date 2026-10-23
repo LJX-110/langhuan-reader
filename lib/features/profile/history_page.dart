@@ -120,6 +120,7 @@ class _HistoryPageState extends State<HistoryPage> {
                               record.coverUrl,
                               width: 46,
                               height: 62,
+                              referer: record.bookUrl,
                               title: record.bookName,
                             ),
                           ),

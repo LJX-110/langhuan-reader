@@ -14,61 +14,74 @@ class Skin extends ConsumerWidget {
       data: data.theme,
       child: Builder(
         builder: (context) {
-          final divider = Theme.of(context).dividerColor;
+          final theme = Theme.of(context);
+          final divider = theme.dividerColor;
           final accent = AppColors.accentOf(context);
           return Scaffold(
             appBar: AppBar(
-              title: Text('主题', style: TextStyle(color: accent)),
+              title: Text(
+                '主题',
+                style: TextStyle(color: AppColors.accentLargeOf(context)),
+              ),
               centerTitle: false,
             ),
-            body: ListView.separated(
-              padding: EdgeInsets.only(
-                top: 8,
-                bottom: 8 + MediaQuery.viewPaddingOf(context).bottom,
-              ),
-              itemCount: LanghuanThemes.all.length,
-              separatorBuilder: (_, _) => Divider(
-                height: .5,
-                indent: 20,
-                endIndent: 20,
-                color: divider,
-              ),
-              itemBuilder: (context, i) {
-                final preset = LanghuanThemes.all[i];
-                final selected = data.themeIndex == i;
-                return Material(
-                  color: selected
-                      ? accent.withValues(alpha: .06)
-                      : Colors.transparent,
-                  child: InkWell(
-                    onTap: () => data.selectTheme(i),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 13, 20, 13),
-                      child: Row(
-                        children: [
-                          _swatch(preset.accent, divider),
-                          const SizedBox(width: 6),
-                          _swatch(preset.secondary, divider),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              preset.name,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: selected
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
-                              ),
+            body: Column(
+              children: [
+                _ThemePreview(divider: divider),
+                Expanded(
+                  child: ListView.separated(
+                    padding: EdgeInsets.only(
+                      top: 4,
+                      bottom: 8 + MediaQuery.viewPaddingOf(context).bottom,
+                    ),
+                    itemCount: LanghuanThemes.all.length,
+                    separatorBuilder: (_, _) => Divider(
+                      height: .5,
+                      indent: 20,
+                      endIndent: 20,
+                      color: divider,
+                    ),
+                    itemBuilder: (context, i) {
+                      final preset = LanghuanThemes.all[i];
+                      final selected = data.themeIndex == i;
+                      return Material(
+                        color: selected
+                            ? accent.withValues(alpha: .06)
+                            : Colors.transparent,
+                        child: InkWell(
+                          onTap: () => data.selectTheme(i),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                            child: Row(
+                              children: [
+                                _swatchPair(
+                                  preset.accent,
+                                  preset.secondary,
+                                  divider,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    preset.name,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: selected
+                                          ? FontWeight.w600
+                                          : FontWeight.w400,
+                                    ),
+                                  ),
+                                ),
+                                if (selected)
+                                  Icon(Icons.check, size: 18, color: accent),
+                              ],
                             ),
                           ),
-                          if (selected)
-                            Icon(Icons.check, size: 18, color: accent),
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
+                ),
+              ],
             ),
           );
         },
@@ -76,14 +89,117 @@ class Skin extends ConsumerWidget {
     );
   }
 
-  Widget _swatch(Color color, Color border) {
+  Widget _swatchPair(Color accent, Color secondary, Color border) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(3),
+      child: Container(
+        width: 44,
+        height: 26,
+        decoration: BoxDecoration(
+          border: Border.all(color: border, width: .5),
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: Row(
+          children: [
+            Expanded(child: ColoredBox(color: accent)),
+            Expanded(child: ColoredBox(color: secondary)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Shows how the current theme lands on a page: title, mark, fill and chip.
+class _ThemePreview extends StatelessWidget {
+  const _ThemePreview({required this.divider});
+
+  final Color divider;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final label = AppColors.accentLargeOf(context);
+    final accent = AppColors.accentOf(context);
+    final companion = AppColors.companionOf(context);
+    final primary = AppColors.themeAccentOf(context);
+    final onPrimary = AppColors.onColorOf(primary);
+    final muted = theme.colorScheme.onSurfaceVariant;
+
     return Container(
-      width: 22,
-      height: 22,
+      margin: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
       decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(2),
-        border: Border.all(color: border, width: .5),
+        border: Border.all(color: divider, width: .5),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '当前主题',
+            style: TextStyle(
+              fontSize: 11,
+              color: muted,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                '书房',
+                style: TextStyle(
+                  color: label,
+                  fontFamily: AppType.serif,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1,
+                ),
+              ),
+              const Spacer(),
+              Container(width: 40, height: 3, color: companion),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: primary,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Text(
+                  '开始阅读',
+                  style: TextStyle(
+                    color: onPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: .10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '在读',
+                  style: TextStyle(color: accent, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
