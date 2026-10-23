@@ -53,4 +53,5 @@ flutter build apk --release --target-platform android-arm64
 
 ## 版本
 
-当前发布版 `1.0.0`；下一里程碑 `2.0.0`，范围与退出标准见 `docs/ROADMAP.md`。
+`pubspec.yaml` 是唯一版本来源，递增、tag 与发布规则见 `docs/VERSIONING.md`。
+当前发布线 `1.0.0`；精确 build 号看 `pubspec.yaml` 与 GitHub Releases。下一里程碑 `2.0.0`，范围与退出标准见 `docs/ROADMAP.md`。
