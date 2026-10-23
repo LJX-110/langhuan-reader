@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:fast_gbk/fast_gbk.dart';
 import 'package:langhuan/features/sources/analyzer/js_analyzer.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/net/source_http.dart';
@@ -37,7 +38,9 @@ class AnalyzeUrl {
     var raw = template.trim();
     var method = 'GET';
     dynamic body;
-    var charset = 'utf-8';
+    // Legado sources declare `{"charset":"gbk"}` in url options; the same
+    // charset must encode Chinese search keys, not only decode responses.
+    var charset = _charsetHint(raw);
     Map<String, String> headers = {};
 
     // Merge source header JSON if present
@@ -55,11 +58,12 @@ class AnalyzeUrl {
       }
       var code = JsEngine.extractCode(raw) ?? raw;
       final host = hostOf(source.bookSourceUrl);
+      final encodedKey = encodeKey(key, charset);
       code = code
-          .replaceAll('{{key}}', Uri.encodeQueryComponent(key))
+          .replaceAll('{{key}}', encodedKey)
           .replaceAll('{{page}}', '$page')
           .replaceAll('{{host}}', host)
-          .replaceAll('{key}', Uri.encodeQueryComponent(key))
+          .replaceAll('{key}', encodedKey)
           .replaceAll('{page}', '$page');
 
       // Quirk path: `url,{opts};result=…` → use url,{opts} as template.
@@ -124,13 +128,14 @@ class AnalyzeUrl {
     }
 
     final host = hostOf(source.bookSourceUrl);
+    final encodedKey = encodeKey(key, charset);
     String fill(String s) {
       return s
-          .replaceAll('{{key}}', Uri.encodeQueryComponent(key))
+          .replaceAll('{{key}}', encodedKey)
           .replaceAll('{{page}}', '$page')
           .replaceAll('{{host}}', host)
           .replaceAll('{{sourceUrl}}', source.bookSourceUrl)
-          .replaceAll('{key}', Uri.encodeQueryComponent(key))
+          .replaceAll('{key}', encodedKey)
           .replaceAll('{page}', '$page')
           .replaceAll('{host}', host);
     }
@@ -158,6 +163,52 @@ class AnalyzeUrl {
       body: body,
       charset: charset,
     );
+  }
+
+  /// Encode a search key for query strings and form bodies.
+  ///
+  /// GBK/Big5-era novel sites expect percent-encoded bytes in their declared
+  /// charset; UTF-8 percent encoding makes Chinese keys come back empty.
+  static String encodeKey(String key, String charset) {
+    final c = charset.toLowerCase().replaceAll('_', '-');
+    final gbkFamily =
+        c.contains('gbk') || c.contains('gb2312') || c.contains('gb18030');
+    if (!gbkFamily) return Uri.encodeQueryComponent(key);
+    try {
+      final out = StringBuffer();
+      for (final b in gbk.encode(key)) {
+        if (b == 0x20) {
+          out.write('+');
+        } else if (_isUnreserved(b)) {
+          out.writeCharCode(b);
+        } else {
+          out.write('%');
+          out.write(b.toRadixString(16).toUpperCase().padLeft(2, '0'));
+        }
+      }
+      return out.toString();
+    } catch (_) {
+      return Uri.encodeQueryComponent(key);
+    }
+  }
+
+  static bool _isUnreserved(int b) =>
+      (b >= 0x41 && b <= 0x5A) ||
+      (b >= 0x61 && b <= 0x7A) ||
+      (b >= 0x30 && b <= 0x39) ||
+      b == 0x2D ||
+      b == 0x2E ||
+      b == 0x5F ||
+      b == 0x7E;
+
+  static final RegExp _charsetPattern = RegExp(
+    '''charset["']?\\s*[:=]\\s*["']?([a-zA-Z0-9_-]+)''',
+    caseSensitive: false,
+  );
+
+  static String _charsetHint(String template) {
+    final match = _charsetPattern.firstMatch(template);
+    return (match?.group(1) ?? 'utf-8').toLowerCase();
   }
 
   /// Accept single-quoted JS object literals as JSON.

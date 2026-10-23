@@ -4,7 +4,6 @@ import 'package:langhuan/design/components/pic_widget.dart';
 import 'package:langhuan/core/storage/local_store.dart';
 import 'package:langhuan/features/reader/settings/reader_font_bootstrap.dart';
 import 'package:langhuan/core/platform/system_ui.dart';
-import 'package:langhuan/core/database/reader_database.dart';
 import 'package:langhuan/app/router/routes.dart';
 import 'package:fluro/fluro.dart';
 import 'package:flutter/foundation.dart';
@@ -82,8 +81,8 @@ class AppInit {
     await SpUtil.getInstance();
     // Extract bundled CJK TTF so Rust book_pager uses the same face as Flutter.
     await ReaderFontBootstrap.ensure();
-    // Single-file reader.db — drop legacy multi-DB files (no migration).
-    await ReaderDatabase.wipeLegacyDatabases();
+    // Legacy multi-file DBs are imported lazily by ReaderDatabase on first
+    // open — never deleted here.
     // Drop pre-reader.db SpUtil page-layout keys (`*pages*`).
     for (final key in SpUtil.getKeys().toList()) {
       if (key.contains('pages')) {

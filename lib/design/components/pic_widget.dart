@@ -1,6 +1,7 @@
 import 'package:extended_image/extended_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:langhuan/core/net/session_cookies.dart';
 
 class PicWidget extends StatelessWidget {
   final String url;
@@ -96,13 +97,18 @@ class PicWidget extends StatelessWidget {
         : (host.isEmpty ? 'https://www.google.com/' : 'https://$host/');
     // Header values must stay ASCII — percent-encode CJK paths.
     final safeReferer = Uri.tryParse(refererValue)?.toString() ?? refererValue;
-    return {
+    final headers = <String, String>{
       'User-Agent':
           'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
       'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
       'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
       'Referer': safeReferer,
     };
+    final cookie = SessionCookies.headerForUrl(src);
+    if (cookie != null && cookie.isNotEmpty) {
+      headers['Cookie'] = cookie;
+    }
+    return headers;
   }
 
   /// True when [error] is a benign cover download/decode failure.

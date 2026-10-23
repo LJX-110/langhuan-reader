@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:langhuan/core/net/session_cookies.dart';
 import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/features/sources/net/analyze_url.dart';
 import 'package:dio/dio.dart';
@@ -26,8 +27,9 @@ class SourceHttp {
       },
     );
     _dio = Dio(options());
-    // Many novel sites ship an incomplete TLS chain that Dart's bundled root
-    // store rejects. Retry only after a handshake failure, never pre-emptively.
+    // Some novel sites ship an incomplete TLS chain. Lenient retry is opt-in
+    // per source (`X-Langhuan-Insecure-TLS: 1` in the source header); sources
+    // without it keep strict certificate validation.
     _lenientDio = Dio(options())
       ..httpClientAdapter = IOHttpClientAdapter(
         createHttpClient: () {
@@ -36,6 +38,27 @@ class SourceHttp {
           return client;
         },
       );
+  }
+
+  /// Header a private source can set to allow a one-time lenient TLS retry.
+  static const String insecureTlsHeader = 'x-langhuan-insecure-tls';
+
+  /// True when [headers] opt in to the lenient TLS retry.
+  static bool allowsInsecureTls(Map<String, String> headers) {
+    for (final entry in headers.entries) {
+      if (entry.key.toLowerCase() != insecureTlsHeader) continue;
+      final value = entry.value.trim().toLowerCase();
+      return value == '1' || value == 'true' || value == 'yes';
+    }
+    return false;
+  }
+
+  /// Remove the control header so it never reaches the remote site.
+  static Map<String, String> stripInsecureTlsHeader(
+    Map<String, String> headers,
+  ) {
+    headers.removeWhere((key, _) => key.toLowerCase() == insecureTlsHeader);
+    return headers;
   }
 
   static final SourceHttp instance = SourceHttp._();
@@ -47,27 +70,25 @@ class SourceHttp {
     'langhuan/charset',
   );
 
-  /// Session cookies per host. Legado sources often need the search page's
-  /// cookie when fetching detail / toc / content.
-  final Map<String, Map<String, String>> _cookieJar = {};
-
+  /// Session cookies per host live in [SessionCookies] so cover loads can use
+  /// the same login session as source requests.
   Future<Response<List<int>>> _send(
     String url,
     Options options,
     Object? data,
   ) async {
-    final host = Uri.tryParse(url)?.host ?? '';
     final headers = Map<String, String>.from(options.headers ?? const {});
+    final allowInsecureTls = allowsInsecureTls(headers);
+    stripInsecureTlsHeader(headers);
     final hasCookie = headers.keys.any((key) => key.toLowerCase() == 'cookie');
-    if (!hasCookie && host.isNotEmpty) {
-      final jar = _cookieJar[host];
-      if (jar != null && jar.isNotEmpty) {
-        headers['cookie'] = jar.entries
-            .map((entry) => '${entry.key}=${entry.value}')
-            .join('; ');
+    if (!hasCookie) {
+      final cookie = SessionCookies.headerForUrl(url);
+      if (cookie != null && cookie.isNotEmpty) {
+        headers['cookie'] = cookie;
       }
     }
     options.headers = headers;
+    final host = Uri.tryParse(url)?.host ?? '';
 
     try {
       final response = await _dio.request<List<int>>(
@@ -79,6 +100,15 @@ class SourceHttp {
       return response;
     } on DioException catch (e) {
       if (!_isTlsError(e)) rethrow;
+      if (!allowInsecureTls) {
+        AppLog.w(
+          'SourceNet',
+          'TLS rejected; add "$insecureTlsHeader: 1" to the source header '
+              'only if this site is trusted: $url',
+          error: e.error,
+        );
+        rethrow;
+      }
       AppLog.w(
         'SourceNet',
         'TLS chain rejected, retrying lenient: $url',
@@ -95,27 +125,9 @@ class SourceHttp {
   }
 
   void _saveCookies(String host, Headers headers) {
-    if (host.isEmpty) return;
     final rawList = headers['set-cookie'];
     if (rawList == null || rawList.isEmpty) return;
-    final jar = _cookieJar.putIfAbsent(host, () => <String, String>{});
-    for (final raw in rawList) {
-      final pair = raw.split(';').first.trim();
-      final eq = pair.indexOf('=');
-      if (eq <= 0) continue;
-      final name = pair.substring(0, eq).trim();
-      final value = pair.substring(eq + 1).trim();
-      if (name.isEmpty) continue;
-      final lower = raw.toLowerCase();
-      final expired =
-          lower.contains('max-age=0') ||
-          lower.contains('expires=thu, 01 jan 1970');
-      if (expired || value.isEmpty) {
-        jar.remove(name);
-      } else {
-        jar[name] = value;
-      }
-    }
+    SessionCookies.saveFromSetCookie(host, rawList);
   }
 
   bool _isTlsError(DioException e) {
@@ -137,10 +149,14 @@ class SourceHttp {
             '(JS searchUrl may have failed to resolve)',
       );
     }
+    final hasContentType = req.headers.keys.any(
+      (key) => key.toLowerCase() == 'content-type',
+    );
     final options = Options(
       method: req.method,
       headers: req.headers,
-      contentType: req.method == 'POST'
+      // Form default only; never override a source's JSON/XML Content-Type.
+      contentType: req.method == 'POST' && !hasContentType
           ? Headers.formUrlEncodedContentType
           : null,
     );

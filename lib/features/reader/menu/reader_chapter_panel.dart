@@ -5,7 +5,7 @@ import 'package:langhuan/features/reader/menu/reader_chrome.dart';
 import 'package:langhuan/features/reader/read_model.dart';
 
 /// Chapter slider shown when the menu first opens.
-class ReaderChapterPanel extends StatelessWidget {
+class ReaderChapterPanel extends StatefulWidget {
   const ReaderChapterPanel({
     super.key,
     required this.readModel,
@@ -18,32 +18,51 @@ class ReaderChapterPanel extends StatelessWidget {
   final VoidCallback onChanged;
 
   @override
+  State<ReaderChapterPanel> createState() => _ReaderChapterPanelState();
+}
+
+class _ReaderChapterPanelState extends State<ReaderChapterPanel> {
+  /// Slider position while the finger is down. Kept local so a drag never
+  /// mutates the reading position before the chapter actually opens.
+  int? _dragIndex;
+
+  Future<void> _step(int delta) async {
+    final chapters = widget.readModel.chapters;
+    final book = widget.readModel.book;
+    if (book == null) return;
+    final next = book.chapterIndex + delta;
+    if (next < 0) {
+      BotToast.showText(text: '已经是第一章');
+      return;
+    }
+    if (next >= chapters.length) {
+      BotToast.showText(text: '已经是最后一章');
+      return;
+    }
+    await widget.readModel.openChapterAt(next, true);
+    widget.readModel.scheduleProgressSave(delay: Duration.zero);
+    widget.onChanged();
+  }
+
+  Future<void> _openAt(int index) async {
+    setState(() => _dragIndex = index);
+    await widget.readModel.openChapterAt(index, true);
+    widget.readModel.scheduleProgressSave(delay: Duration.zero);
+    if (mounted) setState(() => _dragIndex = null);
+    widget.onChanged();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final chapters = readModel.chapters;
+    final chapters = widget.readModel.chapters;
+    final chrome = widget.chrome;
     final max = chapters.isEmpty ? 0.0 : (chapters.length - 1).toDouble();
-    final index = readModel.book?.chapterIndex ?? 0;
+    final modelIndex = widget.readModel.book?.chapterIndex ?? 0;
+    final index = (_dragIndex ?? modelIndex).clamp(0, max.toInt()).toInt();
     final cur = index.toDouble().clamp(0.0, max);
     final chapterName = index >= 0 && index < chapters.length
         ? chapters[index].title
         : '';
-
-    Future<void> step(int delta) async {
-      final book = readModel.book;
-      if (book == null) return;
-      final next = book.chapterIndex + delta;
-      if (next < 0) {
-        BotToast.showText(text: '已经是第一章');
-        return;
-      }
-      if (next >= chapters.length) {
-        BotToast.showText(text: '已经是最后一章');
-        return;
-      }
-      book.chapterIndex = next;
-      await readModel.openChapterAt(next, true);
-      readModel.scheduleProgressSave(delay: Duration.zero);
-      onChanged();
-    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
@@ -62,7 +81,7 @@ class ReaderChapterPanel extends StatelessWidget {
             ),
           Row(
             children: <Widget>[
-              _miniTextBtn('上一章', () => step(-1)),
+              _miniTextBtn('上一章', () => _step(-1)),
               Expanded(
                 child: SliderTheme(
                   data: readerSliderTheme(context, chrome),
@@ -73,21 +92,15 @@ class ReaderChapterPanel extends StatelessWidget {
                     onChanged: max <= 0
                         ? null
                         : (newValue) {
-                            readModel.book!.chapterIndex = newValue.round();
-                            onChanged();
+                            setState(() => _dragIndex = newValue.round());
                           },
                     onChangeEnd: max <= 0
                         ? null
-                        : (newValue) {
-                            readModel.openChapterAt(newValue.round(), true);
-                            readModel.scheduleProgressSave(
-                              delay: Duration.zero,
-                            );
-                          },
+                        : (newValue) => _openAt(newValue.round()),
                   ),
                 ),
               ),
-              _miniTextBtn('下一章', () => step(1)),
+              _miniTextBtn('下一章', () => _step(1)),
             ],
           ),
         ],
@@ -99,7 +112,7 @@ class ReaderChapterPanel extends StatelessWidget {
     return TextButton(
       onPressed: onTap,
       style: TextButton.styleFrom(
-        foregroundColor: chrome.fg,
+        foregroundColor: widget.chrome.fg,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         minimumSize: const Size(0, 36),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,

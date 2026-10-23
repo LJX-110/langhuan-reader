@@ -30,6 +30,7 @@ class ReaderContentReloader {
     required this.markNeedsPaint,
     required this.notify,
     this.cancelPagination,
+    this.onRelayout,
   });
 
   final ChapterRepository chaptersRepo;
@@ -37,7 +38,7 @@ class ReaderContentReloader {
   final List<ChapterTocEntry> Function() chaptersOf;
   final void Function(bool value) setChaptersLoading;
   final void Function(String text) setLoadingHint;
-  final Future Function({bool init}) loadToc;
+  final Future<bool> Function({bool init}) loadToc;
   final Future<String> Function(String id, {int? idx}) fetchChapterBody;
   final Future<ReadPage?> Function(int idx) loadChapter;
   final void Function(ReadPage? page) setCurPage;
@@ -53,6 +54,10 @@ class ReaderContentReloader {
 
   /// Cancel in-flight Rust/Dart progressive pagination (ABI v3).
   final void Function()? cancelPagination;
+
+  /// Called after a font / spacing relayout replaced every page layout.
+  /// Scroll mode uses it to drop its stale window (page heights changed).
+  final void Function()? onRelayout;
 
   bool _refreshing = false;
   Timer? _relayoutTimer;
@@ -72,33 +77,68 @@ class ReaderContentReloader {
     _relayoutTimer = null;
   }
 
-  Future<void> reloadChapters() async {
+  Future<bool> reloadChapters() async {
     final b = bookOf();
-    if (b == null) return;
+    if (b == null) return false;
+    final oldIndex = b.chapterIndex;
+    final before = chaptersOf();
+    final old = oldIndex >= 0 && oldIndex < before.length
+        ? before[oldIndex]
+        : null;
+    final savedPage = b.pageIndex;
+
     setChaptersLoading(true);
     setLoadingHint('正在重新加载目录…');
     notify();
     try {
       // init:true re-syncs full remote TOC while preserving bodies for same ids.
-      await loadToc(init: true);
-      if (chaptersOf().isEmpty) {
+      final loaded = await loadToc(init: true);
+      if (!loaded) return false;
+
+      final list = chaptersOf();
+      if (list.isEmpty) {
         BotToast.showText(text: '目录为空，请检查书源或网络');
+        return false;
       }
+
+      // Keep the reader on the same chapter (by stable id, then url); its
+      // index may have moved after the remote TOC changed.
+      var target = old == null ? -1 : list.indexWhere((c) => c.id == old.id);
+      if (target < 0 && old != null && old.url.isNotEmpty) {
+        target = list.indexWhere((c) => c.url == old.url);
+      }
+      if (target < 0) {
+        target = oldIndex.clamp(0, list.length - 1).toInt();
+      }
+
+      b.chapterIndex = target;
+      b.readingChapter = list[target].title;
+      // The TOC may point at new urls; cached pictures describe the old body.
+      clearPictures();
+      await openChapterAt(target, false, showLoading: false);
+      restorePageIndex(savedPage);
+      markNeedsPaint();
+      notify();
+      return true;
+    } catch (e) {
+      AppLog.w('Read', 'reload chapters failed', error: e);
+      BotToast.showText(text: '目录刷新失败，请稍后重试');
+      return false;
     } finally {
       setChaptersLoading(false);
       notify();
     }
   }
 
-  Future<void> reloadCurrentPage() async {
-    if (_refreshing) return;
+  Future<bool> reloadCurrentPage() async {
+    if (_refreshing) return false;
     final b = bookOf();
-    if (b == null) return;
+    if (b == null) return false;
     final chapters = chaptersOf();
     if (chapters.isEmpty ||
         b.chapterIndex < 0 ||
         b.chapterIndex >= chapters.length) {
-      return;
+      return false;
     }
     _refreshing = true;
     toggleMenu();
@@ -118,20 +158,25 @@ class ReaderContentReloader {
           !content.startsWith('章节内容加载超时') &&
           !content.startsWith('书源不存在') &&
           !content.startsWith('章节地址为空');
-      if (looksOk) {
-        await chaptersRepo.updateBodies([ChapterNode(content, chapter.id)]);
-        chapter.hasBody = true;
-      } else {
+      if (!looksOk) {
         BotToast.showText(text: '刷新失败，请检查书源或网络');
+        return false;
       }
+      await chaptersRepo.updateBodies([ChapterNode(content, chapter.id)]);
+      chapter.hasBody = true;
       // Drop warm snapshot so loadChapter hits DB (updateBodies only clears SQLite).
       removeWarm(chapter.id);
-      setCurPage(await loadChapter(b.chapterIndex));
+      final page = await loadChapter(b.chapterIndex);
+      // The cached paint for this key describes the pre-refresh body.
+      clearPictures();
+      setCurPage(page);
       markNeedsPaint();
       notify();
+      return page != null;
     } catch (e) {
       AppLog.w('Read', 'reload current page failed', error: e);
       BotToast.showText(text: '刷新失败，请稍后重试');
+      return false;
     } finally {
       _refreshing = false;
       hideLoading();
@@ -155,5 +200,6 @@ class ReaderContentReloader {
     restorePageIndex(keepIndex);
     markNeedsPaint();
     notify();
+    onRelayout?.call();
   }
 }

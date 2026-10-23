@@ -89,9 +89,18 @@ class ReaderTopBar extends StatelessWidget {
     final bookName = readModel.book?.name ?? '';
     final chapter = readModel.book?.readingChapter.trim() ?? '';
     final pageChapter = readModel.curPage?.chapterName.trim() ?? '';
-    final chapterName = (pageChapter.isEmpty || pageChapter == '加载中')
-        ? chapter
-        : pageChapter;
+    // In scroll mode curPage may still describe the chapter we started in;
+    // the TOC index is the single source of truth while the list scrolls.
+    final chapterIndex = readModel.book?.chapterIndex ?? -1;
+    final tocChapter =
+        chapterIndex >= 0 && chapterIndex < readModel.chapters.length
+        ? readModel.chapters[chapterIndex].title.trim()
+        : '';
+    final chapterName = readModel.isScrollMode
+        ? (tocChapter.isNotEmpty ? tocChapter : chapter)
+        : ((pageChapter.isEmpty || pageChapter == '加载中')
+              ? chapter
+              : pageChapter);
 
     // Color outside SafeArea so the bar fills status-bar / notch; content
     // still respects the inset. Otherwise the page text peeks through above.

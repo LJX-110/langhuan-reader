@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:langhuan/core/database/legacy_database_migrator.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -7,8 +6,8 @@ import 'package:sqflite/sqflite.dart';
 /// Single SQLite database for 琅嬛阁.
 ///
 /// Holds shelf (`books`), chapter cache (`chapters`), and book sources
-/// (`sources`). No forward migration from legacy multi-file DBs — those are
-/// deleted on boot (see [wipeLegacyDatabases]).
+/// (`sources`). Legacy multi-file databases are imported once, non-destructively,
+/// when this file is first created (see [LegacyDatabaseMigrator]).
 class ReaderDatabase {
   ReaderDatabase._();
   static final ReaderDatabase instance = ReaderDatabase._();
@@ -29,11 +28,17 @@ class ReaderDatabase {
 
   Future<Database> _open() async {
     final dir = await getApplicationDocumentsDirectory();
+    await LegacyDatabaseMigrator(
+      backend: SqfliteLegacyMigrationBackend(
+        createSchema: createSchema,
+        version: version,
+      ),
+    ).migrate(dir.path);
     final path = p.join(dir.path, fileName);
     return openDatabase(
       path,
       version: version,
-      onCreate: _onCreate,
+      onCreate: (db, v) => createSchema(db),
       onUpgrade: _onUpgrade,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
@@ -41,7 +46,8 @@ class ReaderDatabase {
     );
   }
 
-  Future<void> _onCreate(Database db, int version) async {
+  /// Build the complete v3 schema. Shared with the migration backend.
+  static Future<void> createSchema(Database db) async {
     await _createBooks(db);
     await _createChapters(db);
     await _createSources(db);
@@ -57,7 +63,7 @@ class ReaderDatabase {
     }
   }
 
-  Future<void> _createBooks(Database db) async {
+  static Future<void> _createBooks(Database db) async {
     await db.execute('''
 CREATE TABLE books (
   id TEXT PRIMARY KEY NOT NULL,
@@ -82,7 +88,7 @@ CREATE TABLE books (
     await db.execute('CREATE INDEX idx_books_sort ON books (sort_time DESC)');
   }
 
-  Future<void> _createChapters(Database db) async {
+  static Future<void> _createChapters(Database db) async {
     await db.execute('''
 CREATE TABLE chapters (
   id TEXT PRIMARY KEY NOT NULL,
@@ -106,7 +112,7 @@ CREATE TABLE chapters (
     await db.execute('CREATE INDEX idx_chapters_url ON chapters (url)');
   }
 
-  Future<void> _createSources(Database db) async {
+  static Future<void> _createSources(Database db) async {
     await db.execute('''
 CREATE TABLE sources (
   book_source_url TEXT PRIMARY KEY NOT NULL,
@@ -129,7 +135,7 @@ CREATE TABLE sources (
     );
   }
 
-  Future<void> _createBookmarks(Database db) async {
+  static Future<void> _createBookmarks(Database db) async {
     await db.execute('''
 CREATE TABLE IF NOT EXISTS bookmarks (
   id TEXT PRIMARY KEY NOT NULL,
@@ -147,7 +153,7 @@ CREATE TABLE IF NOT EXISTS bookmarks (
     );
   }
 
-  Future<void> _createReadingHistory(Database db) async {
+  static Future<void> _createReadingHistory(Database db) async {
     await db.execute('''
 CREATE TABLE IF NOT EXISTS reading_history (
   book_id TEXT PRIMARY KEY NOT NULL,
@@ -166,36 +172,5 @@ CREATE TABLE IF NOT EXISTS reading_history (
   Future<void> close() async {
     await _db?.close();
     _db = null;
-  }
-
-  /// Delete legacy multi-file DBs (no data migration).
-  ///
-  /// Also drops standalone `sources.db` — sources now live in [fileName].
-  static Future<void> wipeLegacyDatabases() async {
-    final dir = await getApplicationDocumentsDirectory();
-    for (final name in [
-      'books.db',
-      'chapters.db',
-      'sources.db',
-      'movies.db',
-      'cord.db',
-      'voice.db',
-      'books.db-journal',
-      'chapters.db-journal',
-      'sources.db-journal',
-      'books.db-wal',
-      'chapters.db-wal',
-      'sources.db-wal',
-      'books.db-shm',
-      'chapters.db-shm',
-      'sources.db-shm',
-    ]) {
-      final f = File(p.join(dir.path, name));
-      if (await f.exists()) {
-        try {
-          await f.delete();
-        } catch (_) {}
-      }
-    }
   }
 }

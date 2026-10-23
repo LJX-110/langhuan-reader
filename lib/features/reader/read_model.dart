@@ -141,6 +141,11 @@ class ReadModel with ChangeNotifier {
     markNeedsPaint: _markNeedsPaint,
     notify: notifyListeners,
     cancelPagination: _paginator.cancelActive,
+    onRelayout: () {
+      // Page heights changed; scroll mode must rebuild its window.
+      contentGeneration++;
+      notifyListeners();
+    },
   );
   late final ChapterWindowController _window = ChapterWindowController(
     bookOf: () => book,
@@ -298,6 +303,10 @@ class ReadModel with ChangeNotifier {
   /// UI should show text hint, not a spinner.
   bool chaptersLoading = false;
 
+  /// Bumped when TOC / body / source content changes without a chapter-index
+  /// jump, so scroll mode rebuilds its window and drops stale paints.
+  int contentGeneration = 0;
+
   /// Status text while [sessionReady] is false or chapters are refreshing.
   String loadingHint = '正在加载…';
 
@@ -340,9 +349,9 @@ class ReadModel with ChangeNotifier {
     return _toc.fetchRemote(b);
   }
 
-  Future loadToc({bool init = false}) async {
+  Future<bool> loadToc({bool init = false}) async {
     final b = book;
-    if (b == null || Book.isLocalSource(b.sourceUrl)) return;
+    if (b == null || Book.isLocalSource(b.sourceUrl)) return false;
     final bookId = b.id;
     final updated = await _toc.load(
       book: b,
@@ -350,14 +359,15 @@ class ReadModel with ChangeNotifier {
       init: init,
       isStillActive: () => book?.id == bookId,
     );
-    if (updated == null) return;
+    if (updated == null) return false;
     // Drop result if session switched books during the await.
-    if (book?.id != bookId) return;
+    if (book?.id != bookId) return false;
     chapters = updated;
     if (updated.isNotEmpty) {
       book?.latestChapter = updated.last.title;
     }
     notifyListeners();
+    return true;
   }
 
   Future<void> _ensureBookRow(Book b) async {
@@ -517,9 +527,19 @@ class ReadModel with ChangeNotifier {
     return _lifecycle.clear();
   }
 
-  Future<void> reloadChapters() => _reloader.reloadChapters();
+  Future<void> reloadChapters() async {
+    final ok = await _reloader.reloadChapters();
+    if (!ok) return;
+    contentGeneration++;
+    notifyListeners();
+  }
 
-  Future<void> reloadCurrentPage() => _reloader.reloadCurrentPage();
+  Future<void> reloadCurrentPage() async {
+    final ok = await _reloader.reloadCurrentPage();
+    if (!ok) return;
+    contentGeneration++;
+    notifyListeners();
+  }
 
   void resetPages() {
     prePage = null;
@@ -533,8 +553,14 @@ class ReadModel with ChangeNotifier {
       _source.fetchChapterBody(id, idx: idx);
 
   /// Switch active source for the current book, remap progress, reload toc.
-  Future<bool> switchSource(BookSource source, SearchBook hit) =>
-      _source.switchSource(source, hit);
+  Future<bool> switchSource(BookSource source, SearchBook hit) async {
+    final ok = await _source.switchSource(source, hit);
+    if (ok) {
+      contentGeneration++;
+      notifyListeners();
+    }
+    return ok;
+  }
 
   void toggleTapLeftToAdvance() => _chrome.toggleTapLeftToAdvance();
 

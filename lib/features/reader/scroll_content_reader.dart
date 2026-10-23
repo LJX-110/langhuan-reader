@@ -5,6 +5,7 @@ import 'package:langhuan/core/storage/prefs_keys.dart';
 import 'package:langhuan/core/storage/local_store.dart';
 import 'package:langhuan/features/reader/settings/read_setting.dart';
 import 'package:langhuan/data/entities/read_page.dart';
+import 'package:langhuan/features/reader/scroll_chapter_title.dart';
 import 'package:langhuan/app/providers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -62,10 +63,21 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
   /// Last model chapter we bootstrapped against; used to detect TOC jumps.
   int? _syncedChapterIndex;
 
+  /// Last content revision; body/TOC/source reloads bump it even when the
+  /// chapter index stays the same. Forces a fresh window and picture cache.
+  int? _syncedGeneration;
+
+  /// Title shown by the sticky overlay; only this small widget rebuilds when
+  /// the visible chapter changes mid-scroll.
+  final ValueNotifier<String> _visibleChapterName = ValueNotifier('');
+
   Offset? _downPos;
   int? _activePointer;
   static const double _tapSlop = 18;
-  static const double _edgePad = 20;
+  static const double _bottomPad = 20;
+
+  /// Body starts below the sticky title band, matching page-turn mode.
+  double get _topPad => ReadSetting.contentTopInset();
 
   /// Pixels into the viewport used as the reading anchor when mapping
   /// scroll offset → chapter/page.
@@ -109,6 +121,7 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
     } catch (_) {}
     _disposed = true;
     _prewarmToken++;
+    _visibleChapterName.dispose();
     _controller?.removeListener(_onScroll);
     _controller?.dispose();
     _controller = null;
@@ -131,6 +144,7 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
   void _resetForRebootstrap() {
     _bootstrapped = false;
     _syncedChapterIndex = null;
+    _syncedGeneration = null;
     _restoreDone = false;
     _loadingNeighbor = false;
     _prewarmToken++;
@@ -170,6 +184,7 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
     _lastChapter = cur;
     _lastPage = pageIdx;
     _syncedChapterIndex = cur;
+    _syncedGeneration = model.contentGeneration;
     _restoreDone = false;
     _log(
       'bootstrap target cur=$cur page=$pageIdx chapters=${model.chapters.length}',
@@ -210,6 +225,11 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
         if (!_disposed && mounted && !_bootstrapped) _bootstrap();
       });
       return;
+    }
+
+    final name = _chapters[cur]?.chapterName ?? model.chapters[cur].title;
+    if (_visibleChapterName.value != name) {
+      _visibleChapterName.value = name;
     }
 
     final target = _indexOf(cur, pageIdx);
@@ -392,7 +412,7 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
   double _scrollOffsetForItem(int index) {
     if (_items.isEmpty) return 0;
     final i = index.clamp(0, _items.length - 1);
-    return _edgePad + _offsets[i];
+    return _topPad + _offsets[i];
   }
 
   /// Map a y position in list content space (padding excluded) to item index.
@@ -454,7 +474,7 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
     if (_loadingNeighbor && !force) return;
     if (_disposed || c == null || !c.hasClients) return;
 
-    final contentY = c.offset - _edgePad + _progressInset;
+    final contentY = c.offset - _topPad + _progressInset;
     final i = _itemAtContentY(contentY);
     if (i < 0 || i >= _items.length) return;
     final it = _items[i];
@@ -467,6 +487,9 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
     _lastChapter = it.chapterIndex;
     _lastPage = it.pageIndex;
     _syncedChapterIndex = it.chapterIndex;
+    if (_visibleChapterName.value != it.chapterName) {
+      _visibleChapterName.value = it.chapterName;
+    }
     try {
       final model = ref.read(readModelProvider);
       model.applyScrollProgress(it.chapterIndex, it.pageIndex);
@@ -556,29 +579,46 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
     final modelChapter = ref.watch(
       readModelProvider.select((m) => m.book?.chapterIndex),
     );
+    final contentGeneration = ref.watch(
+      readModelProvider.select((m) => m.contentGeneration),
+    );
     final dark =
         paperTheme == PaperTheme.night ||
         SpUtil.getBool(PrefsKeys.dark, defValue: false);
     final paper = ReadSetting.paperColor(dark ? PaperTheme.night : paperTheme);
     final meta = ReadSetting.metaColor(dark ? PaperTheme.night : paperTheme);
 
-    // openChapterAt / switchSource update model chapterIndex without rebuilding
-    // this State; rebootstrap when the jump was not driven by our scroll progress.
-    if (_bootstrapped &&
+    // openChapterAt / switchSource / TOC reload update model chapterIndex or
+    // content revision without rebuilding this State; rebootstrap when the
+    // jump was not driven by our scroll progress.
+    final chapterJump =
+        _bootstrapped &&
         contentReady &&
         modelChapter != null &&
         _syncedChapterIndex != null &&
-        modelChapter != _syncedChapterIndex) {
+        modelChapter != _syncedChapterIndex;
+    final generationChanged =
+        _bootstrapped &&
+        contentReady &&
+        _syncedGeneration != null &&
+        contentGeneration != _syncedGeneration;
+    if (chapterJump || generationChanged) {
       final jumpTo = modelChapter;
+      final generation = contentGeneration;
       _log(
-        'chapter jump model=$jumpTo synced=$_syncedChapterIndex — rebootstrap',
+        'rebootstrap requested model=$jumpTo synced=$_syncedChapterIndex '
+        'gen=$generation syncedGen=$_syncedGeneration',
       );
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_disposed || !mounted) return;
         if (!_bootstrapped) return;
-        final still = ref.read(readModelProvider).book?.chapterIndex;
-        if (still != jumpTo) return;
-        if (still == _syncedChapterIndex) return;
+        final model = ref.read(readModelProvider);
+        if (model.contentGeneration != generation) return;
+        if (!generationChanged && model.book?.chapterIndex != jumpTo) return;
+        if (!generationChanged &&
+            model.book?.chapterIndex == _syncedChapterIndex) {
+          return;
+        }
         _resetForRebootstrap();
         _bootstrap();
       });
@@ -591,6 +631,8 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
     }
 
     final c = _controller;
+    final family = ReadSetting.getFontFamily();
+    final titleFamily = (family.isEmpty || family == 'Roboto') ? null : family;
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: _onPointerDown,
@@ -598,61 +640,86 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
       onPointerCancel: _onPointerCancel,
       child: ColoredBox(
         color: paper,
-        child: NotificationListener<ScrollNotification>(
-          onNotification: (n) {
-            if (n is ScrollEndNotification && _restoreDone) {
-              _applyVisibleProgress(force: true);
-              _maybeLoadNeighbors();
-              _schedulePrewarm();
-            }
-            return false;
-          },
-          child: (_items.isEmpty || c == null)
-              ? (loadingHint.isEmpty
-                    ? const SizedBox.expand()
-                    : Center(
-                        child: Text(
-                          loadingHint,
-                          style: TextStyle(color: meta, fontSize: 15),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (n) {
+                  if (n is ScrollEndNotification && _restoreDone) {
+                    _applyVisibleProgress(force: true);
+                    _maybeLoadNeighbors();
+                    _schedulePrewarm();
+                  }
+                  return false;
+                },
+                child: (_items.isEmpty || c == null)
+                    ? (loadingHint.isEmpty
+                          ? const SizedBox.expand()
+                          : Center(
+                              child: Text(
+                                loadingHint,
+                                style: TextStyle(color: meta, fontSize: 15),
+                              ),
+                            ))
+                    : ListView.builder(
+                        controller: c,
+                        padding: EdgeInsets.only(
+                          top: _topPad,
+                          bottom: _bottomPad,
                         ),
-                      ))
-              : ListView.builder(
-                  controller: c,
-                  padding: const EdgeInsets.only(
-                    top: _edgePad,
-                    bottom: _edgePad,
+                        physics: const BouncingScrollPhysics(
+                          parent: AlwaysScrollableScrollPhysics(),
+                        ),
+                        itemCount: _items.length,
+                        itemExtentBuilder: (index, _) {
+                          if (index < 0 || index >= _items.length) return null;
+                          return _items[index].height;
+                        },
+                        findChildIndexCallback: (Key key) {
+                          if (key is! ValueKey<String>) return null;
+                          final parts = key.value.split(':');
+                          if (parts.length != 2) return null;
+                          final ch = int.tryParse(parts[0]);
+                          final pg = int.tryParse(parts[1]);
+                          if (ch == null || pg == null) return null;
+                          final idx = _indexOf(ch, pg);
+                          if (idx < 0 || idx >= _items.length) return null;
+                          final it = _items[idx];
+                          if (it.chapterIndex != ch || it.pageIndex != pg) {
+                            return null;
+                          }
+                          return idx;
+                        },
+                        itemBuilder: (context, index) {
+                          final item = _items[index];
+                          return _ScrollPageTile(
+                            key: ValueKey(
+                              '${item.chapterIndex}:${item.pageIndex}',
+                            ),
+                            item: item,
+                          );
+                        },
+                      ),
+              ),
+            ),
+            if (_items.isNotEmpty)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  child: ScrollChapterTitle(
+                    chapter: _visibleChapterName,
+                    background: paper,
+                    color: meta,
+                    topInset: ReadSetting.chapterTitleBandTop(),
+                    bandHeight: ReadSetting.contentTopChrome,
+                    horizontalPadding: ReadSetting.getPageDis().toDouble(),
+                    fontFamily: titleFamily,
                   ),
-                  physics: const BouncingScrollPhysics(
-                    parent: AlwaysScrollableScrollPhysics(),
-                  ),
-                  itemCount: _items.length,
-                  itemExtentBuilder: (index, _) {
-                    if (index < 0 || index >= _items.length) return null;
-                    return _items[index].height;
-                  },
-                  findChildIndexCallback: (Key key) {
-                    if (key is! ValueKey<String>) return null;
-                    final parts = key.value.split(':');
-                    if (parts.length != 2) return null;
-                    final ch = int.tryParse(parts[0]);
-                    final pg = int.tryParse(parts[1]);
-                    if (ch == null || pg == null) return null;
-                    final idx = _indexOf(ch, pg);
-                    if (idx < 0 || idx >= _items.length) return null;
-                    final it = _items[idx];
-                    if (it.chapterIndex != ch || it.pageIndex != pg) {
-                      return null;
-                    }
-                    return idx;
-                  },
-                  itemBuilder: (context, index) {
-                    final item = _items[index];
-                    return _ScrollPageTile(
-                      key: ValueKey('${item.chapterIndex}:${item.pageIndex}'),
-                      item: item,
-                    );
-                  },
                 ),
+              ),
+          ],
         ),
       ),
     );

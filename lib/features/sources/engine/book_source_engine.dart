@@ -167,11 +167,7 @@ class BookSourceEngine {
       }
       var cover = rule.getString(coverRule, scope: item);
       if ((cover.isEmpty || _isPlaceholderCover(cover)) && item is Element) {
-        final img = item.localName == 'img' ? item : item.querySelector('img');
-        if (img != null) {
-          cover = rule.getString('img@src', scope: item);
-          if (cover.isEmpty) cover = rule.getString('src', scope: img);
-        }
+        cover = _coverFromElement(item);
       }
       if (cover.isNotEmpty) cover = urlJoin(resp.url, cover);
       if (_isPlaceholderCover(cover)) cover = '';
@@ -229,10 +225,21 @@ class BookSourceEngine {
 
     var cover = pick(r.coverUrl, seed?.coverUrl ?? '');
     if (cover.isEmpty || _isPlaceholderCover(cover)) {
-      // Common detail-page cover selectors (incl. lazy data-src via analyzer).
+      // Common detail-page cover selectors. Lazy-loading themes keep the real
+      // URL in data-src / data-original while src holds a shared placeholder.
       for (final fb in const [
         // package:html needs quoted attr values when they contain ':'
         'meta[property="og:image"]@content',
+        'meta[name="og:image"]@content',
+        'img.cover@data-src',
+        'img.cover@data-original',
+        '.cover img@data-src',
+        '.cover img@data-original',
+        '#cover img@data-src',
+        '#cover img@data-original',
+        'img@data-src',
+        'img@data-original',
+        'img@data-lazy-src',
         'img.cover@src',
         '.cover img@src',
         '#cover img@src',
@@ -243,6 +250,12 @@ class BookSourceEngine {
           cover = c;
           break;
         }
+      }
+    }
+    if (cover.isEmpty || _isPlaceholderCover(cover)) {
+      if (!rule.isJson) {
+        final root = rule.doc.documentElement;
+        if (root != null) cover = _coverFromElement(root);
       }
     }
     if (cover.isNotEmpty) cover = urlJoin(resp.url, cover);
@@ -620,6 +633,68 @@ class BookSourceEngine {
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim()
         .length;
+  }
+
+  /// Attributes that hold a cover URL, ordered by reliability. `src` is last
+  /// because lazy-loading themes put a shared placeholder there.
+  static const List<String> _coverAttrs = [
+    'data-src',
+    'data-original',
+    'data-lazy-src',
+    'data-lazy',
+    'data-echo',
+    'data-url',
+    'src',
+  ];
+
+  static final RegExp _cssUrl = RegExp(
+    r'''url\(\s*['"]?([^'")]+)['"]?\s*\)''',
+    caseSensitive: false,
+  );
+
+  /// Pull the first usable cover URL from an item / page element.
+  static String _coverFromElement(Element root) {
+    final images = <Element>[
+      if (root.localName == 'img') root,
+      ...root.querySelectorAll('img'),
+    ];
+    for (final image in images) {
+      for (final attr in _coverAttrs) {
+        final raw = image.attributes[attr]?.trim() ?? '';
+        if (raw.isEmpty || raw.startsWith('data:')) continue;
+        final url = _firstUrl(raw);
+        if (url.isNotEmpty && !_isPlaceholderCover(url)) return url;
+      }
+      final style = _cssBackground(image.attributes['style'] ?? '');
+      if (style.isNotEmpty && !_isPlaceholderCover(style)) return style;
+      final srcset = _firstSrcset(image.attributes['srcset'] ?? '');
+      if (srcset.isNotEmpty && !_isPlaceholderCover(srcset)) return srcset;
+    }
+    // <picture><source srcset="...">
+    for (final source in root.querySelectorAll('source')) {
+      final srcset = _firstSrcset(source.attributes['srcset'] ?? '');
+      if (srcset.isNotEmpty && !_isPlaceholderCover(srcset)) return srcset;
+    }
+    return '';
+  }
+
+  /// Some themes stuff a whole `srcset` into `data-src`.
+  static String _firstUrl(String raw) {
+    final first = raw.trim().split(',').first.trim();
+    if (!first.contains(RegExp(r'\s'))) return first;
+    return first.split(RegExp(r'\s+')).first;
+  }
+
+  static String _firstSrcset(String raw) {
+    for (final part in raw.split(',')) {
+      final candidate = part.trim().split(RegExp(r'\s+')).first;
+      if (candidate.isNotEmpty) return candidate;
+    }
+    return '';
+  }
+
+  static String _cssBackground(String style) {
+    return _cssUrl.firstMatch(style)?.group(1)?.trim() ?? '';
   }
 
   static bool _isPlaceholderCover(String url) {

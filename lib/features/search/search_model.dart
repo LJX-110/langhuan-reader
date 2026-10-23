@@ -39,6 +39,26 @@ class SearchModel with ChangeNotifier {
   /// Sources that timed out or failed in the current sweep.
   int failedSources = 0;
 
+  /// Names of failed sources, in completion order (for actionable messages).
+  final List<String> failedSourceNames = [];
+
+  bool get allSourcesFailed =>
+      totalSources > 0 && failedSources >= totalSources;
+
+  /// Empty-state explanation: no hits vs all sources failed vs partial outage.
+  String get emptyHint {
+    if (failedSources <= 0) return '换个书名、作者或关键词再试。';
+    if (allSourcesFailed) {
+      final names = failedSourceNames.take(3).join('、');
+      final suffix = failedSourceNames.length > 3 ? ' 等' : '';
+      return names.isEmpty
+          ? '全部 $totalSources 个书源请求失败，请检查网络或书源配置后重试。'
+          : '全部 $totalSources 个书源请求失败（$names$suffix），'
+                '请检查网络或书源配置后重试。';
+    }
+    return '$failedSources 个书源请求失败，结果可能不完整。';
+  }
+
   String historyKey = "";
   int page = 1;
   var word = "";
@@ -85,6 +105,7 @@ class SearchModel with ChangeNotifier {
     searchedSources = 0;
     totalSources = 0;
     failedSources = 0;
+    failedSourceNames.clear();
     _searchGen++;
   }
 
@@ -112,6 +133,7 @@ class SearchModel with ChangeNotifier {
     totalSources = searchable.length;
     searchedSources = 0;
     failedSources = 0;
+    failedSourceNames.clear();
     notifyListeners();
 
     try {
@@ -134,6 +156,9 @@ class SearchModel with ChangeNotifier {
           } catch (_) {
             if (gen != _searchGen) return;
             failedSources++;
+            if (s.bookSourceName.isNotEmpty) {
+              failedSourceNames.add(s.bookSourceName);
+            }
             searchedSources = (searchedSources + 1).clamp(0, totalSources);
             notifyListeners();
             return;
@@ -264,6 +289,7 @@ class SearchModel with ChangeNotifier {
     searchedSources = 0;
     totalSources = 0;
     failedSources = 0;
+    failedSourceNames.clear();
     _searchGen++;
     notifyListeners();
   }
@@ -279,6 +305,7 @@ class SearchModel with ChangeNotifier {
     searchedSources = 0;
     totalSources = 0;
     failedSources = 0;
+    failedSourceNames.clear();
     final gen = ++_searchGen;
     loading = true;
     notifyListeners(); // UI shows loading spinner

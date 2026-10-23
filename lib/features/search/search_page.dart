@@ -292,7 +292,7 @@ class _SearchState extends ConsumerState<Search> {
         padding: const EdgeInsets.fromLTRB(20, 96, 20, 24),
         children: [
           Text(
-            '暂无搜索结果',
+            model.allSourcesFailed ? '书源全部请求失败' : '暂无搜索结果',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
@@ -301,16 +301,14 @@ class _SearchState extends ConsumerState<Search> {
           ),
           const SizedBox(height: 6),
           Text(
-            model.failedSources > 0
-                ? '${model.failedSources} 个书源请求失败，可能网络不稳定或书源已失效。'
-                : '换个书名、作者或关键词再试。',
+            model.emptyHint,
             style: TextStyle(fontSize: 12, color: muted, height: 1.6),
           ),
         ],
       );
     }
 
-    final showFooter = model.loading || model.noMore;
+    final showFooter = model.loading || model.noMore || model.failedSources > 0;
     return NotificationListener<ScrollNotification>(
       onNotification: (n) {
         if (n.metrics.pixels >= n.metrics.maxScrollExtent - 200) {
@@ -323,12 +321,18 @@ class _SearchState extends ConsumerState<Search> {
         itemCount: groups.length + (showFooter ? 1 : 0),
         itemBuilder: (context, i) {
           if (i >= groups.length) {
+            final failedNote = !model.loading && model.failedSources > 0
+                ? ' · ${model.failedSources} 个书源失败'
+                : '';
             return SizedBox(
               height: 54,
               child: Center(
                 child: model.loading
                     ? const CupertinoActivityIndicator(radius: 10)
-                    : Text('到底了', style: TextStyle(fontSize: 11, color: muted)),
+                    : Text(
+                        '到底了$failedNote',
+                        style: TextStyle(fontSize: 11, color: muted),
+                      ),
               ),
             );
           }

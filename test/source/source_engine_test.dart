@@ -607,7 +607,11 @@ function cfCheck(html, targetUrl) {
       expect(req.method, 'POST');
       expect(req.charset.toLowerCase(), 'gbk');
       expect(req.url, contains('www.69shuba.com/modules/article/search.php'));
-      expect(req.body.toString(), contains(Uri.encodeQueryComponent('剑来')));
+      expect(req.body.toString(), contains(AnalyzeUrl.encodeKey('剑来', 'gbk')));
+      expect(
+        req.body.toString(),
+        isNot(contains(Uri.encodeQueryComponent('剑来'))),
+      );
     });
 
     test('tocUrl @js relative transform', () {

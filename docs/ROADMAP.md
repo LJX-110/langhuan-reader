@@ -27,8 +27,8 @@
 
 ### 退出标准
 
-- [ ] `flutter analyze` 无问题
-- [ ] `flutter test` 全部通过
+- [x] `flutter analyze` 无问题
+- [x] `flutter test` 全部通过
 - [ ] release arm64 APK 可安装、可覆盖升级
 - [ ] 最终真机验收：书架 / 发现 / 本地 / 我 / 搜索 / 详情 / 阅读器 / 书源 / 书签 / 阅读记录 / 明暗主题
 - [ ] 连续阅读 30 分钟无崩溃、无明显内存增长

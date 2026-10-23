@@ -58,6 +58,7 @@ class Skin extends ConsumerWidget {
                                   preset.accent,
                                   preset.secondary,
                                   divider,
+                                  index: i,
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
@@ -89,7 +90,12 @@ class Skin extends ConsumerWidget {
     );
   }
 
-  Widget _swatchPair(Color accent, Color secondary, Color border) {
+  Widget _swatchPair(
+    Color accent,
+    Color secondary,
+    Color border, {
+    required int index,
+  }) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(3),
       child: Container(
@@ -100,9 +106,20 @@ class Skin extends ConsumerWidget {
           borderRadius: BorderRadius.circular(3),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(child: ColoredBox(color: accent)),
-            Expanded(child: ColoredBox(color: secondary)),
+            Expanded(
+              child: ColoredBox(
+                key: ValueKey('theme-swatch-$index-accent'),
+                color: accent,
+              ),
+            ),
+            Expanded(
+              child: ColoredBox(
+                key: ValueKey('theme-swatch-$index-secondary'),
+                color: secondary,
+              ),
+            ),
           ],
         ),
       ),
@@ -138,11 +155,7 @@ class _ThemePreview extends StatelessWidget {
         children: [
           Text(
             '当前主题',
-            style: TextStyle(
-              fontSize: 11,
-              color: muted,
-              letterSpacing: 1.2,
-            ),
+            style: TextStyle(fontSize: 11, color: muted, letterSpacing: 1.2),
           ),
           const SizedBox(height: 8),
           Row(
