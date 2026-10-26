@@ -295,13 +295,17 @@ class TextPaginator {
     final padH = n(layoutParams['padH'], decimals: 1);
     final boxW = n(layoutParams['boxW']);
     final boxH = n(layoutParams['boxH']);
+    final topSafe = n(layoutParams['topSafe'], decimals: 1);
+    final bottomSafe = n(layoutParams['bottomSafe'], decimals: 1);
     final fontFamily = '${layoutParams['fontFamily'] ?? ''}';
     final fontPath = '${layoutParams['fontPath'] ?? ''}';
     final justify = layoutParams['shouldJustifyHeight'] == true ? '1' : '0';
     final abi = '${layoutParams['abi'] ?? bookPagerAbiVersion}';
+    final engine = '${layoutParams['engineRevision'] ?? bookPagerLayoutRevision}';
     final align = '${layoutParams['textAlign'] ?? 'justify'}';
-    return 'abi$abi|$fontSize|$lineHeight|$paragraph|$padH|$boxW|$boxH|'
-        '$fontFamily|$fontPath|$justify|$align|$contentLen|$contentSig';
+    return 'abi$abi|eng$engine|$fontSize|$lineHeight|$paragraph|$padH|'
+        '$boxW|$boxH|$topSafe|$bottomSafe|$fontFamily|$fontPath|$justify|'
+        '$align|$contentLen|$contentSig';
   }
 
   /// Cheap content signature so same-length different bodies don't share cache.

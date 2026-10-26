@@ -1,3 +1,4 @@
+import 'package:langhuan/app/version_label.dart';
 import 'package:langhuan/core/storage/local_store.dart';
 import 'package:flutter/material.dart';
 import 'package:langhuan/core/storage/prefs_keys.dart';
@@ -15,7 +16,9 @@ class InfoPage extends StatefulWidget {
 class InfoState extends State<InfoPage> {
   @override
   Widget build(BuildContext context) {
-    final version = SpUtil.getString(PrefsKeys.version);
+    final version = versionDisplayLabel(
+      SpUtil.getString(PrefsKeys.version, defValue: ''),
+    );
     return Scaffold(
       appBar: AppBar(title: Text("公告"), centerTitle: true, elevation: 0),
       body: SafeArea(
@@ -47,9 +50,7 @@ class InfoState extends State<InfoPage> {
                 children: <Widget>[
                   Expanded(child: Container()),
                   Text(
-                    version.isEmpty
-                        ? DateUtil.getNowDateStr()
-                        : 'v$version · ${DateUtil.getNowDateStr()}',
+                    '$version · ${DateUtil.getNowDateStr()}',
                     textAlign: TextAlign.start,
                     style: TextStyle(color: Colors.grey, fontSize: 12),
                   ),

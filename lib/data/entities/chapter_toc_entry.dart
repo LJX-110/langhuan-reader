@@ -8,11 +8,20 @@ class ChapterTocEntry {
   bool hasBody;
   int ord;
 
+  /// Display grouping only: the volume this chapter belongs to.
+  ///
+  /// Empty when the source has no `isVolume` rule. Never participates in
+  /// reading progress, chapter ids or the `(book_id, ord)` index.
+  String volumeTitle;
+  int volumeOrd;
+
   ChapterTocEntry({
     this.id = '',
     this.title = '',
     this.url = '',
     this.hasBody = false,
     this.ord = 0,
+    this.volumeTitle = '',
+    this.volumeOrd = -1,
   });
 }

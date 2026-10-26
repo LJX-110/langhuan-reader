@@ -112,20 +112,103 @@ class SourceRepository {
     await upsertAllWithStats(sources);
   }
 
-  /// Upsert sources and report how many rows were newly inserted vs replaced.
+  /// Upsert sources and report how many rows were newly inserted, explicitly
+  /// overwritten, or left alone.
   ///
-  /// Existing `enabled` flags are preserved on update so re-importing a source
-  /// the user disabled does not re-enable it.
+  /// Default behaviour is conservative: an existing row keeps its rules,
+  /// `enabled` flag, custom order and health timing. A repository sync must not
+  /// silently overwrite what the user has locally. Set [overwriteExistingRules]
+  /// to true only after the user has confirmed a rules refresh.
   ///
   /// Writes are committed in chunks so large imports do not assemble one giant
-  /// MethodChannel argument list.
-  Future<SourceUpsertStats> upsertAllWithStats(List<BookSource> sources) async {
+  /// MethodChannel argument list. The chunks all run inside one transaction:
+  /// if any chunk fails, neither the new sources nor the preserved/overwritten
+  /// state is partially applied.
+  Future<SourceUpsertStats> upsertAllWithStats(
+    List<BookSource> sources, {
+    bool overwriteExistingRules = false,
+  }) async {
     if (sources.isEmpty) {
       return const SourceUpsertStats(inserted: 0, updated: 0);
     }
     final db = await _database;
-    final urls = sources.map((s) => s.bookSourceUrl).toList();
-    final existingEnabled = <String, bool>{};
+    var inserted = 0;
+    var updated = 0;
+    var preserved = 0;
+
+    await db.transaction((txn) async {
+      final urls = sources.map((s) => s.bookSourceUrl).toList();
+      final existing = <String, Map<String, Object?>>{};
+      for (var i = 0; i < urls.length; i += _channelChunk) {
+        final part = urls.sublist(
+          i,
+          i + _channelChunk > urls.length ? urls.length : i + _channelChunk,
+        );
+        final placeholders = List.filled(part.length, '?').join(',');
+        final rows = await txn.rawQuery(
+          'SELECT book_source_url, enabled, custom_order, respond_time, '
+          'last_check_time FROM sources '
+          'WHERE book_source_url IN ($placeholders)',
+          part,
+        );
+        for (final row in rows) {
+          final url = row['book_source_url'] as String? ?? '';
+          if (url.isEmpty) continue;
+          existing[url] = row;
+        }
+      }
+      final maxOrderRows = await txn.rawQuery(
+        'SELECT MAX(custom_order) AS m FROM sources',
+      );
+      var nextOrder = (maxOrderRows.first['m'] as int? ?? -1) + 1;
+
+      for (var i = 0; i < sources.length; i += _channelChunk) {
+        final part = sources.sublist(
+          i,
+          i + _channelChunk > sources.length
+              ? sources.length
+              : i + _channelChunk,
+        );
+        final batch = txn.batch();
+        for (final source in part) {
+          final old = existing[source.bookSourceUrl];
+          if (old == null) {
+            source.customOrder = nextOrder++;
+            inserted++;
+          } else {
+            // Local state always wins unless an explicit overwrite was requested.
+            source.enabled = (old['enabled'] as int? ?? 1) == 1;
+            source.customOrder = old['custom_order'] as int? ?? 0;
+            source.respondTime = old['respond_time'] as int? ?? 0;
+            source.lastCheckTime = old['last_check_time'] as int? ?? 0;
+            if (!overwriteExistingRules) {
+              preserved++;
+              continue;
+            }
+            updated++;
+          }
+          batch.insert(
+            'sources',
+            _toRow(source),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+        await batch.commit(noResult: true);
+      }
+    });
+
+    return SourceUpsertStats(
+      inserted: inserted,
+      updated: updated,
+      preserved: preserved,
+    );
+  }
+
+  /// Existing URLs among [urls], without hydrating rule payloads.
+  Future<Set<String>> existingUrls(List<String> urls) async {
+    final result = <String>{};
+    if (urls.isEmpty) return result;
+    final db = await _database;
     for (var i = 0; i < urls.length; i += _channelChunk) {
       final part = urls.sublist(
         i,
@@ -133,40 +216,75 @@ class SourceRepository {
       );
       final placeholders = List.filled(part.length, '?').join(',');
       final rows = await db.rawQuery(
-        'SELECT book_source_url, enabled FROM sources '
+        'SELECT book_source_url FROM sources '
         'WHERE book_source_url IN ($placeholders)',
         part,
       );
-      for (final r in rows) {
-        final u = r['book_source_url'] as String? ?? '';
-        if (u.isEmpty) continue;
-        existingEnabled[u] = (r['enabled'] as int? ?? 1) == 1;
+      for (final row in rows) {
+        final url = row['book_source_url'] as String? ?? '';
+        if (url.isNotEmpty) result.add(url);
       }
     }
+    return result;
+  }
+
+  /// Overwrite incoming sources in one transaction.
+  ///
+  /// Only call this after the user explicitly chose to replace local rules.
+  /// A failure rolls the whole batch back; local order, enable flag and health
+  /// are still preserved because they are user state, not repository content.
+  Future<SourceUpsertStats> overwriteAllWithRollback(
+    List<BookSource> sources,
+  ) async {
+    if (sources.isEmpty) {
+      return const SourceUpsertStats(inserted: 0, updated: 0);
+    }
+    final db = await _database;
+    final existing = <String, Map<String, Object?>>{};
+    final urls = sources.map((s) => s.bookSourceUrl).toList();
+    for (var i = 0; i < urls.length; i += _channelChunk) {
+      final part = urls.sublist(
+        i,
+        i + _channelChunk > urls.length ? urls.length : i + _channelChunk,
+      );
+      final placeholders = List.filled(part.length, '?').join(',');
+      final rows = await db.rawQuery(
+        'SELECT book_source_url, enabled, custom_order, respond_time, '
+        'last_check_time FROM sources WHERE book_source_url IN ($placeholders)',
+        part,
+      );
+      for (final row in rows) {
+        final url = row['book_source_url'] as String? ?? '';
+        if (url.isNotEmpty) existing[url] = row;
+      }
+    }
+    final maxOrderRows = await db.rawQuery(
+      'SELECT MAX(custom_order) AS m FROM sources',
+    );
+    var nextOrder = (maxOrderRows.first['m'] as int? ?? -1) + 1;
 
     var inserted = 0;
     var updated = 0;
-    for (var i = 0; i < sources.length; i += _channelChunk) {
-      final part = sources.sublist(
-        i,
-        i + _channelChunk > sources.length ? sources.length : i + _channelChunk,
-      );
-      final batch = db.batch();
-      for (final s in part) {
-        if (existingEnabled.containsKey(s.bookSourceUrl)) {
-          s.enabled = existingEnabled[s.bookSourceUrl]!;
-          updated++;
-        } else {
+    await db.transaction((txn) async {
+      for (final source in sources) {
+        final old = existing[source.bookSourceUrl];
+        if (old == null) {
+          source.customOrder = nextOrder++;
           inserted++;
+        } else {
+          source.enabled = (old['enabled'] as int? ?? 1) == 1;
+          source.customOrder = old['custom_order'] as int? ?? 0;
+          source.respondTime = old['respond_time'] as int? ?? 0;
+          source.lastCheckTime = old['last_check_time'] as int? ?? 0;
+          updated++;
         }
-        batch.insert(
+        await txn.insert(
           'sources',
-          _toRow(s),
+          _toRow(source),
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
-      await batch.commit(noResult: true);
-    }
+    });
     return SourceUpsertStats(inserted: inserted, updated: updated);
   }
 
@@ -214,6 +332,32 @@ class SourceRepository {
       }
       await batch.commit(noResult: true);
     }
+  }
+
+  /// Replace the group string of [urls] in one transaction (批量移动分组).
+  ///
+  /// An empty [group] clears the grouping. Only `book_source_group` is
+  /// written, so rules, order and health stay untouched.
+  Future<void> updateGroups(List<String> urls, String group) async {
+    if (urls.isEmpty) return;
+    final db = await _database;
+    await db.transaction((txn) async {
+      for (var i = 0; i < urls.length; i += _channelChunk) {
+        final end = i + _channelChunk > urls.length
+            ? urls.length
+            : i + _channelChunk;
+        final batch = txn.batch();
+        for (final url in urls.sublist(i, end)) {
+          batch.update(
+            'sources',
+            {'book_source_group': group},
+            where: 'book_source_url = ?',
+            whereArgs: [url],
+          );
+        }
+        await batch.commit(noResult: true);
+      }
+    });
   }
 
   Future<void> deleteMany(List<String> urls) async {

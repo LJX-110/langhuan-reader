@@ -1,5 +1,12 @@
+import 'dart:convert';
+
+import 'package:bot_toast/bot_toast.dart';
 import 'package:langhuan/core/platform/screen.dart';
+import 'package:langhuan/data/entities/book.dart';
+import 'package:langhuan/data/repositories/book_repository.dart';
+import 'package:langhuan/design/components/bookshelf_3d.dart';
 import 'package:langhuan/design/components/page_header.dart';
+import 'package:langhuan/design/components/shelf_book_view.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/core/storage/prefs_keys.dart';
 import 'package:langhuan/core/storage/local_store.dart';
@@ -7,12 +14,11 @@ import 'package:langhuan/app/router/routes.dart';
 import 'package:langhuan/app/providers.dart';
 import 'package:langhuan/core/platform/system_ui.dart';
 import 'package:langhuan/features/shelf/shelf_model.dart';
-import 'package:langhuan/features/shelf/widgets/books_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// 书架
+/// 书架：只有 3D 书架一种形态；整理页负责排序与批量删除。
 class BookShelf extends ConsumerStatefulWidget {
   const BookShelf({super.key});
 
@@ -40,6 +46,7 @@ class _BookShelfState extends ConsumerState<BookShelf> {
   Widget build(BuildContext context) {
     final shelfModel = ref.watch(shelfModelProvider);
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final books = shelfModel.visibleShelf;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiHelper.overlayStyle(context),
@@ -50,7 +57,6 @@ class _BookShelfState extends ConsumerState<BookShelf> {
           child: Column(
             children: [
               _ShelfHeader(
-                coverMode: shelfModel.cover,
                 filter: shelfModel.filter,
                 onFilter: shelfModel.setFilter,
                 onSearch: () {
@@ -60,35 +66,175 @@ class _BookShelfState extends ConsumerState<BookShelf> {
                     params: {'type': 'book', 'name': ''},
                   );
                 },
-                onToggleMode: shelfModel.toggleModel,
                 onManage: () => Routes.navigateTo(context, Routes.sortShelf),
                 onHistory: () => Routes.navigateTo(context, Routes.history),
               ),
-              Expanded(child: BooksWidget('')),
+              Expanded(
+                child: books.isEmpty
+                    ? (shelfModel.shelf.isEmpty
+                          ? _EmptyShelf(dark: dark)
+                          : _EmptyFilter(
+                              onShowAll: () =>
+                                  shelfModel.setFilter(ShelfFilter.all),
+                            ))
+                    : Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppDimens.pagePadding,
+                        ),
+                        child: Bookshelf3D(
+                          books: books
+                              .map(ShelfBookView.fromBook)
+                              .toList(growable: false),
+                          initialBookId: _initialFocusId(books),
+                          onOpen: _openShelfBook,
+                          onDelete: _deleteShelfBook,
+                        ),
+                      ),
+              ),
             ],
           ),
         ),
       ),
     );
   }
+
+  /// Default focus: the most recently read book, else the first one.
+  String? _initialFocusId(List<Book> books) {
+    for (final book in books) {
+      if (book.readingChapter.trim().isNotEmpty ||
+          book.chapterIndex > 0 ||
+          book.pageIndex > 0) {
+        return book.id;
+      }
+    }
+    return books.isEmpty ? null : books.first.id;
+  }
+
+  Future<void> _openShelfBook(ShelfBookView view) async {
+    var openBook = Book.id(view.id);
+    for (final book in ref.read(shelfModelProvider).shelf) {
+      if (book.id == view.id) {
+        openBook = book;
+        break;
+      }
+    }
+    // Prefer durable DB progress over possibly-stale in-memory shelf data.
+    try {
+      final dbBook = await BookRepository.instance.getById(view.id);
+      if (dbBook != null) openBook = dbBook;
+    } catch (_) {}
+    if (!mounted) return;
+    await Routes.navigateTo(
+      context,
+      Routes.read,
+      params: {'read': jsonEncode(openBook.toJson())},
+    );
+  }
+
+  Future<void> _deleteShelfBook(ShelfBookView view) async {
+    final model = ref.read(shelfModelProvider);
+    Book? target;
+    for (final book in model.shelf) {
+      if (book.id == view.id) {
+        target = book;
+        break;
+      }
+    }
+    if (target == null) return;
+    await model.removeBook(target);
+    BotToast.showText(text: '已移除《${target.name}》');
+  }
 }
 
-/// 顶栏：标题 + 数量 + 搜索 / 视图 / 整理
+class _EmptyShelf extends StatelessWidget {
+  const _EmptyShelf({required this.dark});
+
+  final bool dark;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = dark ? AppColors.textOnDark : AppColors.ink;
+    final muted = dark ? AppColors.textMutedDark : AppColors.inkMute;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 80, 24, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '书架还是空的',
+            style: TextStyle(
+              color: primary,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '去发现页或搜索找一本书。',
+            style: TextStyle(color: muted, fontSize: 12),
+          ),
+          const SizedBox(height: 6),
+          TextButton(
+            onPressed: () {
+              Routes.navigateTo(
+                context,
+                Routes.search,
+                params: {'type': 'book', 'name': ''},
+              );
+            },
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, 32),
+            ),
+            child: const Text('去搜索'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyFilter extends StatelessWidget {
+  const _EmptyFilter({required this.onShowAll});
+
+  final VoidCallback onShowAll;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final primary = dark ? AppColors.textOnDark : AppColors.ink;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '这个筛选下还没有书',
+            style: TextStyle(
+              color: primary,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextButton(onPressed: onShowAll, child: const Text('查看全部')),
+        ],
+      ),
+    );
+  }
+}
+
+/// 顶栏：标题 + 阅读记录 + 整理（不再有网格 / 列表切换）
 class _ShelfHeader extends StatelessWidget {
-  final bool coverMode;
   final ShelfFilter filter;
   final ValueChanged<ShelfFilter> onFilter;
   final VoidCallback onSearch;
-  final VoidCallback onToggleMode;
   final VoidCallback onManage;
   final VoidCallback onHistory;
 
   const _ShelfHeader({
-    required this.coverMode,
     required this.filter,
     required this.onFilter,
     required this.onSearch,
-    required this.onToggleMode,
     required this.onManage,
     required this.onHistory,
   });
@@ -123,13 +269,6 @@ class _ShelfHeader extends StatelessWidget {
                 icon: Icons.history,
                 tooltip: '阅读记录',
                 onTap: onHistory,
-              ),
-              _HeaderIcon(
-                icon: coverMode
-                    ? Icons.view_list_outlined
-                    : Icons.grid_view_outlined,
-                tooltip: coverMode ? '列表模式' : '封面模式',
-                onTap: onToggleMode,
               ),
               _HeaderIcon(
                 icon: Icons.checklist_rtl,

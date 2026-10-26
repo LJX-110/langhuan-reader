@@ -10,6 +10,8 @@ import 'package:langhuan/core/storage/prefs_keys.dart';
 import 'package:langhuan/design/components/pic_widget.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/features/search/search_model.dart';
+import 'package:langhuan/features/sources/model/source_search_report.dart';
+import 'package:langhuan/features/sources/source_test_panel.dart';
 
 class Search extends ConsumerStatefulWidget {
   final String type;
@@ -29,6 +31,7 @@ class _SearchState extends ConsumerState<Search> {
   void initState() {
     super.initState();
     searchModel = ref.read(searchModelProvider);
+    searchModel.loadGroupOptions();
     if (widget.type == 'book' && widget.name.isNotEmpty) {
       controller.text = widget.name;
     }
@@ -67,6 +70,7 @@ class _SearchState extends ConsumerState<Search> {
         child: Column(
           children: [
             _searchBar(context),
+            if (model.groupOptions.length > 1) _groupChips(context, model),
             Expanded(
               child: model.showResult
                   ? _resultView(context, model)
@@ -135,6 +139,32 @@ class _SearchState extends ConsumerState<Search> {
             onPressed: () => Navigator.of(context).maybePop(),
             child: const Text('取消'),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Group scope chips (全部 + each group). Switching re-runs the current
+  /// keyword under the new scope.
+  Widget _groupChips(BuildContext context, SearchModel model) {
+    return SizedBox(
+      height: 42,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
+        children: [
+          for (final group in ['', ...model.groupOptions])
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: ChoiceChip(
+                label: Text(
+                  group.isEmpty ? '全部' : group,
+                  style: const TextStyle(fontSize: 12),
+                ),
+                selected: model.groupFilter == group,
+                onSelected: (_) => model.setGroupFilter(group),
+              ),
+            ),
         ],
       ),
     );
@@ -251,16 +281,44 @@ class _SearchState extends ConsumerState<Search> {
                 ),
               ),
               const Spacer(),
-              Text(
-                model.loading && groups.isEmpty ? '正在搜索…' : '按书合并',
-                style: TextStyle(fontSize: 11, color: muted),
-              ),
+              if (model.failures.isNotEmpty)
+                InkWell(
+                  onTap: () => _showDiagnostics(context, model),
+                  child: Text(
+                    _statusLabel(model),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                )
+              else
+                Text(
+                  _statusLabel(model),
+                  style: TextStyle(fontSize: 11, color: muted),
+                ),
             ],
           ),
         ),
         Expanded(child: _resultBody(context, model, groups)),
       ],
     );
+  }
+
+  /// Header status: search progress, per-source success/failure summary, or
+  /// the merge hint. Failures make it an entry point to the diagnostics sheet.
+  String _statusLabel(SearchModel model) {
+    if (model.loading && model.bks.isEmpty) {
+      return model.softTimeoutElapsed ? '仍在搜索…' : '正在搜索…';
+    }
+    if (model.loading && model.fromCache) {
+      return model.softTimeoutElapsed ? '缓存结果 · 仍在刷新' : '缓存结果 · 刷新中…';
+    }
+    if (model.failures.isNotEmpty) {
+      final ok = model.reports.length - model.failures.length;
+      return '成功 $ok · 失败 ${model.failures.length}';
+    }
+    return model.fromCache ? '缓存结果' : '按书合并';
   }
 
   Widget _resultBody(
@@ -281,6 +339,17 @@ class _SearchState extends ConsumerState<Search> {
             const CupertinoActivityIndicator(radius: 14),
             const SizedBox(height: 12),
             Text(progress, style: TextStyle(fontSize: 12, color: muted)),
+            if (model.softTimeoutElapsed) ...[
+              const SizedBox(height: 4),
+              Text(
+                '书源响应较慢，可继续等待或停止',
+                style: TextStyle(fontSize: 11, color: muted),
+              ),
+              TextButton(
+                onPressed: model.stopWaiting,
+                child: const Text('停止等待'),
+              ),
+            ],
           ],
         ),
       );
@@ -304,6 +373,19 @@ class _SearchState extends ConsumerState<Search> {
             model.emptyHint,
             style: TextStyle(fontSize: 12, color: muted, height: 1.6),
           ),
+          if (model.reports.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: () => _showDiagnostics(context, model),
+                icon: const Icon(Icons.troubleshoot, size: 18),
+                label: Text(
+                  model.failures.isEmpty ? '查看搜索诊断' : '查看诊断并重试',
+                ),
+              ),
+            ),
+          ],
         ],
       );
     }
@@ -328,10 +410,55 @@ class _SearchState extends ConsumerState<Search> {
               height: 54,
               child: Center(
                 child: model.loading
-                    ? const CupertinoActivityIndicator(radius: 10)
-                    : Text(
-                        '到底了$failedNote',
-                        style: TextStyle(fontSize: 11, color: muted),
+                    ? (model.softTimeoutElapsed
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '仍在搜索'
+                                  ' (${model.searchedSources}/${model.totalSources})',
+                                  style: TextStyle(fontSize: 11, color: muted),
+                                ),
+                                TextButton(
+                                  onPressed: model.stopWaiting,
+                                  style: TextButton.styleFrom(
+                                    minimumSize: const Size(0, 32),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    '停止等待',
+                                    style: TextStyle(fontSize: 11),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : const CupertinoActivityIndicator(radius: 10))
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '到底了$failedNote',
+                            style: TextStyle(fontSize: 11, color: muted),
+                          ),
+                          if (model.failures.isNotEmpty) ...[
+                            const SizedBox(width: 2),
+                            TextButton(
+                              onPressed: () => _showDiagnostics(context, model),
+                              style: TextButton.styleFrom(
+                                minimumSize: const Size(0, 32),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
+                              ),
+                              child: const Text(
+                                '诊断',
+                                style: TextStyle(fontSize: 11),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
               ),
             );
@@ -339,6 +466,170 @@ class _SearchState extends ConsumerState<Search> {
           return _resultRow(context, groups[i], model);
         },
       ),
+    );
+  }
+
+  void _showDiagnostics(BuildContext context, SearchModel model) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => FractionallySizedBox(
+        heightFactor: .78,
+        child: AnimatedBuilder(
+          animation: model,
+          builder: (context, _) {
+            final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+            final reports = [...model.reports];
+            reports.sort((a, b) {
+              int rank(SourceSearchReport r) => r.failed
+                  ? 0
+                  : (r.issue == SourceSearchIssue.noResult ? 1 : 2);
+              final byRank = rank(a).compareTo(rank(b));
+              if (byRank != 0) return byRank;
+              return a.sourceName.compareTo(b.sourceName);
+            });
+            final failures = model.failures;
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 12, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              '搜索诊断',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '「${model.word}」 · ${reports.length} 个书源 · '
+                              '${failures.length} 个失败',
+                              style: TextStyle(fontSize: 11, color: muted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (failures.length > 1)
+                        TextButton(
+                          onPressed: () => model.retryFailedSources(),
+                          child: const Text('全部重试'),
+                        ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: reports.isEmpty
+                      ? Center(
+                          child: Text(
+                            '暂无诊断数据',
+                            style: TextStyle(fontSize: 12, color: muted),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: EdgeInsets.fromLTRB(
+                            16,
+                            12,
+                            16,
+                            12 + MediaQuery.viewPaddingOf(context).bottom,
+                          ),
+                          itemCount: reports.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 10),
+                          itemBuilder: (context, i) {
+                            final report = reports[i];
+                            final retrying = model.retryingSources.contains(
+                              report.sourceUrl,
+                            );
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        report.sourceName.isEmpty
+                                            ? report.sourceUrl
+                                            : report.sourceName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    if (retrying)
+                                      const Padding(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                        ),
+                                        child: SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                      )
+                                    else if (report.failed)
+                                      TextButton(
+                                        onPressed: () => model.retrySource(
+                                          report.sourceUrl,
+                                        ),
+                                        child: const Text(
+                                          '重试',
+                                          style: TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                    TextButton(
+                                      onPressed: () => _testSingleSource(
+                                        context,
+                                        model,
+                                        report,
+                                      ),
+                                      child: const Text(
+                                        '测试',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                SourceSearchReportCard(report: report),
+                              ],
+                            );
+                          },
+                        ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _testSingleSource(
+    BuildContext context,
+    SearchModel model,
+    SourceSearchReport report,
+  ) {
+    final name = report.sourceName.isEmpty
+        ? report.sourceUrl
+        : report.sourceName;
+    return showSourceTestSheet(
+      context: context,
+      sourceName: name,
+      sourceUrl: report.sourceUrl,
+      initialKeyword: model.word,
+      onSearch: (keyword) => model.testSingleSource(report.sourceUrl, keyword),
     );
   }
 
@@ -384,6 +675,7 @@ class _SearchState extends ConsumerState<Search> {
                   height: 84,
                   referer: item.bookUrl,
                   title: item.name,
+                  baseUrl: item.sourceUrl,
                 ),
               ),
               const SizedBox(width: 12),

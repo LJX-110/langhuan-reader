@@ -4,7 +4,6 @@ import 'package:langhuan/core/events/event.dart';
 import 'package:bot_toast/bot_toast.dart';
 import 'package:langhuan/core/storage/local_store.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:langhuan/core/storage/prefs_keys.dart';
 
 enum ShelfFilter { all, reading, unread }
 
@@ -74,87 +73,7 @@ class ShelfModel with ChangeNotifier {
   }
 
   BuildContext? context;
-  // WeChat Reading–like: cover grid is the product default.
-  bool cover = SpUtil.getBool(PrefsKeys.coverGrid, defValue: true);
-  bool sortShelf = false;
   final BookRepository _books = BookRepository.instance;
-  List<bool> _picks = [];
-
-  bool pickAllFlag = false;
-
-  void initPicks() {
-    pickAllFlag = false;
-    _picks = [];
-    for (var i = 0; i < shelf.length; i++) {
-      _picks.add(false);
-    }
-  }
-
-  Future<void> removePicks() async {
-    List<Book> bks = [];
-    List<String> ids = [];
-    List<bool> pics = [];
-
-    for (var i = 0; i < _picks.length; i++) {
-      if (_picks[i]) {
-        await delLocalCache([shelf[i].id]);
-        ids.add(shelf[i].id);
-      } else {
-        bks.add(shelf[i]);
-        pics.add(_picks[i]);
-      }
-    }
-    shelf = bks;
-    _picks = pics;
-    sortShelf = false;
-    BotToast.showText(text: "删除书籍成功");
-    notifyListeners();
-  }
-
-  void pickAll() {
-    _picks = [];
-    for (var i = 0; i < shelf.length; i++) {
-      _picks.add(!pickAllFlag);
-    }
-    pickAllFlag = !pickAllFlag;
-
-    notifyListeners();
-  }
-
-  bool picks(int i) {
-    if (_picks.isEmpty) {
-      for (var i = 0; i < shelf.length; i++) {
-        _picks.add(false);
-      }
-    }
-    if (_picks.length < shelf.length) {
-      for (var i = 0; i < shelf.length - _picks.length; i++) {
-        _picks.add(false);
-      }
-    }
-    return _picks[i];
-  }
-
-  void changePick(int i) {
-    _picks[i] = !_picks[i];
-    notifyListeners();
-  }
-
-  bool hasPick() {
-    return _picks.contains(true);
-  }
-
-  void toggleModel() {
-    cover = !cover;
-    SpUtil.putBool(PrefsKeys.coverGrid, cover);
-    notifyListeners();
-  }
-
-  void sortShelfModel() {
-    initPicks();
-    sortShelf = !sortShelf;
-    notifyListeners();
-  }
 
   /// Local-only shelf refresh (no cloud).
   Future<void> refreshShelf() async {
@@ -183,6 +102,47 @@ class ShelfModel with ChangeNotifier {
     for (var i = 0; i < ids.length; i++) {
       await _books.delete(ids[i]);
     }
+  }
+
+  /// Remove one book from the shelf (DB row + chapter cache).
+  Future<void> removeBook(Book book) async {
+    shelf = shelf.where((b) => b.id != book.id).toList(growable: false);
+    notifyListeners();
+    await delLocalCache([book.id]);
+  }
+
+  /// Remove every book in [ids]; used by the 3D 整理页 batch delete.
+  Future<void> removeBooks(Set<String> ids) async {
+    if (ids.isEmpty) return;
+    shelf = shelf.where((b) => !ids.contains(b.id)).toList(growable: false);
+    notifyListeners();
+    await delLocalCache(ids.toList(growable: false));
+  }
+
+  /// Persist a new shelf order after a 3D drag-reorder.
+  ///
+  /// `sort_time` is rewritten as "newest position first" in one transaction,
+  /// so the order survives restarts and the reader's "touch to top" still
+  /// works with the same field.
+  Future<void> applyOrder(List<String> orderedIds) async {
+    if (orderedIds.isEmpty) return;
+    final byId = <String, Book>{for (final b in shelf) b.id: b};
+    final next = <Book>[];
+    for (final id in orderedIds) {
+      final book = byId.remove(id);
+      if (book != null) next.add(book);
+    }
+    // Defensive: keep rows that were not part of the drag.
+    next.addAll(byId.values);
+    final base = DateUtil.getNowDateMs();
+    for (var i = 0; i < next.length; i++) {
+      next[i].sortTime = base - i;
+    }
+    shelf = next;
+    notifyListeners();
+    await _books.updateSortOrder(
+      next.map((b) => b.id).toList(growable: false),
+    );
   }
 
   Future<void> modifyShelf(Book book) async {

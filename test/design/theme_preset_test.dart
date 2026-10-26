@@ -25,7 +25,14 @@ void main() {
     );
     // A vivid accent stays as the fill colour…
     expect(light.colorScheme.primary, const Color(0xFFFFFF00));
-    expect(light.colorScheme.onPrimary, AppColors.black);
+    expect(
+      light.colorScheme.onPrimary,
+      AppColors.onColorOf(light.colorScheme.primary),
+    );
+    expect(
+      _contrast(light.colorScheme.onPrimary, light.colorScheme.primary),
+      greaterThan(4.4),
+    );
     // …while text and icons use a readable tone of the same hue.
     final lightInk = AppColors.readableAccent(
       light.colorScheme.primary,

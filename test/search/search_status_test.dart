@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:langhuan/features/search/search_model.dart';
+import 'package:langhuan/features/sources/model/source_search_report.dart';
 
 void main() {
   group('SearchModel failure reporting', () {
@@ -38,6 +39,48 @@ void main() {
       expect(model.allSourcesFailed, isTrue);
       expect(model.emptyHint, contains('全部 5 个书源请求失败'));
       expect(model.emptyHint, contains('甲源、乙源、丙源 等'));
+    });
+
+    test('total outage breaks down failure kinds', () {
+      model
+        ..totalSources = 2
+        ..searchedSources = 2
+        ..failedSources = 2
+        ..failedSourceNames.addAll(['甲源', '乙源']);
+      model.reports.addAll([
+        const SourceSearchReport(
+          sourceUrl: 'a',
+          sourceName: '甲源',
+          keyword: '斗破',
+          page: 1,
+          issue: SourceSearchIssue.timeout,
+        ),
+        const SourceSearchReport(
+          sourceUrl: 'b',
+          sourceName: '乙源',
+          keyword: '斗破',
+          page: 1,
+          issue: SourceSearchIssue.network,
+        ),
+      ]);
+
+      expect(model.emptyHint, contains('请求超时 1'));
+      expect(model.emptyHint, contains('网络失败 1'));
+      expect(model.failures, hasLength(2));
+    });
+
+    test('no-result report is reachable, not a failure', () {
+      const report = SourceSearchReport(
+        sourceUrl: 'a',
+        sourceName: '甲源',
+        keyword: '斗破',
+        page: 1,
+        issue: SourceSearchIssue.noResult,
+      );
+
+      expect(report.reachable, isTrue);
+      expect(report.failed, isFalse);
+      expect(report.summary, contains('无结果'));
     });
   });
 }

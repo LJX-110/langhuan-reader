@@ -8,10 +8,11 @@
 - 东方古风、书阁气质；不做通用阅读平台，不做社区、账号、听书。本地只支持 TXT 导入，不接 EPUB / MOBI / PDF。
 - 应用不内置任何书源，也不提供任何公开书源列表或默认仓库地址。
 - 只保留「私有书源仓库」接口：由使用者填写自己的 JSON 地址，手动同步。
+- 书源导入与仓库同步默认保留本地规则；只有用户明确确认后才覆盖，写库失败不得留下半批数据。
 
 ## 身份
 
-- 应用名：**琅嬛阁**；当前版本 `1.0.0`。
+- 应用名：**琅嬛阁**；当前版本 `2.1.0`。
 - Android 包名：`com.langhuan.reader`；Dart 包名：`langhuan`。
 - 上游底本：Apache-2.0；固定信息见 `docs/UPSTREAM.md`。
 - 必须保留 `LICENSE`、`NOTICE` 和第三方许可文本；界面不保留上游名称、链接、邮箱、截图。许可归属只放在 `NOTICE` 与 `docs/UPSTREAM.md`，其他文档不重复上游链接。
@@ -44,7 +45,7 @@ flutter build apk --release --target-platform android-arm64
 ## 设计
 
 - 4 个主页签：书架 / 发现 / 本地 / 我。
-- 视觉方向：白 / 黑底 + 12 套双色主题；每页只留一行页面标题，不保留品牌顶栏、英文副题和档案编号；发现页立体书架。
+- 视觉方向：白 / 黑底 + 12 套双色主题；每页只留一行页面标题，不保留品牌顶栏、英文副题和档案编号；发现页是平面列表，3D 模式只用于书架页与本地页。
 - 主题只改强调色与辅助色，页面正文仍用白 / 黑底；荧光色不整页铺底，保证正文可读。
 - 主题色分两种用法：`ColorScheme.primary` 使用当前背景上可见的主题色，强调色接近底色时自动换用辅助色；文字 / 图标一律用 `AppColors.accentOf` 的同色相校正色，不得直接把原始亮色当文字色。
 - 辅助色用于底栏下划线、筛选下划线、书脊边线等小面积点缀；接近底色的辅助色用 `AppColors.companionOf` 校正后再使用。
@@ -54,4 +55,4 @@ flutter build apk --release --target-platform android-arm64
 ## 版本
 
 `pubspec.yaml` 是唯一版本来源，递增、tag 与发布规则见 `docs/VERSIONING.md`。
-当前发布线 `1.0.0`；精确 build 号看 `pubspec.yaml` 与 GitHub Releases。下一里程碑 `2.0.0`，范围与退出标准见 `docs/ROADMAP.md`。
+上一发布版 `1.0.0`；当前版本线 `2.1.0`，精确 build 号看 `pubspec.yaml` 与 GitHub Releases。范围与退出标准见 `docs/ROADMAP.md`。

@@ -162,6 +162,28 @@ class BookRepository {
     );
   }
 
+  /// Persist a full shelf order: `sort_time` descends with the list position.
+  ///
+  /// One transaction; only `sort_time` is written so progress, source and
+  /// reading state stay untouched.
+  Future<void> updateSortOrder(List<String> bookIds) async {
+    if (bookIds.isEmpty) return;
+    final db = await _database;
+    final base = DateUtil.getNowDateMs();
+    await db.transaction((txn) async {
+      final batch = txn.batch();
+      for (var i = 0; i < bookIds.length; i++) {
+        batch.update(
+          'books',
+          {'sort_time': base - i},
+          where: 'id = ?',
+          whereArgs: [bookIds[i]],
+        );
+      }
+      await batch.commit(noResult: true);
+    });
+  }
+
   Future<void> delete(String bookId) async {
     final db = await _database;
     // chapters cascade via FK if enabled; also explicit for safety.

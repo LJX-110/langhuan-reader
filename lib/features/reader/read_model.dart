@@ -155,6 +155,18 @@ class ReadModel with ChangeNotifier {
     messagePage: _messagePage,
     showLoading: _showTextLoading,
     hideLoading: _hideTextLoading,
+    curPageOf: () => curPage,
+    chapterTitleOf: (idx) =>
+        (idx >= 0 && idx < chapters.length) ? chapters[idx].title : '',
+    onLoadFailed: (idx, title, error, {required bool keptContent}) {
+      chapterLoadError = keptContent
+          ? '「$title」加载失败，已保留当前章节'
+          : '「$title」加载失败';
+      notifyListeners();
+    },
+    onLoadSucceeded: () {
+      chapterLoadError = null;
+    },
     setCurPage: (page) => curPage = page,
     setPrePage: (page) => prePage = page,
     setNextPage: (page) => nextPage = page,
@@ -189,9 +201,6 @@ class ReadModel with ChangeNotifier {
   late final ReaderLoadingPresenter _loading = ReaderLoadingPresenter(
     paginator: _paginator,
     setLoadingHint: (text) => loadingHint = text,
-    setCurPage: (page) => curPage = page,
-    clearPictures: pictureCache.clear,
-    markNeedsPaint: _markNeedsPaint,
     notify: notifyListeners,
   );
   late final ReaderThemeController _theme = ReaderThemeController(
@@ -310,6 +319,9 @@ class ReadModel with ChangeNotifier {
   /// Status text while [sessionReady] is false or chapters are refreshing.
   String loadingHint = '正在加载…';
 
+  /// Non-null when the last TOC / chapter jump failed and can be retried.
+  String? chapterLoadError;
+
   //点击上下页方式
   bool get tapLeftToAdvance => _chrome.tapLeftToAdvance;
   set tapLeftToAdvance(bool value) => _chrome.tapLeftToAdvance = value;
@@ -339,6 +351,12 @@ class ReadModel with ChangeNotifier {
   Future openChapterAt(int idx, bool jump, {bool showLoading = true}) {
     return _window.openAt(idx, jump, showLoadingUi: showLoading);
   }
+
+  /// Paint the target TOC chapter title before its body arrives.
+  void previewChapter(int index) => _window.previewChapter(index);
+
+  /// Retry the last failed chapter load (from the reader error banner).
+  Future<void> retryFailedChapter() => _window.retryFailed();
 
   /// WeChat-style solid paper swatch.
   Future<void> setPaperTheme(PaperTheme theme) => _theme.setPaperTheme(theme);
@@ -416,20 +434,45 @@ class ReadModel with ChangeNotifier {
   /*菜单控制 */
   void toggleShowMenu() => _chrome.toggleShowMenu();
 
+  /// Placeholder pages must never overwrite real reading progress.
+  bool get _canPersistProgress =>
+      curPage != null && !curPage!.isPlaceholder && curPage!.pages.isNotEmpty;
+
   /// Debounced progress save after page turns.
-  void scheduleProgressSave({Duration delay = ReadingProgressStore.debounce}) =>
-      _progress.schedule(book: book, chapters: chapters, delay: delay);
+  void scheduleProgressSave({Duration delay = ReadingProgressStore.debounce}) {
+    if (!_canPersistProgress) {
+      AppLog.i('Read', 'skip progress schedule (placeholder page)');
+      return;
+    }
+    _progress.schedule(book: book, chapters: chapters, delay: delay);
+  }
 
   /// Flush any pending debounced save immediately (call on exit / background).
-  Future<void> flushProgressSave() =>
-      _progress.flush(book: book, chapters: chapters);
+  Future<void> flushProgressSave() {
+    if (!_canPersistProgress) {
+      AppLog.i('Read', 'skip progress flush (placeholder page)');
+      return Future<void>.value();
+    }
+    return _progress.flush(book: book, chapters: chapters);
+  }
 
   /*状态保存 */
-  Future<void> saveData() => _progress.save(book: book, chapters: chapters);
+  Future<void> saveData() {
+    if (!_canPersistProgress) {
+      AppLog.i('Read', 'skip progress save (placeholder page)');
+      return Future<void>.value();
+    }
+    return _progress.save(book: book, chapters: chapters);
+  }
 
   /// Always update the history list, independent of shelf/progress gates.
-  Future<void> recordHistory() =>
-      _progress.recordHistory(book: book, chapters: chapters);
+  Future<void> recordHistory() {
+    if (!_canPersistProgress) {
+      AppLog.i('Read', 'skip history touch (placeholder page)');
+      return Future<void>.value();
+    }
+    return _progress.recordHistory(book: book, chapters: chapters);
+  }
 
   /*页面点击事件 */
   /// Zone tap using local coordinates of the reader canvas.
@@ -450,6 +493,7 @@ class ReadModel with ChangeNotifier {
       chapters.isNotEmpty &&
       curPage != null &&
       curPage!.pages.isNotEmpty &&
+      !curPage!.isPlaceholder &&
       curPage!.chapterName != '加载中';
 
   /// Switch page-turn / scroll mode.

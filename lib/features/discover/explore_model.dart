@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/data/entities/book_info.dart';
 import 'package:langhuan/data/entities/search_item.dart';
+import 'package:langhuan/features/discover/cover_enricher.dart';
 import 'package:langhuan/features/sources/source_model.dart';
 import 'package:langhuan/features/sources/engine/book_source_engine.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
@@ -15,6 +16,15 @@ import 'package:flutter/material.dart';
 /// Bottom-tab discovery: book-source exploreUrl kinds + paginated book list.
 class ExploreModel with ChangeNotifier {
   final BookSourceEngine _engine = BookSourceEngine();
+  late final CoverEnricher _covers = CoverEnricher(fetch: _fetchCover);
+
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
 
   List<BookSource> exploreSources = [];
   BookSource? activeSource;
@@ -141,9 +151,13 @@ class ExploreModel with ChangeNotifier {
         }
         noMore = true;
       } else {
+        final added = <SearchItem>[];
         for (final h in hits) {
-          books.add(_toItem(h));
+          final item = _toItem(h);
+          books.add(item);
+          added.add(item);
         }
+        unawaited(_enrich(added));
       }
     } catch (e) {
       AppLog.w('Explore', 'load books failed', error: e);
@@ -178,6 +192,24 @@ class ExploreModel with ChangeNotifier {
       bookUrl: h.bookUrl,
       sourceName: h.sourceName,
     );
+  }
+
+  /// Fill missing covers for the rows just added (visible first screen).
+  Future<void> _enrich(List<SearchItem> items) => _covers.enrich(
+    items,
+    limit: 8,
+    onUpdated: () {
+      if (!_disposed) notifyListeners();
+    },
+  );
+
+  Future<String> _fetchCover(SearchItem item) async {
+    BookSource? src = activeSource;
+    if (src == null || src.bookSourceUrl != item.sourceUrl) {
+      src = await SourceModel().findByUrl(item.sourceUrl);
+    }
+    if (src == null) return '';
+    return _engine.fetchCover(src, item.bookUrl);
   }
 
   Future<BookInfo?> openDetail(SearchItem item) async {

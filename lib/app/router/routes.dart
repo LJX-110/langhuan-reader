@@ -37,6 +37,7 @@ class Routes {
     router.define(cache, handler: cacheHandler);
     router.define(history, handler: historyHandler);
     router.define(bookmarks, handler: bookmarksHandler);
+    router.define(update, handler: updateHandler);
   }
 
   // 对参数进行encode，解决参数中有特殊字符，影响fluro路由匹配

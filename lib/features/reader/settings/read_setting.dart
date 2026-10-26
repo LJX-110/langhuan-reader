@@ -198,6 +198,41 @@ class ReadSetting {
     SpUtil.putInt(PrefsKeys.pageTurnMode, mode.clamp(0, 3));
   }
 
+  /// Neighbor chapter prefetch range, in chapters; both clamp to 0–5.
+  ///
+  /// Reading must never fail because prefs are not ready (unit tests, early
+  /// startup): fall back to the defaults instead of throwing.
+  static int get prefetchBack {
+    try {
+      return SpUtil.getInt(
+        PrefsKeys.readerPrefetchBack,
+        defValue: 1,
+      ).clamp(0, 5);
+    } catch (_) {
+      return 1;
+    }
+  }
+
+  static int get prefetchForward {
+    try {
+      return SpUtil.getInt(
+        PrefsKeys.readerPrefetchForward,
+        defValue: 2,
+      ).clamp(0, 5);
+    } catch (_) {
+      return 2;
+    }
+  }
+
+  static void setPrefetchRange({int? back, int? forward}) {
+    if (back != null) {
+      SpUtil.putInt(PrefsKeys.readerPrefetchBack, back.clamp(0, 5));
+    }
+    if (forward != null) {
+      SpUtil.putInt(PrefsKeys.readerPrefetchForward, forward.clamp(0, 5));
+    }
+  }
+
   /// Body alignment: `justify` (both edges) or `left` (ragged right).
   static String getTextAlign() {
     final value = SpUtil.getString(PrefsKeys.readerTextAlign, defValue: '');
@@ -276,8 +311,28 @@ class ReadSetting {
   static const double contentChromeGap = 12;
 
   /// Top of the chapter-title chrome band.
+  ///
+  /// Runtime [updateTopSafeHeight] wins when it is larger than the persisted
+  /// value: immersive mode can report a smaller/zero `padding.top` later, and
+  /// the title must stay below the notch regardless of startup order.
   static double chapterTitleBandTop() {
-    return SpUtil.getDouble(PrefsKeys.topSafeHeight);
+    final stored = SpUtil.getDouble(PrefsKeys.topSafeHeight);
+    return _runtimeTopSafeHeight > stored ? _runtimeTopSafeHeight : stored;
+  }
+
+  static double _runtimeTopSafeHeight = 0;
+
+  /// Refresh the runtime top safe inset. Returns true when it changed enough
+  /// to invalidate pagination.
+  static bool updateTopSafeHeight(double value) {
+    if (!value.isFinite || value <= 0) return false;
+    final changed = (value - _runtimeTopSafeHeight).abs() > 0.5;
+    _runtimeTopSafeHeight = value;
+    final stored = SpUtil.getDouble(PrefsKeys.topSafeHeight);
+    if ((value - stored).abs() > 0.5) {
+      SpUtil.putDouble(PrefsKeys.topSafeHeight, value);
+    }
+    return changed;
   }
 
   /// Top of the time / page-number chrome band.

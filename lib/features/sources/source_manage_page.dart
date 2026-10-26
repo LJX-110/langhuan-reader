@@ -1,5 +1,10 @@
 import 'package:langhuan/features/sources/source_model.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
+import 'package:langhuan/features/sources/import/source_import_conflict.dart';
+import 'package:langhuan/features/sources/import/source_importer.dart';
+import 'package:langhuan/features/sources/import/source_validation.dart';
+import 'package:langhuan/features/sources/model/source_groups.dart';
+import 'package:langhuan/features/sources/source_test_panel.dart';
 import 'package:langhuan/app/providers.dart';
 import 'package:langhuan/features/sources/source_repo_page.dart';
 import 'package:bot_toast/bot_toast.dart';
@@ -19,6 +24,12 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
   bool _agreed = false;
   bool _selectMode = false;
   final Set<String> _selected = <String>{};
+
+  /// Current group filter ('' = 全部). Scope only; never rewrites sources.
+  String _groupFilter = '';
+
+  List<BookSource> _visibleSources(SourceModel model) =>
+      SourceGroups.filter(model.sources, _groupFilter);
 
   @override
   void initState() {
@@ -42,22 +53,137 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
     });
   }
 
+  /// 全选 / 反选只作用于当前分组筛选下的书源。
   void _selectAll(SourceModel model) {
     setState(() {
       _selected
         ..clear()
-        ..addAll(model.sources.map((e) => e.bookSourceUrl));
+        ..addAll(_visibleSources(model).map((e) => e.bookSourceUrl));
     });
   }
 
   void _invertSelection(SourceModel model) {
     setState(() {
-      final all = model.sources.map((e) => e.bookSourceUrl).toSet();
+      final all = _visibleSources(
+        model,
+      ).map((e) => e.bookSourceUrl).toSet();
       final next = all.difference(_selected);
       _selected
         ..clear()
         ..addAll(next);
     });
+  }
+
+  Widget _groupChips(List<String> groups, String effective) {
+    return SizedBox(
+      height: 44,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        children: [
+          for (final group in ['', ...groups])
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: ChoiceChip(
+                label: Text(
+                  group.isEmpty ? '全部' : group,
+                  style: const TextStyle(fontSize: 12),
+                ),
+                selected: effective == group,
+                onSelected: (_) => setState(() => _groupFilter = group),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 批量移动分组：替换所选书源的 bookSourceGroup（留空 = 清空分组）。
+  Future<void> _moveSelectedToGroup(SourceModel model) async {
+    if (_selected.isEmpty) {
+      BotToast.showText(text: '请先勾选书源');
+      return;
+    }
+    final groups = SourceGroups.collect(model.sources);
+    final ctrl = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('移动到分组'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: ctrl,
+              decoration: const InputDecoration(
+                labelText: '分组名称（留空 = 清空分组）',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            if (groups.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                '已有分组（点击填入）',
+                style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final group in groups)
+                    ActionChip(
+                      label: Text(
+                        group,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      onPressed: () => ctrl.text = group,
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, ctrl.text.trim()),
+            child: Text('移动 ${_selected.length} 个'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (result == null) return;
+    await model.setGroup(_selected.toList(), result);
+    BotToast.showText(
+      text: result.isEmpty
+          ? '已清空所选书源的分组'
+          : '已移动到分组「$result」',
+    );
+    _exitSelectMode();
+  }
+
+  Future<void> _exportSelected(SourceModel model) async {
+    if (_selected.isEmpty) {
+      BotToast.showText(text: '请先勾选书源');
+      return;
+    }
+    try {
+      final json = await model.exportSelected(_selected.toList());
+      if (json.length > 8 * 1024 * 1024) {
+        BotToast.showText(text: '所选书源过大，无法复制到剪贴板，请分批导出');
+        return;
+      }
+      await Clipboard.setData(ClipboardData(text: json));
+      BotToast.showText(text: '已复制 ${_selected.length} 个书源 JSON 到剪贴板');
+    } catch (e) {
+      BotToast.showText(text: '导出失败：$e');
+    }
   }
 
   Future<void> _enableSelected(SourceModel model) async {
@@ -128,6 +254,86 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
       ),
     );
     if (ok == true) await model.remove(source);
+  }
+
+  Future<void> _testSourceDialog(SourceModel model, BookSource source) {
+    final name = source.bookSourceName.isEmpty
+        ? source.bookSourceUrl
+        : source.bookSourceName;
+    return showSourceTestSheet(
+      context: context,
+      sourceName: name,
+      sourceUrl: source.bookSourceUrl,
+      initialKeyword: '测试',
+      onSearch: (keyword) => model.testSourceSearch(source, keyword),
+    );
+  }
+
+  Future<bool?> _askImportIssues(
+    BuildContext context,
+    SourceValidationReport report,
+  ) {
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('部分书源未通过校验'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '可导入 ${report.valid.length} 个；'
+                '${report.invalid.length} 个有问题：',
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: report.invalid.length,
+                  separatorBuilder: (_, _) => const Divider(height: 12),
+                  itemBuilder: (_, i) {
+                    final item = report.invalid[i];
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.displayName,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${item.problem} · ${item.hint}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text('仅导入可用的 ${report.valid.length} 个'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -204,14 +410,40 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
           ? const Center(child: CircularProgressIndicator())
           : model.sources.isEmpty
           ? _empty(context, model)
-          : ListView.separated(
-              padding: EdgeInsets.only(
-                bottom: 12 + MediaQuery.viewPaddingOf(context).bottom,
-              ),
-              itemCount: model.sources.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
-              itemBuilder: (ctx, i) {
-                final s = model.sources[i];
+          : Builder(
+              builder: (context) {
+                final groups = SourceGroups.collect(model.sources);
+                final effective = groups.contains(_groupFilter)
+                    ? _groupFilter
+                    : '';
+                final visible = SourceGroups.filter(model.sources, effective);
+                return Column(
+                  children: [
+                    if (groups.length > 1) _groupChips(groups, effective),
+                    Expanded(
+                      child: visible.isEmpty
+                          ? Center(
+                              child: Text(
+                                '该分组下暂无书源',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            )
+                          : ListView.separated(
+                              padding: EdgeInsets.only(
+                                bottom:
+                                    12 +
+                                    MediaQuery.viewPaddingOf(context).bottom,
+                              ),
+                              itemCount: visible.length,
+                              separatorBuilder: (_, _) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (ctx, i) {
+                                final s = visible[i];
                 final url = s.bookSourceUrl;
                 final selected = _selected.contains(url);
                 return ListTile(
@@ -271,7 +503,9 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                               tooltip: '更多',
                               icon: const Icon(Icons.more_vert),
                               onSelected: (value) {
-                                if (value == 'test') model.testSource(s);
+                                if (value == 'test') {
+                                  _testSourceDialog(model, s);
+                                }
                                 if (value == 'delete') {
                                   _deleteSource(model, s);
                                 }
@@ -279,7 +513,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                               itemBuilder: (_) => const [
                                 PopupMenuItem(
                                   value: 'test',
-                                  child: Text('测试书源'),
+                                  child: Text('测试搜索'),
                                 ),
                                 PopupMenuItem(
                                   value: 'delete',
@@ -289,6 +523,11 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                             ),
                           ],
                         ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
                 );
               },
             ),
@@ -296,27 +535,50 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
           ? SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                child: Row(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => _enableSelected(model),
-                        child: const Text('启用'),
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => _enableSelected(model),
+                            child: const Text('启用'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => _disableSelected(model),
+                            child: const Text('禁用'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => _deleteSelected(model),
+                            child: const Text('删除'),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => _disableSelected(model),
-                        child: const Text('禁用'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => _deleteSelected(model),
-                        child: const Text('删除'),
-                      ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => _moveSelectedToGroup(model),
+                            child: const Text('移动到分组'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => _exportSelected(model),
+                            child: const Text('导出选中'),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -365,6 +627,40 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<bool?> _askOverwrite(
+    BuildContext context,
+    SourceImportConflict conflict,
+  ) {
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('发现规则不同的书源'),
+        content: Text(
+          '本次导入包含 ${conflict.newCount} 个新书源；'
+          '${conflict.changedCount} 个已有书源规则不同'
+          '${conflict.unchangedCount > 0 ? '，${conflict.unchangedCount} 个规则相同' : ''}。\n\n'
+          '新书源会正常添加。已有书源默认保留本地规则；'
+          '只有选择「覆盖本地规则」才会用导入内容更新这 '
+          '${conflict.changedCount} 个书源。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('保留本地'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('覆盖本地规则'),
+          ),
+        ],
       ),
     );
   }
@@ -477,17 +773,63 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                           return;
                         }
                         try {
-                          if (tab == 0) {
-                            await model.importJsonText(
-                              textCtrl.text,
-                              agreed: agreed,
+                          if (tab == 1) {
+                            BotToast.showText(text: '正在下载书源…');
+                          }
+                          final parsed = tab == 0
+                              ? SourceImporter.parseJson(textCtrl.text)
+                              : await SourceImporter.fromUrl(
+                                  urlCtrl.text.trim(),
+                                );
+                          if (!ctx.mounted) return;
+                          if (parsed.sources.isEmpty) {
+                            await model.importParsed(parsed, agreed: true);
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            return;
+                          }
+
+                          // 导入前校验：结构有问题的源默认不写入，用户可明确选择
+                          // 「仅导入可用的 N 个」。
+                          var checked = parsed;
+                          final validation = SourceValidator.validate(parsed);
+                          if (validation.invalid.isNotEmpty) {
+                            final keepValid = await _askImportIssues(
+                              ctx,
+                              validation,
                             );
-                          } else {
-                            await model.importFromUrl(
-                              urlCtrl.text.trim(),
-                              agreed: agreed,
+                            if (keepValid != true) return;
+                            checked = SourceParseResult(
+                              sources: validation.valid,
+                              skipped:
+                                  parsed.skipped + validation.invalid.length,
+                              duplicatesInBatch: parsed.duplicatesInBatch,
                             );
                           }
+                          if (checked.sources.isEmpty) {
+                            BotToast.showText(text: '没有通过校验的书源可导入');
+                            return;
+                          }
+
+                          final conflict = await model.inspectImport(checked);
+                          var overwrite = false;
+                          if (conflict.hasChanged) {
+                            if (!ctx.mounted) return;
+                            final choice = await _askOverwrite(ctx, conflict);
+                            if (choice == null) return;
+                            overwrite = choice;
+                          } else if (conflict.newCount == 0) {
+                            BotToast.showText(text: '没有需要导入或更新的书源');
+                            return;
+                          }
+
+                          final toImport = overwrite
+                              ? conflict.withoutUnchanged(checked)
+                              : checked;
+                          await model.importParsed(
+                            toImport,
+                            agreed: true,
+                            overwriteExistingRules: overwrite,
+                          );
                           if (ctx.mounted) Navigator.pop(ctx);
                         } catch (e) {
                           BotToast.showText(text: e.toString());

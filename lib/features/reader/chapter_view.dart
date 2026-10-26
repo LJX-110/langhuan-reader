@@ -1,7 +1,9 @@
+import 'dart:async';
+
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/core/storage/local_store.dart';
 import 'package:langhuan/core/platform/system_ui.dart';
-import 'package:langhuan/data/entities/chapter_toc_entry.dart';
+import 'package:langhuan/features/reader/model/toc_rows.dart';
 import 'package:langhuan/app/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -70,22 +72,27 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
     }
   }
 
-  void _jumpTo(int index, {double alignment = 0}) {
+  void _jumpTo(int chapterIndex, {double alignment = 0}) {
     if (!_itemScrollController.isAttached) return;
     final chapters = ref.read(readModelProvider).chapters;
     if (chapters.isEmpty) return;
-    _itemScrollController.jumpTo(
-      index: index.clamp(0, chapters.length - 1),
-      alignment: alignment,
+    final row = tocRowForChapter(
+      _rows(),
+      chapterIndex.clamp(0, chapters.length - 1),
     );
+    _itemScrollController.jumpTo(index: row, alignment: alignment);
   }
 
-  Future<void> _scrollTo(int index, {double alignment = 0}) async {
+  Future<void> _scrollTo(int chapterIndex, {double alignment = 0}) async {
     if (!_itemScrollController.isAttached) return;
     final chapters = ref.read(readModelProvider).chapters;
     if (chapters.isEmpty) return;
+    final row = tocRowForChapter(
+      _rows(),
+      chapterIndex.clamp(0, chapters.length - 1),
+    );
     await _itemScrollController.scrollTo(
-      index: index.clamp(0, chapters.length - 1),
+      index: row,
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeOut,
       alignment: alignment,
@@ -101,39 +108,26 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
     _centeredOnce = true;
   }
 
-  List<({int index, ChapterTocEntry chapter})> _filtered(
-    List<ChapterTocEntry> chapters,
-  ) {
-    final q = _query.trim().toLowerCase();
-    if (q.isEmpty) {
-      return [
-        for (var i = 0; i < chapters.length; i++)
-          (index: i, chapter: chapters[i]),
-      ];
-    }
-    final out = <({int index, ChapterTocEntry chapter})>[];
-    for (var i = 0; i < chapters.length; i++) {
-      final name = chapters[i].title.toLowerCase();
-      final numStr = '${i + 1}';
-      if (name.contains(q) || numStr.contains(q)) {
-        out.add((index: i, chapter: chapters[i]));
-      }
-    }
-    return out;
-  }
+  List<TocRow> _rows() => buildTocRows(
+    ref.read(readModelProvider).chapters,
+    query: _query,
+  );
 
   Future<void> _openChapter(int index) async {
     final data = ref.read(readModelProvider);
     final book = data.book;
     if (book == null) return;
     if (index < 0 || index >= data.chapters.length) return;
+    // Paint the target title immediately; progress indices stay untouched
+    // until the body actually loads.
+    data.previewChapter(index);
     Navigator.of(context).pop();
-    book.chapterIndex = index;
-    book.pageIndex = 0;
-    // Small delay so drawer/page pop animation doesn't fight repaint.
-    await Future<void>.delayed(const Duration(milliseconds: 200));
-    await data.openChapterAt(index, true);
-    data.scheduleProgressSave(delay: Duration.zero);
+    unawaited(() async {
+      await data.openChapterAt(index, true, showLoading: false);
+      if (data.chapterLoadError == null) {
+        data.scheduleProgressSave(delay: Duration.zero);
+      }
+    }());
   }
 
   Future<void> _showJumpDialog() async {
@@ -219,7 +213,12 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
       });
       await Future<void>.delayed(const Duration(milliseconds: 16));
     }
-    await _scrollTo(index, alignment: 0.35);
+    final current = ref.read(readModelProvider).book?.chapterIndex ?? 0;
+    if ((index - current).abs() > 20) {
+      _jumpTo(index, alignment: 0.35);
+    } else {
+      await _scrollTo(index, alignment: 0.35);
+    }
   }
 
   Future<void> _goCurrent() async {
@@ -276,7 +275,7 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
     final loadingHint = ref.watch(
       readModelProvider.select((m) => m.loadingHint),
     );
-    final filtered = _filtered(chapters);
+    final rows = buildTocRows(chapters, query: _query);
 
     if (!_centeredOnce && chapters.isNotEmpty && _query.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -346,7 +345,7 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
                         style: TextStyle(color: _secondary, fontSize: 14),
                       ),
                     )
-                  : filtered.isEmpty
+                  : rows.isEmpty
                   ? Center(
                       child: Text(
                         '未找到匹配章节',
@@ -357,11 +356,18 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
                       itemScrollController: _itemScrollController,
                       itemPositionsListener: _itemPositionsListener,
                       padding: const EdgeInsets.fromLTRB(0, 4, 0, 8),
-                      itemCount: filtered.length,
+                      itemCount: rows.length,
                       itemBuilder: (context, i) {
-                        final item = filtered[i];
-                        final index = item.index;
-                        final chapter = item.chapter;
+                        final row = rows[i];
+                        if (row.isVolume) {
+                          return _VolumeTile(
+                            title: row.title,
+                            count: row.count,
+                            tertiary: _tertiary,
+                          );
+                        }
+                        final index = row.chapterIndex;
+                        final chapter = row.chapter!;
                         final selected = index == cur;
                         final cached = chapter.hasBody;
                         return _ChapterTile(
@@ -609,6 +615,56 @@ class _SearchField extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // Tile
 // ---------------------------------------------------------------------------
+
+/// Volume header — grouping label only, deliberately not tappable.
+class _VolumeTile extends StatelessWidget {
+  final String title;
+  final int count;
+  final Color tertiary;
+
+  const _VolumeTile({
+    required this.title,
+    required this.count,
+    required this.tertiary,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final companion = AppColors.companionOf(context);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    letterSpacing: 1,
+                    fontWeight: FontWeight.w600,
+                    color: tertiary,
+                  ),
+                ),
+              ),
+              if (count > 0)
+                Text(
+                  '$count 章',
+                  style: TextStyle(fontSize: 11, color: tertiary),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Container(height: 1, color: companion.withValues(alpha: .45)),
+        ],
+      ),
+    );
+  }
+}
 
 class _ChapterTile extends StatelessWidget {
   final int index;

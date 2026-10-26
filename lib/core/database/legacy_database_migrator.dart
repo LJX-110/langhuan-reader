@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:langhuan/core/database/legacy_schema_mapping.dart';
 import 'package:langhuan/core/utils/app_log.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
@@ -7,16 +8,34 @@ import 'package:sqflite/sqflite.dart';
 /// Outcome of one legacy-database migration attempt.
 enum LegacyMigrationStatus { targetExists, noLegacy, migrated, merged, failed }
 
+/// A row that cannot be mapped without losing its identity or a constraint
+/// conflict that means the target already lost data during an older build.
+class LegacyMigrationException implements Exception {
+  const LegacyMigrationException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'LegacyMigrationException: $message';
+}
+
 class LegacyMigrationResult {
   const LegacyMigrationResult(
     this.status, {
     this.copiedRows = 0,
+    this.skippedRows = 0,
     this.legacyFiles = const [],
     this.error,
   });
 
   final LegacyMigrationStatus status;
+
+  /// Rows actually inserted by the last migration call.
   final int copiedRows;
+
+  /// Duplicate or already-present rows skipped by `INSERT OR IGNORE`.
+  final int skippedRows;
+
   final List<String> legacyFiles;
   final Object? error;
 }
@@ -39,13 +58,22 @@ abstract class LegacyMigrationBackend {
 
   Future<List<String>> columns(String path, String table);
 
+  Future<int> count(String path, String table);
+
   Future<List<Map<String, Object?>>> rows(
     String path,
     String table,
-    List<String> columns,
-  );
+    List<String> columns, {
+    int? limit,
+    int? offset,
+    String? orderBy,
+  });
 
-  Future<void> insertIgnore(
+  /// Insert rows, skipping primary-key / unique-index conflicts.
+  ///
+  /// Returns the number of rows actually inserted, so a migration cannot
+  /// report success while every row was silently ignored.
+  Future<int> insertIgnore(
     String path,
     String table,
     List<Map<String, Object?>> rows,
@@ -123,11 +151,19 @@ class LegacyDatabaseMigrator {
     }
 
     var copiedRows = 0;
+    var skippedRows = 0;
     try {
       await backend.createReaderDatabase(temp);
       final targetTables = (await backend.tables(temp)).toSet();
       for (final source in legacy) {
-        copiedRows += await _copyDatabase(source, temp, targetTables);
+        final stats = await _copyDatabase(
+          source,
+          temp,
+          targetTables,
+          allowConflicts: false,
+        );
+        copiedRows += stats.inserted;
+        skippedRows += stats.skipped;
       }
 
       // Another isolated open won the race; keep the established database,
@@ -138,6 +174,7 @@ class LegacyDatabaseMigrator {
         return LegacyMigrationResult(
           LegacyMigrationStatus.targetExists,
           copiedRows: copiedRows,
+          skippedRows: skippedRows,
           legacyFiles: legacy,
         );
       }
@@ -145,11 +182,13 @@ class LegacyDatabaseMigrator {
       await _deleteQuietly(marker);
       AppLog.i(
         'Database',
-        'legacy migration ok files=${legacy.length} rows=$copiedRows',
+        'legacy migration ok files=${legacy.length} '
+            'inserted=$copiedRows skipped=$skippedRows',
       );
       return LegacyMigrationResult(
         LegacyMigrationStatus.migrated,
         copiedRows: copiedRows,
+        skippedRows: skippedRows,
         legacyFiles: legacy,
       );
     } catch (e, st) {
@@ -167,6 +206,7 @@ class LegacyDatabaseMigrator {
       return LegacyMigrationResult(
         LegacyMigrationStatus.failed,
         copiedRows: copiedRows,
+        skippedRows: skippedRows,
         legacyFiles: legacy,
         error: e,
       );
@@ -188,19 +228,29 @@ class LegacyDatabaseMigrator {
     List<String> legacy,
   ) async {
     var copiedRows = 0;
+    var skippedRows = 0;
     try {
       final targetTables = (await backend.tables(target)).toSet();
       for (final source in legacy) {
-        copiedRows += await _copyDatabase(source, target, targetTables);
+        final stats = await _copyDatabase(
+          source,
+          target,
+          targetTables,
+          allowConflicts: true,
+        );
+        copiedRows += stats.inserted;
+        skippedRows += stats.skipped;
       }
       await _deleteQuietly(marker);
       AppLog.i(
         'Database',
-        'legacy retry merge ok files=${legacy.length} rows=$copiedRows',
+        'legacy retry merge ok files=${legacy.length} '
+            'inserted=$copiedRows skipped=$skippedRows',
       );
       return LegacyMigrationResult(
         LegacyMigrationStatus.merged,
         copiedRows: copiedRows,
+        skippedRows: skippedRows,
         legacyFiles: legacy,
       );
     } catch (e, st) {
@@ -214,6 +264,7 @@ class LegacyDatabaseMigrator {
       return LegacyMigrationResult(
         LegacyMigrationStatus.failed,
         copiedRows: copiedRows,
+        skippedRows: skippedRows,
         legacyFiles: legacy,
         error: e,
       );
@@ -241,29 +292,141 @@ class LegacyDatabaseMigrator {
     } catch (_) {}
   }
 
-  Future<int> _copyDatabase(
+  Future<_CopyStats> _copyDatabase(
     String source,
     String target,
-    Set<String> targetTables,
-  ) async {
-    var copied = 0;
+    Set<String> targetTables, {
+    required bool allowConflicts,
+  }) async {
+    var inserted = 0;
+    var skipped = 0;
     final sourceTables = (await backend.tables(source)).toSet();
     for (final table in copyTables) {
       if (!targetTables.contains(table) || !sourceTables.contains(table)) {
         continue;
       }
       final targetColumns = (await backend.columns(target, table)).toSet();
-      final sourceColumns = (await backend.columns(source, table)).toSet();
-      final shared = sourceColumns.where(targetColumns.contains).toList();
-      if (shared.isEmpty) continue;
-
-      final rows = await backend.rows(source, table, shared);
-      if (rows.isEmpty) continue;
-      await backend.insertIgnore(target, table, rows);
-      copied += rows.length;
+      final sourceColumns = await backend.columns(source, table);
+      if (sourceColumns.isEmpty || targetColumns.isEmpty) continue;
+      final stats = await _copyTable(
+        source,
+        target,
+        table,
+        sourceColumns,
+        targetColumns,
+        allowConflicts: allowConflicts,
+      );
+      inserted += stats.inserted;
+      skipped += stats.skipped;
     }
-    return copied;
+    return _CopyStats(inserted: inserted, skipped: skipped);
   }
+
+  Future<_CopyStats> _copyTable(
+    String source,
+    String target,
+    String table,
+    List<String> sourceColumns,
+    Set<String> targetColumns, {
+    required bool allowConflicts,
+  }) async {
+    // Chapters hold whole chapter bodies; keep each page small enough that a
+    // legacy 100 MB chapters.db never has to be resident in memory at once.
+    final pageSize = table == 'chapters' ? 50 : 200;
+    final orderBy = _orderByFor(table, sourceColumns);
+    final chapterOrd = <String, int>{};
+    var offset = 0;
+    var inserted = 0;
+    var skipped = 0;
+
+    while (true) {
+      final rows = await backend.rows(
+        source,
+        table,
+        sourceColumns,
+        limit: pageSize,
+        offset: offset,
+        orderBy: orderBy,
+      );
+      if (rows.isEmpty) break;
+
+      final mapped = <Map<String, Object?>>[];
+      for (final row in rows) {
+        final targetRow = _mapRow(table, row, chapterOrd);
+        if (targetRow == null) {
+          throw LegacyMigrationException(
+            '$table row ${offset + mapped.length} has no usable identity; '
+            'legacy file kept: $source',
+          );
+        }
+        // Keep only columns the current target table actually owns.
+        targetRow.removeWhere((key, _) => !targetColumns.contains(key));
+        mapped.add(targetRow);
+      }
+
+      if (mapped.isNotEmpty) {
+        final count = await backend.insertIgnore(target, table, mapped);
+        inserted += count;
+        final conflicts = mapped.length - count;
+        if (conflicts > 0) {
+          skipped += conflicts;
+          if (!allowConflicts) {
+            AppLog.w(
+              'Database',
+              'legacy $table: $conflicts row(s) skipped by a duplicate key',
+            );
+          }
+        }
+      }
+
+      if (rows.length < pageSize) break;
+      offset += pageSize;
+    }
+
+    return _CopyStats(inserted: inserted, skipped: skipped);
+  }
+
+  Map<String, Object?>? _mapRow(
+    String table,
+    Map<String, Object?> row,
+    Map<String, int> chapterOrd,
+  ) {
+    switch (table) {
+      case 'books':
+        return LegacySchemaMapping.book(row);
+      case 'chapters':
+        final bookId = LegacySchemaMapping.stringOf(row, const [
+          'book_id',
+          'bookId',
+        ]);
+        final ord = chapterOrd[bookId] ?? 0;
+        chapterOrd[bookId] = ord + 1;
+        return LegacySchemaMapping.chapter(row, ord: ord);
+      case 'sources':
+        return LegacySchemaMapping.source(row);
+      case 'bookmarks':
+        return LegacySchemaMapping.bookmark(row);
+      case 'reading_history':
+        return LegacySchemaMapping.readingHistory(row);
+    }
+    return null;
+  }
+
+  static String? _orderByFor(String table, List<String> columns) {
+    if (table != 'chapters') return 'rowid ASC';
+    final parts = <String>[];
+    if (columns.contains('book_id')) parts.add('book_id ASC');
+    if (columns.contains('idx')) parts.add('idx ASC');
+    parts.add('rowid ASC');
+    return parts.join(', ');
+  }
+}
+
+class _CopyStats {
+  const _CopyStats({required this.inserted, required this.skipped});
+
+  final int inserted;
+  final int skipped;
 }
 
 /// Production backend: opens each database lazily with sqflite.
@@ -332,22 +495,45 @@ class SqfliteLegacyMigrationBackend implements LegacyMigrationBackend {
   }
 
   @override
-  Future<List<Map<String, Object?>>> rows(
-    String path,
-    String table,
-    List<String> columns,
-  ) async {
+  Future<int> count(String path, String table) async {
     final db = await _database(path);
-    return db.query(table, columns: columns);
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM ${_quote(table)}',
+    );
+    final value = rows.isEmpty ? null : rows.first['c'];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   @override
-  Future<void> insertIgnore(
+  Future<List<Map<String, Object?>>> rows(
+    String path,
+    String table,
+    List<String> columns, {
+    int? limit,
+    int? offset,
+    String? orderBy,
+  }) async {
+    final db = await _database(path);
+    return db.query(
+      table,
+      columns: columns,
+      orderBy: orderBy,
+      limit: limit,
+      offset: offset,
+    );
+  }
+
+  @override
+  Future<int> insertIgnore(
     String path,
     String table,
     List<Map<String, Object?>> rows,
   ) async {
+    if (rows.isEmpty) return 0;
     final db = await _database(path);
+    final before = await count(path, table);
     await db.transaction((txn) async {
       for (final row in rows) {
         await txn.insert(
@@ -357,6 +543,8 @@ class SqfliteLegacyMigrationBackend implements LegacyMigrationBackend {
         );
       }
     });
+    final after = await count(path, table);
+    return after - before;
   }
 
   @override

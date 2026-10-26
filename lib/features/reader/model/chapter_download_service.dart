@@ -1,4 +1,5 @@
 import 'package:langhuan/core/utils/app_log.dart';
+import 'package:langhuan/core/utils/redact.dart';
 import 'package:langhuan/data/repositories/chapter_repository.dart';
 import 'package:langhuan/data/entities/chapter_node.dart';
 import 'package:langhuan/data/entities/chapter_toc_entry.dart';
@@ -37,11 +38,12 @@ class ChapterDownloadService {
     if (chapterUrl.isEmpty) {
       return '章节地址为空，请重新加载目录';
     }
+    final logUrl = Redact.forLog(chapterUrl);
     try {
-      AppLog.d('Read', 'fetch content idx=$idx url=$chapterUrl');
+      AppLog.d('Read', 'fetch content idx=$idx url=$logUrl');
       final content = await engine.content(source, chapterUrl);
       if (content.isEmpty) {
-        AppLog.w('Read', 'empty content idx=$idx url=$chapterUrl');
+        AppLog.w('Read', 'empty content idx=$idx url=$logUrl');
         return '章节内容加载失败，请检查书源或换源后重试';
       }
       AppLog.d('Read', 'content ok idx=$idx len=${content.length}');
@@ -49,11 +51,13 @@ class ChapterDownloadService {
     } catch (e, st) {
       AppLog.e(
         'Read',
-        'content failed idx=$idx url=$chapterUrl',
+        'content failed idx=$idx url=$logUrl',
         error: e,
         stackTrace: st,
       );
-      return '章节内容加载失败，请检查书源或换源后重试\n$e';
+      // Raw exceptions can embed the full request URL (tokens included);
+      // details stay in the log, the UI only needs the actionable message.
+      return '章节内容加载失败，请检查书源或换源后重试';
     }
   }
 

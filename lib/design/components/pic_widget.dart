@@ -2,6 +2,7 @@ import 'package:extended_image/extended_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:langhuan/core/net/session_cookies.dart';
+import 'package:langhuan/design/tokens/app_colors.dart';
 
 class PicWidget extends StatelessWidget {
   final String url;
@@ -18,6 +19,9 @@ class PicWidget extends StatelessWidget {
   /// Shown over the placeholder when the cover cannot be loaded.
   final String title;
 
+  /// Source base URL; protocol-relative / relative cover paths resolve here.
+  final String baseUrl;
+
   const PicWidget(
     this.url, {
     super.key,
@@ -28,45 +32,67 @@ class PicWidget extends StatelessWidget {
     this.radius = 0,
     this.referer = '',
     this.title = '',
+    this.baseUrl = '',
   });
 
-  Widget get _placeholder {
-    final image = Image.asset(
-      'images/nocover.jpg',
+  /// Designed typographic placeholder: paper panel, companion spine strip and
+  /// the book name set vertically. Reads as a deliberate cover, unlike the
+  /// grey `nocover.jpg` it replaces.
+  Widget _placeholder(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final paper = dark ? AppColors.surfaceDark : AppColors.paperDeep;
+    final line = dark ? AppColors.dividerDark : AppColors.line;
+    final spine = AppColors.companionOf(context).withValues(alpha: .55);
+    final ink = dark ? AppColors.textMutedDark : AppColors.inkSoft;
+    final name = title.trim();
+    final fontSize = (width * .18).clamp(9.0, 14.0);
+    final maxChars = (height / (fontSize * 1.25)).floor().clamp(1, 5);
+    final chars = name.isEmpty
+        ? const ['暂', '无', '封', '面']
+        : name.substring(0, name.length > maxChars ? maxChars : name.length)
+              .split('');
+    return Container(
       width: width,
       height: height,
-      fit: BoxFit.cover,
-    );
-    final name = title.trim();
-    if (name.isEmpty) return image;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        image,
-        Positioned(
-          left: 6,
-          right: 6,
-          bottom: 10,
-          child: Text(
-            name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: 'serif',
-              fontSize: height > 90 ? 13 : 10,
-              height: 1.3,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF5B5B5B),
+      decoration: BoxDecoration(
+        color: paper,
+        border: Border.all(color: line, width: .5),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 4,
+            child: ColoredBox(color: spine),
+          ),
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final ch in chars)
+                  Text(
+                    ch,
+                    style: TextStyle(
+                      fontFamily: AppType.serif,
+                      fontSize: fontSize,
+                      height: 1.25,
+                      fontWeight: FontWeight.w600,
+                      color: ink,
+                    ),
+                  ),
+              ],
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  /// Normalize cover URLs: trim, protocol-relative, common placeholders → empty.
-  static String normalizeUrl(String raw) {
+  /// Normalize cover URLs: trim, protocol-relative, resolve against [base],
+  /// common placeholders → empty.
+  static String normalizeUrl(String raw, {String base = ''}) {
     var s = raw.trim();
     if (s.isEmpty) return '';
     if (s.startsWith('//')) s = 'https:$s';
@@ -82,6 +108,13 @@ class PicWidget extends StatelessWidget {
       return '';
     }
     if (!(s.startsWith('http://') || s.startsWith('https://'))) {
+      // Relative path: resolve against the source page before giving up.
+      final b = base.trim();
+      if (b.isEmpty || s.startsWith('data:')) return '';
+      final joined = Uri.tryParse(b)?.resolve(s).toString() ?? '';
+      if (joined.startsWith('http://') || joined.startsWith('https://')) {
+        return joined;
+      }
       return '';
     }
     return s;
@@ -111,27 +144,24 @@ class PicWidget extends StatelessWidget {
     return headers;
   }
 
-  /// True when [error] is a benign cover download/decode failure.
+  /// True when [error] is a cover download/decode failure worth hiding from
+  /// the red error overlay. Keep this narrow: swallowing every network error
+  /// also hides real bugs from the log.
   static bool isBenignCoverError(Object? error) {
     if (error == null) return false;
     final s = error.toString();
     return s.contains('Failed to load') ||
         s.contains('Invalid image data') ||
         s.contains('ImageDecoder') ||
-        s.contains('unimplemented') ||
-        s.contains('HttpException') ||
-        s.contains('SocketException') ||
-        s.contains('HandshakeException') ||
-        s.contains('ClientException') ||
         s.contains('NetworkImageLoadException');
   }
 
   @override
   Widget build(BuildContext context) {
-    final src = normalizeUrl(url);
+    final src = normalizeUrl(url, base: baseUrl);
     Widget child;
     if (src.isEmpty) {
-      child = _placeholder;
+      child = _placeholder(context);
     } else {
       final cacheW = (width * MediaQuery.devicePixelRatioOf(context)).round();
       child = ExtendedImage.network(
@@ -146,12 +176,18 @@ class PicWidget extends StatelessWidget {
         clearMemoryCacheIfFailed: true,
         retries: 1,
         timeRetry: const Duration(milliseconds: 500),
+        // Without timeLimit a connected-but-silent CDN leaves the placeholder
+        // spinning forever and keeps the socket open.
+        timeLimit: const Duration(seconds: 12),
+        // Cover URLs are md5(url)-keyed; an explicit max age gives stale or
+        // corrupted cache entries a chance to be replaced.
+        cacheMaxAge: const Duration(days: 7),
         headers: _headersFor(src),
         cacheWidth: cacheW > 0 ? cacheW : null,
         loadStateChanged: (state) {
           switch (state.extendedImageLoadState) {
             case LoadState.loading:
-              return _placeholder;
+              return _placeholder(context);
             case LoadState.failed:
               // Quiet failure: keep placeholder; optional one-line debug only.
               assert(() {
@@ -162,7 +198,7 @@ class PicWidget extends StatelessWidget {
                 }
                 return true;
               }());
-              return _placeholder;
+              return _placeholder(context);
             case LoadState.completed:
               return null; // use default decoded image
           }

@@ -13,9 +13,9 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
 
-INK = (15, 27, 43, 255)          # #0F1B2B 深墨蓝
-MOON = (241, 236, 223, 255)      # #F1ECDF 月白
-GOLD = (176, 138, 74, 255)       # #B08A4A 暗金
+INK = (23, 40, 58, 255)          # #17283A 墨蓝
+MOON = (242, 233, 215, 255)      # #F2E9D7 月白
+GOLD = (184, 154, 104, 255)      # #B89A68 柔金
 CLEAR = (0, 0, 0, 0)
 WHITE = (255, 255, 255, 255)
 
@@ -117,7 +117,15 @@ def _draw_pavilion(
 
     roof = pen.points(_roof_points())
     draw.polygon(roof, fill=roof_fill)
-    draw.line(roof + [roof[0]], fill=line_fill, width=pen.width(14), joint="curve")
+    # Draw the closed outline in two passes; PIL leaves a small notch where the
+    # first and last segments meet at the sharp left eave tip.
+    draw.line(roof, fill=line_fill, width=pen.width(14), joint="curve")
+    draw.line(
+        [roof[-1], roof[0], roof[1]],
+        fill=line_fill,
+        width=pen.width(14),
+        joint="curve",
+    )
 
     # Ridge finial: a small diamond, still visible as a gold dot at 48 px.
     finial = pen.points([(512, 472), (530, 490), (512, 508), (494, 490)])

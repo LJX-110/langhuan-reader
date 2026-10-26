@@ -1,5 +1,6 @@
 import 'package:langhuan/features/reader/animation/animation_controller_with_listener_number.dart';
 import 'package:langhuan/features/reader/read_model.dart';
+import 'package:langhuan/features/reader/settings/read_setting.dart';
 import 'package:langhuan/app/providers.dart';
 import 'package:langhuan/features/reader/page_turn/novel_page_painter.dart';
 import 'package:langhuan/features/reader/page_turn/reader_page_manager.dart';
@@ -59,6 +60,17 @@ class _PageContentReaderState extends ConsumerState<PageContentReader>
     _applyMode(viewModel.currentAnimationMode, viewModel);
     pagePainter = NovelPagePainter(pageManager: pageManager);
     viewModel.pagePainter = pagePainter;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final top = MediaQuery.viewPaddingOf(context).top;
+    if (!ReadSetting.updateTopSafeHeight(top)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(readModelProvider).scheduleRelayout();
+    });
   }
 
   void _applyMode(int mode, ReadModel viewModel) {
@@ -274,19 +286,60 @@ class _PageContentReaderState extends ConsumerState<PageContentReader>
     _recoverIfStale();
 
     final size = _canvasSize(context);
+    final loadError = ref.watch(
+      readModelProvider.select((m) => m.chapterLoadError),
+    );
 
-    return Listener(
-      behavior: HitTestBehavior.opaque,
-      onPointerDown: _onPointerDown,
-      onPointerMove: _onPointerMove,
-      onPointerUp: _onPointerUp,
-      onPointerCancel: _onPointerCancel,
-      child: CustomPaint(
-        key: canvasKey,
-        isComplex: true,
-        size: size,
-        painter: pagePainter,
-      ),
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: _onPointerDown,
+            onPointerMove: _onPointerMove,
+            onPointerUp: _onPointerUp,
+            onPointerCancel: _onPointerCancel,
+            child: CustomPaint(
+              key: canvasKey,
+              isComplex: true,
+              size: size,
+              painter: pagePainter,
+            ),
+          ),
+        ),
+        if (loadError != null)
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 52,
+            child: Material(
+              elevation: 3,
+              borderRadius: BorderRadius.circular(10),
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        loadError,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        ref.read(readModelProvider).retryFailedChapter();
+                      },
+                      child: const Text('重试'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 

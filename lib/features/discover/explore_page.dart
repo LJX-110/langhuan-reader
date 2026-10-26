@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:langhuan/design/components/page_header.dart';
-import 'package:langhuan/design/components/bookshelf_3d.dart';
 import 'package:langhuan/design/components/pic_widget.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/data/entities/search_item.dart';
@@ -98,17 +97,16 @@ class _ExplorePageState extends ConsumerState<ExplorePage>
             const SizedBox(height: 4),
             _ExploreSourceTrigger(model: model, dark: dark),
             if (model.kinds.length > 1) _KindBar(model: model, dark: dark),
-            if (model.books.isNotEmpty)
-              Bookshelf3D(
-                books: model.books.take(12).toList(growable: false),
-                onOpen: (item) => _openBook(context, model, item),
-              ),
             Divider(
               height: 1,
               color: dark ? AppColors.dividerDark : AppColors.divider,
             ),
             Expanded(
-              child: _BookList(model: model, dark: dark),
+              child: _BookList(
+                model: model,
+                dark: dark,
+                onOpen: (item) => _openBook(context, model, item),
+              ),
             ),
           ],
         ),
@@ -253,7 +251,12 @@ class _KindBar extends StatelessWidget {
 class _BookList extends StatelessWidget {
   final ExploreModel model;
   final bool dark;
-  const _BookList({required this.model, required this.dark});
+  final Future<void> Function(SearchItem item) onOpen;
+  const _BookList({
+    required this.model,
+    required this.dark,
+    required this.onOpen,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -266,34 +269,53 @@ class _BookList extends StatelessWidget {
     }
 
     if (model.books.isEmpty) {
+      final error = model.error ?? '';
+      final activeName = model.activeSource?.bookSourceName ?? '';
+      final hasSource = model.exploreSources.isNotEmpty;
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(24, 80, 24, 24),
         children: [
           Text(
-            model.error ?? '暂无内容',
+            error.isEmpty ? '这个分类下还没有内容' : error,
             style: TextStyle(fontSize: 14, color: secondary, height: 1.5),
           ),
-          if ((model.error ?? '').contains('书源'))
-            TextButton(
-              onPressed: () => Routes.navigateTo(context, Routes.sources),
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(0, 32),
-              ),
-              child: const Text('去书源管理'),
-            )
-          else if ((model.error ?? '').contains('重试'))
-            TextButton(
-              onPressed: model.loading
-                  ? null
-                  : () => model.loadBooks(refresh: true),
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(0, 32),
-              ),
-              child: const Text('重试'),
+          if (activeName.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              '当前书源：$activeName',
+              style: TextStyle(fontSize: 12, color: tertiary),
             ),
+          ],
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 4,
+            children: [
+              TextButton(
+                onPressed: () => Routes.navigateTo(context, Routes.sources),
+                child: const Text('书源管理'),
+              ),
+              if (hasSource)
+                TextButton(
+                  onPressed: model.loading
+                      ? null
+                      : () => model.loadBooks(refresh: true),
+                  child: const Text('重试'),
+                ),
+              if (model.exploreSources.length > 1)
+                TextButton(
+                  onPressed: () {
+                    ExploreSourcePickerSheet.show(
+                      context,
+                      sources: List.of(model.exploreSources),
+                      activeUrl: model.activeSource?.bookSourceUrl,
+                      onSelected: (s) => model.selectSource(s),
+                    );
+                  },
+                  child: const Text('换书源'),
+                ),
+            ],
+          ),
         ],
       );
     }
@@ -336,15 +358,7 @@ class _BookList extends StatelessWidget {
             primary: primary,
             secondary: secondary,
             tertiary: tertiary,
-            onTap: () async {
-              final b = await model.openDetail(item);
-              if (b == null || !context.mounted) return;
-              Routes.navigateTo(
-                context,
-                Routes.detail,
-                params: {'detail': jsonEncode(b)},
-              );
-            },
+            onTap: () => onOpen(item),
           );
         },
       ),
@@ -476,6 +490,7 @@ class _BookRow extends StatelessWidget {
                   height: picH,
                   referer: item.bookUrl,
                   title: item.name,
+                  baseUrl: item.sourceUrl,
                 ),
               ),
               Expanded(

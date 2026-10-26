@@ -83,9 +83,7 @@ class ReadingSessionLifecycle {
     final lastChapter = b.readingChapter.trim();
     final hasLastChapter =
         lastChapter.isNotEmpty && lastChapter != '加载中' && lastChapter != '目录';
-    final title = hasLastChapter
-        ? lastChapter
-        : (b.name.isNotEmpty ? b.name : '阅读');
+    final title = hasLastChapter ? lastChapter : '';
     // Blank body for re-open (cache typically paints within ~1 frame).
     // Cold open still gets a soft "正在加载…" until hydrate fills content.
     final hint = hasLastChapter ? '' : '正在加载…';

@@ -1,3 +1,4 @@
+import 'package:extended_image/extended_image.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
@@ -60,6 +61,14 @@ class _CacheManagerState extends State<CacheManager> {
     await _reload();
   }
 
+  Future<void> _clearCoverCache() async {
+    final done = await clearDiskCachedImages();
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(done ? '已清除封面缓存' : '封面缓存清理失败')));
+  }
+
   Future<void> _clearBookBodies(String bookId) async {
     await _chapters.clearBook(bookId);
     if (!mounted) return;
@@ -112,6 +121,18 @@ class _CacheManagerState extends State<CacheManager> {
                         tooltip: '清除全部分页缓存',
                         icon: const Icon(Icons.delete_outline),
                         onPressed: _clearPageLayouts,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Card(
+                    child: ListTile(
+                      title: const Text('封面磁盘缓存'),
+                      subtitle: const Text('清理后封面会重新下载；可解决旧图/错图'),
+                      trailing: IconButton(
+                        tooltip: '清除封面缓存',
+                        icon: const Icon(Icons.image_not_supported_outlined),
+                        onPressed: _loading ? null : _clearCoverCache,
                       ),
                     ),
                   ),

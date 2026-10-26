@@ -1,10 +1,13 @@
+import 'package:flutter/foundation.dart';
 import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/data/repositories/chapter_repository.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/entities/chapter_toc_entry.dart';
 import 'package:langhuan/features/sources/engine/book_source_engine.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
+import 'package:langhuan/features/sources/model/search_book.dart';
 import 'package:langhuan/features/sources/util/book_id.dart';
+import 'package:langhuan/features/sources/util/title_format.dart';
 import 'package:bot_toast/bot_toast.dart';
 
 /// Remote TOC fetch + local catalog persistence for the active book.
@@ -40,17 +43,7 @@ class TocService {
       );
       final list = await engine.toc(source, tocUrl);
       AppLog.i('Read', 'fetchRemoteToc got ${list.length} chapters');
-      return list
-          .map(
-            (c) => ChapterTocEntry(
-              id: makeChapterId(book.id, c.url),
-              title: c.name,
-              url: c.url,
-              hasBody: false,
-              ord: c.index,
-            ),
-          )
-          .toList();
+      return mapChapters(book, list);
     } catch (e, st) {
       AppLog.e(
         'Read',
@@ -61,6 +54,43 @@ class TocService {
       BotToast.showText(text: '目录加载失败：$e');
       return null;
     }
+  }
+
+  /// Map engine chapters to TOC entries, attaching each volume header to the
+  /// chapters that follow it.
+  ///
+  /// Volume rows themselves never become entries: reading progress, chapter
+  /// ids and the `(book_id, ord)` index all stay on readable chapters only.
+  @visibleForTesting
+  static List<ChapterTocEntry> mapChapters(
+    Book book,
+    List<SourceChapter> list,
+  ) {
+    var currentVolume = '';
+    var volumeOrd = -1;
+    final entries = <ChapterTocEntry>[];
+    for (final c in list) {
+      if (c.isVolume) {
+        final name = normalizeTitle(c.name);
+        if (name.isEmpty) continue;
+        currentVolume = name;
+        volumeOrd++;
+        continue;
+      }
+      if (c.url.isEmpty) continue;
+      entries.add(
+        ChapterTocEntry(
+          id: makeChapterId(book.id, c.url),
+          title: normalizeTitle(c.name),
+          url: c.url,
+          hasBody: false,
+          ord: entries.length,
+          volumeTitle: currentVolume,
+          volumeOrd: currentVolume.isEmpty ? -1 : volumeOrd,
+        ),
+      );
+    }
+    return entries;
   }
 
   /// Merge remote TOC into local state + DB.

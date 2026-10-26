@@ -12,6 +12,7 @@ import 'package:langhuan/features/sources/source_manage_page.dart';
 import 'package:langhuan/features/settings/cache_manager.dart';
 import 'package:langhuan/features/settings/font_set_page.dart';
 import 'package:langhuan/features/settings/log_viewer_page.dart';
+import 'package:langhuan/features/settings/update_page.dart';
 import 'package:langhuan/features/profile/history_page.dart';
 import 'package:langhuan/features/profile/bookmarks_page.dart';
 import 'package:fluro/fluro.dart';
@@ -89,6 +90,12 @@ var sourcesHandler = Handler(
 var logsHandler = Handler(
   handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
     return const LogViewer();
+  },
+);
+
+var updateHandler = Handler(
+  handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
+    return const UpdatePage();
   },
 );
 

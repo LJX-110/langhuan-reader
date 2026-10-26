@@ -5,6 +5,7 @@ import 'package:langhuan/core/storage/local_store.dart';
 import 'package:langhuan/features/reader/settings/reader_font_bootstrap.dart';
 import 'package:langhuan/core/platform/system_ui.dart';
 import 'package:langhuan/app/router/routes.dart';
+import 'package:langhuan/app/version_label.dart';
 import 'package:fluro/fluro.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -93,15 +94,22 @@ class AppInit {
     Routes.configureRoutes(router);
     Routes.router = router;
     await DirectoryUtil.getInstance();
+    // Older builds wrote a synthetic 1.0.0 when PackageInfo failed. Drop that
+    // placeholder so the UI falls back to「未知」instead of a fake version.
+    if (isLegacyFallbackVersion(
+      SpUtil.getString(PrefsKeys.version, defValue: ''),
+    )) {
+      SpUtil.remove(PrefsKeys.version);
+    }
     // Version label for「我的」页 (synced dynamically via package_info_plus).
+    // On failure keep an existing cache; otherwise the UI shows「未知」rather
+    // than inventing a release number.
     try {
       final pkg = await PackageInfo.fromPlatform();
       SpUtil.putString(PrefsKeys.version, pkg.version);
     } catch (_) {
-      if (!SpUtil.haveKey(PrefsKeys.version) ||
-          SpUtil.getString(PrefsKeys.version).isEmpty) {
-        SpUtil.putString(PrefsKeys.version, '1.0.0');
-      }
+      // Intentionally no synthetic fallback: a stale 1.0.0 would read as the
+      // real package version.
     }
     // Default: visible system bars. Only the reader body goes immersive.
     await SystemUiHelper.showSystemBars();

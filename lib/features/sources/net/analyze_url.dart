@@ -246,6 +246,15 @@ class AnalyzeUrl {
   /// URL (e.g. leftover JS after a failed `@js` evaluation).
   static String sanitizeUrl(String input, {String base = ''}) {
     final original = input.trim();
+    final lower = original.toLowerCase();
+    // Handler leftovers are not links: many sites use href="javascript:;"
+    // and keep the real book id in onclick.
+    if (lower.startsWith('javascript:') ||
+        lower.startsWith('mailto:') ||
+        lower.startsWith('tel:')) {
+      return '';
+    }
+    if (original.startsWith('#')) return '';
     var raw = _stripJsTemplates(original);
     if (raw.isEmpty) return raw;
 
@@ -295,6 +304,12 @@ class AnalyzeUrl {
         RegExp(
           r'\b(let|var|const|function|getArguments|getVariable)\b',
         ).hasMatch(t)) {
+      return true;
+    }
+    // Inline handler body left after a failed @onclick@js transform:
+    //   openBook('123','','')
+    if (RegExp(r"^[\w$.]+\s*\([^/]*\)\s*$").hasMatch(t) &&
+        (t.contains("'") || t.contains('"'))) {
       return true;
     }
     return false;

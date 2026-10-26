@@ -3,22 +3,39 @@ import 'package:langhuan/features/sources/net/source_http.dart';
 
 void main() {
   group('SourceHttp TLS policy', () {
-    test('lenient retry requires an explicit per-source opt-in', () {
-      expect(SourceHttp.allowsInsecureTls({}), isFalse);
+    test('a repository header alone never authorizes lenient TLS', () {
       expect(
-        SourceHttp.allowsInsecureTls({'X-Langhuan-Insecure-TLS': '1'}),
+        SourceHttp.allowsInsecureTls({
+          'X-Langhuan-Insecure-TLS': '1',
+        }, localOptIn: false),
+        isFalse,
+      );
+    });
+
+    test('local opt-in still requires the per-source header', () {
+      expect(SourceHttp.allowsInsecureTls({}, localOptIn: true), isFalse);
+      expect(
+        SourceHttp.allowsInsecureTls({
+          'X-Langhuan-Insecure-TLS': '1',
+        }, localOptIn: true),
         isTrue,
       );
       expect(
-        SourceHttp.allowsInsecureTls({'x-langhuan-insecure-tls': 'true'}),
+        SourceHttp.allowsInsecureTls({
+          'x-langhuan-insecure-tls': 'true',
+        }, localOptIn: true),
         isTrue,
       );
       expect(
-        SourceHttp.allowsInsecureTls({'x-langhuan-insecure-tls': 'yes'}),
+        SourceHttp.allowsInsecureTls({
+          'x-langhuan-insecure-tls': 'yes',
+        }, localOptIn: true),
         isTrue,
       );
       expect(
-        SourceHttp.allowsInsecureTls({'x-langhuan-insecure-tls': '0'}),
+        SourceHttp.allowsInsecureTls({
+          'x-langhuan-insecure-tls': '0',
+        }, localOptIn: true),
         isFalse,
       );
     });

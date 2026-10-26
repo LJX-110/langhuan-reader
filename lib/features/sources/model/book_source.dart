@@ -303,6 +303,19 @@ class SearchRule {
     'bookUrl': bookUrl,
     'checkKeyWord': checkKeyWord,
   };
+
+  /// True when no search field is configured at all.
+  bool get isEmpty =>
+      bookList.isEmpty &&
+      name.isEmpty &&
+      author.isEmpty &&
+      kind.isEmpty &&
+      wordCount.isEmpty &&
+      lastChapter.isEmpty &&
+      intro.isEmpty &&
+      coverUrl.isEmpty &&
+      bookUrl.isEmpty &&
+      checkKeyWord.isEmpty;
 }
 
 class BookInfoRule {
@@ -355,6 +368,19 @@ class BookInfoRule {
     'tocUrl': tocUrl,
     'canReName': canReName,
   };
+
+  /// True when no detail field is configured at all.
+  bool get isEmpty =>
+      init.isEmpty &&
+      name.isEmpty &&
+      author.isEmpty &&
+      kind.isEmpty &&
+      wordCount.isEmpty &&
+      lastChapter.isEmpty &&
+      intro.isEmpty &&
+      coverUrl.isEmpty &&
+      tocUrl.isEmpty &&
+      canReName.isEmpty;
 }
 
 class TocRule {
@@ -391,6 +417,15 @@ class TocRule {
     'updateTime': updateTime,
     'nextTocUrl': nextTocUrl,
   };
+
+  /// True when no catalog field is configured at all.
+  bool get isEmpty =>
+      chapterList.isEmpty &&
+      chapterName.isEmpty &&
+      chapterUrl.isEmpty &&
+      isVolume.isEmpty &&
+      updateTime.isEmpty &&
+      nextTocUrl.isEmpty;
 }
 
 class ContentRule {
@@ -423,4 +458,12 @@ class ContentRule {
     'replaceRegex': replaceRegex,
     'imageStyle': imageStyle,
   };
+
+  /// True when no content field is configured at all.
+  bool get isEmpty =>
+      content.isEmpty &&
+      nextContentUrl.isEmpty &&
+      sourceRegex.isEmpty &&
+      replaceRegex.isEmpty &&
+      imageStyle.isEmpty;
 }

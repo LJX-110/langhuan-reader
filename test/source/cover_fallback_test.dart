@@ -37,6 +37,20 @@ void main() {
     // Detail page has no og:image; the cover lives in data-src only.
     final info = await engine.bookInfo(source, '${site.base}/book/2');
     expect(info.coverUrl, '${site.base}/cover/2.jpg');
+
+    // Cover-only lookup used by list enrichment: absolute URL or empty.
+    expect(
+      await engine.fetchCover(source, '${site.base}/book/2'),
+      '${site.base}/cover/2.jpg',
+    );
+    expect(
+      await engine.fetchCover(
+        source,
+        '${site.base}/missing',
+        timeout: const Duration(milliseconds: 300),
+      ),
+      isEmpty,
+    );
   });
 }
 

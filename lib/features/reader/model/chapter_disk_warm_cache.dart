@@ -3,6 +3,7 @@ import 'package:langhuan/data/repositories/chapter_repository.dart';
 import 'package:langhuan/data/entities/chapter_toc_entry.dart';
 import 'package:langhuan/features/reader/model/chapter_content_loader.dart';
 import 'package:langhuan/features/reader/model/text_paginator.dart';
+import 'package:langhuan/features/reader/settings/read_setting.dart';
 
 /// In-memory warm window of disk chapter body + page layout (cur±1).
 class ChapterDiskWarmCache {
@@ -20,11 +21,16 @@ class ChapterDiskWarmCache {
   /// Drop a single chapter snapshot (e.g. after body refresh).
   void remove(String chapterId) => _warm.remove(chapterId);
 
-  /// Prefetch disk rows for [centerIdx] and neighbors into [_warm].
+  /// Prefetch disk rows for [centerIdx] and its configured neighbors.
+  ///
+  /// The window is `[center - prefetchBack, center + prefetchForward]` from
+  /// the reader settings (defaults 1 back / 2 forward).
   Future<void> warmAround(List<ChapterTocEntry> toc, int centerIdx) async {
     if (toc.isEmpty) return;
     final ids = <String>[];
-    for (final i in [centerIdx - 1, centerIdx, centerIdx + 1]) {
+    final from = centerIdx - ReadSetting.prefetchBack;
+    final to = centerIdx + ReadSetting.prefetchForward;
+    for (var i = from; i <= to; i++) {
       if (i < 0 || i >= toc.length) continue;
       final id = toc[i].id;
       if (id.isNotEmpty) ids.add(id);

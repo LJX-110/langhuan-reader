@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:bot_toast/bot_toast.dart';
 import 'package:langhuan/core/events/event.dart';
 import 'package:langhuan/core/platform/system_ui.dart';
+import 'package:langhuan/features/settings/update_service.dart';
 import 'package:langhuan/features/shelf/book_shelf.dart';
 import 'package:langhuan/features/discover/explore_page.dart';
 import 'package:langhuan/features/local/local_page.dart';
@@ -32,6 +34,18 @@ class _MainShellState extends State<MainShell> {
         setState(() => _index = i);
       }
     });
+    // Silent startup check: 24h throttle, failures ignored, non-blocking hint.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkUpdate());
+  }
+
+  Future<void> _checkUpdate() async {
+    try {
+      final info = await UpdateService().check();
+      if (info == null || !mounted) return;
+      BotToast.showText(text: '发现新版本 ${info.version}，可在「我的」页查看');
+    } catch (_) {
+      // Silent: the manual entry in 我的 reports errors instead.
+    }
   }
 
   @override

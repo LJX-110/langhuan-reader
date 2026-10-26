@@ -75,6 +75,8 @@ class ReaderSettingsPanel extends StatelessWidget {
           _sectionLabel('翻页', chrome),
           const SizedBox(height: 10),
           _pageTurnModeRow(context, chrome, readModel, onChanged),
+          const SizedBox(height: 10),
+          _prefetchRangeRow(context, chrome, onChanged),
           const SizedBox(height: 16),
           _sectionLabel('更多', chrome),
           const SizedBox(height: 10),
@@ -388,6 +390,53 @@ Widget _pageTurnModeRow(
         ),
       );
     }).toList(),
+  );
+}
+
+/// Neighbor prefetch range: chapters kept warm before / after the current one.
+Widget _prefetchRangeRow(
+  BuildContext context,
+  ReaderChrome chrome,
+  VoidCallback onChanged,
+) {
+  Widget hint(String text) =>
+      Text(text, style: TextStyle(fontSize: 12, color: chrome.muted));
+  return Column(
+    children: [
+      _stepperRow(
+        chrome: chrome,
+        label: '前',
+        valueText: '${ReadSetting.prefetchBack} 章',
+        onMinus: () {
+          ReadSetting.setPrefetchRange(back: ReadSetting.prefetchBack - 1);
+          onChanged();
+        },
+        onPlus: () {
+          ReadSetting.setPrefetchRange(back: ReadSetting.prefetchBack + 1);
+          onChanged();
+        },
+        child: hint('预取范围 · 向前'),
+      ),
+      const SizedBox(height: 6),
+      _stepperRow(
+        chrome: chrome,
+        label: '后',
+        valueText: '${ReadSetting.prefetchForward} 章',
+        onMinus: () {
+          ReadSetting.setPrefetchRange(
+            forward: ReadSetting.prefetchForward - 1,
+          );
+          onChanged();
+        },
+        onPlus: () {
+          ReadSetting.setPrefetchRange(
+            forward: ReadSetting.prefetchForward + 1,
+          );
+          onChanged();
+        },
+        child: hint('预取范围 · 向后'),
+      ),
+    ],
   );
 }
 

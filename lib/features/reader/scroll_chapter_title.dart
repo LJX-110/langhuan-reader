@@ -53,7 +53,8 @@ class ScrollChapterTitle extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 13 / scale,
+                    fontSize: 14 / scale,
+                    fontWeight: FontWeight.w500,
                     height: 1.2,
                     letterSpacing: .2,
                     color: color,

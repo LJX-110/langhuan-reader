@@ -169,8 +169,7 @@ class _ReadBookState extends ConsumerState<ReadBook>
       onPopInvokedWithResult: (bool didPop, dynamic result) async {
         if (didPop) return;
         if (!popWithMenuAndChapterView()) return;
-        final bookId = readModel.book?.id;
-        if (bookId != null && !ref.read(shelfModelProvider).isOnShelf(bookId)) {
+        if (_needsShelfPrompt) {
           await confirmAddToShelf(context);
         }
         if (context.mounted) {
@@ -202,11 +201,19 @@ class _ReadBookState extends ConsumerState<ReadBook>
   /// Explicit top-bar back. Unlike [PopScope], this exits the reader even
   /// while the menu is open (the system back first closes the menu).
   Future<void> _exitReader() async {
-    final bookId = readModel.book?.id;
-    if (bookId != null && !ref.read(shelfModelProvider).isOnShelf(bookId)) {
+    if (_needsShelfPrompt) {
       await confirmAddToShelf(context);
     }
     if (mounted) Navigator.of(context).pop();
+  }
+
+  /// Local TXT books live on the local tab; they must never be inserted into
+  /// the online shelf or deleted when the user declines the shelf prompt.
+  bool get _needsShelfPrompt {
+    final book = readModel.book;
+    if (book == null) return false;
+    if (Book.isLocalSource(book.sourceUrl)) return false;
+    return !ref.read(shelfModelProvider).isOnShelf(book.id);
   }
 
   Future<void> confirmAddToShelf(BuildContext context) async {

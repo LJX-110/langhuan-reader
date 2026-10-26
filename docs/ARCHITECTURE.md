@@ -2,7 +2,7 @@
 
 ## 当前结构
 
-`lib/` 已按功能重排，新代码优先落在对应 `features/` 目录。当前发布版 1.0.0，下一里程碑 2.0.0。
+`lib/` 已按功能重排，新代码优先落在对应 `features/` 目录。当前开发版 2.0.0（未发布）。
 
 ```text
 langhuan/
@@ -21,7 +21,7 @@ langhuan/
 │  │  ├─ cache/             缓存管理
 │  │  ├─ database/          SQLite（reader.db）
 │  │  ├─ events/            EventBus 事件
-│  │  ├─ network/           Dio 与拦截器
+│  │  ├─ net/               会话 Cookie 等网络基础设施
 │  │  ├─ platform/          屏幕与系统 UI
 │  │  ├─ storage/           本地键值存储
 │  │  └─ utils/             日志等工具
@@ -30,7 +30,7 @@ langhuan/
 │  │  └─ repositories/      书、章节、书源的持久化
 │  ├─ design/
 │  │  ├─ brand/             应用名与固定文案
-│  │  ├─ components/        PageHeader、搜索、立体书架、封面等展示组件
+│  │  ├─ components/        PageHeader、搜索、ShelfBookView、立体书架、封面等展示组件
 │  │  ├─ theme/             12 套主题、明暗控制
 │  │  └─ tokens/            基础中性色、尺寸、阴影、字体与 ThemeData
 │  └─ features/
@@ -58,7 +58,10 @@ langhuan/
 - `app/shell/` 只负责四个主页签（书架 / 发现 / 本地 / 我）与 Dock 的装配，不承载业务逻辑。搜索不是页签，从书架 / 发现页头进入 `/search`。
 - `design/tokens/` 只放中性色、尺寸、阴影、字体与 `buildLanghuanTheme`，不依赖业务状态。
 - `design/theme/theme_presets.dart` 定义 12 套双色主题；`ColorModel` 只负责选择、持久化和构建 ThemeData。
-- `design/components/` 只做展示：`PageHeader`、`PaperSearchEntry`、`Bookshelf3D`。
+- `design/components/` 只做展示：`PageHeader`、`PaperSearchEntry`、`ShelfBookView`、`Bookshelf3D`、`PicWidget`。`Bookshelf3D` 只依赖通用展示模型，书架页与本地页共用。
+- `features/local/` 的读文件、解码、解析和指纹计算在后台 isolate 完成；`reader.db` 写入留在主 isolate，避免大文件冻结 UI。
+- `features/sources/sync/` 与 `features/sources/import/source_import_conflict.dart` 只做同步决策：手动 JSON / URL 导入比对完整规则，仓库同步先判断 URL 是否已存在；两者都默认保留本地规则，用户二次确认后才覆盖。写入在单事务内完成，失败整批回滚。
+- `design/components/Bookshelf3D` 只用于书架页与本地页的 3D 模式；发现页保持平面列表，不挂载 3D 书架。
 - `features/*/` 页面负责展示与交互，模型负责状态与调用；页面不直接写 SQL。
 - `data/repositories/` 是数据库访问边界；书源列表查询不携带 `raw_json`，避免大 payload 过 MethodChannel。
 - `features/sources/engine/` 只执行书源规则，不依赖 UI。
@@ -68,7 +71,7 @@ langhuan/
 - 阅读器浮层拆为 `features/reader/menu/`：顶栏、底栏、章节滑条、下载与设置面板；`reader_menu.dart` 只保留浮层编排与状态。
 - 顶栏显示书名 + 当前章节名；排版设置的连续调整由 `ReaderContentReloader.scheduleRelayout()` 合并为一次重排，避免每次滑动都清缓存、重分页。
 - 系统栏统一走 `SystemUiHelper.overlayStyle(context)`：透明状态栏 / 导航栏、按页面明暗切换图标色并关闭导航栏对比度遮罩；列表页与底部栏自行叠加 `viewPadding.bottom`，避免被系统导航条盖住。
-- 书源请求统一走 `features/sources/net/source_http.dart`；只有证书链不完整导致握手失败时，才对同一次请求降级重试，正常证书仍严格校验。
+- 书源请求统一走 `features/sources/net/source_http.dart`；默认严格校验证书。只有“本地高风险开关已开启”且“书源自带 `X-Langhuan-Insecure-TLS` 标记”同时满足，才对同一次请求降级重试。
 
 ## 数据流
 
@@ -76,9 +79,11 @@ langhuan/
 用户输入仓库 URL
   → SourceRepo.fetch(url)
   → SourceImporter.parseJson(text)
-  → SourceModel.importParsed(...)
-  → SourceRepository.upsert(...)
-  → reader.db (sources)
+  → SourceModel.inspectImport(...) / buildSourceSyncPlan(...)
+  → 用户选择：默认保留本地规则，或明确覆盖
+  → SourceRepository.upsertAllWithStats / overwriteAllWithRollback
+  → 单事务写 reader.db (sources)，失败整批回滚
+  → 重新加载书源列表
 
 书架打开书
   → BookRepository / ChapterRepository
@@ -113,21 +118,21 @@ langhuan/
 - 文字与图标使用 `AppColors.accentOf`：保持色相，按背景亮度调整明度到 WCAG AA 4.5:1；辅助色接近底色时用 `AppColors.companionOf` 做小面积点缀。主题色块展示原始双色，不再与界面显示对不上。
 - 默认主题「鸢尾蓝 · 流光白」；主题定义在 `design/theme/theme_presets.dart`。
 - 每页只保留一行 `PageHeader`，不保留品牌顶栏、英文副题和档案编号；底部为白底四页签 Dock，不使用胶囊。
-- 发现页使用 `design/components/bookshelf_3d.dart`：书脊、书页厚度、顶面、透视、落地阴影与吸附翻页。
+- 发现页使用平面列表；书架页与本地页共用 `design/components/bookshelf_3d.dart` 的 3D 模式。全新安装默认 3D，旧版 `coverGrid` 偏好保留为网格 / 列表。
 - 每页标题、底栏选中项、书架筛选使用主题强调色；底栏与筛选的下划线使用辅助色。
 - 不使用重模糊；header / dock 都是实色白。
-- 布局/主题测试在 `test/design/chrome_layout_test.dart`、`bookshelf_layout_test.dart` 与 `theme_preset_test.dart`，覆盖 360 / 411 / 800 宽、明暗两套、1.3 倍文字缩放与主题可读性。
+- 布局/主题测试在 `test/design/chrome_layout_test.dart`、`bookshelf_layout_test.dart`、`bookshelf_3d_dynamic_test.dart` 与 `theme_preset_test.dart`，覆盖 360 / 411 / 800 宽、明暗两套、1.3 倍文字缩放、数量增减与主题可读性。
 
 ## 数据库
 
 - 单文件 `reader.db`，表：`books`、`chapters`、`sources`、`bookmarks`、`reading_history`。
-- schema 版本为 3；`onUpgrade` 只增量建表，`bookmarks` / `reading_history` 通过 `book_id` 外键级联删除，不清空用户数据。
+- schema 版本为 4（`chapters` 增 `volume_title` / `volume_ord`，仅展示分组，不参与进度）；`onUpgrade` 只增量建表 / 补列，`bookmarks` / `reading_history` 通过 `book_id` 外键级联删除，不清空用户数据。
 - 本地 TXT 复用现有 `books` / `chapters`，不新增表；`source_url` 以 `local://` 开头，章节正文直接存入 `chapters.body`。
 - 书签与阅读记录已落地；任何后续 schema 改动仍必须先补增量迁移与迁移测试。
 
 ## 验证
 
 - `flutter analyze`：通过。
-- `flutter test`：80 项通过，其中设计/主题 15 项；JS 引擎相关用例在缺少宿主原生库时跳过。
+- `flutter test --concurrency=1`：全部通过；联网类用例（TLS 实站、阅友小说、源码包校验）需对应环境变量开启，默认跳过。
+- 书源仓储事务测试使用 `sqflite_common_ffi` 的真实内存数据库，覆盖默认保留、明确覆盖与跨分块失败回滚；迁移测试覆盖数据库 3→4 与目录重排。
 - release arm64 APK：R8 + `shrinkResources`，使用项目自有 keystore 签名。
-- 最终真机验收：列入 2.0.0 退出标准，见 `docs/ROADMAP.md`。

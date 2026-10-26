@@ -2,8 +2,10 @@ import 'dart:convert';
 
 import 'package:langhuan/data/repositories/source_repository.dart';
 import 'package:langhuan/features/sources/engine/book_source_engine.dart';
+import 'package:langhuan/features/sources/import/source_import_conflict.dart';
 import 'package:langhuan/features/sources/import/source_importer.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
+import 'package:langhuan/features/sources/model/source_search_report.dart';
 import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 
@@ -27,6 +29,24 @@ class SourceModel with ChangeNotifier {
   /// Enabled sources without rule payloads. Prefer [hydrateSources] before engine use.
   Future<List<BookSource>> enabledSources() => _sources.getEnabled();
 
+  /// Which incoming URLs already exist locally, for the overwrite dialog.
+  Future<Set<String>> existingUrls(List<String> urls) =>
+      _sources.existingUrls(urls);
+
+  /// Compare a parsed import with the full local rules before writing anything.
+  Future<SourceImportConflict> inspectImport(SourceParseResult parsed) async {
+    final urls = <String>{
+      for (final source in parsed.sources)
+        if (source.bookSourceUrl.isNotEmpty) source.bookSourceUrl,
+    }.toList(growable: false);
+    if (urls.isEmpty) return const SourceImportConflict();
+    final existing = await _sources.getByUrls(urls);
+    return buildSourceImportConflict(
+      incoming: parsed.sources,
+      existing: existing,
+    );
+  }
+
   Future<List<BookSource>> hydrateSources(List<BookSource> meta) {
     return _sources.getByUrls(meta.map((e) => e.bookSourceUrl).toList());
   }
@@ -41,22 +61,28 @@ class SourceModel with ChangeNotifier {
 
   /// Run one search and store latency / failure for the health column.
   Future<void> testSource(BookSource source) async {
-    if (source.searchUrl.trim().isEmpty) {
-      BotToast.showText(text: '该源没有搜索规则，无法测试');
-      return;
+    final report = await testSourceSearch(source, '测试');
+    if (report == null) return;
+    BotToast.showText(text: '${report.label}：${report.summary}');
+  }
+
+  /// Single-source test search with a user-supplied keyword.
+  ///
+  /// Health treats "no result" as reachable: the site answered, the keyword
+  /// just did not match. Rule/parse/network/timeout failures store -1.
+  Future<SourceSearchReport?> testSourceSearch(
+    BookSource source,
+    String keyword,
+  ) async {
+    final key = keyword.trim();
+    if (key.isEmpty) {
+      BotToast.showText(text: '请输入搜索关键词');
+      return null;
     }
     BotToast.showText(text: '正在测试「${source.bookSourceName}」…');
-    final stopwatch = Stopwatch()..start();
-    var ok = true;
-    try {
-      final hydrated = await _sources.getByUrl(source.bookSourceUrl) ?? source;
-      await BookSourceEngine().search(hydrated, '测试', 1);
-    } catch (_) {
-      ok = false;
-    }
-    stopwatch.stop();
-    final elapsed = stopwatch.elapsedMilliseconds;
-    source.respondTime = ok ? elapsed : -1;
+    final hydrated = await _sources.getByUrl(source.bookSourceUrl) ?? source;
+    final report = await BookSourceEngine().searchWithReport(hydrated, key, 1);
+    source.respondTime = report.reachable ? report.elapsedMs : -1;
     source.lastCheckTime = DateTime.now().millisecondsSinceEpoch;
     await _sources.updateHealth(
       source.bookSourceUrl,
@@ -64,7 +90,7 @@ class SourceModel with ChangeNotifier {
       lastCheckTime: source.lastCheckTime,
     );
     notifyListeners();
-    BotToast.showText(text: ok ? '测试完成：${elapsed}ms' : '测试失败：书源不可用');
+    return report;
   }
 
   Future<void> remove(BookSource source) async {
@@ -93,6 +119,36 @@ class SourceModel with ChangeNotifier {
     notifyListeners();
   }
 
+  /// 批量移动分组：把 [urls] 的 bookSourceGroup 替换为 [group]（空 = 清空）。
+  Future<void> setGroup(List<String> urls, String group) async {
+    if (urls.isEmpty) return;
+    final value = group.trim();
+    await _sources.updateGroups(urls, value);
+    final set = urls.toSet();
+    for (final s in sources) {
+      if (set.contains(s.bookSourceUrl)) s.bookSourceGroup = value;
+    }
+    notifyListeners();
+  }
+
+  /// Export only [urls], with full rule payloads, in the given order.
+  Future<String> exportSelected(List<String> urls) async {
+    final picked = <BookSource>[];
+    for (final url in urls) {
+      final full = await _sources.getByUrl(url);
+      if (full != null) picked.add(full);
+    }
+    final list = picked.map((s) {
+      if (s.rawJson.isNotEmpty) {
+        try {
+          return jsonDecode(s.rawJson);
+        } catch (_) {}
+      }
+      return s.toLegadoJson();
+    }).toList();
+    return const JsonEncoder.withIndent('  ').convert(list);
+  }
+
   Future<void> removeMany(List<String> urls) async {
     if (urls.isEmpty) return;
     await _sources.deleteMany(urls);
@@ -107,7 +163,9 @@ class SourceModel with ChangeNotifier {
     int duplicatesInBatch = 0,
   }) {
     final parts = <String>[
-      '成功导入 ${stats.total} 个书源（新增 ${stats.inserted}，更新 ${stats.updated}）',
+      '成功导入 ${stats.total} 个书源'
+          '（新增 ${stats.inserted}，更新 ${stats.updated}，'
+          '保留本地 ${stats.preserved}）',
     ];
     if (duplicatesInBatch > 0) {
       parts.add('合并重复 $duplicatesInBatch');
@@ -118,49 +176,19 @@ class SourceModel with ChangeNotifier {
     return parts.join('，');
   }
 
-  Future<int> importJsonText(
-    String text, {
-    bool agreed = false,
-    bool silent = false,
-  }) async {
-    if (!agreed) {
-      throw StateError('请先确认书源使用声明');
-    }
-    return importParsed(
-      SourceImporter.parseJson(text),
-      agreed: true,
-      silent: silent,
-    );
-  }
-
-  Future<int> importFromUrl(
-    String url, {
-    bool agreed = false,
-    bool silent = false,
-  }) async {
-    if (!agreed) {
-      throw StateError('请先确认书源使用声明');
-    }
-    if (!silent) BotToast.showText(text: '正在下载书源…');
-    return importParsed(
-      await SourceImporter.fromUrl(url),
-      agreed: true,
-      silent: silent,
-    );
-  }
-
   /// Commit an already-fetched repository payload.
-  Future<int> importParsed(
+  Future<SourceUpsertStats> importParsed(
     SourceParseResult parsed, {
     bool agreed = false,
     bool silent = false,
+    bool overwriteExistingRules = false,
   }) async {
     if (!agreed) {
       throw StateError('请先确认书源使用声明');
     }
     if (parsed.sources.isEmpty) {
       if (!silent) BotToast.showText(text: '未解析到有效书源');
-      return 0;
+      return const SourceUpsertStats(inserted: 0, updated: 0);
     }
     final usable = parsed.sources
         .where(
@@ -176,9 +204,12 @@ class SourceModel with ChangeNotifier {
               '请从源仓库导入「书源」JSON（地址含 shuyuans/json）。',
         );
       }
-      return 0;
+      return const SourceUpsertStats(inserted: 0, updated: 0);
     }
-    final stats = await _commitImport(parsed);
+    final stats = await _commitImport(
+      parsed,
+      overwriteExistingRules: overwriteExistingRules,
+    );
     if (!silent) {
       await load();
       BotToast.showText(
@@ -189,33 +220,37 @@ class SourceModel with ChangeNotifier {
         ),
       );
     }
-    return stats.total;
+    return stats;
   }
 
-  Future<SourceUpsertStats> _commitImport(SourceParseResult parsed) async {
-    final base = await _sources.count();
+  Future<SourceUpsertStats> _commitImport(
+    SourceParseResult parsed, {
+    required bool overwriteExistingRules,
+  }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
-    // Upsert in slices and drop each slice so peak heap stays bounded.
-    const slice = 80;
-    var inserted = 0;
-    var updated = 0;
     final all = parsed.sources;
-    for (var i = 0; i < all.length; i += slice) {
-      final end = i + slice > all.length ? all.length : i + slice;
-      final chunk = all.sublist(i, end);
-      for (var j = 0; j < chunk.length; j++) {
-        chunk[j].customOrder = base + i + j;
-        chunk[j].lastUpdateTime = now;
+    for (final source in all) {
+      source.lastUpdateTime = now;
+    }
+    if (overwriteExistingRules) {
+      // One transaction: a mid-batch failure rolls the whole overwrite back,
+      // so the local source list cannot end up half repository / half local.
+      final stats = await _sources.overwriteAllWithRollback(all);
+      for (final source in all) {
+        source.rawJson = '';
       }
-      final stats = await _sources.upsertAllWithStats(chunk);
-      inserted += stats.inserted;
-      updated += stats.updated;
-      for (final s in chunk) {
-        s.rawJson = '';
-      }
+      all.clear();
+      return stats;
+    }
+
+    // Default path: the repository keeps existing rows and inserts new ones
+    // inside one transaction, so a failure cannot leave a half-imported batch.
+    final stats = await _sources.upsertAllWithStats(all);
+    for (final source in all) {
+      source.rawJson = '';
     }
     all.clear();
-    return SourceUpsertStats(inserted: inserted, updated: updated);
+    return stats;
   }
 
   /// Export from DB in chunks (list cache has no `raw_json`).

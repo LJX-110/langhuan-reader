@@ -117,10 +117,20 @@ class AppColors {
         ThemeData.estimateBrightnessForColor(background),
       );
 
-  static Color onColorOf(Color color) =>
-      ThemeData.estimateBrightnessForColor(color) == Brightness.dark
-      ? white
-      : black;
+  /// Pick whichever of black / white actually reads better on [color].
+  ///
+  /// `ThemeData.estimateBrightnessForColor` flips near luminance 0.337; a
+  /// colour just below that (e.g. #FD742D) got white text at ~2.7:1. Comparing
+  /// both contrast ratios keeps every fill at its best available contrast.
+  static Color onColorOf(Color color) {
+    // Pure black / white, not the softer text tokens: a fill only needs to
+    // maximize contrast, and #141414 fell just under 4.5:1 on 瓦松绿.
+    const pureWhite = Color(0xFFFFFFFF);
+    const pureBlack = Color(0xFF000000);
+    return contrastRatio(color, pureWhite) >= contrastRatio(color, pureBlack)
+        ? pureWhite
+        : pureBlack;
+  }
 
   static double contrastRatio(Color a, Color b) {
     final la = a.computeLuminance();

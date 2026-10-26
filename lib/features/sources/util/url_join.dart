@@ -14,13 +14,14 @@ String urlJoin(String base, String path) {
   final baseUri = Uri.tryParse(base);
   if (baseUri == null || !baseUri.hasScheme) return p;
   if (p.startsWith('/')) {
-    return Uri(
-      scheme: baseUri.scheme,
-      userInfo: baseUri.userInfo,
-      host: baseUri.host,
-      port: baseUri.hasPort ? baseUri.port : null,
-      path: p,
-    ).toString();
+    // Uri(path: '/c.php?id=1') treats '?' as an illegal path delimiter and
+    // throws. resolve() parses the query correctly; a genuinely malformed
+    // path still falls back to the raw value instead of failing the source.
+    try {
+      return baseUri.resolve(p).toString();
+    } catch (_) {
+      return p;
+    }
   }
   try {
     return baseUri.resolve(p).toString();

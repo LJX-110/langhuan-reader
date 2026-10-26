@@ -7,8 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:langhuan/app/router/routes.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
+import 'package:langhuan/design/components/bookshelf_3d.dart';
 import 'package:langhuan/design/components/page_header.dart';
-import 'package:langhuan/design/components/pic_widget.dart';
+import 'package:langhuan/design/components/shelf_book_view.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/features/local/local_import_service.dart';
 
@@ -27,6 +28,8 @@ class _LocalPageState extends State<LocalPage> {
   List<Book> _list = const [];
   bool _loading = true;
   bool _importing = false;
+  int _importDone = 0;
+  int _importTotal = 0;
 
   @override
   void initState() {
@@ -63,29 +66,53 @@ class _LocalPageState extends State<LocalPage> {
       return;
     }
     if (picked == null || picked.files.isEmpty) return;
+    final files = picked.files;
 
-    setState(() => _importing = true);
+    setState(() {
+      _importing = true;
+      _importDone = 0;
+      _importTotal = files.length;
+    });
     var ok = 0;
-    String? firstError;
+    final failures = <String>[];
     LocalImportResult? last;
-    for (final file in picked.files) {
+    for (var i = 0; i < files.length; i++) {
+      final file = files[i];
       try {
         final result = await _imports.importFile(file);
         last = result;
         ok++;
       } catch (e) {
-        firstError ??= '$e';
+        failures.add('${file.name.isEmpty ? '未命名文件' : file.name}：$e');
       }
+      if (mounted) setState(() => _importDone = i + 1);
     }
     if (!mounted) return;
     setState(() => _importing = false);
     await _reload();
-    if (ok > 0) {
+    if (failures.isEmpty) {
       final name = last?.book.name ?? '';
       BotToast.showText(text: ok == 1 ? '已导入《$name》' : '已导入 $ok 本');
-    } else {
-      BotToast.showText(text: '导入失败：${firstError ?? '未知错误'}');
+      return;
     }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('导入结果'),
+        content: SingleChildScrollView(
+          child: Text(
+            '成功 $ok 本，失败 ${failures.length} 本\n\n${failures.join('\n')}',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _open(Book book) async {
@@ -97,25 +124,27 @@ class _LocalPageState extends State<LocalPage> {
     _reload();
   }
 
+  Future<void> _openById(String id) async {
+    for (final book in _list) {
+      if (book.id == id) {
+        await _open(book);
+        return;
+      }
+    }
+  }
+
+  Future<void> _deleteById(String id) async {
+    for (final book in _list) {
+      if (book.id == id) {
+        await _delete(book);
+        return;
+      }
+    }
+  }
+
+  /// Deletion after the shelf's inline confirm; the page no longer opens its
+  /// own dialog so 书架 / 本地 share one interaction.
   Future<void> _delete(Book book) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('移出本地书库'),
-        content: Text('删除《${book.name}》及其章节缓存？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
     setState(() {
       _list = _list.where((b) => b.id != book.id).toList(growable: false);
     });
@@ -125,6 +154,18 @@ class _LocalPageState extends State<LocalPage> {
       BotToast.showText(text: '删除失败：$e');
       await _reload();
     }
+  }
+
+  /// Default focus: the most recently read local book, else the first one.
+  String? _initialFocusId() {
+    for (final book in _list) {
+      if (book.readingChapter.trim().isNotEmpty ||
+          book.chapterIndex > 0 ||
+          book.pageIndex > 0) {
+        return book.id;
+      }
+    }
+    return _list.isEmpty ? null : _list.first.id;
   }
 
   @override
@@ -154,7 +195,13 @@ class _LocalPageState extends State<LocalPage> {
                 child: OutlinedButton.icon(
                   onPressed: _importing ? null : _importTxt,
                   icon: const Icon(Icons.file_open_outlined, size: 17),
-                  label: Text(_importing ? '正在导入…' : '导入 TXT'),
+                  label: Text(
+                    _importing
+                        ? (_importTotal > 0
+                              ? '正在导入 $_importDone/$_importTotal…'
+                              : '正在导入…')
+                        : '导入 TXT',
+                  ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.accentOf(context),
                     side: BorderSide(
@@ -169,7 +216,11 @@ class _LocalPageState extends State<LocalPage> {
                 ),
               ),
             ),
-            if (_importing) const LinearProgressIndicator(minHeight: 2),
+            if (_importing)
+              LinearProgressIndicator(
+                minHeight: 2,
+                value: _importTotal > 0 ? _importDone / _importTotal : null,
+              ),
             Expanded(child: _body(dark)),
           ],
         ),
@@ -182,15 +233,15 @@ class _LocalPageState extends State<LocalPage> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_list.isEmpty) return _empty(dark);
-    return ListView.separated(
-      padding: const EdgeInsets.only(top: 4, bottom: 24),
-      itemCount: _list.length,
-      separatorBuilder: (_, _) => Divider(
-        height: 1,
-        color: dark ? AppColors.dividerDark : AppColors.line,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppDimens.pagePadding),
+      child: Bookshelf3D(
+        books: _list.map(ShelfBookView.fromBook).toList(growable: false),
+        initialBookId: _initialFocusId(),
+        onOpen: (view) => _openById(view.id),
+        onDelete: (view) => _deleteById(view.id),
+        deleteWarning: '删除后无法撤销',
       ),
-      itemBuilder: (context, i) =>
-          Material(color: Colors.transparent, child: _row(_list[i], dark)),
     );
   }
 
@@ -224,70 +275,6 @@ class _LocalPageState extends State<LocalPage> {
             child: const Text('导入 TXT'),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _row(Book book, bool dark) {
-    final primary = dark ? AppColors.textOnDark : AppColors.ink;
-    final muted = dark ? AppColors.textMutedDark : AppColors.inkMute;
-    final progress = book.readingChapter.isNotEmpty
-        ? book.readingChapter
-        : '第 ${book.chapterIndex + 1} 章';
-    return InkWell(
-      onTap: () => _open(book),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 10, 8, 10),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: PicWidget(
-                book.coverUrl,
-                width: 46,
-                height: 64,
-                fit: BoxFit.cover,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    book.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: primary,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    book.author,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11, color: muted),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    progress,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11, color: muted),
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              tooltip: '删除',
-              onPressed: () => _delete(book),
-              icon: Icon(Icons.delete_outline, size: 19, color: muted),
-            ),
-          ],
-        ),
       ),
     );
   }

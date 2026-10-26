@@ -1,10 +1,17 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:langhuan/core/utils/app_log.dart';
+import 'package:langhuan/core/utils/redact.dart';
 import 'package:langhuan/data/entities/book_info.dart';
 import 'package:langhuan/features/sources/analyzer/js_analyzer.dart';
 import 'package:langhuan/features/sources/analyzer/regex_analyzer.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
+import 'package:langhuan/features/sources/model/source_diagnostics.dart';
+import 'package:langhuan/features/sources/model/source_search_report.dart';
 import 'package:langhuan/features/sources/net/analyze_url.dart';
+import 'package:langhuan/features/sources/net/source_http.dart';
 import 'package:langhuan/features/sources/rule/analyze_rule.dart';
 import 'package:langhuan/features/sources/util/book_id.dart';
 import 'package:langhuan/features/sources/util/text_clean.dart';
@@ -25,26 +32,8 @@ class BookSourceEngine {
     if (source.searchUrl.isEmpty || key.isEmpty) return const [];
     AppLog.d('Source', 'search "${source.bookSourceName}" key=$key page=$page');
     try {
-      final resp = await AnalyzeUrl.fetch(
-        source,
-        source.searchUrl,
-        key: key,
-        page: page,
-      ).timeout(sourceTimeout);
-      return _parseBookList(
-        source,
-        resp,
-        listRule: source.ruleSearch.bookList,
-        nameRule: source.ruleSearch.name,
-        authorRule: source.ruleSearch.author,
-        kindRule: source.ruleSearch.kind,
-        wordCountRule: source.ruleSearch.wordCount,
-        lastChapterRule: source.ruleSearch.lastChapter,
-        introRule: source.ruleSearch.intro,
-        coverRule: source.ruleSearch.coverUrl,
-        bookUrlRule: source.ruleSearch.bookUrl,
-        logTag: 'search',
-      );
+      final run = await _runSearch(source, key, page);
+      return run.books;
     } catch (e, st) {
       AppLog.e(
         'SourceNet',
@@ -53,6 +42,260 @@ class BookSourceEngine {
         stackTrace: st,
       );
       rethrow;
+    }
+  }
+
+  /// Search one source and classify the outcome for diagnostics.
+  ///
+  /// Never throws: network, timeout and parse failures become a
+  /// [SourceSearchReport] so a sweep can keep going and the UI can offer a
+  /// per-source retry.
+  Future<SourceSearchReport> searchWithReport(
+    BookSource source,
+    String key,
+    int page, {
+    Duration timeout = sourceTimeout,
+  }) async {
+    final sw = Stopwatch()..start();
+    var requestUrl = '';
+    try {
+      final run = await _runSearch(
+        source,
+        key,
+        page,
+        timeout: timeout,
+        onRequestUrl: (url) => requestUrl = url,
+      );
+      sw.stop();
+      final report = _classifyReport(source, key, page, run, sw.elapsedMilliseconds);
+      AppLog.i(
+        'Source',
+        'search report "${source.bookSourceName}" ${report.label} '
+            'hits=${report.hits.length} ${report.elapsedMs}ms '
+            'url=${report.requestUrl}',
+      );
+      return report;
+    } on TimeoutException {
+      sw.stop();
+      return _failedReport(
+        source,
+        key,
+        page,
+        SourceSearchIssue.timeout,
+        detail: '超过 ${_durationLabel(timeout)}未响应。',
+        elapsedMs: sw.elapsedMilliseconds,
+        requestUrl: requestUrl,
+      );
+    } on DioException catch (e) {
+      sw.stop();
+      final issue =
+          e.type == DioExceptionType.connectionTimeout ||
+              e.type == DioExceptionType.receiveTimeout ||
+              e.type == DioExceptionType.sendTimeout ||
+              e.type == DioExceptionType.transformTimeout
+          ? SourceSearchIssue.timeout
+          : SourceSearchIssue.network;
+      return _failedReport(
+        source,
+        key,
+        page,
+        issue,
+        detail: _dioDetail(e),
+        elapsedMs: sw.elapsedMilliseconds,
+        requestUrl: requestUrl,
+        httpStatus: e.response?.statusCode ?? 0,
+      );
+    } on ArgumentError {
+      sw.stop();
+      return _failedReport(
+        source,
+        key,
+        page,
+        SourceSearchIssue.incompatibleRule,
+        detail: source.searchUrl.trim().isEmpty
+            ? '未配置搜索地址。'
+            : '搜索地址无法解析，可能是 JS 规则未执行。',
+        elapsedMs: sw.elapsedMilliseconds,
+        requestUrl: requestUrl,
+      );
+    } catch (e, st) {
+      sw.stop();
+      AppLog.w(
+        'SourceNet',
+        'search report failed "${source.bookSourceName}"',
+        error: e,
+      );
+      AppLog.d('SourceNet', 'search report stack: $st');
+      return _failedReport(
+        source,
+        key,
+        page,
+        SourceSearchIssue.unknown,
+        detail: '请求或解析异常（${Redact.errorType(e)}）。',
+        elapsedMs: sw.elapsedMilliseconds,
+        requestUrl: requestUrl,
+      );
+    }
+  }
+
+  Future<_SearchRun> _runSearch(
+    BookSource source,
+    String key,
+    int page, {
+    Duration timeout = sourceTimeout,
+    void Function(String url)? onRequestUrl,
+  }) async {
+    final request = AnalyzeUrl.build(
+      source,
+      source.searchUrl,
+      key: key,
+      page: page,
+    );
+    onRequestUrl?.call(request.url);
+    final resp = await SourceHttp.instance.fetch(request).timeout(timeout);
+    final listRule = source.ruleSearch.bookList;
+    final parsed = _parseBookList(
+      source,
+      resp,
+      listRule: listRule,
+      nameRule: source.ruleSearch.name,
+      authorRule: source.ruleSearch.author,
+      kindRule: source.ruleSearch.kind,
+      wordCountRule: source.ruleSearch.wordCount,
+      lastChapterRule: source.ruleSearch.lastChapter,
+      introRule: source.ruleSearch.intro,
+      coverRule: source.ruleSearch.coverUrl,
+      bookUrlRule: source.ruleSearch.bookUrl,
+      logTag: 'search',
+    );
+    var keyInBody = resp.body.contains(key);
+    if (!keyInBody) {
+      final lower = key.toLowerCase();
+      if (lower != key) keyInBody = resp.body.toLowerCase().contains(lower);
+    }
+    return _SearchRun(
+      books: parsed.books,
+      rawItems: parsed.rawItems,
+      dropped: parsed.dropped,
+      requestUrl: request.url,
+      bodyLength: resp.body.length,
+      keyInBody: keyInBody,
+      httpStatus: resp.statusCode,
+      listRule: listRule,
+    );
+  }
+
+  SourceSearchReport _classifyReport(
+    BookSource source,
+    String key,
+    int page,
+    _SearchRun run,
+    int elapsedMs,
+  ) {
+    final base = SourceSearchReport(
+      sourceUrl: source.bookSourceUrl,
+      sourceName: source.bookSourceName,
+      keyword: key,
+      page: page,
+      issue: SourceSearchIssue.none,
+      hits: run.books,
+      elapsedMs: elapsedMs,
+      requestUrl: Redact.url(run.requestUrl),
+      httpStatus: run.httpStatus,
+      rawItems: run.rawItems,
+    );
+    if (run.books.isNotEmpty) return base;
+
+    if (run.listRule.trim().isEmpty) {
+      return _copy(
+        base,
+        SourceSearchIssue.incompatibleRule,
+        '未配置搜索列表规则。',
+      );
+    }
+    if (run.rawItems == 0) {
+      if (run.keyInBody) {
+        return _copy(
+          base,
+          SourceSearchIssue.parse,
+          '页面包含关键词，但列表规则没有匹配到条目'
+              '（${run.listRule}，页面 ${run.bodyLength} 字节）。',
+        );
+      }
+      return _copy(base, SourceSearchIssue.noResult, '页面已返回，但未找到「$key」。');
+    }
+    return _copy(
+      base,
+      SourceSearchIssue.parse,
+      '匹配到 ${run.rawItems} 个条目，但书名或详情链接规则未取到'
+          '${run.dropped > 0 ? '（丢弃 ${run.dropped} 条）' : ''}。',
+    );
+  }
+
+  SourceSearchReport _failedReport(
+    BookSource source,
+    String key,
+    int page,
+    SourceSearchIssue issue, {
+    required String detail,
+    required int elapsedMs,
+    required String requestUrl,
+    int httpStatus = 0,
+  }) {
+    return SourceSearchReport(
+      sourceUrl: source.bookSourceUrl,
+      sourceName: source.bookSourceName,
+      keyword: key,
+      page: page,
+      issue: issue,
+      elapsedMs: elapsedMs,
+      requestUrl: Redact.url(requestUrl),
+      detail: detail,
+      httpStatus: httpStatus,
+    );
+  }
+
+  SourceSearchReport _copy(
+    SourceSearchReport base,
+    SourceSearchIssue issue,
+    String detail,
+  ) {
+    return SourceSearchReport(
+      sourceUrl: base.sourceUrl,
+      sourceName: base.sourceName,
+      keyword: base.keyword,
+      page: base.page,
+      issue: issue,
+      hits: base.hits,
+      elapsedMs: base.elapsedMs,
+      requestUrl: base.requestUrl,
+      detail: detail,
+      httpStatus: base.httpStatus,
+      rawItems: base.rawItems,
+    );
+  }
+
+  String _durationLabel(Duration d) =>
+      d.inSeconds >= 1 ? '${d.inSeconds} 秒' : '${d.inMilliseconds} 毫秒';
+
+  String _dioDetail(DioException e) {
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+      case DioExceptionType.transformTimeout:
+        return '连接书源超时。';
+      case DioExceptionType.badCertificate:
+        return 'HTTPS 证书校验失败。';
+      case DioExceptionType.badResponse:
+        final code = e.response?.statusCode ?? 0;
+        return code > 0 ? '站点返回 HTTP $code。' : '站点返回异常响应。';
+      case DioExceptionType.connectionError:
+        return '无法连接书源站点，请检查网络或站点状态。';
+      case DioExceptionType.cancel:
+        return '请求已取消。';
+      case DioExceptionType.unknown:
+        return '网络请求失败，请检查网络或站点状态。';
     }
   }
 
@@ -66,7 +309,7 @@ class BookSourceEngine {
     if (url.isEmpty) return const [];
     AppLog.d(
       'Source',
-      'explore "${source.bookSourceName}" page=$page url=$url',
+      'explore "${source.bookSourceName}" page=$page url=${Redact.forLog(url)}',
     );
     try {
       final resp = await AnalyzeUrl.fetch(
@@ -90,11 +333,11 @@ class BookSourceEngine {
         coverRule: pick(er.coverUrl, sr.coverUrl),
         bookUrlRule: pick(er.bookUrl, sr.bookUrl),
         logTag: 'explore',
-      );
+      ).books;
     } catch (e, st) {
       AppLog.e(
         'SourceNet',
-        'explore fail "${source.bookSourceName}" url=$url',
+        'explore fail "${source.bookSourceName}" url=${Redact.forLog(url)}',
         error: e,
         stackTrace: st,
       );
@@ -102,7 +345,7 @@ class BookSourceEngine {
     }
   }
 
-  List<SearchBook> _parseBookList(
+  _ParsedBookList _parseBookList(
     BookSource source,
     SourceResponse resp, {
     required String listRule,
@@ -131,38 +374,44 @@ class BookSourceEngine {
       );
     }
     final out = <SearchBook>[];
+    var dropped = 0;
     final checkKey = source.ruleSearch.checkKeyWord.trim();
     for (final item in items) {
       final name = rule.getString(nameRule, scope: item);
-      if (name.isEmpty) continue;
+      if (name.isEmpty) {
+        dropped++;
+        continue;
+      }
       if (checkKey.isNotEmpty && name.contains(checkKey)) {
         // Legado checkKeyWord: drop captcha / soft-404 result rows.
+        dropped++;
         continue;
       }
       var bookUrl = rule.getString(bookUrlRule, scope: item);
-      if (bookUrl.isEmpty && item is Element) {
-        bookUrl = item.attributes['href'] ?? '';
-        if (bookUrl.isEmpty) {
-          bookUrl = item.querySelector('a')?.attributes['href'] ?? '';
-        }
+      if (bookUrl.isNotEmpty) {
+        bookUrl = AnalyzeUrl.sanitizeUrl(bookUrl, base: resp.url);
       }
-      bookUrl = AnalyzeUrl.sanitizeUrl(
-        urlJoin(resp.url, bookUrl),
-        base: resp.url,
-      );
       if (bookUrl.isEmpty && item is Element) {
-        // Some sites keep the real link in data-href instead of href.
-        final dataUrl =
-            item.attributes['data-href'] ?? item.attributes['data-url'] ?? '';
-        if (dataUrl.isNotEmpty) {
-          bookUrl = AnalyzeUrl.sanitizeUrl(
-            urlJoin(resp.url, dataUrl),
-            base: resp.url,
-          );
+        // Rule missed or produced a handler/JS leftover: recover the card's
+        // real link from href / data-href instead of dropping the hit.
+        final anchor = item.querySelector('a');
+        final candidates = <String>[
+          item.attributes['href'] ?? '',
+          anchor?.attributes['href'] ?? '',
+          item.attributes['data-href'] ?? '',
+          anchor?.attributes['data-href'] ?? '',
+          item.attributes['data-url'] ?? '',
+          anchor?.attributes['data-url'] ?? '',
+        ];
+        for (final candidate in candidates) {
+          if (candidate.isEmpty) continue;
+          bookUrl = AnalyzeUrl.sanitizeUrl(candidate, base: resp.url);
+          if (bookUrl.isNotEmpty) break;
         }
       }
       if (bookUrl.isEmpty) {
         AppLog.d('RuleMiss', 'skip item without usable bookUrl name=$name');
+        dropped++;
         continue;
       }
       var cover = rule.getString(coverRule, scope: item);
@@ -190,10 +439,53 @@ class BookSourceEngine {
       'Source',
       '$logTag ok "${source.bookSourceName}" hits=${out.length}',
     );
-    return out;
+    return _ParsedBookList(
+      out,
+      rawItems: items.length,
+      dropped: dropped,
+    );
   }
 
   Future<BookInfo> bookInfo(
+    BookSource source,
+    String bookUrl, {
+    SearchBook? seed,
+  }) async {
+    final resolved = AnalyzeUrl.sanitizeUrl(
+      bookUrl,
+      base: source.bookSourceUrl,
+    );
+    if (resolved.isEmpty) {
+      throw SourceStageError(
+        stage: 'bookInfo',
+        field: 'bookUrl',
+        rule: bookUrl,
+        detail: '详情地址无效',
+      );
+    }
+    try {
+      return await _bookInfo(source, resolved, seed: seed);
+    } on SourceStageError {
+      rethrow;
+    } catch (e, st) {
+      AppLog.e(
+        'SourceNet',
+        'bookInfo fail "${source.bookSourceName}" '
+            'url=${Redact.forLog(resolved)}',
+        error: e,
+        stackTrace: st,
+      );
+      throw SourceStageError(
+        stage: 'bookInfo',
+        field: 'bookUrl',
+        rule: bookUrl,
+        detail: _stageDetail(e),
+        cause: e,
+      );
+    }
+  }
+
+  Future<BookInfo> _bookInfo(
     BookSource source,
     String bookUrl, {
     SearchBook? seed,
@@ -223,7 +515,189 @@ class BookSourceEngine {
       return v.isNotEmpty ? v : fallback;
     }
 
-    var cover = pick(r.coverUrl, seed?.coverUrl ?? '');
+    final cover = _resolveCover(source, resp, rule, seed?.coverUrl ?? '');
+    var tocUrl = pick(r.tocUrl, bookUrl);
+    if (tocUrl.isNotEmpty) tocUrl = urlJoin(resp.url, tocUrl);
+
+    final name = pick(r.name, seed?.name ?? '');
+    // Author: never cleanAuthor(seed) through a failed rule — garbage detail
+    // rules used to wipe a good search-result author via pick() + cleanAuthor.
+    final author = _resolveAuthor(
+      rule,
+      ruleStr: r.author,
+      fallback: seed?.author ?? '',
+    );
+    final intro = pick(r.intro, seed?.intro ?? '');
+    final last = pick(r.lastChapter, seed?.lastChapter ?? '');
+    final kind = pick(r.kind, seed?.kind ?? '');
+    final id = makeBookKey(source.bookSourceUrl, bookUrl);
+
+    return BookInfo(
+      id: id,
+      name: name,
+      author: author,
+      coverUrl: cover,
+      category: kind,
+      description: intro,
+      latestChapter: last,
+      sourceUrl: source.bookSourceUrl,
+      bookUrl: bookUrl,
+      originName: source.bookSourceName,
+      tocUrl: tocUrl.isEmpty ? bookUrl : tocUrl,
+    );
+  }
+
+  /// Short reason for a failed stage request (timeout / HTTP / parse).
+  String _stageDetail(Object error) {
+    if (error is TimeoutException) {
+      return '超过 ${sourceTimeout.inSeconds} 秒未响应';
+    }
+    if (error is DioException) return _dioDetail(error);
+    if (error is ArgumentError) return '地址无法解析（可能是 JS 规则未执行）';
+    return '请求或解析异常（${Redact.errorType(error)}）';
+  }
+
+  /// Detail-page stage test used by the single-source test sheet.
+  Future<SourceStageResult> testBookInfo(
+    BookSource source,
+    String bookUrl,
+  ) async {
+    final sw = Stopwatch()..start();
+    try {
+      final info = await bookInfo(source, bookUrl);
+      sw.stop();
+      if (info.name.isEmpty) {
+        return SourceStageResult.failure(
+          stage: 'bookInfo',
+          elapsedMs: sw.elapsedMilliseconds,
+          field: 'name',
+          rule: source.ruleBookInfo.name,
+          detail: '详情页已返回，但书名规则未匹配',
+          bookUrl: info.bookUrl,
+          tocUrl: info.tocUrl,
+        );
+      }
+      return SourceStageResult(
+        stage: 'bookInfo',
+        ok: true,
+        elapsedMs: sw.elapsedMilliseconds,
+        detail: '详情解析成功',
+        count: 1,
+        sample: info.name,
+        bookUrl: info.bookUrl,
+        tocUrl: info.tocUrl,
+      );
+    } on SourceStageError catch (e) {
+      sw.stop();
+      return SourceStageResult.fromError(e, sw.elapsedMilliseconds);
+    } catch (e) {
+      sw.stop();
+      return SourceStageResult.failure(
+        stage: 'bookInfo',
+        elapsedMs: sw.elapsedMilliseconds,
+        detail: '详情异常（${Redact.errorType(e)}）',
+      );
+    }
+  }
+
+  /// Catalog stage test: reports the failing `chapterList` rule when empty.
+  Future<SourceStageResult> testToc(BookSource source, String tocUrl) async {
+    final sw = Stopwatch()..start();
+    try {
+      final chapters = await toc(source, tocUrl);
+      sw.stop();
+      final readable = chapters.where((c) => !c.isVolume).toList();
+      if (readable.isEmpty) {
+        return SourceStageResult.failure(
+          stage: 'toc',
+          elapsedMs: sw.elapsedMilliseconds,
+          field: 'chapterList',
+          rule: source.ruleToc.chapterList,
+          detail: '目录页已返回，但列表规则未匹配到章节',
+          tocUrl: tocUrl,
+        );
+      }
+      return SourceStageResult(
+        stage: 'toc',
+        ok: true,
+        elapsedMs: sw.elapsedMilliseconds,
+        detail: '目录解析成功（${readable.length} 章）',
+        count: readable.length,
+        sample: readable.first.name,
+        tocUrl: tocUrl,
+        chapterUrl: readable.first.url,
+      );
+    } on SourceStageError catch (e) {
+      sw.stop();
+      return SourceStageResult.fromError(e, sw.elapsedMilliseconds);
+    } catch (e) {
+      sw.stop();
+      return SourceStageResult.failure(
+        stage: 'toc',
+        elapsedMs: sw.elapsedMilliseconds,
+        field: 'chapterList',
+        rule: source.ruleToc.chapterList,
+        detail: '目录异常（${Redact.errorType(e)}）',
+        tocUrl: tocUrl,
+      );
+    }
+  }
+
+  /// Content stage test: reports the failing `content` rule when empty.
+  Future<SourceStageResult> testContent(
+    BookSource source,
+    String chapterUrl,
+  ) async {
+    final sw = Stopwatch()..start();
+    try {
+      final text = await content(source, chapterUrl);
+      sw.stop();
+      if (text.isEmpty) {
+        return SourceStageResult.failure(
+          stage: 'content',
+          elapsedMs: sw.elapsedMilliseconds,
+          field: 'content',
+          rule: source.ruleContent.content,
+          detail: '正文页已返回，但正文规则未匹配到内容',
+          chapterUrl: chapterUrl,
+        );
+      }
+      final head = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+      return SourceStageResult(
+        stage: 'content',
+        ok: true,
+        elapsedMs: sw.elapsedMilliseconds,
+        detail: '正文解析成功（${text.length} 字）',
+        count: text.length,
+        sample: head.length > 40 ? head.substring(0, 40) : head,
+        chapterUrl: chapterUrl,
+      );
+    } on SourceStageError catch (e) {
+      sw.stop();
+      return SourceStageResult.fromError(e, sw.elapsedMilliseconds);
+    } catch (e) {
+      sw.stop();
+      return SourceStageResult.failure(
+        stage: 'content',
+        elapsedMs: sw.elapsedMilliseconds,
+        field: 'content',
+        rule: source.ruleContent.content,
+        detail: '正文异常（${Redact.errorType(e)}）',
+        chapterUrl: chapterUrl,
+      );
+    }
+  }
+
+  /// Cover for a detail page: rule first, then common selectors, then the
+  /// first usable image in the DOM. Returns an absolute URL or ''.
+  String _resolveCover(
+    BookSource source,
+    SourceResponse resp,
+    AnalyzeRule rule,
+    String seedCover,
+  ) {
+    var cover = rule.getString(source.ruleBookInfo.coverUrl);
+    if (cover.isEmpty || _isPlaceholderCover(cover)) cover = seedCover;
     if (cover.isEmpty || _isPlaceholderCover(cover)) {
       // Common detail-page cover selectors. Lazy-loading themes keep the real
       // URL in data-src / data-original while src holds a shared placeholder.
@@ -259,43 +733,70 @@ class BookSourceEngine {
       }
     }
     if (cover.isNotEmpty) cover = urlJoin(resp.url, cover);
-    if (_isPlaceholderCover(cover)) cover = seed?.coverUrl ?? '';
+    if (_isPlaceholderCover(cover)) cover = seedCover;
     if (_isPlaceholderCover(cover)) cover = '';
-    var tocUrl = pick(r.tocUrl, bookUrl);
-    if (tocUrl.isNotEmpty) tocUrl = urlJoin(resp.url, tocUrl);
+    return cover;
+  }
 
-    final name = pick(r.name, seed?.name ?? '');
-    // Author: never cleanAuthor(seed) through a failed rule — garbage detail
-    // rules used to wipe a good search-result author via pick() + cleanAuthor.
-    final author = _resolveAuthor(
-      rule,
-      ruleStr: r.author,
-      fallback: seed?.author ?? '',
-    );
-    final intro = pick(r.intro, seed?.intro ?? '');
-    final last = pick(r.lastChapter, seed?.lastChapter ?? '');
-    final kind = pick(r.kind, seed?.kind ?? '');
-    final id = makeBookKey(source.bookSourceUrl, bookUrl);
-
-    return BookInfo(
-      id: id,
-      name: name,
-      author: author,
-      coverUrl: cover,
-      category: kind,
-      description: intro,
-      latestChapter: last,
-      sourceUrl: source.bookSourceUrl,
-      bookUrl: bookUrl,
-      originName: source.bookSourceName,
-      tocUrl: tocUrl.isEmpty ? bookUrl : tocUrl,
-    );
+  /// Fetch only the cover for a list row (detail page + cover rules).
+  ///
+  /// Used by visible-row enrichment: short budget, silent failure, returns an
+  /// absolute URL or an empty string.
+  Future<String> fetchCover(
+    BookSource source,
+    String bookUrl, {
+    Duration timeout = const Duration(seconds: 6),
+  }) async {
+    final url = AnalyzeUrl.sanitizeUrl(bookUrl, base: source.bookSourceUrl);
+    if (url.isEmpty) return '';
+    final sw = Stopwatch()..start();
+    try {
+      final resp = await AnalyzeUrl.fetch(
+        source,
+        '',
+        absoluteUrl: url,
+      ).timeout(timeout);
+      final body = _applyInitRule(
+        resp.body,
+        source.ruleBookInfo.init,
+        baseUrl: resp.url,
+        isJson: resp.isJson,
+        jsLib: source.jsLib,
+      );
+      final rule = AnalyzeRule(
+        content: body,
+        baseUrl: resp.url,
+        isJson: resp.isJson || _looksJson(body),
+        jsLib: source.jsLib,
+      );
+      final cover = _resolveCover(source, resp, rule, '');
+      AppLog.d(
+        'Cover',
+        'enrich "${source.bookSourceName}" url=${Redact.forLog(url)} '
+            'hit=${cover.isNotEmpty} ${sw.elapsedMilliseconds}ms',
+      );
+      return cover;
+    } catch (e) {
+      AppLog.d(
+        'Cover',
+        'enrich failed "${source.bookSourceName}" '
+            'url=${Redact.forLog(url)} ${Redact.errorType(e)}',
+      );
+      return '';
+    }
   }
 
   Future<List<SourceChapter>> toc(BookSource source, String tocUrl) async {
+    if (tocUrl.isEmpty) {
+      throw const SourceStageError(
+        stage: 'toc',
+        field: 'tocUrl',
+        detail: '目录地址为空',
+      );
+    }
     AppLog.d(
       'Source',
-      'toc "${source.bookSourceName}" url=$tocUrl '
+      'toc "${source.bookSourceName}" url=${Redact.forLog(tocUrl)} '
           'chapterList=${source.ruleToc.chapterList}',
     );
     final all = <SourceChapter>[];
@@ -363,20 +864,37 @@ class BookSourceEngine {
             }
           }
           name = name.replaceAll(RegExp(r'\s+'), ' ').trim();
+          if (name.isEmpty) {
+            skipped++;
+            continue;
+          }
+          // Volume rows have no chapter URL: keep them as grouping headers
+          // before the URL checks would drop them.
+          final isVol =
+              source.ruleToc.isVolume.isNotEmpty &&
+              rule.getString(source.ruleToc.isVolume, scope: item).isNotEmpty;
+          if (isVol) {
+            all.add(
+              SourceChapter(
+                name: name,
+                url: '',
+                isVolume: true,
+                index: all.length,
+              ),
+            );
+            continue;
+          }
           url = urlJoin(resp.url, url.trim());
-          if (name.isEmpty || url.isEmpty) {
+          if (url.isEmpty) {
             skipped++;
             continue;
           }
           if (!seen.add(url)) continue;
-          final isVol =
-              source.ruleToc.isVolume.isNotEmpty &&
-              rule.getString(source.ruleToc.isVolume, scope: item).isNotEmpty;
           all.add(
             SourceChapter(
               name: name,
               url: url,
-              isVolume: isVol,
+              isVolume: false,
               index: all.length,
             ),
           );
@@ -400,19 +918,38 @@ class BookSourceEngine {
         'toc ok "${source.bookSourceName}" chapters=${all.length} pages=$pages',
       );
       return all;
+    } on SourceStageError {
+      rethrow;
     } catch (e, st) {
       AppLog.e(
         'SourceNet',
-        'toc fail "${source.bookSourceName}" url=$tocUrl',
+        'toc fail "${source.bookSourceName}" '
+            'field=chapterList url=${Redact.forLog(tocUrl)}',
         error: e,
         stackTrace: st,
       );
-      rethrow;
+      throw SourceStageError(
+        stage: 'toc',
+        field: 'chapterList',
+        rule: source.ruleToc.chapterList,
+        detail: _stageDetail(e),
+        cause: e,
+      );
     }
   }
 
   Future<String> content(BookSource source, String chapterUrl) async {
-    AppLog.d('Source', 'content "${source.bookSourceName}" url=$chapterUrl');
+    if (chapterUrl.isEmpty) {
+      throw const SourceStageError(
+        stage: 'content',
+        field: 'chapterUrl',
+        detail: '章节地址为空',
+      );
+    }
+    AppLog.d(
+      'Source',
+      'content "${source.bookSourceName}" url=${Redact.forLog(chapterUrl)}',
+    );
     final buf = StringBuffer();
     var next = chapterUrl;
     var pages = 0;
@@ -539,14 +1076,23 @@ class BookSourceEngine {
         'content ok "${source.bookSourceName}" len=${text.length} pages=$pages',
       );
       return text;
+    } on SourceStageError {
+      rethrow;
     } catch (e, st) {
       AppLog.e(
         'SourceNet',
-        'content fail "${source.bookSourceName}" url=$chapterUrl',
+        'content fail "${source.bookSourceName}" '
+            'field=content url=${Redact.forLog(chapterUrl)}',
         error: e,
         stackTrace: st,
       );
-      rethrow;
+      throw SourceStageError(
+        stage: 'content',
+        field: 'content',
+        rule: source.ruleContent.content,
+        detail: _stageDetail(e),
+        cause: e,
+      );
     }
   }
 
@@ -771,4 +1317,38 @@ class BookSourceEngine {
 
     return cleanAuthor(fallback);
   }
+}
+
+class _ParsedBookList {
+  const _ParsedBookList(
+    this.books, {
+    this.rawItems = 0,
+    this.dropped = 0,
+  });
+
+  final List<SearchBook> books;
+  final int rawItems;
+  final int dropped;
+}
+
+class _SearchRun {
+  const _SearchRun({
+    required this.books,
+    required this.rawItems,
+    required this.dropped,
+    required this.requestUrl,
+    required this.bodyLength,
+    required this.keyInBody,
+    required this.httpStatus,
+    required this.listRule,
+  });
+
+  final List<SearchBook> books;
+  final int rawItems;
+  final int dropped;
+  final String requestUrl;
+  final int bodyLength;
+  final bool keyInBody;
+  final int httpStatus;
+  final String listRule;
 }

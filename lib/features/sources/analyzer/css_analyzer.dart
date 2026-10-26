@@ -35,6 +35,7 @@ class CssAnalyzer {
       'title',
       'id',
       'class',
+      'onclick',
     };
     return attrs.contains(p) || p.startsWith('data-');
   }
@@ -444,6 +445,11 @@ class CssAnalyzer {
       case 'class':
       case 'content':
         return el.attributes[attr] ?? '';
+      case 'onclick':
+        // Inline handler may hold the only detail link. Missing handler must
+        // stay empty — falling back to el.text would leak the card title into
+        // a bookUrl rule.
+        return el.attributes['onclick'] ?? '';
       default:
         // data-src etc. may be requested explicitly by rules.
         if (attr.startsWith('data-')) {

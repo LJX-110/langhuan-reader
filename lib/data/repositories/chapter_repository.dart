@@ -21,7 +21,15 @@ class ChapterRepository {
     final db = await _database;
     final rows = await db.query(
       'chapters',
-      columns: ['id', 'title', 'url', 'has_body', 'ord'],
+      columns: [
+        'id',
+        'title',
+        'url',
+        'has_body',
+        'ord',
+        'volume_title',
+        'volume_ord',
+      ],
       where: 'book_id = ?',
       whereArgs: [bookId],
       orderBy: 'ord ASC',
@@ -34,6 +42,8 @@ class ChapterRepository {
             url: r['url'] as String? ?? '',
             hasBody: (r['has_body'] as int? ?? 0) == 1,
             ord: r['ord'] as int? ?? 0,
+            volumeTitle: r['volume_title'] as String? ?? '',
+            volumeOrd: r['volume_ord'] as int? ?? -1,
           ),
         )
         .toList();
@@ -76,6 +86,8 @@ class ChapterRepository {
         'pages_json': null,
         'layout_fp': null,
         'pages_cached_at': 0,
+        'volume_title': c.volumeTitle,
+        'volume_ord': c.volumeOrd,
       });
     }
     await batch.commit(noResult: true);
@@ -83,59 +95,92 @@ class ChapterRepository {
 
   /// Diff-upsert TOC: keeps body/pages for unchanged chapter ids.
   ///
-  /// - matching id → update title/url/ord/source only
+  /// - matching id → update title/url/ord/source/volume only
   /// - new id → insert empty body row
   /// - missing id → delete (drops its cache)
+  ///
+  /// Order changes are applied in two phases inside one transaction: surviving
+  /// rows are first parked far above the new range, then written to their
+  /// final `ord`. A single-pass update would collide with the
+  /// `UNIQUE(book_id, ord)` index whenever a chapter is inserted or removed
+  /// in the middle of the list.
   Future<void> syncToc(
     List<ChapterTocEntry> chapters,
     String bookId, {
     String sourceUrl = '',
   }) async {
     final db = await _database;
-    final existing = await db.query(
-      'chapters',
-      columns: ['id'],
-      where: 'book_id = ?',
-      whereArgs: [bookId],
-    );
-    final oldIds = existing.map((r) => r['id'] as String? ?? '').toSet()
-      ..removeWhere((e) => e.isEmpty);
-    final newIds = <String>{};
-    final batch = db.batch();
+    const parkOffset = 1000000;
+    await db.transaction((txn) async {
+      final existing = await txn.query(
+        'chapters',
+        columns: ['id'],
+        where: 'book_id = ?',
+        whereArgs: [bookId],
+      );
+      final oldIds = existing.map((r) => r['id'] as String? ?? '').toSet()
+        ..removeWhere((e) => e.isEmpty);
+      final newIds = <String>{};
+      final updates = <(String, Map<String, Object?>)>[];
+      final inserts = <Map<String, Object?>>[];
 
-    for (var i = 0; i < chapters.length; i++) {
-      final c = chapters[i];
-      final ord = c.ord != 0 ? c.ord : i;
-      newIds.add(c.id);
-      if (oldIds.contains(c.id)) {
-        batch.update(
-          'chapters',
-          {'title': c.title, 'url': c.url, 'source_url': sourceUrl, 'ord': ord},
-          where: 'id = ?',
-          whereArgs: [c.id],
-        );
-      } else {
-        batch.insert('chapters', {
-          'id': c.id,
-          'book_id': bookId,
-          'title': c.title,
-          'url': c.url,
-          'source_url': sourceUrl,
-          'ord': ord,
-          'body': '',
-          'has_body': 0,
-          'content_len': 0,
-          'pages_json': null,
-          'layout_fp': null,
-          'pages_cached_at': 0,
-        });
+      for (var i = 0; i < chapters.length; i++) {
+        final c = chapters[i];
+        final ord = c.ord != 0 ? c.ord : i;
+        newIds.add(c.id);
+        if (oldIds.contains(c.id)) {
+          updates.add((
+            c.id,
+            {
+              'title': c.title,
+              'url': c.url,
+              'source_url': sourceUrl,
+              'ord': ord,
+              'volume_title': c.volumeTitle,
+              'volume_ord': c.volumeOrd,
+            },
+          ));
+        } else {
+          inserts.add({
+            'id': c.id,
+            'book_id': bookId,
+            'title': c.title,
+            'url': c.url,
+            'source_url': sourceUrl,
+            'ord': ord,
+            'body': '',
+            'has_body': 0,
+            'content_len': 0,
+            'pages_json': null,
+            'layout_fp': null,
+            'pages_cached_at': 0,
+            'volume_title': c.volumeTitle,
+            'volume_ord': c.volumeOrd,
+          });
+        }
       }
-    }
 
-    for (final id in oldIds.difference(newIds)) {
-      batch.delete('chapters', where: 'id = ?', whereArgs: [id]);
-    }
-    await batch.commit(noResult: true);
+      // Phase 1: drop removed rows so the unique index only sees survivors.
+      for (final id in oldIds.difference(newIds)) {
+        await txn.delete('chapters', where: 'id = ?', whereArgs: [id]);
+      }
+      // Phase 2: park survivors out of the final range.
+      if (oldIds.isNotEmpty) {
+        await txn.rawUpdate(
+          'UPDATE chapters SET ord = ord + ? WHERE book_id = ?',
+          [parkOffset, bookId],
+        );
+      }
+      // Phase 3: insert new rows and write final ords.
+      final batch = txn.batch();
+      for (final row in inserts) {
+        batch.insert('chapters', row);
+      }
+      for (final (id, values) in updates) {
+        batch.update('chapters', values, where: 'id = ?', whereArgs: [id]);
+      }
+      await batch.commit(noResult: true);
+    });
   }
 
   Future<void> appendToc(
@@ -160,6 +205,8 @@ class ChapterRepository {
         'pages_json': null,
         'layout_fp': null,
         'pages_cached_at': 0,
+        'volume_title': c.volumeTitle,
+        'volume_ord': c.volumeOrd,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
     }
     await batch.commit(noResult: true);
@@ -190,6 +237,8 @@ class ChapterRepository {
         'pages_json': null,
         'layout_fp': null,
         'pages_cached_at': 0,
+        'volume_title': '',
+        'volume_ord': -1,
       });
     }
     await batch.commit(noResult: true);

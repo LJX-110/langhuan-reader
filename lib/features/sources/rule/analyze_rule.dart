@@ -169,6 +169,29 @@ class AnalyzeRule {
       if (parts.length >= 3) postReplace = parts[2];
     }
 
+    // Trailing JS transform: `selector@attr@js:code`.
+    // Legado applies the code to the value the head rule extracted, e.g.
+    //   @onclick@js:result.match(/\('(.*?)', '', ''\)/)[1]
+    // This must run before the pure-JS branch below, which would otherwise
+    // evaluate the code against the whole element text.
+    final trailingJs = _splitTrailingJs(r);
+    if (trailingJs != null) {
+      final prior = trailingJs.head.isEmpty
+          ? _scopeToText(scope)
+          : getString(trailingJs.head, scope: scope);
+      var result = JsEngine.instance.eval(
+        trailingJs.code,
+        result: prior,
+        baseUrl: baseUrl,
+        src: content,
+        jsLib: jsLib,
+      );
+      if (postRegex != null && postRegex.isNotEmpty) {
+        result = _applyPost(result, postRegex, postReplace);
+      }
+      return result.trim();
+    }
+
     // Prefix JS then CSS/attr:
     //   <js>cfCheck(result, baseUrl);</js>.txtnav@textNodes
     final hybrid = _splitLeadingJs(r);
@@ -411,10 +434,25 @@ class AnalyzeRule {
     return h != null && h.tail.trim().isNotEmpty;
   }
 
+  /// Split `head@js:code` where the JS transforms the head's value.
+  /// Returns null for a leading `@js:` rule or when no tail transform exists.
+  static ({String head, String code})? _splitTrailingJs(String rule) {
+    final r = rule.trim();
+    if (r.isEmpty || r.startsWith('@js:')) return null;
+    final idx = r.lastIndexOf('@js:');
+    if (idx <= 0) return null;
+    return (
+      head: r.substring(0, idx).trim(),
+      code: r.substring(idx + 4).trim(),
+    );
+  }
+
   /// True when rule uses `&&` join outside of JS / ## replace.
   static bool _hasJoin(String rule) {
     final r = rule.trim();
     if (!r.contains('&&')) return false;
+    // `&&` inside a trailing @js: transform is a JS operator.
+    if (_splitTrailingJs(r) != null) return false;
     if (JsEngine.needsJs(r) &&
         !_hasTrailingCssAfterJs(r) &&
         !r.contains('##')) {
@@ -440,6 +478,9 @@ class AnalyzeRule {
     final r = rule.trim();
     if (r.isEmpty) return const [];
     if (!r.contains('||')) return [r];
+    // `||` inside a trailing @js: transform is a JS operator, not an
+    // alternative separator.
+    if (_splitTrailingJs(r) != null) return [r];
     // Don't split pure JS or mid-JS ||.
     if (r.startsWith('@js:') ||
         (r.startsWith('<js>') && !_hasTrailingCssAfterJs(r))) {
@@ -548,6 +589,9 @@ class AnalyzeRule {
     'title',
     'id',
     'class',
+    // Many sites put the detail link in an inline handler:
+    //   <a href="javascript:;" onclick="openBook('123','','')">…
+    'onclick',
   };
 }
 

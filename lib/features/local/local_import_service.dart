@@ -1,7 +1,7 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:langhuan/data/entities/book.dart';
@@ -15,6 +15,55 @@ class LocalImportResult {
 
   final Book book;
   final int chapterCount;
+}
+
+/// Sendable input for [parseLocalTxtFile].
+@immutable
+class LocalTxtSource {
+  const LocalTxtSource({required this.path, required this.fileName});
+
+  final String path;
+  final String fileName;
+}
+
+/// Sendable output of [parseLocalTxtFile].
+@immutable
+class LocalTxtParseResult {
+  const LocalTxtParseResult({
+    required this.parsed,
+    required this.byteLength,
+    required this.fingerprint,
+  });
+
+  final ParsedTxtBook parsed;
+  final int byteLength;
+  final String fingerprint;
+}
+
+/// Read, decode, parse and fingerprint a TXT file.
+///
+/// Top-level so the whole CPU-heavy part runs in a background isolate; the
+/// sqflite writes stay on the main isolate in [LocalImportService].
+LocalTxtParseResult parseLocalTxtFile(LocalTxtSource source) {
+  final bytes = File(source.path).readAsBytesSync();
+  return LocalTxtParseResult(
+    parsed: TxtBookParser.parse(
+      fileName: source.fileName,
+      text: decodeTxtBytes(bytes),
+    ),
+    byteLength: bytes.length,
+    fingerprint: fnv1aHex(bytes),
+  );
+}
+
+/// FNV-1a 64-bit hex, used only for a stable local book id.
+String fnv1aHex(Uint8List bytes) {
+  var hash = 0xcbf29ce484222325;
+  for (final byte in bytes) {
+    hash ^= byte;
+    hash = (hash * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF;
+  }
+  return hash.toRadixString(16).padLeft(16, '0');
 }
 
 /// Imports a TXT file into the existing books/chapters tables.
@@ -33,24 +82,28 @@ class LocalImportService {
     if (path == null || path.isEmpty) {
       throw const FormatException('无法读取文件路径');
     }
-    final bytes = await File(path).readAsBytes();
-    final text = decodeTxtBytes(bytes);
     final fileName = file.name.isNotEmpty ? file.name : p.basename(path);
-    final parsed = TxtBookParser.parse(fileName: fileName, text: text);
-    final fingerprint = _fnv1a(bytes);
-    final id = makeBookKey(sourceUrl, '$fileName|${bytes.length}|$fingerprint');
+    final parsed = await compute(
+      parseLocalTxtFile,
+      LocalTxtSource(path: path, fileName: fileName),
+    );
+    final id = makeBookKey(
+      sourceUrl,
+      '$fileName|${parsed.byteLength}|${parsed.fingerprint}',
+    );
     final existing = await _books.getById(id);
     final now = DateTime.now();
+    final chapters = parsed.parsed.chapters;
 
     final book = Book(
       id: id,
-      name: parsed.title,
-      author: parsed.author.isEmpty ? '本地' : parsed.author,
+      name: parsed.parsed.title,
+      author: parsed.parsed.author.isEmpty ? '本地' : parsed.parsed.author,
       coverUrl: '',
       category: '本地',
-      description: 'TXT · ${parsed.chapters.length} 章',
-      readingChapter: existing?.readingChapter ?? parsed.chapters.first.title,
-      latestChapter: parsed.chapters.last.title,
+      description: 'TXT · ${chapters.length} 章',
+      readingChapter: existing?.readingChapter ?? chapters.first.title,
+      latestChapter: chapters.last.title,
       chapterIndex: existing?.chapterIndex ?? 0,
       pageIndex: existing?.pageIndex ?? 0,
       scrollOffset: existing?.scrollOffset ?? 0,
@@ -64,18 +117,9 @@ class LocalImportService {
     await _books.upsert(book);
     await _chapters.replaceLocalChapters(
       book.id,
-      parsed.chapters,
+      chapters,
       sourceUrl: sourceUrl,
     );
-    return LocalImportResult(book, parsed.chapters.length);
-  }
-
-  String _fnv1a(Uint8List bytes) {
-    var hash = 0xcbf29ce484222325;
-    for (final b in bytes) {
-      hash ^= b;
-      hash = (hash * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF;
-    }
-    return hash.toRadixString(16).padLeft(16, '0');
+    return LocalImportResult(book, chapters.length);
   }
 }

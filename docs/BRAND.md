@@ -8,12 +8,13 @@
 
 ## 品牌资产
 
-图标与启动图由 `tool/generate_brand_assets.py` 生成，方向 **双页书**：
+图标与启动图由 `tool/generate_brand_assets.py` 生成，方向 **月照琅嬛**：
 
-- 碧海青底，冷白双页，鎏金书口与一方金印
-- 1024 px 母版绘制后按密度降采样
+- 墨蓝底 `#17283A`，月白圆盘 `#F2E9D7`，一阁柔金楼阁 `#B89A68`
+- 楼阁为单檐、平脊、两侧起翘；无月亮以外的额外装饰元素
+- 1024 px 设计稿在 4 倍画布上绘制后按密度降采样
 - 输出 `assets/brand/icon_master.png`、`icon_foreground.png`、`launch_logo.png`
-- 自适应图标底色 `@color/brand_deep` `#14505B`
+- Android 自适应图标底色 `@color/brand_deep` `#0F1B2B`；每档 mipmap 还包括 `ic_launcher_monochrome.png`（Android 13 主题图标）
 - 顶栏已删除，图标只用于启动器与启动页；不再出现在页面顶部
 
 重新生成：
@@ -22,7 +23,7 @@
 python tool/generate_brand_assets.py
 ```
 
-母版源文件在 `assets/brand/`，不要只改 Android 产物。
+真正的母版是 `tool/generate_brand_assets.py`；`assets/brand/` 下的 PNG 是脚本产物，不要只改 Android 产物或单个密度图。
 
 ## 视觉系统
 
@@ -68,7 +69,7 @@ python tool/generate_brand_assets.py
 
 - `PageHeader`：一行页面标题 + 右侧动作。
 - `PaperSearchEntry`：白底细边框搜索入口。
-- `Bookshelf3D`：发现页立体书架，书脊、书页厚度、透视与吸附。
+- `Bookshelf3D`：立体书架组件，含书脊、书页厚度、透视与吸附；用于书架页与本地页的 3D 模式，发现页保持平面列表。全新安装默认 3D，旧版 `coverGrid` 偏好继续保留为网格 / 列表。
 - `LanhuanDock`：底部四页签（书架 / 发现 / 本地 / 我），实色白、无胶囊、无模糊。
 - 阅读器纸色、字体、翻页视觉保持独立。
 
@@ -80,7 +81,7 @@ python tool/generate_brand_assets.py
 |------|------|----------|
 | 读书三十乘，千万中一二。 | 明·张岱《琅嬛福地记》 | 关于页、阅读统计页脚 |
 | 此中有全书，并不遗只字。 | 明·张岱《琅嬛福地记》 | 藏书说明 |
-| 深柳读书 | 明·张岱《陶庵梦忆·琅嬛福地》 | 发现页小标、空态短句 |
+| 深柳读书 | 明·张岱《陶庵梦忆·琅嬛福地》 | 空态短句、关于页 |
 | 楼下门之，匾曰「琅嬛福地」 | 明·张岱《陶庵梦忆·琅嬛福地》 | 关于页、品牌故事 |
 
 使用原则：

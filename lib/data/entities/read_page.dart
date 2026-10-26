@@ -11,13 +11,26 @@ class ReadPage {
   double height;
   String chapterName;
 
+  /// In-memory only: true for loading / error placeholders.
+  ///
+  /// Never serialized into `pages_json`; old caches deserialize as `false`.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  bool isPlaceholder;
+
   ReadPage.kong()
     : pages = const [],
       chapterContent = '',
       height = 0,
-      chapterName = '';
+      chapterName = '',
+      isPlaceholder = false;
 
-  ReadPage(this.chapterContent, this.chapterName, this.height, this.pages);
+  ReadPage(
+    this.chapterContent,
+    this.chapterName,
+    this.height,
+    this.pages, {
+    this.isPlaceholder = false,
+  });
 
   factory ReadPage.fromJson(Map<String, dynamic> json) =>
       _$ReadPageFromJson(json);

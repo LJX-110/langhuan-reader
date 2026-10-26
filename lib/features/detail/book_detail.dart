@@ -557,10 +557,14 @@ class _BookDetailState extends ConsumerState<BookDetail> {
                   future: BookRepository.instance.exists(book.id),
                   builder: (context, snap) {
                     final hasRead = snap.data == true;
+                    final scheme = Theme.of(context).colorScheme;
                     return ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.accentOf(context),
-                        foregroundColor: AppColors.white,
+                        // Theme contrast is computed from the swatch itself;
+                        // white text on a light accent (or black on a dark
+                        // accent) is unreadable in several of the 12 themes.
+                        backgroundColor: scheme.primary,
+                        foregroundColor: scheme.onPrimary,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),

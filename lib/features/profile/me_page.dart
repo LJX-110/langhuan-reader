@@ -1,4 +1,5 @@
 import 'package:langhuan/app/providers.dart';
+import 'package:langhuan/app/version_label.dart';
 import 'package:langhuan/core/platform/system_ui.dart';
 import 'package:langhuan/app/router/routes.dart';
 import 'package:langhuan/core/storage/local_store.dart';
@@ -142,6 +143,12 @@ class Me extends ConsumerWidget {
                       ),
                       _row(
                         context,
+                        '检查更新',
+                        () => Routes.navigateTo(context, Routes.update),
+                        line: line,
+                      ),
+                      _row(
+                        context,
                         '关于',
                         () => _showAbout(context),
                         line: line,
@@ -151,7 +158,9 @@ class Me extends ConsumerWidget {
                     const SizedBox(height: 18),
                     Center(
                       child: Text(
-                        'v${SpUtil.getString(PrefsKeys.version, defValue: '')}',
+                        versionDisplayLabel(
+                          SpUtil.getString(PrefsKeys.version, defValue: ''),
+                        ),
                         style: TextStyle(fontSize: 10, color: muted),
                       ),
                     ),
@@ -246,7 +255,9 @@ class Me extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('${AppBrand.name} V${SpUtil.getString(PrefsKeys.version)}'),
+        title: Text(
+          '${AppBrand.name} ${versionDisplayLabel(SpUtil.getString(PrefsKeys.version, defValue: ''))}',
+        ),
         content: Text(
           ReadSetting.poet,
           style: const TextStyle(fontSize: 15, height: 2.1),

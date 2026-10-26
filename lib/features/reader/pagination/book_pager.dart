@@ -26,6 +26,12 @@ typedef _CancelDart = void Function(int jobId);
 const int bookPagerAbiVersion = 3;
 const int _minAbiVersion = 3;
 
+/// Layout-contract revision, independent of the FFI ABI.
+///
+/// Bump when the Rust/Dart pagination *output* changes without an ABI change,
+/// so cached page layouts are invalidated.
+const int bookPagerLayoutRevision = 1;
+
 /// Result of a native (or mapped) paginate call.
 class PaginateResult {
   final List<TextPage> pages;
@@ -196,7 +202,14 @@ class BookPager {
     _cancel?.call(jobId);
   }
 
-  static Map<String, dynamic> _inputMap({
+  /// Build the native request payload.
+  ///
+  /// Rust declares `paragraph_spacing` / `page_width` / `page_height` with
+  /// serde aliases (`paragraph`, `box_width`, `box_height`). Sending both the
+  /// canonical name and its alias makes serde reject the whole payload with
+  /// "duplicate field", so only canonical names may appear here.
+  @visibleForTesting
+  static Map<String, dynamic> buildInputPayload({
     required String text,
     required double fontSize,
     required double lineHeight,
@@ -219,10 +232,7 @@ class BookPager {
       'text': text,
       'font_size': fontSize,
       'line_height': lineHeight,
-      'paragraph': paragraph,
       'paragraph_spacing': paragraph,
-      'box_width': boxWidth,
-      'box_height': boxHeight,
       'page_width': boxWidth,
       'page_height': boxHeight,
       'padding_horizontal': paddingHorizontal,
@@ -356,7 +366,7 @@ class BookPager {
       throw StateError('BookPager ABI3 requires font_path');
     }
 
-    final input = _inputMap(
+    final input = buildInputPayload(
       text: text,
       fontSize: fontSize,
       lineHeight: lineHeight,
@@ -461,7 +471,7 @@ class BookPager {
       );
     }
 
-    final payload = _inputMap(
+    final payload = buildInputPayload(
       text: text,
       fontSize: fontSize,
       lineHeight: lineHeight,
@@ -499,7 +509,7 @@ class BookPager {
     int startChar = 0,
     int maxPages = 0,
   }) {
-    final payload = _inputMap(
+    final payload = buildInputPayload(
       text: text,
       fontSize: fontSize,
       lineHeight: lineHeight,

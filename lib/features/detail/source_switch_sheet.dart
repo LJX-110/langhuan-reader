@@ -5,6 +5,8 @@ import 'package:langhuan/features/reader/read_model.dart';
 import 'package:langhuan/features/sources/engine/book_source_engine.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
+import 'package:langhuan/features/sources/model/source_groups.dart';
+import 'package:langhuan/features/sources/model/source_search_report.dart';
 import 'package:langhuan/features/sources/util/text_clean.dart';
 import 'package:langhuan/app/providers.dart';
 import 'package:bot_toast/bot_toast.dart';
@@ -37,6 +39,14 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
   bool loading = true;
   String? error;
   final List<_Candidate> candidates = [];
+
+  /// Group scope for the candidate sweep ('' = all).
+  String _groupFilter = '';
+  List<String> _groups = const [];
+
+  /// Per-source outcome counts for the status row.
+  int _noMatch = 0;
+  final List<({String name, String reason})> _failed = [];
 
   Book? get _book => widget.readModel.book;
 
@@ -77,8 +87,8 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
     }
 
     final model = ref.read(sourceModelProvider);
-    final meta = await model.enabledSources();
-    if (meta.isEmpty) {
+    final all = await model.enabledSources();
+    if (all.isEmpty) {
       if (!mounted) return;
       setState(() {
         loading = false;
@@ -86,8 +96,23 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
       });
       return;
     }
+    _groups = SourceGroups.collect(all);
+    final meta = SourceGroups.filter(all, _groupFilter);
+    if (meta.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        loading = false;
+        candidates.clear();
+        _failed.clear();
+        _noMatch = 0;
+        error = '该分组下没有启用的书源';
+      });
+      return;
+    }
 
     final list = <_Candidate>[];
+    var noMatch = 0;
+    final failed = <({String name, String reason})>[];
     const pool = 5;
     final author = cleanAuthor(book.author);
     for (var i = 0; i < meta.length; i += pool) {
@@ -96,16 +121,26 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
       final chunk = await model.hydrateSources(chunkMeta);
       if (!mounted) return;
       final futures = chunk.map((s) async {
-        try {
-          final hits = await _engine
-              .search(s, key, 1)
-              .timeout(BookSourceEngine.sourceTimeout);
-          return hits
-              .where((h) => _isLikelyMatch(book, h, author))
-              .map((h) => _Candidate(s, h))
-              .toList();
-        } catch (_) {
-          return <_Candidate>[];
+        // searchWithReport never throws and tells失败种类 apart from 无匹配.
+        final report = await _engine.searchWithReport(s, key, 1);
+        final matched = report.hits
+            .where((h) => _isLikelyMatch(book, h, author))
+            .map((h) => _Candidate(s, h))
+            .toList();
+        switch (switchOutcomeOf(report, matched.length)) {
+          case SwitchSourceOutcome.hit:
+            return matched;
+          case SwitchSourceOutcome.noMatch:
+            noMatch++;
+            return const <_Candidate>[];
+          case SwitchSourceOutcome.failed:
+            failed.add((
+              name: s.bookSourceName.isEmpty
+                  ? s.bookSourceUrl
+                  : s.bookSourceName,
+              reason: '${report.label}：${report.hint}',
+            ));
+            return const <_Candidate>[];
         }
       });
       final parts = await Future.wait(futures);
@@ -130,9 +165,69 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
       candidates
         ..clear()
         ..addAll(list);
+      _noMatch = noMatch;
+      _failed
+        ..clear()
+        ..addAll(failed);
       loading = false;
-      error = list.isEmpty ? '未找到其它可用书源' : null;
+      error = list.isEmpty
+          ? (failed.isNotEmpty
+                ? '没有可用结果：${failed.length} 个书源失败'
+                : '未找到其它可用书源')
+          : null;
     });
+  }
+
+  void _retry() {
+    setState(() {
+      loading = true;
+      error = null;
+      candidates.clear();
+      _failed.clear();
+      _noMatch = 0;
+    });
+    _load();
+  }
+
+  Future<void> _showFailures() async {
+    if (_failed.isEmpty) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('失败书源'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: _failed.length,
+            separatorBuilder: (_, _) => const Divider(height: 12),
+            itemBuilder: (_, i) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _failed[i].name,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _failed[i].reason,
+                  style: TextStyle(fontSize: 12, color: _secondary),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Strict-ish match: same/similar title; author only when both sides have one.
@@ -246,6 +341,74 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
                     ),
                   ),
                 ),
+              if (_groups.length > 1)
+                SizedBox(
+                  height: 40,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    children: [
+                      for (final group in ['', ..._groups])
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            label: Text(
+                              group.isEmpty ? '全部' : group,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            selected: _groupFilter == group,
+                            onSelected: (_) {
+                              if (_groupFilter == group) return;
+                              setState(() {
+                                _groupFilter = group;
+                                loading = true;
+                                error = null;
+                                candidates.clear();
+                                _failed.clear();
+                                _noMatch = 0;
+                              });
+                              _load();
+                            },
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              if (!loading && (_noMatch > 0 || _failed.isNotEmpty))
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 2, 8, 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '候选 ${candidates.length} · 无匹配 $_noMatch · '
+                          '失败 ${_failed.length}',
+                          style: TextStyle(fontSize: 11, color: _secondary),
+                        ),
+                      ),
+                      if (_failed.isNotEmpty)
+                        TextButton(
+                          onPressed: _showFailures,
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(0, 32),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          child: const Text(
+                            '失败原因',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      TextButton(
+                        onPressed: _retry,
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(0, 32),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        child: const Text('重试', style: TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                ),
               Divider(height: 1, color: _divider),
               Expanded(
                 child: loading
@@ -337,6 +500,19 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
       ),
     );
   }
+}
+
+/// Outcome of one source during a 换源 sweep.
+enum SwitchSourceOutcome { hit, noMatch, failed }
+
+/// Classify a switch-search report for the status row.
+///
+/// A reachable site whose results do not match the book is 无匹配, not a
+/// failure; only unreachable / timed-out / rule-broken sources count as 失败.
+SwitchSourceOutcome switchOutcomeOf(SourceSearchReport report, int matched) {
+  if (matched > 0) return SwitchSourceOutcome.hit;
+  if (!report.reachable) return SwitchSourceOutcome.failed;
+  return SwitchSourceOutcome.noMatch;
 }
 
 class _Candidate {

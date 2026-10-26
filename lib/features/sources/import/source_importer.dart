@@ -23,9 +23,17 @@ class SourceUpsertStats {
   final int inserted;
   final int updated;
 
-  const SourceUpsertStats({required this.inserted, required this.updated});
+  /// Existing rows left untouched because a repository sync must not silently
+  /// overwrite rules/order/health the user already has locally.
+  final int preserved;
 
-  int get total => inserted + updated;
+  const SourceUpsertStats({
+    required this.inserted,
+    required this.updated,
+    this.preserved = 0,
+  });
+
+  int get total => inserted + updated + preserved;
 }
 
 class SourceImporter {

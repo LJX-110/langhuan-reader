@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:langhuan/core/net/session_cookies.dart';
+import 'package:langhuan/core/storage/local_store.dart';
+import 'package:langhuan/core/storage/prefs_keys.dart';
 import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/features/sources/net/analyze_url.dart';
 import 'package:dio/dio.dart';
@@ -40,11 +42,29 @@ class SourceHttp {
       );
   }
 
-  /// Header a private source can set to allow a one-time lenient TLS retry.
+  /// Header a private source can set to request a one-time lenient TLS retry.
   static const String insecureTlsHeader = 'x-langhuan-insecure-tls';
 
-  /// True when [headers] opt in to the lenient TLS retry.
-  static bool allowsInsecureTls(Map<String, String> headers) {
+  /// True when [headers] request the lenient retry **and** the user has turned
+  /// on the local high-risk switch.
+  ///
+  /// The header alone must never be enough: a repository JSON could otherwise
+  /// silently authorize a MITM certificate. [localOptIn] is injectable for
+  /// tests; production reads [PrefsKeys.allowInsecureTls] (default false).
+  static bool allowsInsecureTls(
+    Map<String, String> headers, {
+    bool? localOptIn,
+  }) {
+    var optedIn = localOptIn;
+    if (optedIn == null) {
+      try {
+        optedIn = SpUtil.getBool(PrefsKeys.allowInsecureTls, defValue: false);
+      } catch (_) {
+        // Unit tests / early calls before bootstrap: strict by default.
+        optedIn = false;
+      }
+    }
+    if (!optedIn) return false;
     for (final entry in headers.entries) {
       if (entry.key.toLowerCase() != insecureTlsHeader) continue;
       final value = entry.value.trim().toLowerCase();
@@ -103,8 +123,9 @@ class SourceHttp {
       if (!allowInsecureTls) {
         AppLog.w(
           'SourceNet',
-          'TLS rejected; add "$insecureTlsHeader: 1" to the source header '
-              'only if this site is trusted: $url',
+          'TLS rejected; enable the high-risk local switch and add '
+              '"$insecureTlsHeader: 1" to the source header only if this site '
+              'is trusted: $url',
           error: e.error,
         );
         rethrow;

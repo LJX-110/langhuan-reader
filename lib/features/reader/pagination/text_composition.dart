@@ -310,11 +310,14 @@ class TextComposition {
       'padH': ReadSetting.getPageDis().toDouble(),
       'boxW': boxW,
       'boxH': boxH,
+      'topSafe': ReadSetting.chapterTitleBandTop(),
+      'bottomSafe': Screen.bottomSafeHeight,
       'fontFamily': ReadSetting.getFontFamily(),
       'fontPath': ReadSetting.getFontPath(),
       'shouldJustifyHeight': shouldJustifyHeight,
       // Bump cache when pager contract changes.
       'abi': bookPagerAbiVersion,
+      'engineRevision': bookPagerLayoutRevision,
       'textAlign': ReadSetting.getTextAlign(),
     };
   }

@@ -107,6 +107,17 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final top = MediaQuery.viewPaddingOf(context).top;
+    if (!ReadSetting.updateTopSafeHeight(top)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(readModelProvider).scheduleRelayout();
+    });
+  }
+
+  @override
   void dispose() {
     try {
       final model = ref.read(readModelProvider);
@@ -576,6 +587,9 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
     final contentReady = ref.watch(
       readModelProvider.select((m) => m.contentReady),
     );
+    final loadError = ref.watch(
+      readModelProvider.select((m) => m.chapterLoadError),
+    );
     final modelChapter = ref.watch(
       readModelProvider.select((m) => m.book?.chapterIndex),
     );
@@ -716,6 +730,40 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
                     bandHeight: ReadSetting.contentTopChrome,
                     horizontalPadding: ReadSetting.getPageDis().toDouble(),
                     fontFamily: titleFamily,
+                  ),
+                ),
+              ),
+            if (loadError != null)
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 24,
+                child: Material(
+                  elevation: 3,
+                  borderRadius: BorderRadius.circular(10),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.surfaceContainerHighest,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            loadError,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            ref.read(readModelProvider).retryFailedChapter();
+                          },
+                          child: const Text('重试'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

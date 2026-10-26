@@ -268,43 +268,18 @@ class ReaderPainter {
     final bodyTop = ReadSetting.contentTopInset();
     final maxLineWidth = (pageW - contentPadding * 2).clamp(1.0, pageW);
 
-    // Explicit loading page (chapterName == '加载中') with a non-empty hint.
-    // Blank reopen placeholders have real chapter titles + empty pages and
-    // fall through to normal paint (paper only, no centered "正在加载").
-    if (readPage.chapterName == '加载中') {
-      final msg = readPage.chapterContent.trim();
-      if (msg.isEmpty) {
-        return pageRecorder.endRecording();
-      }
-      final centerPainter = TextPainter(
-        textDirection: TextDirection.ltr,
-        textAlign: TextAlign.center,
-        text: TextSpan(
-          text: msg,
-          style: style.copyWith(
-            color: meta,
-            fontSize: (fontSize * 0.95).clamp(14.0, 18.0),
-          ),
-        ),
-      );
-      centerPainter.layout(maxWidth: maxLineWidth);
-      final dx = (pageW - centerPainter.width) / 2;
-      final dy = (pageH - centerPainter.height) / 2;
-      centerPainter.paint(pageCanvas, Offset(dx, dy));
-      final pic = pageRecorder.endRecording();
-      _logPaintPage(readPage, i, 0, sw);
-      return pic;
-    }
-
     final chromeStyle = TextStyle(
-      fontSize: 13 / Screen.textScaleFactor,
+      fontSize: 14 / Screen.textScaleFactor,
+      fontWeight: FontWeight.w500,
       color: meta,
       fontFamily: familyOrNull,
       letterSpacing: .2,
     );
 
-    if (chrome) {
-      // Chapter title — vertically centered in the top chrome band.
+    // Chapter title — vertically centered in the top chrome band.
+    // Always paint it for a non-empty title; placeholder pages are identified
+    // by [ReadPage.isPlaceholder], never by a magic title string.
+    if (chrome && readPage.chapterName.trim().isNotEmpty) {
       _labelPainter.text = TextSpan(
         text: readPage.chapterName,
         style: chromeStyle,
@@ -314,6 +289,36 @@ class ReaderPainter {
           ReadSetting.chapterTitleBandTop() +
           (ReadSetting.contentTopChrome - _labelPainter.height) / 2;
       _labelPainter.paint(pageCanvas, Offset(contentPadding, titleY));
+    }
+
+    // Loading / error placeholder: title above, hint centered in the body box.
+    if (readPage.isPlaceholder) {
+      final msg = readPage.chapterContent.trim();
+      if (msg.isNotEmpty) {
+        final centerPainter = TextPainter(
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.center,
+          text: TextSpan(
+            text: msg,
+            style: style.copyWith(
+              color: meta,
+              fontSize: (fontSize * 0.95).clamp(14.0, 18.0),
+            ),
+          ),
+        );
+        centerPainter.layout(maxWidth: maxLineWidth);
+        final contentBottom = pageH - ReadSetting.contentBottomInset();
+        final areaH = (contentBottom - bodyTop).clamp(0.0, pageH);
+        final dy =
+            bodyTop + ((areaH - centerPainter.height) / 2).clamp(0.0, areaH);
+        centerPainter.paint(
+          pageCanvas,
+          Offset((pageW - centerPainter.width) / 2, dy),
+        );
+      }
+      final pic = pageRecorder.endRecording();
+      _logPaintPage(readPage, i, 0, sw);
+      return pic;
     }
 
     final linePainter = TextPainter(
