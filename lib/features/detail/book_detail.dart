@@ -365,60 +365,48 @@ class _BookDetailState extends ConsumerState<BookDetail> {
   Widget _catalogBody() {
     final latest = info.latestChapter.trim();
     final time = info.updatedAt.trim();
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: _openRead,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppColors.accentSoftOf(context),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.menu_book_outlined,
-                  size: 18,
-                  color: AppColors.accentOf(context),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      latest.isEmpty ? '暂无章节信息' : latest,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: _primary,
-                      ),
+    return InkWell(
+      onTap: _openRead,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            Icon(
+              Icons.menu_book_outlined,
+              size: 18,
+              color: AppColors.accentOf(context),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    latest.isEmpty ? '暂无章节信息' : latest,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: _primary,
                     ),
-                    if (time.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        '更新于 $time',
-                        style: TextStyle(fontSize: 12, color: _secondary),
-                      ),
-                    ] else
-                      Text(
-                        '最新章节',
-                        style: TextStyle(fontSize: 12, color: _secondary),
-                      ),
-                  ],
-                ),
+                  ),
+                  if (time.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '更新于 $time',
+                      style: TextStyle(fontSize: 12, color: _secondary),
+                    ),
+                  ] else
+                    Text(
+                      '最新章节',
+                      style: TextStyle(fontSize: 12, color: _secondary),
+                    ),
+                ],
               ),
-              Icon(Icons.chevron_right, color: _secondary, size: 20),
-            ],
-          ),
+            ),
+            Icon(Icons.chevron_right, color: _secondary, size: 20),
+          ],
         ),
       ),
     );
@@ -588,7 +576,7 @@ class _BookDetailState extends ConsumerState<BookDetail> {
                         foregroundColor: scheme.onPrimary,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(4),
                         ),
                       ),
                       onPressed: _openRead,

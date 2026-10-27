@@ -211,38 +211,85 @@ class _KindBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = AppColors.accentOf(context);
-    final accentSoft = AppColors.accentSoftOf(context);
+    final companion = AppColors.companionOf(context);
     final unselected = dark ? AppColors.textOnDark : AppColors.textSecondary;
     return SizedBox(
-      height: 40,
+      height: 42,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
         itemCount: model.kinds.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        separatorBuilder: (_, _) => const SizedBox(width: 22),
         itemBuilder: (context, i) {
           final k = model.kinds[i];
           final selected =
               model.activeKind?.title == k.title &&
               model.activeKind?.url == k.url;
-          return FilterChip(
-            label: Text(k.title),
+          return _KindTab(
+            label: k.title,
             selected: selected,
-            onSelected: (_) => model.selectKind(k),
-            selectedColor: accentSoft,
-            backgroundColor: dark
-                ? const Color(0xFF2A2A2A)
-                : const Color(0xFFF3F3F3),
-            checkmarkColor: accent,
-            side: BorderSide.none,
-            labelStyle: TextStyle(
-              fontSize: 12,
-              color: selected ? accent : unselected,
-            ),
-            visualDensity: VisualDensity.compact,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            activeColor: accent,
+            underlineColor: companion,
+            inactiveColor: unselected,
+            onTap: () => model.selectKind(k),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Text tab with a short companion-colour underline, matching the dock's
+/// active marker. No filled chip: the page stays a flat list.
+class _KindTab extends StatelessWidget {
+  const _KindTab({
+    required this.label,
+    required this.selected,
+    required this.activeColor,
+    required this.underlineColor,
+    required this.inactiveColor,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final Color activeColor;
+  final Color underlineColor;
+  final Color inactiveColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: InkWell(
+        onTap: onTap,
+        splashColor: activeColor.withValues(alpha: .06),
+        highlightColor: Colors.transparent,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 10, bottom: 8),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: selected ? activeColor : inactiveColor,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: selected ? 18 : 0,
+              height: 2,
+              color: underlineColor,
+            ),
+            const SizedBox(height: 2),
+          ],
+        ),
       ),
     );
   }
