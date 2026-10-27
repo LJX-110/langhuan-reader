@@ -50,7 +50,7 @@ langhuan/
 ├─ docs/                    架构、路线、品牌、书源仓库、上游说明
 ├─ AGENTS.md                项目约定
 ├─ NOTICE                   上游归属
-└─ LICENSE                  Apache-2.0
+└─ LICENSE                  GPL-3.0（上游 Apache-2.0 原文在 third_party/）
 ```
 
 ## 模块边界

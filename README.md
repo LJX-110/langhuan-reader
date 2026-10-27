@@ -87,4 +87,4 @@ flutter build apk --release --target-platform android-arm64
 
 ## 许可
 
-项目基于 Apache-2.0 底本整理和重写。许可归属与第三方许可见 [`NOTICE`](NOTICE)、[`LICENSE`](LICENSE) 和 [`docs/UPSTREAM.md`](docs/UPSTREAM.md)。
+本仓库按 **GPL-3.0** 分发（`LICENSE`）：上游底本为 Apache-2.0，3D 书架移植自 GPL-3.0 的 Wenku8-Local。许可归属、上游与第三方许可见 [`NOTICE`](NOTICE)、[`third_party/Apache-2.0.txt`](third_party/Apache-2.0.txt) 和 [`docs/UPSTREAM.md`](docs/UPSTREAM.md)。

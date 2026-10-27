@@ -40,7 +40,8 @@ class TocService {
       AppLog.i(
         'Read',
         'fetchRemoteToc source=${source.bookSourceName} '
-            'tocUrl=$tocUrl chapterList=${source.ruleToc.chapterList}',
+            'tocUrl=${Redact.forLog(tocUrl)} '
+            'chapterList=${source.ruleToc.chapterList}',
       );
       final list = await engine.toc(source, tocUrl);
       AppLog.i('Read', 'fetchRemoteToc got ${list.length} chapters');
@@ -48,7 +49,7 @@ class TocService {
     } catch (e, st) {
       AppLog.e(
         'Read',
-        'fetchRemoteToc failed for $tocUrl',
+        'fetchRemoteToc failed for ${Redact.forLog(tocUrl)}',
         error: e,
         stackTrace: st,
       );

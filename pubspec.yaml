@@ -54,7 +54,6 @@ dependency_overrides:
 flutter:
   uses-material-design: true
   assets:
-    - images/
     # Bundled CJK face for reader + Rust book_pager (ABI v3 shared font_path).
     - assets/fonts/HarmonyOS_Sans_SC_Regular.ttf
   fonts:

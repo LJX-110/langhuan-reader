@@ -1,18 +1,22 @@
 # NOTICE
 
-This product is based on the open-source project:
+琅嬛阁（langhuan-reader）是一个个人自用的 Android 网络小说阅读器。
 
-- `book` — https://github.com/leetomlee123/book
-- Upstream commit: `0b25219cf7ebdbd2b166f9a299c239f21fc721a0`
-- Licensed under the Apache License, Version 2.0.
+## 许可
 
-The upstream project and its contributors retain copyright in the portions
-that remain. This repository contains substantial modifications, removals,
-and new code for 琅嬛阁, a personal, single-user Android reader.
+- 本项目整体按 **GNU General Public License v3.0** 分发，全文见 `LICENSE`。
+- 上游底本：`book`（https://github.com/leetomlee123/book），
+  上游提交 `0b25219cf7ebdbd2b166f9a299c239f21fc721a0`，按 **Apache License 2.0**
+  授权。上游及其贡献者保留其代码部分的版权；本仓库在其基础上做了大量修改、
+  删除与新写。Apache License 2.0 全文保留在 `third_party/Apache-2.0.txt`。
+- 3D 书架（`lib/design/components/shelf_*.dart`、`bookshelf_3d.dart` 的场景层）
+  在视觉模型、几何参数与滚动物理上移植自
+  **Wenku8-Local**（https://github.com/Wenku8-Local 系列练习项目），该项目按
+  **GNU General Public License v3.0** 分发；移植部分同样受 GPL-3.0 约束。
 
-Additional third-party notices are kept with their components, including:
+## 第三方组件
+
+其他第三方许可文本随组件保留：
 
 - `third_party/flutter_js/LICENSE`
 - `assets/fonts/HarmonyOS_Sans_SC_LICENSE.txt`
-
-The Apache License 2.0 text is in `LICENSE`.

@@ -16,7 +16,7 @@
 - Android 包名：`com.langhuan.reader`；Dart 包名：`langhuan`。
 - 上游底本：Apache-2.0；固定信息见 `docs/UPSTREAM.md`。
 - 必须保留 `LICENSE`、`NOTICE` 和第三方许可文本；界面不保留上游名称、链接、邮箱、截图。许可归属只放在 `NOTICE` 与 `docs/UPSTREAM.md`，其他文档不重复上游链接。
-- Wenku8-Local（`参考\Wenku8-Local-main`）可直接移植代码用于本项目（2026-10-26 用户决定放弃「只作视觉参考」约束）；其原始许可为 GPL-3.0，仓库对外发布时的许可标注待确认前不动 `LICENSE`。
+- Wenku8-Local（`参考\Wenku8-Local-main`）可直接移植代码用于本项目（2026-10-26 用户决定放弃「只作视觉参考」约束）；本仓库整体按 GPL-3.0 分发（`LICENSE`），移植处必须在 `NOTICE` 署名，上游 Apache-2.0 原文保留在 `third_party/Apache-2.0.txt`。
 
 ## 技术边界
 
