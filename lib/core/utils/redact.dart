@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
+
 /// URL sanitising for diagnostics, logs and UI.
 ///
 /// Book-source request URLs often carry tokens, session ids or cookies in the
@@ -38,4 +42,35 @@ class Redact {
   /// Prefer mapping exception types at the call site; this is only a fallback
   /// for messages that are known to be short and URL-free.
   static String errorType(Object error) => error.runtimeType.toString();
+
+  /// Short user-facing reason for a failed action.
+  ///
+  /// Never embeds `error.toString()`: Dio messages and other exceptions can
+  /// carry full request URLs (query strings, tokens). Full details belong in
+  /// `AppLog`, not in a toast.
+  static String userMessage(Object error) {
+    if (error is DioException) {
+      switch (error.type) {
+        case DioExceptionType.connectionTimeout:
+        case DioExceptionType.sendTimeout:
+        case DioExceptionType.receiveTimeout:
+        case DioExceptionType.transformTimeout:
+          return '网络超时';
+        case DioExceptionType.connectionError:
+          return '连接失败，检查网络或换个书源';
+        case DioExceptionType.badCertificate:
+          return '证书校验失败';
+        case DioExceptionType.cancel:
+          return '已取消';
+        case DioExceptionType.badResponse:
+          final code = error.response?.statusCode;
+          return code == null ? '服务器无响应' : '服务器返回 $code';
+        case DioExceptionType.unknown:
+          return '网络错误';
+      }
+    }
+    if (error is TimeoutException) return '操作超时';
+    if (error is FormatException) return '数据格式错误';
+    return '操作失败，可查看日志';
+  }
 }

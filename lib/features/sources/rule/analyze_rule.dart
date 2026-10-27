@@ -163,10 +163,31 @@ class AnalyzeRule {
     String? postRegex;
     String? postReplace;
     if (!JsEngine.needsJs(r) && r.contains('##')) {
-      final parts = r.split('##');
-      r = parts[0];
-      if (parts.length >= 2) postRegex = parts[1];
-      if (parts.length >= 3) postReplace = parts[2];
+      // Only top-level `##` separates rule / regex / replacement; `##` inside
+      // `{{...}}` belongs to the inner rule (Legado template syntax).
+      final first = _indexOfTopLevel(r, '##');
+      if (first >= 0) {
+        final head = r.substring(0, first);
+        final rest = r.substring(first + 2);
+        final second = _indexOfTopLevel(rest, '##');
+        r = head;
+        if (second >= 0) {
+          postRegex = rest.substring(0, second);
+          postReplace = rest.substring(second + 2);
+        } else {
+          postRegex = rest;
+        }
+      }
+    }
+
+    // Legado template syntax: `{{rule}}` interpolation and `{rule}` optional
+    // segments. Only for non-JS rules — JS code uses braces for blocks.
+    if (!_containsJsMarker(r) && r.contains('{')) {
+      var templated = _interpolateTemplate(r, scope: scope);
+      if (postRegex != null && postRegex.isNotEmpty) {
+        templated = _applyPost(templated, postRegex, postReplace);
+      }
+      return templated.trim();
     }
 
     // Trailing JS transform: `selector@attr@js:code`.
@@ -337,13 +358,79 @@ class AnalyzeRule {
 
   String _applyPost(String result, String postRegex, String? postReplace) {
     try {
-      return result.replaceAll(
-        RegExp(postRegex, multiLine: true, dotAll: true),
-        postReplace ?? '',
-      );
+      final re = RegExp(postRegex, multiLine: true, dotAll: true);
+      final rep = postReplace ?? '';
+      // `$1` / `\1` group references are not expanded by String.replaceAll.
+      if (rep.contains(r'$') || rep.contains(r'\')) {
+        return result.replaceAllMapped(re, (m) => _expandGroups(rep, m));
+      }
+      return result.replaceAll(re, rep);
     } catch (_) {
       return result;
     }
+  }
+
+  /// Expand Legado replacement group refs (`$1`, `\1`) against [m].
+  static String _expandGroups(String rep, Match m) {
+    return rep.replaceAllMapped(RegExp(r'\$(\d+)|\\(\d+)'), (g) {
+      final i = int.tryParse(g.group(1) ?? g.group(2) ?? '');
+      if (i == null || i < 0 || i > m.groupCount) return g.group(0)!;
+      return m.group(i) ?? '';
+    });
+  }
+
+  static bool _containsJsMarker(String rule) {
+    final lower = rule.toLowerCase();
+    return lower.contains('@js:') || lower.contains('<js>');
+  }
+
+  /// First occurrence of [needle] that is not inside `{...}` template braces.
+  static int _indexOfTopLevel(String s, String needle) {
+    var depth = 0;
+    for (var i = 0; i + needle.length <= s.length; i++) {
+      final ch = s[i];
+      if (ch == '{') {
+        depth++;
+        continue;
+      }
+      if (ch == '}') {
+        if (depth > 0) depth--;
+        continue;
+      }
+      if (depth == 0 && s.startsWith(needle, i)) return i;
+    }
+    return -1;
+  }
+
+  /// Evaluate Legado `{{rule}}` interpolation and `{rule}` optional segments.
+  ///
+  /// Literal text outside the braces is kept verbatim, so URL templates like
+  /// `https://host/detail?id={{$.id}}` produce the final URL directly.
+  /// `{{}}` always substitutes (possibly empty); `{}` drops the segment when
+  /// the inner rule yields nothing.
+  String _interpolateTemplate(String rule, {dynamic scope}) {
+    final out = StringBuffer();
+    var i = 0;
+    while (i < rule.length) {
+      final open = rule.indexOf('{', i);
+      if (open < 0) {
+        out.write(rule.substring(i));
+        break;
+      }
+      out.write(rule.substring(i, open));
+      final double = open + 1 < rule.length && rule[open + 1] == '{';
+      final contentStart = open + (double ? 2 : 1);
+      final close = rule.indexOf(double ? '}}' : '}', contentStart);
+      if (close < 0) {
+        out.write(rule.substring(open));
+        break;
+      }
+      final inner = rule.substring(contentStart, close).trim();
+      final value = inner.isEmpty ? '' : getString(inner, scope: scope);
+      if (double || value.isNotEmpty) out.write(value);
+      i = close + (double ? 2 : 1);
+    }
+    return out.toString();
   }
 
   /// Content rule often wants HTML then plain text.

@@ -1,4 +1,5 @@
 import 'package:langhuan/core/storage/prefs_keys.dart';
+import 'package:langhuan/core/utils/redact.dart';
 import 'package:langhuan/core/storage/local_store.dart';
 import 'package:langhuan/features/sources/repo/source_repo.dart';
 import 'package:langhuan/features/sources/sync/source_sync_plan.dart';
@@ -147,12 +148,16 @@ class _SourceRepoPageState extends ConsumerState<SourceRepoPage> {
       );
     } catch (e) {
       if (imported) {
-        BotToast.showText(text: '书源已写入，但同步后处理失败：$e');
+        BotToast.showText(
+          text: '书源已写入，但同步后处理失败：${Redact.userMessage(e)}',
+        );
         try {
           await ref.read(sourceModelProvider).load();
         } catch (_) {}
       } else {
-        BotToast.showText(text: '同步失败，未写入任何书源：$e');
+        BotToast.showText(
+          text: '同步失败，未写入任何书源：${Redact.userMessage(e)}',
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);

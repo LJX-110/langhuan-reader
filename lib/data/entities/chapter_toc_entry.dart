@@ -15,6 +15,9 @@ class ChapterTocEntry {
   String volumeTitle;
   int volumeOrd;
 
+  /// Per-chapter meta from `ruleToc.updateTime`（章节字数 / 更新时间）.
+  String info;
+
   ChapterTocEntry({
     this.id = '',
     this.title = '',
@@ -23,5 +26,6 @@ class ChapterTocEntry {
     this.ord = 0,
     this.volumeTitle = '',
     this.volumeOrd = -1,
+    this.info = '',
   });
 }

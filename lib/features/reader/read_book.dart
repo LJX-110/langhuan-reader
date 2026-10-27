@@ -5,6 +5,7 @@ import 'package:langhuan/features/reader/settings/read_setting.dart';
 import 'package:langhuan/core/storage/local_store.dart';
 import 'package:langhuan/core/platform/system_ui.dart';
 import 'package:langhuan/data/entities/book.dart';
+import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/core/events/event.dart';
 import 'package:langhuan/features/reader/read_model.dart';
 import 'package:langhuan/features/shelf/shelf_model.dart';
@@ -233,9 +234,8 @@ class _ReadBookState extends ConsumerState<ReadBook>
           TextButton(
             onPressed: () async {
               readModel.allowProgressSave = false;
-              await ref.read(shelfModelProvider).delLocalCache([
-                widget.book.id,
-              ]);
+              // Keep the row so 阅读记录 stays usable; just stay off-shelf.
+              await BookRepository.instance.retire([widget.book.id]);
               if (dialogContext.mounted) {
                 Navigator.pop(dialogContext);
               }

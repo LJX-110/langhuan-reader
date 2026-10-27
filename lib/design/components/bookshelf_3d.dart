@@ -1,19 +1,25 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
-import 'package:langhuan/design/components/pic_widget.dart';
 import 'package:langhuan/design/components/shelf_book_view.dart';
 import 'package:langhuan/design/components/shelf_geometry.dart';
+import 'package:langhuan/design/components/shelf_palette.dart';
+import 'package:langhuan/design/components/shelf_pose.dart';
+import 'package:langhuan/design/components/shelf_scene.dart';
+import 'package:langhuan/design/components/shelf_scroll_physics.dart';
+import 'package:langhuan/design/components/shelf_volume.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 
-/// Continuous 3D shelf.
+/// 3D 书架：一排书脊 + 景深，滚动位置是唯一时钟。
 ///
-/// The focused volume faces the reader; neighbours turn away until their
-/// spines carry the row. The shelf is finite (first / last book stop in the
-/// middle, no wrap-around) and each volume is a solid: spine, cover, page
-/// edge and a top face that shares vertices with the spine and cover.
+/// 中心的那本从行里「抽」出来（连续抽出波：cos² 权重，左右各到 ±1.48 格），
+/// 邻书退回书脊，整排沿行内弧线轻微下沉；松手后先摩擦减速再落回整数格位，
+/// 每进入一个格位一次轻触感。书架是有限的：第一本与最后一本都停在正中，
+/// 两端不循环，只构建可视窗口内的书。
 class Bookshelf3D extends StatefulWidget {
   const Bookshelf3D({
     super.key,
@@ -58,51 +64,123 @@ class Bookshelf3D extends StatefulWidget {
 }
 
 class _Bookshelf3DState extends State<Bookshelf3D>
-    with TickerProviderStateMixin {
-  /// Volumes beyond this distance from the focus are not built.
-  static const int _renderWindow = 5;
+    with SingleTickerProviderStateMixin {
+  /// 行框下方留给书名 / 作者 / 计数的固定高度。
+  static const double _metaHeight = 76;
 
-  /// Fractional focus index: whole numbers sit on a book, values in between
-  /// are reached while dragging. Always kept inside `[0, books.length - 1]`.
-  double _f = 0;
-  String? _focusId;
-  int _hapticSlot = 0;
+  /// 点按邻书后滚到中心的时间，末段带一点点回弹。
+  static const Duration _centreDuration = Duration(milliseconds: 280);
+  static const Curve _centreCurve = Cubic(.2, 1.06, .35, 1);
 
-  late final AnimationController _settle;
-  double _settleFrom = 0;
-  double _settleTo = 0;
+  /// 入场装配：整排从后场推上来。
+  static const Duration _entryDuration = Duration(milliseconds: 720);
 
+  late final ShelfPose _pose;
+  late final ValueNotifier<int> _active;
   late final AnimationController _entry;
+  late final Animation<double> _metaFade;
+  late final Animation<Offset> _metaSlide;
 
-  int? _grabbedIndex;
-  double _grabDx = 0;
-  int? _reorderTarget;
+  ScrollController? _scroll;
+  bool _reduced = false;
 
+  /// 需要真实构建的窗口（左闭右开），跟着中心走。
+  int _firstSlot = 0;
+  int _endSlot = 0;
+  bool _windowSyncScheduled = false;
+  bool _laneSyncScheduled = false;
+  int? _pendingLane;
+
+  /// 视觉中心的书名 id：书目增删时按它把中心找回来。
+  String? _focusId;
+
+  /// 触感：一次手势里每进一个格位响一次，不连续震动。
+  bool _hapticGesture = false;
+  int? _lastDetent;
+  int _lastPulse = -1000;
+  int _command = 0;
+
+  /// 行内二次确认。
   ShelfBookView? _pendingDelete;
   bool _deleteBusy = false;
 
-  int get _maxIndex => math.max(0, widget.books.length - 1);
+  int get _lastSlot => widget.books.isEmpty ? 0 : widget.books.length - 1;
 
   @override
   void initState() {
     super.initState();
-    _settle = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 220),
-    )..addListener(_onSettleTick);
-    _entry = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 520),
+    _pose = ShelfPose(count: widget.books.length);
+    _entry = AnimationController(vsync: this, duration: _entryDuration)
+      ..value = widget.entryAnimation ? 0 : 1
+      ..addListener(_assemble);
+    _metaFade = _entry.drive(
+      CurveTween(curve: const Interval(.45, 1, curve: Curves.easeOutCubic)),
     );
-    if (widget.entryAnimation) {
+    _metaSlide = _entry.drive(
+      Tween<Offset>(begin: const Offset(0, .16), end: Offset.zero).chain(
+        CurveTween(curve: const Interval(.45, 1, curve: Curves.easeOutCubic)),
+      ),
+    );
+    final lane = (_indexOf(widget.initialBookId) ?? 0).clamp(0, _lastSlot);
+    _pose.move(lane.toDouble(), notify: false);
+    _focusId = widget.books.isEmpty ? null : widget.books[lane].id;
+    _active = ValueNotifier<int>(lane);
+    _pose.present(_entry.value);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduced = MediaQuery.disableAnimationsOf(context);
+    if (!widget.entryAnimation ||
+        _reduced ||
+        !TickerMode.valuesOf(context).enabled) {
+      _finishEntrance();
+    } else if (!_entry.isAnimating && !_entry.isCompleted) {
+      _pose.present(_entry.value);
       _entry.forward();
-    } else {
-      _entry.value = 1;
     }
-    final initial = _indexOf(widget.initialBookId);
-    _f = (initial ?? 0).clamp(0, _maxIndex).toDouble();
-    _hapticSlot = _f.round();
-    _focusId = widget.books.isEmpty ? null : widget.books[_f.round()].id;
+  }
+
+  @override
+  void didUpdateWidget(covariant Bookshelf3D oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _pose.count = widget.books.length;
+    if (widget.books.isEmpty) {
+      _pose.move(0, notify: false);
+      _pendingLane = null;
+      _focusId = null;
+      _pendingDelete = null;
+      _deleteBusy = false;
+      _pose.endGrab();
+      return;
+    }
+    // 书目变了：按 id 把中心的那本找回来，找不到就退回当前格位。
+    final listChanged =
+        !identical(oldWidget.books, widget.books) ||
+        oldWidget.books.length != widget.books.length;
+    if (listChanged) {
+      final lane =
+          _indexOf(_focusId) ?? _pose.focus.round().clamp(0, _lastSlot);
+      _scheduleLaneSync(lane);
+    }
+    if (_pendingDelete != null &&
+        !widget.books.any((book) => book.id == _pendingDelete!.id)) {
+      // The parent removed the book while we waited.
+      _pendingDelete = null;
+      _deleteBusy = false;
+    }
+    if (_pose.grabbed != null && _pose.grabbed! > _lastSlot) _pose.endGrab();
+  }
+
+  @override
+  void dispose() {
+    _scroll?.removeListener(_scrolled);
+    _scroll?.dispose();
+    _entry.dispose();
+    _pose.dispose();
+    _active.dispose();
+    super.dispose();
   }
 
   int? _indexOf(String? id) {
@@ -113,159 +191,171 @@ class _Bookshelf3DState extends State<Bookshelf3D>
     return null;
   }
 
-  @override
-  void didUpdateWidget(covariant Bookshelf3D oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final listChanged =
-        !identical(oldWidget.books, widget.books) ||
-        oldWidget.books.length != widget.books.length;
-    if (widget.books.isEmpty) {
-      _f = 0;
-      _focusId = null;
-      _pendingDelete = null;
-      _grabbedIndex = null;
-      _reorderTarget = null;
-      return;
-    }
-    // Keep the focused book selected across filters and reloads.
-    if (listChanged) {
-      final byId = _indexOf(_focusId);
-      if (byId != null) {
-        _f = byId.toDouble();
-      } else {
-        _f = _f.round().clamp(0, _maxIndex).toDouble();
-      }
-      _focusId = widget.books[_f.round()].id;
-    } else {
-      _f = _f.clamp(0, _maxIndex).toDouble();
-    }
-    if (_pendingDelete != null &&
-        !widget.books.any((b) => b.id == _pendingDelete!.id)) {
-      // The parent removed the book while we waited.
-      _pendingDelete = null;
-      _deleteBusy = false;
-    }
-    if (_grabbedIndex != null && _grabbedIndex! > _maxIndex) {
-      _grabbedIndex = null;
-      _reorderTarget = null;
-      _grabDx = 0;
+  void _assemble() => _pose.present(_entry.value);
+
+  void _finishEntrance() {
+    if (!_entry.isCompleted) _entry.value = 1;
+  }
+
+  // ---------------------------------------------------------------- 滚动
+
+  /// 把中心、窗口与格位计数对齐到当前滚动位置。
+  void _syncFromOffset() {
+    if (_scroll?.hasClients != true) return;
+    _pose.move(_scroll!.offset / _pose.pitch);
+    _syncWindow();
+    final lane = _pose.focus.round().clamp(0, _lastSlot);
+    if (_active.value != lane) {
+      _active.value = lane;
+      _focusId = widget.books[lane].id;
     }
   }
 
-  @override
-  void dispose() {
-    _settle.dispose();
-    _entry.dispose();
-    super.dispose();
+  void _scrolled() {
+    if (_scroll?.hasClients != true) return;
+    _syncFromOffset();
+    final lane = _pose.focus.round().clamp(0, _lastSlot);
+    // 一次手势里每进一个格位响一次；Flutter 自己会尊重系统的触感开关。
+    final now =
+        SchedulerBinding.instance.currentSystemFrameTimeStamp.inMilliseconds;
+    if (_hapticGesture &&
+        widget.books.length > 1 &&
+        (_pose.focus - lane).abs() < .12 &&
+        lane != _lastDetent &&
+        now - _lastPulse >= 65) {
+      _lastDetent = lane;
+      _lastPulse = now;
+      if (!_reduced) unawaited(HapticFeedback.selectionClick());
+    }
   }
 
-  void _onSettleTick() {
+  bool _onScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollStartNotification &&
+        notification.dragDetails != null) {
+      _finishEntrance();
+      _command++;
+      _hapticGesture = true;
+      _lastDetent = _pose.focus.round();
+    } else if (notification is ScrollStartNotification) {
+      _hapticGesture = true;
+    } else if (notification is ScrollEndNotification) {
+      _hapticGesture = false;
+    }
+    return false;
+  }
+
+  /// 窗口只在中心跨过一格时变化，滚动像素本身不会重建组件树。
+  void _syncWindow() {
     if (!mounted) return;
-    setState(() {
-      _f = _settleFrom + (_settleTo - _settleFrom) * Curves.easeOutCubic.transform(_settle.value);
-    });
-    _maybeHaptic();
-  }
-
-  void _maybeHaptic() {
-    final slot = _f.round();
-    if (slot == _hapticSlot) return;
-    _hapticSlot = slot;
-    if (!MediaQuery.disableAnimationsOf(context)) {
-      HapticFeedback.selectionClick();
-    }
-  }
-
-  void _startSettle({double? to}) {
-    final target = (to ?? _f.round().toDouble()).clamp(
-      0.0,
-      _maxIndex.toDouble(),
-    );
-    if ((target - _f).abs() < 0.001) {
-      _settle.stop();
-      _focusId = widget.books[_f.round()].id;
+    final window = _pose.window();
+    if (window.first == _firstSlot && window.end == _endSlot) return;
+    // 布局阶段滚动位置可能自己校正一次并触发回调，此时不能直接 setState。
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      if (_windowSyncScheduled) return;
+      _windowSyncScheduled = true;
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        _windowSyncScheduled = false;
+        if (!mounted) return;
+        _syncWindow();
+      });
       return;
     }
-    _settleFrom = _f;
-    _settleTo = target;
-    _settle.forward(from: 0);
-    _focusId = widget.books[target.round()].id;
+    setState(() {
+      _firstSlot = window.first;
+      _endSlot = window.end;
+    });
   }
 
-  void _onShelfDragUpdate(DragUpdateDetails details, ShelfMetrics m) {
-    if (_grabbedIndex != null) return;
-    _settle.stop();
-    setState(() {
-      _f = (_f - details.delta.dx / m.snapPitch).clamp(
-        0.0,
-        _maxIndex.toDouble(),
+  /// 把一个格位落到位：等这一帧布局完（行程也更新了）再跳。
+  void _scheduleLaneSync(int lane) {
+    _pendingLane = lane;
+    if (_laneSyncScheduled) return;
+    _laneSyncScheduled = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _laneSyncScheduled = false;
+      if (!mounted) return;
+      final target = _pendingLane;
+      if (target == null) return;
+      if (_scroll?.hasClients != true) {
+        _scheduleLaneSync(target);
+        return;
+      }
+      _pendingLane = null;
+      final position = _scroll!.position;
+      final pixels = (target * _pose.pitch).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
       );
+      if ((position.pixels - pixels).abs() > .5) _scroll!.jumpTo(pixels);
     });
-    _maybeHaptic();
   }
 
-  void _onShelfDragEnd() {
-    if (_grabbedIndex != null) return;
-    _startSettle();
-  }
+  // ---------------------------------------------------------------- 手势
 
-  void _onTapBook(int index) {
-    final book = widget.books[index];
+  void _tap(int slot) {
     if (widget.selectable) {
-      widget.onToggleSelect?.call(book);
+      widget.onToggleSelect?.call(widget.books[slot]);
       return;
     }
-    if (index == _f.round()) {
-      widget.onOpen(book);
+    final settled =
+        (_pose.focus - slot).abs() < .03 &&
+        _scroll?.position.isScrollingNotifier.value == false;
+    if (settled) {
+      _open(slot);
     } else {
-      _startSettle(to: index.toDouble());
+      unawaited(_centre(slot));
     }
   }
 
-  void _onLongPressStart(int index) {
-    if (widget.onReorder == null) return;
-    _settle.stop();
-    setState(() {
-      _grabbedIndex = index;
-      _grabDx = 0;
-      _reorderTarget = index;
-    });
-    if (!MediaQuery.disableAnimationsOf(context)) {
-      HapticFeedback.selectionClick();
+  Future<void> _centre(int slot) async {
+    if (widget.books.length < 2 || _scroll?.hasClients != true) return;
+    _finishEntrance();
+    final command = ++_command;
+    if (!_hapticGesture) _lastDetent = _pose.focus.round();
+    _hapticGesture = true;
+    final target = slot * _pose.pitch;
+    if (_reduced) {
+      _scroll!.jumpTo(target);
+    } else {
+      await _scroll!.animateTo(
+        target,
+        duration: _centreDuration,
+        curve: _centreCurve,
+      );
     }
+    if (mounted && command == _command) _hapticGesture = false;
   }
 
-  void _onLongPressMove(LongPressMoveUpdateDetails details, ShelfMetrics m) {
-    final from = _grabbedIndex;
+  void _open(int slot) {
+    _finishEntrance();
+    _command++;
+    _hapticGesture = false;
+    final position = _scroll?.hasClients == true ? _scroll!.position : null;
+    if (position is ScrollPositionWithSingleContext) position.goIdle();
+    widget.onOpen(widget.books[slot]);
+  }
+
+  void _grabStart(int slot) {
+    _pose.beginGrab(slot);
+    if (!_reduced) unawaited(HapticFeedback.selectionClick());
+  }
+
+  void _grabMove(double dx) {
+    final from = _pose.grabbed;
     if (from == null) return;
-    final dx = details.offsetFromOrigin.dx;
-    final target = (from + (dx / m.snapPitch).round()).clamp(0, _maxIndex);
-    final changed = target != _reorderTarget;
-    setState(() {
-      _grabDx = dx;
-      _reorderTarget = target;
-    });
-    if (changed && !MediaQuery.disableAnimationsOf(context)) {
-      HapticFeedback.selectionClick();
-    }
+    final target = (from + (dx / _pose.pitch).round()).clamp(0, _lastSlot);
+    final moved = target != _pose.dropTarget;
+    _pose.updateGrab(dx, target);
+    if (moved && !_reduced) unawaited(HapticFeedback.selectionClick());
   }
 
-  Future<void> _onLongPressEnd() async {
-    final from = _grabbedIndex;
-    final to = _reorderTarget;
-    setState(() {
-      _grabbedIndex = null;
-      _reorderTarget = null;
-      _grabDx = 0;
-    });
+  Future<void> _grabEnd() async {
+    final from = _pose.grabbed;
+    final to = _pose.dropTarget;
+    _pose.endGrab();
     if (from == null || to == null || from == to) return;
     await widget.onReorder?.call(from, to);
-  }
-
-  void _askDelete() {
-    if (_pendingDelete != null || _deleteBusy) return;
-    final focused = widget.books[_f.round()];
-    setState(() => _pendingDelete = focused);
   }
 
   Future<void> _confirmDelete() async {
@@ -285,188 +375,152 @@ class _Bookshelf3DState extends State<Bookshelf3D>
     }
   }
 
-  double _entryProgressFor(double d) {
-    if (!widget.entryAnimation) return 1;
-    final order = d.abs().clamp(0.0, _renderWindow.toDouble());
-    final delay = order * .12;
-    final span = math.max(.35, 1 - delay);
-    final t = ((_entry.value - delay) / span).clamp(0.0, 1.0);
-    return Curves.easeOutCubic.transform(t);
-  }
+  // ---------------------------------------------------------------- 构建
 
   @override
   Widget build(BuildContext context) {
     if (widget.books.isEmpty) return const SizedBox.shrink();
+    final palette = ShelfPalette.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         final bounded = constraints.hasBoundedHeight;
-        final size = Size(
-          constraints.maxWidth,
-          bounded ? constraints.maxHeight : 420,
+        final height = bounded ? constraints.maxHeight : 420.0;
+        final metrics = ShelfMetrics.forSize(
+          Size(constraints.maxWidth, height),
+          metaHeight: _metaHeight,
         );
-        final m = ShelfMetrics.forSize(size);
-        final dark = Theme.of(context).brightness == Brightness.dark;
-        final focused = widget.books[_f.round()];
+        _pose.configure(metrics.viewport, metrics.pitch);
+        // 当前已处于 build，不需要 setState；首次构建、书目变化与视口变化
+        // 都在这里把窗口对齐。
+        final window = _pose.window();
+        _firstSlot = window.first;
+        _endSlot = window.end;
+        _scroll ??= ScrollController(
+          initialScrollOffset: _pose.focus * metrics.pitch,
+          // 这条横向坐标轴属于书架自己，别让外层的 PageStorage 覆盖它。
+          keepScrollOffset: false,
+        )..addListener(_scrolled);
 
-        final children = <Widget>[
-          // Rail: one hairline the volumes stand on.
-          Positioned(
-            left: 10,
-            right: 10,
-            top: m.railY,
-            child: Container(
-              height: 1,
-              decoration: BoxDecoration(
-                color: dark ? AppColors.dividerDark : AppColors.line,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: dark ? .28 : .08),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
+        // 行框 + 书名区组成一组，空间富余时整组居中。
+        final slack = height - metrics.rowHeight - metrics.metaHeight;
+        final top = slack > 0 ? slack / 2 : 0.0;
+        final canvas = Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            Positioned(
+              left: 0,
+              right: 0,
+              top: top,
+              height: metrics.rowHeight,
+              child: _row(metrics, palette),
+            ),
+            Positioned(
+              left: 16,
+              right: 16,
+              top: math.min(
+                top + metrics.rowHeight,
+                math.max(0, height - metrics.metaHeight),
               ),
+              height: metrics.metaHeight - 12,
+              child: _meta(palette),
+            ),
+          ],
+        );
+        return bounded ? canvas : SizedBox(height: height, child: canvas);
+      },
+    );
+  }
+
+  Widget _row(ShelfMetrics metrics, ShelfPalette palette) {
+    return NotificationListener<ScrollMetricsNotification>(
+      // 行程或视口宽度变化时滚动位置会自己校正（校正本身不通知监听者），
+      // 这里跟着把中心与窗口对齐，免得书名区停在上一个格位。
+      onNotification: (_) {
+        _syncFromOffset();
+        return false;
+      },
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _onScrollNotification,
+        child: ScrollConfiguration(
+          // 3D 书架不该被拉伸或发光：越界反馈交给落位物理。
+          behavior: ScrollConfiguration.of(
+            context,
+          ).copyWith(overscroll: false, scrollbars: false),
+          child: Scrollable(
+            key: const ValueKey('shelf-scroll'),
+            controller: _scroll,
+            axisDirection: AxisDirection.right,
+            physics: widget.books.length < 2
+                ? const NeverScrollableScrollPhysics()
+                : ShelfSnapPhysics(pose: _pose),
+            viewportBuilder: (context, offset) => ShelfScene(
+              offset: offset,
+              pose: _pose,
+              metrics: metrics,
+              firstSlot: _firstSlot,
+              palette: palette,
+              // 孩子按书自身 id 做键：整理页拖动排序后，元素与渲染对象跟着书走。
+              children: [
+                for (var slot = _firstSlot; slot < _endSlot; slot++)
+                  _volume(slot, metrics, palette),
+              ],
             ),
           ),
-        ];
+        ),
+      ),
+    );
+  }
 
-        // Paint far volumes first so the focused one stays on top.
-        final order = <int>[];
-        for (var i = 0; i < widget.books.length; i++) {
-          final d = i - _f;
-          if (d.abs() > _renderWindow + .5) continue;
-          order.add(i);
-        }
-        order.sort((a, b) {
-          final da = (a - _f).abs();
-          final db = (b - _f).abs();
-          final byDistance = db.compareTo(da);
-          if (byDistance != 0) return byDistance;
-          if (a == _grabbedIndex) return 1;
-          if (b == _grabbedIndex) return -1;
-          return 0;
-        });
+  Widget _volume(int slot, ShelfMetrics metrics, ShelfPalette palette) {
+    final book = widget.books[slot];
+    final reorderable = widget.onReorder != null;
+    return ShelfVolume(
+      key: ValueKey('shelf-book-${book.id}'),
+      book: book,
+      pose: _pose,
+      slot: slot,
+      metrics: metrics,
+      palette: palette,
+      picked: widget.selectedIds.contains(book.id),
+      selectable: widget.selectable,
+      onTap: () => _tap(slot),
+      onGrabStart: reorderable ? () => _grabStart(slot) : null,
+      onGrabMove: reorderable ? _grabMove : null,
+      onGrabEnd: reorderable ? _grabEnd : null,
+    );
+  }
 
-        // Insertion marker while reordering.
-        final target = _reorderTarget;
-        if (target != null && _grabbedIndex != null) {
-          final td = target - _f;
-          if (td.abs() <= _renderWindow + .5) {
-            final tx = m.xForD(td) +
-                (td < 0 ? m.boxW - m.spineW / 2 : m.spineW / 2);
-            children.add(
-              Positioned(
-                left: tx - 1,
-                top: m.railY - m.bodyH - 6,
-                width: 2,
-                height: m.bodyH + 6,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: AppColors.companionOf(context),
-                    borderRadius: BorderRadius.circular(1),
-                  ),
-                ),
-              ),
-            );
-          }
-        }
-
-        for (final i in order) {
-          final d = i - _f;
-          final mirrored = d < 0;
-          final x = m.xForD(d);
-          final y = m.railY - m.bodyH + m.yForD(d);
-          final entry = _entryProgressFor(d);
-          final grabbed = i == _grabbedIndex;
-          children.add(
-            Positioned(
-              key: ValueKey('shelf-book-${widget.books[i].id}'),
-              left: x,
-              top: y - m.depthY,
-              width: m.volumeW,
-              height: m.volumeH + 8,
-              child: Transform.translate(
-                offset: Offset(grabbed ? _grabDx : 0, grabbed ? -18 : 0),
-                child: Opacity(
-                  opacity: entry,
-                  child: Transform.translate(
-                    offset: Offset(0, (1 - entry) * 16),
-                    child: _ShelfVolume(
-                      book: widget.books[i],
-                      metrics: m,
-                      d: d,
-                      mirrored: mirrored,
-                      focused: i == _f.round(),
-                      selectable: widget.selectable,
-                      picked: widget.selectedIds.contains(widget.books[i].id),
-                      grabbed: grabbed,
-                      onTap: () => _onTapBook(i),
-                      onLongPressStart: widget.onReorder == null
-                          ? null
-                          : () => _onLongPressStart(i),
-                      onLongPressMove: widget.onReorder == null
-                          ? null
-                          : (details) => _onLongPressMove(details, m),
-                      onLongPressEnd: widget.onReorder == null
-                          ? null
-                          : _onLongPressEnd,
-                      onRemove: widget.onDelete == null || i != _f.round()
-                          ? null
-                          : _askDelete,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }
-
-        children.add(
-          Positioned(
-            left: 16,
-            right: 16,
-            top: m.railY + 10,
-            height: math.max(0, m.metaHeight - 12),
-            // The meta block is a fixed-height band: cap text growth so a
-            // large system font cannot overflow it (the 3D test matrix covers
-            // 1.3× scale).
+  /// 书名区：中心那本的名字、作者与进度，右端是格位计数与移除入口。
+  Widget _meta(ShelfPalette palette) {
+    return ValueListenableBuilder<int>(
+      valueListenable: _active,
+      builder: (context, lane, _) {
+        final book = widget.books[lane.clamp(0, _lastSlot)];
+        final pending = _pendingDelete;
+        return FadeTransition(
+          opacity: _metaFade,
+          child: SlideTransition(
+            position: _metaSlide,
             child: MediaQuery.withClampedTextScaling(
               maxScaleFactor: 1.1,
-              child: _meta(context, focused, dark),
+              child: pending != null
+                  ? _confirmRow(palette, pending)
+                  : _metaLine(palette, book, lane),
             ),
           ),
-        );
-
-        final canvas = Stack(clipBehavior: Clip.hardEdge, children: children);
-        return GestureDetector(
-          behavior: HitTestBehavior.deferToChild,
-          onHorizontalDragStart: (_) {
-            if (_grabbedIndex == null) _settle.stop();
-          },
-          onHorizontalDragUpdate: (details) =>
-              _onShelfDragUpdate(details, m),
-          onHorizontalDragEnd: (_) => _onShelfDragEnd(),
-          onHorizontalDragCancel: _onShelfDragEnd,
-          child: bounded ? canvas : SizedBox(height: size.height, child: canvas),
         );
       },
     );
   }
 
-  Widget _meta(BuildContext context, ShelfBookView focused, bool dark) {
-    final muted = dark ? AppColors.textMutedDark : AppColors.inkMute;
-    final pending = _pendingDelete;
-    if (pending != null) {
-      return _confirmRow(context, pending, muted);
-    }
-    final accent = AppColors.accentOf(context);
-    final count =
-        '${(_f.round() + 1).toString().padLeft(2, '0')} / '
-        '${widget.books.length.toString().padLeft(2, '0')}';
-    final meta = focused.progressLabel.isEmpty
-        ? focused.author
-        : '${focused.author.isEmpty ? '未知作者' : focused.author} · '
-              '${focused.progressLabel}';
+  Widget _metaLine(ShelfPalette palette, ShelfBookView book, int lane) {
+    final muted = palette.muted;
+    final accent = palette.accent;
+    final companion = palette.companion;
+    final meta = book.progressLabel.isEmpty
+        ? book.author
+        : '${book.author.isEmpty ? '未知作者' : book.author} · '
+              '${book.progressLabel}';
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -476,7 +530,7 @@ class _Bookshelf3DState extends State<Bookshelf3D>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                focused.name,
+                book.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -493,7 +547,7 @@ class _Bookshelf3DState extends State<Bookshelf3D>
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 11, height: 1.35, color: muted),
               ),
-              if (focused.hasUpdate) ...[
+              if (book.hasUpdate) ...[
                 const SizedBox(height: 2),
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -502,17 +556,14 @@ class _Bookshelf3DState extends State<Bookshelf3D>
                       width: 6,
                       height: 6,
                       decoration: BoxDecoration(
-                        color: AppColors.companionOf(context),
+                        color: companion,
                         shape: BoxShape.circle,
                       ),
                     ),
                     const SizedBox(width: 4),
                     Text(
                       '有更新',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: AppColors.companionOf(context),
-                      ),
+                      style: TextStyle(fontSize: 10, color: companion),
                     ),
                   ],
                 ),
@@ -520,15 +571,42 @@ class _Bookshelf3DState extends State<Bookshelf3D>
             ],
           ),
         ),
-        Text(
-          count,
-          style: TextStyle(fontSize: 10, letterSpacing: 1, color: muted),
+        if (widget.onDelete != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 8, top: 1),
+            child: OutlinedButton(
+              key: const ValueKey('shelf-remove'),
+              onPressed: _deleteBusy
+                  ? null
+                  : () => setState(() => _pendingDelete = book),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.danger,
+                side: BorderSide(
+                  color: AppColors.danger.withValues(alpha: .5),
+                  width: .8,
+                ),
+                minimumSize: const Size(0, 26),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: const TextStyle(fontSize: 11),
+              ),
+              child: const Text('移除'),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.only(left: 10, top: 2),
+          child: Text(
+            '${(lane + 1).toString().padLeft(2, '0')} / '
+            '${widget.books.length.toString().padLeft(2, '0')}',
+            style: TextStyle(fontSize: 10, letterSpacing: 1, color: muted),
+          ),
         ),
       ],
     );
   }
 
-  Widget _confirmRow(BuildContext context, ShelfBookView book, Color muted) {
+  Widget _confirmRow(ShelfPalette palette, ShelfBookView book) {
+    final muted = palette.muted;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -593,359 +671,4 @@ class _Bookshelf3DState extends State<Bookshelf3D>
       ),
     );
   }
-}
-
-/// One volume: spine + cover + page edge + top face, rotated around its spine.
-class _ShelfVolume extends StatelessWidget {
-  const _ShelfVolume({
-    required this.book,
-    required this.metrics,
-    required this.d,
-    required this.mirrored,
-    required this.focused,
-    required this.selectable,
-    required this.picked,
-    required this.grabbed,
-    required this.onTap,
-    this.onLongPressStart,
-    this.onLongPressMove,
-    this.onLongPressEnd,
-    this.onRemove,
-  });
-
-  final ShelfBookView book;
-  final ShelfMetrics metrics;
-  final double d;
-  final bool mirrored;
-  final bool focused;
-  final bool selectable;
-  final bool picked;
-  final bool grabbed;
-  final VoidCallback onTap;
-  final VoidCallback? onLongPressStart;
-  final void Function(LongPressMoveUpdateDetails details)? onLongPressMove;
-  final Future<void> Function()? onLongPressEnd;
-  final VoidCallback? onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final m = metrics;
-    final turn = m.yawForD(d).abs();
-    final angle = mirrored ? -turn : turn;
-    final alignment = mirrored ? Alignment.centerRight : Alignment.centerLeft;
-
-    final body = SizedBox(
-      width: m.boxW,
-      height: m.bodyH,
-      child: _volumeBody(context, dark),
-    );
-
-    return Semantics(
-      label:
-          '《${book.name}》，${book.author.isEmpty ? '未知作者' : book.author}'
-          '，${book.progressLabel}${picked ? '，已选择' : ''}',
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        onLongPressStart:
-            onLongPressStart == null ? null : (_) => onLongPressStart!(),
-        onLongPressMoveUpdate: onLongPressMove,
-        onLongPressEnd:
-            onLongPressEnd == null ? null : (_) => onLongPressEnd!(),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            // Top face first so the book body overlaps it cleanly.
-            Positioned.fill(
-              child: CustomPaint(
-                painter: _TopFacePainter(
-                  metrics: m,
-                  paper: dark ? AppColors.surfaceDark : AppColors.paperWhite,
-                  shadow: dark ? AppColors.dividerDark : AppColors.paperDeep,
-                  line: dark ? AppColors.dividerDark : AppColors.line,
-                  tint: AppColors.companionOf(context),
-                  dark: dark,
-                ),
-              ),
-            ),
-            Positioned(
-              left: 0,
-              top: m.depthY,
-              child: Container(
-                decoration: BoxDecoration(
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: dark ? .34 : .16),
-                      blurRadius: grabbed ? 22 : 12,
-                      offset: Offset(0, grabbed ? 12 : 7),
-                    ),
-                  ],
-                ),
-                child: Transform(
-                  alignment: alignment,
-                  transform: Matrix4.identity()
-                    ..setEntry(3, 2, .0015)
-                    ..rotateY(angle),
-                  child: body,
-                ),
-              ),
-            ),
-            if (onRemove != null)
-              Positioned(
-                key: const ValueKey('shelf-remove'),
-                left: m.boxW / 2 - 24,
-                top: m.depthY + m.bodyH - 26,
-                width: 48,
-                height: 20,
-                child: Material(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(10),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: onRemove,
-                    child: Container(
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: AppColors.danger.withValues(alpha: .6),
-                        ),
-                      ),
-                      child: const Text(
-                        '移除',
-                        style: TextStyle(fontSize: 11, color: AppColors.danger),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _volumeBody(BuildContext context, bool dark) {
-    final m = metrics;
-    final accent = AppColors.accentOf(context);
-    final companion = AppColors.companionOf(context);
-    final onAccent = AppColors.onColorOf(accent);
-    final cover = Expanded(
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          PicWidget(
-            book.coverUrl,
-            width: m.coverW,
-            height: m.bodyH,
-            radius: 0,
-            referer: book.referer,
-            title: book.name,
-          ),
-          if (book.hasUpdate)
-            Positioned(
-              top: 0,
-              right: mirrored ? null : 0,
-              left: mirrored ? 0 : null,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  color: AppColors.updateBadge,
-                  borderRadius: BorderRadius.only(
-                    bottomLeft: Radius.circular(mirrored ? 0 : 5),
-                    bottomRight: Radius.circular(mirrored ? 5 : 0),
-                  ),
-                ),
-                child: const Text(
-                  '更新',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 8.5,
-                    height: 1.2,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          if (selectable)
-            Positioned(
-              right: 4,
-              bottom: 4,
-              child: Container(
-                width: 20,
-                height: 20,
-                decoration: BoxDecoration(
-                  color: picked
-                      ? accent
-                      : (dark ? AppColors.surfaceDark : AppColors.paperWhite),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: picked ? accent : companion.withValues(alpha: .8),
-                    width: 1.5,
-                  ),
-                ),
-                child: picked
-                    ? Icon(Icons.check, size: 13, color: onAccent)
-                    : null,
-              ),
-            ),
-        ],
-      ),
-    );
-    final spine = Container(
-      width: m.spineW,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [
-            Color.alphaBlend(Colors.black.withValues(alpha: .24), accent),
-            accent,
-            Color.alphaBlend(Colors.white.withValues(alpha: .14), accent),
-          ],
-        ),
-        border: Border(
-          right: mirrored
-              ? BorderSide.none
-              : BorderSide(color: companion.withValues(alpha: .75), width: .8),
-          left: mirrored
-              ? BorderSide(color: companion.withValues(alpha: .75), width: .8)
-              : BorderSide.none,
-        ),
-      ),
-      child: RotatedBox(
-        quarterTurns: 3,
-        child: Center(
-          child: Text(
-            book.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 7.5,
-              height: 1,
-              letterSpacing: .3,
-              color: onAccent,
-            ),
-          ),
-        ),
-      ),
-    );
-    final foreEdge = SizedBox(
-      width: 5,
-      height: m.bodyH,
-      child: CustomPaint(painter: _PageEdgePainter(dark, m)),
-    );
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(
-          color: companion.withValues(alpha: focused ? .0 : .35),
-          width: .5,
-        ),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(2.5),
-        child: Row(
-          children: mirrored
-              ? [foreEdge, cover, spine]
-              : [spine, cover, foreEdge],
-        ),
-      ),
-    );
-  }
-}
-
-/// Quad connecting the spine top and the cover top to the shelf's top face.
-class _TopFacePainter extends CustomPainter {
-  const _TopFacePainter({
-    required this.metrics,
-    required this.paper,
-    required this.shadow,
-    required this.line,
-    required this.tint,
-    required this.dark,
-  });
-
-  final ShelfMetrics metrics;
-  final Color paper;
-  final Color shadow;
-  final Color line;
-  final Color tint;
-  final bool dark;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final m = metrics;
-    final boxW = m.boxW;
-    final top = Color.alphaBlend(
-      tint.withValues(alpha: dark ? .10 : .05),
-      paper,
-    );
-    final quad = Path()
-      ..moveTo(0, m.depthY)
-      ..lineTo(boxW, m.depthY)
-      ..lineTo(boxW + m.depthX, 0)
-      ..lineTo(m.depthX, 0)
-      ..close();
-    final paint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.bottomCenter,
-        end: Alignment.topCenter,
-        colors: [shadow, top],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, m.depthY + 2));
-    canvas.drawPath(quad, paint);
-    canvas.drawPath(
-      quad,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = .5
-        ..color = line,
-    );
-    // The front edge (where top face meets spine / cover) reads as a seam.
-    canvas.drawLine(
-      Offset(0, m.depthY),
-      Offset(boxW, m.depthY),
-      Paint()
-        ..strokeWidth = .6
-        ..color = line,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _TopFacePainter oldDelegate) =>
-      oldDelegate.paper != paper ||
-      oldDelegate.tint != tint ||
-      oldDelegate.metrics != metrics;
-}
-
-/// Hairline stack on the fore-edge so the volume reads as paper, not a slab.
-class _PageEdgePainter extends CustomPainter {
-  const _PageEdgePainter(this.dark, this.metrics);
-
-  final bool dark;
-  final ShelfMetrics metrics;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Paper tones derive from the existing tokens; no fixed swatches so the
-    // 12 themes stay untouched while dark mode keeps a light page edge.
-    final paper = dark
-        ? Color.alphaBlend(
-            Colors.white.withValues(alpha: .68),
-            AppColors.surfaceDark,
-          )
-        : AppColors.paperWhite;
-    canvas.drawRect(Offset.zero & size, Paint()..color = paper);
-    final line = Paint()
-      ..color = Colors.black.withValues(alpha: .10)
-      ..strokeWidth = .5;
-    for (var y = 2.0; y < size.height; y += 3) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _PageEdgePainter oldDelegate) =>
-      oldDelegate.dark != dark || oldDelegate.metrics != metrics;
 }

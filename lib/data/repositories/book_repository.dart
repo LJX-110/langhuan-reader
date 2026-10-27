@@ -17,7 +17,11 @@ class BookRepository {
     final db = await _database;
     final rows = await db.query(
       'books',
-      where: includeLocal ? null : 'source_url NOT LIKE ?',
+      // `on_shelf = 0` rows stay in the table so reading history and
+      // bookmarks survive a "移出书架"; they just do not show in the grid.
+      where: includeLocal
+          ? null
+          : 'on_shelf = 1 AND source_url NOT LIKE ?',
       whereArgs: includeLocal ? null : ['${Book.localSourcePrefix}%'],
       orderBy: 'sort_time DESC',
     );
@@ -74,13 +78,14 @@ class BookRepository {
     await batch.commit(noResult: true);
   }
 
-  /// Insert only if missing (first open / race).
+  /// Insert only if missing (first open / history). A missing row means the
+  /// book is not on the shelf, so it is inserted as off-shelf.
   Future<void> ensureExists(Book book) async {
     if (await exists(book.id)) return;
     final db = await _database;
     await db.insert(
       'books',
-      _toRow(book),
+      _toRow(book, onShelf: 0),
       conflictAlgorithm: ConflictAlgorithm.ignore,
     );
   }
@@ -191,6 +196,55 @@ class BookRepository {
     await db.delete('books', where: 'id = ?', whereArgs: [bookId]);
   }
 
+  /// Persist a cover discovered after the book row was created.
+  Future<void> updateCover(String bookId, String coverUrl) async {
+    if (bookId.isEmpty || coverUrl.isEmpty) return;
+    final db = await _database;
+    await db.update(
+      'books',
+      {'cover_url': coverUrl},
+      where: 'id = ?',
+      whereArgs: [bookId],
+    );
+  }
+
+  /// Flip the shelf flag without touching any other column.
+  Future<void> setOnShelf(List<String> bookIds, bool onShelf) async {
+    if (bookIds.isEmpty) return;
+    final db = await _database;
+    final batch = db.batch();
+    for (final id in bookIds) {
+      batch.update(
+        'books',
+        {'on_shelf': onShelf ? 1 : 0},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// Move books off the shelf without deleting the rows.
+  ///
+  /// Reading history, bookmarks and progress all key off `books.id`, so a hard
+  /// delete silently wiped them (2.1.0). Chapter bodies are dropped to reclaim
+  /// space; they are re-fetched if the book is added again.
+  Future<void> retire(List<String> bookIds) async {
+    if (bookIds.isEmpty) return;
+    final db = await _database;
+    final batch = db.batch();
+    for (final id in bookIds) {
+      batch.update(
+        'books',
+        {'on_shelf': 0},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      batch.delete('chapters', where: 'book_id = ?', whereArgs: [id]);
+    }
+    await batch.commit(noResult: true);
+  }
+
   Book _fromRow(Map<String, Object?> row) {
     String s(Object? v) {
       if (v == null) return '';
@@ -223,7 +277,7 @@ class BookRepository {
     );
   }
 
-  Map<String, Object?> _toRow(Book book) {
+  Map<String, Object?> _toRow(Book book, {int onShelf = 1}) {
     return {
       'id': book.id,
       'name': book.name,
@@ -245,6 +299,7 @@ class BookRepository {
       'sort_time': book.sortTime == 0 ? DateUtil.getNowDateMs() : book.sortTime,
       'has_update': book.hasUpdate,
       'updated_at': book.updatedAt,
+      'on_shelf': onShelf,
     };
   }
 }

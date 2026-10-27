@@ -373,6 +373,7 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
                         return _ChapterTile(
                           index: index,
                           title: chapter.title,
+                          info: chapter.info,
                           selected: selected,
                           cached: cached,
                           dark: _dark,
@@ -669,6 +670,10 @@ class _VolumeTile extends StatelessWidget {
 class _ChapterTile extends StatelessWidget {
   final int index;
   final String title;
+
+  /// Per-chapter meta from `ruleToc.updateTime` (字数 / 更新时间); empty when
+  /// the source has no such rule, in which case the row stays single-line.
+  final String info;
   final bool selected;
   final bool cached;
   final bool dark;
@@ -679,6 +684,7 @@ class _ChapterTile extends StatelessWidget {
   const _ChapterTile({
     required this.index,
     required this.title,
+    this.info = '',
     required this.selected,
     required this.cached,
     required this.dark,
@@ -717,16 +723,35 @@ class _ChapterTile extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: titleColor,
-                    fontSize: 15,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                    height: 1.35,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: titleColor,
+                        fontSize: 15,
+                        fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                        height: 1.35,
+                      ),
+                    ),
+                    if (info.trim().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          info.trim(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: tertiary,
+                            fontSize: 11,
+                            height: 1.3,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
               if (selected)

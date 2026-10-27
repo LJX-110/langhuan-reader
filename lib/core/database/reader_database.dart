@@ -24,7 +24,10 @@ class ReaderDatabase {
   /// never drop user data (see [_onUpgrade]).
   ///
   /// v4: `chapters` gains `volume_title` / `volume_ord` for grouped TOCs.
-  static const int version = 4;
+  /// v5: `books` gains `on_shelf` so removing a book keeps its row (and with
+  ///     it reading history / bookmarks) instead of deleting everything;
+  ///     `chapters` gains `info` (`ruleToc.updateTime` meta for the header).
+  static const int version = 5;
   static const String fileName = 'reader.db';
 
   /// One-time guard so an old `sources.db` is imported after a v1 `reader.db`
@@ -124,7 +127,8 @@ CREATE TABLE IF NOT EXISTS books (
   latest_chapter TEXT NOT NULL DEFAULT '',
   sort_time INTEGER NOT NULL DEFAULT 0,
   has_update INTEGER NOT NULL DEFAULT 0,
-  updated_at TEXT NOT NULL DEFAULT ''
+  updated_at TEXT NOT NULL DEFAULT '',
+  on_shelf INTEGER NOT NULL DEFAULT 1
 )''');
     await _ensureColumns(db, 'books', const {
       'name': "TEXT NOT NULL DEFAULT ''",
@@ -144,6 +148,7 @@ CREATE TABLE IF NOT EXISTS books (
       'sort_time': 'INTEGER NOT NULL DEFAULT 0',
       'has_update': 'INTEGER NOT NULL DEFAULT 0',
       'updated_at': "TEXT NOT NULL DEFAULT ''",
+      'on_shelf': 'INTEGER NOT NULL DEFAULT 1',
     });
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_books_sort ON books (sort_time DESC)',
@@ -167,6 +172,7 @@ CREATE TABLE IF NOT EXISTS chapters (
   pages_cached_at INTEGER NOT NULL DEFAULT 0,
   volume_title TEXT NOT NULL DEFAULT '',
   volume_ord INTEGER NOT NULL DEFAULT -1,
+  info TEXT NOT NULL DEFAULT '',
   FOREIGN KEY (book_id) REFERENCES books (id) ON DELETE CASCADE
 )''');
     await _ensureColumns(db, 'chapters', const {
@@ -183,6 +189,7 @@ CREATE TABLE IF NOT EXISTS chapters (
       'pages_cached_at': 'INTEGER NOT NULL DEFAULT 0',
       'volume_title': "TEXT NOT NULL DEFAULT ''",
       'volume_ord': 'INTEGER NOT NULL DEFAULT -1',
+      'info': "TEXT NOT NULL DEFAULT ''",
     });
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_chapters_book ON chapters (book_id)',

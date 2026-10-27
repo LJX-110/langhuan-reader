@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:langhuan/core/utils/redact.dart';
+
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/features/reader/settings/font_catalog.dart';
 import 'package:langhuan/core/storage/local_store.dart';
@@ -174,7 +176,7 @@ class _FontSetState extends ConsumerState<FontSet> {
       }
       await _applyFont(row.key);
     } catch (e) {
-      BotToast.showText(text: '下载失败：$e');
+      BotToast.showText(text: '下载失败：${Redact.userMessage(e)}');
     } finally {
       if (mounted) {
         setState(() {
@@ -252,7 +254,7 @@ class _FontSetState extends ConsumerState<FontSet> {
       await _reload();
       BotToast.showText(text: '已导入 ${FontCatalog.displayName(key)}');
     } catch (e) {
-      BotToast.showText(text: '导入失败：$e');
+      BotToast.showText(text: '导入失败：${Redact.userMessage(e)}');
     } finally {
       if (mounted) setState(() => _importing = false);
     }

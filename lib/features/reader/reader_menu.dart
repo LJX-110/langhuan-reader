@@ -1,4 +1,5 @@
 import 'package:bot_toast/bot_toast.dart';
+import 'package:langhuan/core/utils/redact.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -109,7 +110,7 @@ class _MenuState extends ConsumerState<ReaderMenu> {
       setState(() => _bookmarked = !exists);
       BotToast.showText(text: exists ? '已取消书签' : '已添加书签');
     } catch (e) {
-      BotToast.showText(text: '书签操作失败：$e');
+      BotToast.showText(text: '书签操作失败：${Redact.userMessage(e)}');
     }
   }
 

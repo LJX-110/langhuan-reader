@@ -75,7 +75,9 @@ class SourceImporter {
       }
     } else if (root is Map) {
       // Repository manifest: { name, version, sources: [...] }
-      final container = root['sources'] ?? root['data'];
+      // Legado full-backup exports use `bookSources`.
+      final container =
+          root['sources'] ?? root['data'] ?? root['bookSources'];
       if (container is List) {
         for (final e in container) {
           if (e is Map) {

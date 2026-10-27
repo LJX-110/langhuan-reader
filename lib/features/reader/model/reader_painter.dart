@@ -276,19 +276,54 @@ class ReaderPainter {
       letterSpacing: .2,
     );
 
-    // Chapter title — vertically centered in the top chrome band.
-    // Always paint it for a non-empty title; placeholder pages are identified
-    // by [ReadPage.isPlaceholder], never by a magic title string.
-    if (chrome && readPage.chapterName.trim().isNotEmpty) {
-      _labelPainter.text = TextSpan(
-        text: readPage.chapterName,
-        style: chromeStyle,
-      );
-      _labelPainter.layout();
-      final titleY =
-          ReadSetting.chapterTitleBandTop() +
-          (ReadSetting.contentTopChrome - _labelPainter.height) / 2;
-      _labelPainter.paint(pageCanvas, Offset(contentPadding, titleY));
+    // Chapter header. First page of a chapter gets the book-style header
+    // (title + source meta); later pages keep a muted running head. Placeholder
+    // pages are identified by [ReadPage.isPlaceholder], never by a magic title.
+    final title = readPage.chapterName.trim();
+    if (chrome && title.isNotEmpty) {
+      final bandTop = ReadSetting.chapterTitleBandTop();
+      if (i == 0) {
+        _labelPainter
+          ..maxLines = 1
+          ..ellipsis = '…'
+          ..text = TextSpan(
+            text: title,
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              height: 1.25,
+              color: ink,
+              fontFamily: familyOrNull,
+            ),
+          );
+        _labelPainter.layout(maxWidth: maxLineWidth);
+        var y = bandTop + 1;
+        _labelPainter.paint(pageCanvas, Offset(contentPadding, y));
+        y += _labelPainter.height + 1;
+        final info = readPage.chapterInfo.trim();
+        if (info.isNotEmpty) {
+          _labelPainter.text = TextSpan(
+            text: info,
+            style: TextStyle(
+              fontSize: 11,
+              height: 1.2,
+              color: meta,
+              fontFamily: familyOrNull,
+            ),
+          );
+          _labelPainter.layout(maxWidth: maxLineWidth);
+          _labelPainter.paint(pageCanvas, Offset(contentPadding, y));
+        }
+      } else {
+        _labelPainter
+          ..maxLines = 1
+          ..ellipsis = '…'
+          ..text = TextSpan(text: title, style: chromeStyle);
+        _labelPainter.layout(maxWidth: maxLineWidth);
+        final titleY =
+            bandTop + (ReadSetting.contentTopChrome - _labelPainter.height) / 2;
+        _labelPainter.paint(pageCanvas, Offset(contentPadding, titleY));
+      }
     }
 
     // Loading / error placeholder: title above, hint centered in the body box.

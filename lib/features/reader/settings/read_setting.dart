@@ -300,8 +300,11 @@ class ReadSetting {
   }
 
   /// Height of the chapter-title chrome band (below the status / safe area).
+  ///
+  /// Tall enough for the first-page chapter header (title + source meta such
+  /// as 章节字数 / 更新时间); later pages paint a single running-head line.
   /// Must stay in sync with [ReaderPainter.drawContent].
-  static const double contentTopChrome = 36;
+  static const double contentTopChrome = 52;
 
   /// Height of the time / page-number chrome band (above the bottom safe area).
   static const double contentBottomChrome = 36;

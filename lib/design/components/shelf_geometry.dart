@@ -1,150 +1,151 @@
 import 'dart:math' as math;
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/painting.dart';
 
-/// Pure layout maths for the 3D shelf.
+/// 3D 书架的纯几何。
 ///
-/// Keeping the numbers out of the widget means the unit tests and the widget
-/// tests share one source of truth, and the drag/snap maths can be exercised
-/// without pumping frames.
+/// 整排书共用一套斜投影：书脊是一块切变过的平行四边形，封面从书脊顶边
+/// 沿深度向量向后铺开，被「抽出」的那本沿同一深度向量向左上推出并抬起。
+/// 这里只有数字和算式，渲染与测试共用同一份来源。
+abstract final class ShelfGeometry {
+  /// 斜投影的深度向量：向右 .66、向上 .30（屏幕 y 轴朝下，所以为负）。
+  static const double depthX = .66;
+  static const double depthY = -.30;
+
+  /// 书脊顶边相对底边右移的比例，让整排书立在同一个斜面上。
+  static const double spineShear = .10;
+
+  /// 相邻格位的横向步长 = 书脊宽 + 这道缝。
+  static const double slotGap = 11;
+
+  /// 抽出波的半径（单位：格位）。再远的书完全收回，只当书脊排。
+  static const double waveRadius = 1.48;
+
+  /// 完全抽出时的行程（相对封面宽）与抬起量（相对书高）。
+  static const double pullRatio = .84;
+  static const double liftRatio = .60;
+
+  /// 行框顶端到静止书顶的距离（相对书高），以及行框底部留白。
+  static const double seatRatio = .60;
+  static const double rowPadding = 44;
+
+  /// 行内弧线：远端每格下沉的斜率与曲率，以及封顶距离。
+  static const double rowStep = 2.5;
+  static const double rowCurve = .45;
+  static const double rowMaxDistance = 7;
+
+  static double spineWidth(double width) => (width * .043).clamp(14.0, 18.0);
+
+  static double pitch(double width) => spineWidth(width) + slotGap;
+
+  static double coverWidth(double width) => (width * .32).clamp(100.0, 128.0);
+
+  /// 书身高度：封面图（118:166）加上下两道档案栏位。
+  static double bodyHeight(double cover) => (cover - 20) * 166 / 118 + 54;
+
+  /// 一本静止的书从书脊左边到封面右边、在屏幕上的横向宽度。
+  static double footprint(double spine, double cover) => spine + cover * depthX;
+
+  /// 顶面在书脊顶边之上撑起的高度。
+  static double topInset(double cover) => -cover * depthY;
+
+  /// 静止时书顶在行框内的纵向位置：书坐在行框下半部，抽出时才上浮。
+  static double seatY(double height) => height * seatRatio + 12;
+
+  /// 抽出波权重：中心为 1，[waveRadius] 处为 0，中间按 cos² 收口。
+  static double wave(double distance) {
+    final d = distance.abs();
+    if (d >= waveRadius) return 0;
+    final value = math.cos(d / waveRadius * math.pi / 2);
+    return value * value;
+  }
+
+  /// 抽出行程：越靠中心拉得越远，末段稍微收力，避免相邻两本撞在一起。
+  static double pull(double cover, double weight) =>
+      cover * pullRatio * weight * (1.24 - .24 * weight);
+
+  /// 抬起量：smoothstep，书是被「抬起」而不是沿斜线平移。
+  static double lift(double height, double weight) =>
+      height * liftRatio * (weight * weight * (3 - 2 * weight));
+
+  /// 抽出位移（相对静止位置）：沿深度向量推出，再整体抬起。
+  static Offset extraction(double cover, double height, double weight) {
+    final distance = pull(cover, weight);
+    return Offset(
+      -distance * depthX,
+      -distance * depthY - lift(height, weight),
+    );
+  }
+
+  /// 行内弧线：以中心为最低点，向两侧对称下沉，远端封顶。
+  static double railY(double distance) {
+    final d = distance.clamp(-rowMaxDistance, rowMaxDistance);
+    return d * rowStep + d * d * rowCurve;
+  }
+}
+
+/// 某个视口尺寸下解析出来的一套书架尺寸。
+///
+/// 与 [ShelfGeometry] 分开的原因：几何是常量算术，这一层是「这次布局用的是多少」，
+/// 组件、渲染对象与测试都从这里取值，避免三处各算一遍。
 class ShelfMetrics {
   const ShelfMetrics({
-    required this.width,
-    required this.height,
-    required this.coverW,
+    required this.viewport,
     required this.spineW,
+    required this.coverW,
     required this.bodyH,
-    required this.railY,
     required this.metaHeight,
-    required this.depthX,
-    required this.depthY,
   });
 
-  /// Shelf viewport width / height (the widget's constraints).
-  final double width;
-  final double height;
+  /// 书架视口宽度（行内步长、书脊与封面尺寸都由它推出）。
+  final double viewport;
 
-  /// Front cover width of the focused volume.
-  final double coverW;
-
-  /// Spine strip width; side volumes compress to this (plus a sliver of the
-  /// turned cover).
+  /// 书脊条宽度；静止的书在行内只剩这一条加一道封面缝。
   final double spineW;
 
-  /// Volume height (cover only; the top face is drawn above it).
+  /// 封面面板宽度（抽出后按深度向量压缩到 `coverW * depthX`）。
+  final double coverW;
+
+  /// 书身高度（封面本身；顶面画在它上方）。
   final double bodyH;
 
-  /// Y of the shelf rail (books stand on it).
-  final double railY;
-
-  /// Space reserved under the rail for the focused title / author / progress.
+  /// 行框下方留给书名 / 作者 / 计数的高度。
   final double metaHeight;
 
-  /// How far the top face leans towards the outer side and up.
-  final double depthX;
-  final double depthY;
-
-  /// Spine + cover box of one volume when it faces the reader.
-  double get boxW => spineW + coverW;
-
-  /// Gap between adjacent volumes in the side band.
-  double get slotGap => 10;
-
-  /// One step of shelf scrolling: the side band packs at spine pitch.
-  double get snapPitch => spineW + slotGap;
-
-  /// Total paint width of a volume including its top face.
-  double get volumeW => boxW + depthX;
-
-  /// Total paint height of a volume including its top face.
-  double get volumeH => bodyH + depthY;
-
   factory ShelfMetrics.forSize(Size size, {double metaHeight = 76}) {
-    final w = math.max(size.width, 240.0);
-    final coverW = (w * 0.32).clamp(100.0, 132.0);
-    final spineW = (w * 0.043).clamp(14.0, 18.0);
-    // The top face leans a little less than the audit draft so it does not
-    // cover the neighbouring volume on narrow screens.
-    final depthX = coverW * 0.42;
-    final depthY = coverW * 0.20;
-    final bodyH = coverW * 166 / 118;
-    final railY = math.max(
-      bodyH + 44,
-      math.max(size.height, 320.0) - metaHeight - 14,
-    );
+    // 视口可能是无限宽（放进 ListView 之类的宽松约束），几何先收在一个合理宽度里。
+    final width = size.width.isFinite ? math.max(size.width, 240.0) : 360.0;
+    final cover = ShelfGeometry.coverWidth(width);
     return ShelfMetrics(
-      width: size.width,
-      height: size.height,
-      coverW: coverW,
-      spineW: spineW,
-      bodyH: bodyH,
-      railY: railY,
+      viewport: width,
+      spineW: ShelfGeometry.spineWidth(width),
+      coverW: cover,
+      bodyH: ShelfGeometry.bodyHeight(cover),
       metaHeight: metaHeight,
-      depthX: depthX,
-      depthY: depthY,
     );
   }
 
-  /// Unsigned yaw (radians) at a fractional distance [x] from the focus.
-  ///
-  /// 0 → facing the reader; 1 → already a narrow angled cover; beyond that the
-  /// spine carries the row until the angle caps at ~81°.
-  double yawAbsForD(double x) {
-    if (x <= 0) return 0;
-    if (x >= 1) return math.min(1.42, 1.15 + 0.27 * (x - 1));
-    return 1.15 * x;
-  }
+  /// 一格步长：静止的书在行内按这个间距排列。
+  double get pitch => ShelfGeometry.pitch(viewport);
 
-  /// Signed yaw for the slot [d] steps away from the focused book; the sign
-  /// is the side (positive = right of centre).
-  double yawForD(double d) => d < 0 ? -yawAbsForD(-d) : yawAbsForD(d);
+  /// 一本静止的书的横向投影宽度。
+  double get footprint => ShelfGeometry.footprint(spineW, coverW);
 
-  /// Yaw of the integer slot [d] — kept for the geometry tests.
-  double yawFor(int d) => yawForD(d.toDouble());
+  /// 静止书顶到书脊顶边的距离（顶面撑起的高度）。
+  double get topInset => ShelfGeometry.topInset(coverW);
 
-  /// Screen-space width of the volume at [d] after it turns away.
-  double visibleWidthForD(double d) {
-    if (d == 0) return boxW;
-    return spineW + coverW * math.cos(yawAbsForD(d.abs()));
-  }
+  /// 静止书顶在行框内的纵向位置。
+  double get seatY => ShelfGeometry.seatY(bodyH);
 
-  double visibleWidthFor(int d) => visibleWidthForD(d.toDouble());
+  /// 一格书位（含顶面与书脊切变）占用的高度。
+  double get volumeH =>
+      topInset + bodyH + ShelfGeometry.spineShear * spineW;
 
-  /// Y offset: distant volumes sink slightly so the row reads as an arc.
-  double yForD(double d) => (d.abs() * 2.5 + d * d * 0.45);
+  /// 行框总高度：静止站位 + 抽出上浮的余量 + 底部留白。
+  double get rowHeight => seatY + volumeH + ShelfGeometry.rowPadding;
 
-  /// Left edge (screen space) of the volume box at fractional slot [d].
-  ///
-  /// Mirrors the right side around the centre so both sides stay symmetric
-  /// while dragging.
-  double xForD(double d) {
-    if (d >= 0) return _rightX(d);
-    final steps = -d;
-    return width - _rightX(steps) - visibleWidthForD(steps);
-  }
+  /// 封面面板里的图片尺寸（面板上下各留一行档案位）。
+  double get coverImageW => coverW - 20;
 
-  /// Whether the volume at [d] is drawn mirrored (spine on the right) so its
-  /// spine faces the focused book.
-  bool mirrorFor(int d) => d < 0;
-
-  double _rightX(double d) {
-    final first = width / 2 - boxW / 2; // slot 0 left edge
-    final sideStart = width / 2 + boxW / 2 + slotGap; // slot +1 left edge
-    if (d <= 1) return first + (sideStart - first) * d;
-    var x = sideStart;
-    var k = 1;
-    final target = d;
-    while (k < target) {
-      final step = visibleWidthFor(k) + slotGap;
-      final remaining = target - k;
-      if (remaining >= 1) {
-        x += step;
-        k += 1;
-      } else {
-        x += step * remaining;
-        break;
-      }
-    }
-    return x;
-  }
+  double get coverImageH => coverImageW * 166 / 118;
 }

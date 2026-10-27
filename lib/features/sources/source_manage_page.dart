@@ -1,3 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:langhuan/core/utils/redact.dart';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:langhuan/features/sources/source_model.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/import/source_import_conflict.dart';
@@ -182,7 +189,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
       await Clipboard.setData(ClipboardData(text: json));
       BotToast.showText(text: '已复制 ${_selected.length} 个书源 JSON 到剪贴板');
     } catch (e) {
-      BotToast.showText(text: '导出失败：$e');
+      BotToast.showText(text: '导出失败：${Redact.userMessage(e)}');
     }
   }
 
@@ -395,7 +402,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                       await Clipboard.setData(ClipboardData(text: json));
                       BotToast.showText(text: '已复制全部书源 JSON 到剪贴板');
                     } catch (e) {
-                      BotToast.showText(text: '导出失败：$e');
+                      BotToast.showText(text: '导出失败：${Redact.userMessage(e)}');
                     }
                   },
                 ),
@@ -669,7 +676,10 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
     final textCtrl = TextEditingController();
     final urlCtrl = TextEditingController();
     var agreed = _agreed;
-    var tab = 0; // 0 paste, 1 url
+    var tab = 0; // 0 paste, 1 url, 2 local file
+    var fileName = '';
+    var fileText = '';
+    var fileBusy = false;
 
     await showModalBottomSheet(
       context: context,
@@ -713,20 +723,25 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                         _agreed = agreed;
                       }),
                     ),
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
                         ChoiceChip(
                           label: const Text('粘贴 JSON'),
                           selected: tab == 0,
                           onSelected: (_) => setSt(() => tab = 0),
                         ),
-                        const SizedBox(width: 8),
                         ChoiceChip(
                           label: const Text('网络 URL'),
                           selected: tab == 1,
                           onSelected: (_) => setSt(() => tab = 1),
                         ),
-                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: const Text('本地文件'),
+                          selected: tab == 2,
+                          onSelected: (_) => setSt(() => tab = 2),
+                        ),
                         ActionChip(
                           avatar: const Icon(
                             Icons.cloud_download_outlined,
@@ -757,13 +772,82 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                           hintText: '粘贴 Legado 书源 JSON（对象或数组）',
                         ),
                       )
-                    else
+                    else if (tab == 1)
                       TextField(
                         controller: urlCtrl,
                         decoration: const InputDecoration(
                           border: OutlineInputBorder(),
                           hintText: 'https://example.com/sources.json',
                         ),
+                      )
+                    else
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: fileBusy
+                                ? null
+                                : () async {
+                                    setSt(() => fileBusy = true);
+                                    try {
+                                      final picked = await FilePicker
+                                          .pickFiles(withData: true);
+                                      if (picked == null ||
+                                          picked.files.isEmpty) {
+                                        return;
+                                      }
+                                      final f = picked.files.single;
+                                      final bytes = f.bytes ??
+                                          (f.path != null
+                                              ? await File(f.path!)
+                                                  .readAsBytes()
+                                              : null);
+                                      if (bytes == null) {
+                                        BotToast.showText(
+                                          text: '读取文件失败',
+                                        );
+                                        return;
+                                      }
+                                      var text = const Utf8Decoder(
+                                        allowMalformed: true,
+                                      ).convert(bytes);
+                                      if (text.isNotEmpty &&
+                                          text.codeUnitAt(0) == 0xFEFF) {
+                                        text = text.substring(1);
+                                      }
+                                      setSt(() {
+                                        fileName = f.name;
+                                        fileText = text;
+                                      });
+                                    } catch (e) {
+                                      BotToast.showText(
+                                        text: '读取文件失败：${e.runtimeType}',
+                                      );
+                                    } finally {
+                                      setSt(() => fileBusy = false);
+                                    }
+                                  },
+                            icon: const Icon(
+                              Icons.folder_open_outlined,
+                              size: 18,
+                            ),
+                            label: Text(
+                              fileName.isEmpty ? '选择书源文件' : fileName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            fileText.isEmpty
+                                ? '支持 Legado / 阅读 导出的 .json；大文件在后台解析，不卡界面。'
+                                : '已读取 ${(fileText.length / 1024).toStringAsFixed(0)} KB',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                        ],
                       ),
                     const SizedBox(height: 12),
                     ElevatedButton(
@@ -776,11 +860,27 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                           if (tab == 1) {
                             BotToast.showText(text: '正在下载书源…');
                           }
-                          final parsed = tab == 0
-                              ? SourceImporter.parseJson(textCtrl.text)
-                              : await SourceImporter.fromUrl(
-                                  urlCtrl.text.trim(),
-                                );
+                          final SourceParseResult parsed;
+                          if (tab == 0) {
+                            parsed = SourceImporter.parseJson(textCtrl.text);
+                          } else if (tab == 1) {
+                            parsed = await SourceImporter.fromUrl(
+                              urlCtrl.text.trim(),
+                            );
+                          } else {
+                            if (fileText.isEmpty) {
+                              BotToast.showText(text: '请先选择书源文件');
+                              return;
+                            }
+                            BotToast.showText(text: '正在解析书源文件…');
+                            // Multi-MB packs would jank the UI thread.
+                            parsed = fileText.length > 200 * 1024
+                                ? await compute(
+                                    SourceImporter.parseJson,
+                                    fileText,
+                                  )
+                                : SourceImporter.parseJson(fileText);
+                          }
                           if (!ctx.mounted) return;
                           if (parsed.sources.isEmpty) {
                             await model.importParsed(parsed, agreed: true);

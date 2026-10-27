@@ -13,6 +13,7 @@ import 'package:langhuan/core/storage/local_store.dart';
 import 'package:langhuan/app/router/routes.dart';
 import 'package:langhuan/app/providers.dart';
 import 'package:langhuan/core/platform/system_ui.dart';
+import 'package:langhuan/features/shelf/shelf_cover_enricher.dart';
 import 'package:langhuan/features/shelf/shelf_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -30,6 +31,16 @@ class _BookShelfState extends ConsumerState<BookShelf> {
   @override
   void initState() {
     super.initState();
+    // Cold start: ShelfModel starts empty. Without this the shelf shows
+    // nothing until the user re-adds a book (2.1.0 regression).
+    ref.read(shelfModelProvider).initShelf().then((_) {
+      if (!mounted) return;
+      // Fill covers the source never gave us (runs at most once per book).
+      ShelfCoverEnricher().enrich(
+        ref.read(shelfModelProvider).shelf,
+        onUpdated: () => ref.read(shelfModelProvider).refreshShelf(),
+      );
+    });
     if (!SpUtil.containsKey(PrefsKeys.topSafeHeight)) {
       SpUtil.putDouble(PrefsKeys.topSafeHeight, Screen.topSafeHeight);
     }

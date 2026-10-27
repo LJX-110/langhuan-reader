@@ -2,7 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:langhuan/design/components/bookshelf_3d.dart';
 import 'package:langhuan/design/components/shelf_book_view.dart';
+import 'package:langhuan/design/components/shelf_geometry.dart';
+import 'package:langhuan/design/components/shelf_scene.dart';
+import 'package:langhuan/design/components/shelf_volume.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
+
+/// 书架测试宿主的宽度：几何尺寸由它推出。
+const double _hostWidth = 400;
 
 List<ShelfBookView> _books(int count) {
   return List.generate(
@@ -40,6 +46,8 @@ class _ShelfHost extends StatefulWidget {
 
 class _ShelfHostState extends State<_ShelfHost> {
   late List<ShelfBookView> _items = List.of(widget.initial);
+
+  List<ShelfBookView> get items => _items;
 
   void replace(List<ShelfBookView> items) {
     setState(() => _items = items);
@@ -93,6 +101,25 @@ Future<_ShelfHostState> _pumpHost(
   );
   await tester.pump();
   return key.currentState!;
+}
+
+/// 一本书露在外面的书脊中心。
+///
+/// 整排书里只有自己那一条书脊不会被邻书盖住（右边的书画在自己的右边，
+/// 左边的书先画），所以点书脊等价于点这本书 —— 这也是手指真正去点的位置。
+Offset _spineCentre(WidgetTester tester, String id) {
+  final rect = tester.getRect(find.byKey(ValueKey('shelf-book-$id')));
+  final metrics = ShelfMetrics.forSize(
+    const Size(_hostWidth, 640),
+  );
+  return Offset(
+    rect.left + metrics.spineW / 2,
+    rect.top + metrics.topInset + metrics.bodyH / 2,
+  );
+}
+
+Future<void> _tapSpine(WidgetTester tester, String id) async {
+  await tester.tapAt(_spineCentre(tester, id));
 }
 
 void main() {
@@ -158,7 +185,7 @@ void main() {
       onOpen: (book) => opened.add(book.id),
     );
 
-    await tester.tap(find.byKey(const ValueKey('shelf-book-b2')));
+    await _tapSpine(tester, 'b2');
     await tester.pumpAndSettle();
 
     expect(opened, ['b2']);
@@ -175,7 +202,7 @@ void main() {
       onOpen: (book) => opened.add(book.id),
     );
 
-    await tester.tap(find.byKey(const ValueKey('shelf-book-b3')));
+    await _tapSpine(tester, 'b3');
     await tester.pumpAndSettle();
 
     expect(opened, isEmpty);
@@ -238,7 +265,7 @@ void main() {
       onOpen: (book) => opened.add(book.id),
     );
 
-    await tester.tap(find.byKey(const ValueKey('shelf-book-b0')));
+    await _tapSpine(tester, 'b0');
     await tester.pump();
 
     expect(picked, ['b0']);
@@ -254,9 +281,7 @@ void main() {
       onReorder: (from, to) async => reorders.add((from, to)),
     );
 
-    final gesture = await tester.startGesture(
-      tester.getCenter(find.byKey(const ValueKey('shelf-book-b2'))),
-    );
+    final gesture = await tester.startGesture(_spineCentre(tester, 'b2'));
     await tester.pump(const Duration(milliseconds: 600));
     await gesture.moveBy(const Offset(90, 0));
     await tester.pump();
@@ -266,6 +291,89 @@ void main() {
     expect(reorders, isNotEmpty);
     expect(reorders.first.$1, 2);
     expect(reorders.first.$2, greaterThan(2));
+  });
+
+  testWidgets('only the centre book is pulled out of the row', (tester) async {
+    await _pumpHost(tester, initial: _books(5), initialFocus: 'b2');
+    await tester.pumpAndSettle();
+
+    double open(String id) => tester
+        .renderObject<ShelfVolumeRender>(find.byKey(ValueKey('shelf-book-$id')))
+        .debugOpenFraction;
+
+    // 中心一本完全抽出，左右两格已经基本收回，并且左右对称。
+    expect(open('b2'), closeTo(1, .01));
+    expect(open('b1'), lessThan(open('b2') * .3));
+    expect(open('b3'), lessThan(open('b2') * .3));
+    expect(open('b1'), closeTo(open('b3'), .0001));
+    // 抽出波半径之外的书完全收回，只当一排书脊。
+    expect(open('b4'), 0);
+  });
+
+  testWidgets('only the books inside the viewport window are built', (
+    tester,
+  ) async {
+    await _pumpHost(tester, initial: _books(300), initialFocus: 'b150');
+
+    final scene = tester.renderObject<ShelfSceneRender>(find.byType(ShelfScene));
+    // 三百本的书架不等于三百本书位：窗口盖满视口就停。
+    expect(scene.debugMountedCount, lessThan(300));
+    expect(scene.debugMountedCount, greaterThan(20));
+    expect(scene.debugFirstSlot, lessThan(150));
+    expect(scene.debugEndSlot, greaterThan(150));
+  });
+
+  testWidgets('a completed reorder keeps the shelf whole and follows the book', (
+    tester,
+  ) async {
+    late _ShelfHostState host;
+    final reorders = <(int, int)>[];
+    host = await _pumpHost(
+      tester,
+      initial: _books(5),
+      initialFocus: 'b2',
+      onReorder: (from, to) async {
+        reorders.add((from, to));
+        final next = List.of(host.items);
+        next.insert(to, next.removeAt(from));
+        host.replace(next);
+      },
+    );
+    expect(find.text('03 / 05'), findsOneWidget);
+
+    final gesture = await tester.startGesture(_spineCentre(tester, 'b2'));
+    await tester.pump(const Duration(milliseconds: 600));
+    await gesture.moveBy(const Offset(-60, 0));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(reorders, [(2, 0)]);
+    // 中心跟着被拖的那本走：书名 3 落到第一位，书架仍是完整的五本。
+    expect(find.text('01 / 05'), findsOneWidget);
+    expect(find.text('书名 3'), findsWidgets);
+  });
+
+  testWidgets('scrolling one step moves the shelf centre by one book', (
+    tester,
+  ) async {
+    await _pumpHost(tester, initial: _books(5), initialFocus: 'b2');
+    expect(find.text('03 / 05'), findsOneWidget);
+
+    final metrics = ShelfMetrics.forSize(const Size(_hostWidth, 640));
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('shelf-scroll'))),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    await gesture.moveBy(Offset(-metrics.pitch, 0));
+    // 慢速松手：没有甩动速度，落位由弹簧收到最近的整数格位。
+    await tester.pump(const Duration(milliseconds: 200));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('04 / 05'), findsOneWidget);
   });
 
   testWidgets('shelf fits a narrow screen with large text', (tester) async {

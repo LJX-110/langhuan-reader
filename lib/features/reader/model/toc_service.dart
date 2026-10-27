@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:langhuan/core/utils/redact.dart';
 import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/data/repositories/chapter_repository.dart';
 import 'package:langhuan/data/entities/book.dart';
@@ -51,7 +52,7 @@ class TocService {
         error: e,
         stackTrace: st,
       );
-      BotToast.showText(text: '目录加载失败：$e');
+      BotToast.showText(text: '目录加载失败：${Redact.userMessage(e)}');
       return null;
     }
   }
@@ -87,6 +88,7 @@ class TocService {
           ord: entries.length,
           volumeTitle: currentVolume,
           volumeOrd: currentVolume.isEmpty ? -1 : volumeOrd,
+          info: c.info,
         ),
       );
     }

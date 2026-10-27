@@ -1,4 +1,5 @@
 import 'package:langhuan/core/utils/app_log.dart';
+import 'package:langhuan/core/utils/redact.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/data/repositories/chapter_repository.dart';
 import 'package:langhuan/data/entities/book.dart';
@@ -84,6 +85,7 @@ class SourceSwitchService {
               url: c.url,
               hasBody: false,
               ord: c.index,
+              info: c.info,
             ),
           )
           .toList();
@@ -121,7 +123,7 @@ class SourceSwitchService {
       );
     } catch (e, st) {
       AppLog.e('Read', 'switchSource failed', error: e, stackTrace: st);
-      BotToast.showText(text: '换源失败：$e');
+      BotToast.showText(text: '换源失败：${Redact.userMessage(e)}');
       return null;
     }
   }

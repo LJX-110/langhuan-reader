@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/core/utils/redact.dart';
 import 'package:langhuan/data/entities/book_info.dart';
@@ -769,11 +770,21 @@ class BookSourceEngine {
         isJson: resp.isJson || _looksJson(body),
         jsLib: source.jsLib,
       );
-      final cover = _resolveCover(source, resp, rule, '');
+      var cover = _resolveCover(source, resp, rule, '');
+      var source_ = '';
+      if (cover.isEmpty && !rule.isJson) {
+        // Sources without a cover rule often still ship a social-card image.
+        final meta = coverFromHtmlMeta(body);
+        if (meta.isNotEmpty) {
+          cover = urlJoin(resp.url, meta);
+          source_ = 'meta';
+        }
+      }
       AppLog.d(
         'Cover',
         'enrich "${source.bookSourceName}" url=${Redact.forLog(url)} '
-            'hit=${cover.isNotEmpty} ${sw.elapsedMilliseconds}ms',
+            'hit=${cover.isNotEmpty}${source_.isEmpty ? '' : ' via=$source_'} '
+            '${sw.elapsedMilliseconds}ms',
       );
       return cover;
     } catch (e) {
@@ -784,6 +795,23 @@ class BookSourceEngine {
       );
       return '';
     }
+  }
+
+  /// `og:image` / `twitter:image` from a detail page, used when the source
+  /// has no working `ruleBookInfo.coverUrl`.
+  @visibleForTesting
+  static String coverFromHtmlMeta(String html) {
+    if (html.isEmpty || !html.contains('<meta')) return '';
+    final tag = RegExp(
+      r'''<meta[^>]+(?:property|name)\s*=\s*["'](?:og:image|og:image:url|twitter:image)["'][^>]*>''',
+      caseSensitive: false,
+    ).firstMatch(html);
+    if (tag == null) return '';
+    final content = RegExp(
+      r'''content\s*=\s*["']([^"']+)["']''',
+      caseSensitive: false,
+    ).firstMatch(tag.group(0)!);
+    return content?.group(1)?.trim() ?? '';
   }
 
   Future<List<SourceChapter>> toc(BookSource source, String tocUrl) async {
@@ -868,6 +896,12 @@ class BookSourceEngine {
             skipped++;
             continue;
           }
+          final info = source.ruleToc.updateTime.isEmpty
+              ? ''
+              : rule
+                    .getString(source.ruleToc.updateTime, scope: item)
+                    .replaceAll(RegExp(r'\s+'), ' ')
+                    .trim();
           // Volume rows have no chapter URL: keep them as grouping headers
           // before the URL checks would drop them.
           final isVol =
@@ -896,6 +930,7 @@ class BookSourceEngine {
               url: url,
               isVolume: false,
               index: all.length,
+              info: info,
             ),
           );
         }

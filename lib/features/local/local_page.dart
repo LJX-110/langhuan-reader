@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:langhuan/core/utils/redact.dart';
+
 import 'package:bot_toast/bot_toast.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -62,7 +64,7 @@ class _LocalPageState extends State<LocalPage> {
         allowMultiple: true,
       );
     } catch (e) {
-      BotToast.showText(text: '无法打开文件选择器：$e');
+      BotToast.showText(text: '无法打开文件选择器：${Redact.userMessage(e)}');
       return;
     }
     if (picked == null || picked.files.isEmpty) return;
@@ -151,7 +153,7 @@ class _LocalPageState extends State<LocalPage> {
     try {
       await _books.delete(book.id);
     } catch (e) {
-      BotToast.showText(text: '删除失败：$e');
+      BotToast.showText(text: '删除失败：${Redact.userMessage(e)}');
       await _reload();
     }
   }

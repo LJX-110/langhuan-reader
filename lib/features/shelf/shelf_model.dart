@@ -97,18 +97,12 @@ class ShelfModel with ChangeNotifier {
     return shelf.map((f) => f.id).toList().contains(id);
   }
 
-  //删除本地记录
-  Future<void> delLocalCache(List<String> ids) async {
-    for (var i = 0; i < ids.length; i++) {
-      await _books.delete(ids[i]);
-    }
-  }
-
-  /// Remove one book from the shelf (DB row + chapter cache).
+  /// Remove one book from the shelf. The row (and with it reading history and
+  /// bookmarks) stays in the DB; only `on_shelf` flips to 0.
   Future<void> removeBook(Book book) async {
     shelf = shelf.where((b) => b.id != book.id).toList(growable: false);
     notifyListeners();
-    await delLocalCache([book.id]);
+    await _books.retire([book.id]);
   }
 
   /// Remove every book in [ids]; used by the 3D 整理页 batch delete.
@@ -116,7 +110,7 @@ class ShelfModel with ChangeNotifier {
     if (ids.isEmpty) return;
     shelf = shelf.where((b) => !ids.contains(b.id)).toList(growable: false);
     notifyListeners();
-    await delLocalCache(ids.toList(growable: false));
+    await _books.retire(ids.toList(growable: false));
   }
 
   /// Persist a new shelf order after a 3D drag-reorder.
@@ -152,6 +146,9 @@ class ShelfModel with ChangeNotifier {
     if (action == "add") {
       shelf.insert(0, book);
       await _books.upsertAll([book]);
+      // A previously removed book keeps its row (history/bookmarks); flip the
+      // flag back so it survives the next cold start.
+      await _books.setOnShelf([book.id], true);
       notifyListeners();
 
       BotToast.showText(text: "已添加到书架");
@@ -162,7 +159,7 @@ class ShelfModel with ChangeNotifier {
           notifyListeners();
         }
       }
-      delLocalCache([book.id]);
+      await _books.retire([book.id]);
       BotToast.showText(text: "已移除出书架");
     }
   }

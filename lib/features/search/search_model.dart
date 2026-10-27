@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:langhuan/core/utils/redact.dart';
 
 import 'package:langhuan/data/repositories/source_repository.dart';
 import 'package:langhuan/data/entities/book_info.dart';
@@ -272,7 +273,7 @@ class SearchModel with ChangeNotifier {
       return true;
     } catch (e) {
       if (gen != _searchGen) return false;
-      BotToast.showText(text: '搜索失败：$e');
+      BotToast.showText(text: '搜索失败：${Redact.userMessage(e)}');
       return false;
     }
   }

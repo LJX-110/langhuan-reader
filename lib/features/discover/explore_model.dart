@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:langhuan/core/utils/app_log.dart';
+import 'package:langhuan/core/utils/redact.dart';
 import 'package:langhuan/data/entities/book_info.dart';
 import 'package:langhuan/data/entities/search_item.dart';
 import 'package:langhuan/features/discover/cover_enricher.dart';
@@ -86,7 +88,7 @@ class ExploreModel with ChangeNotifier {
       bootstrapped = true;
       await loadBooks(refresh: true);
     } catch (e) {
-      error = '加载发现失败：$e';
+      error = '加载发现失败：${Redact.userMessage(e)}';
     } finally {
       loading = false;
       notifyListeners();
@@ -163,6 +165,11 @@ class ExploreModel with ChangeNotifier {
       AppLog.w('Explore', 'load books failed', error: e);
       if (e is TimeoutException) {
         error = '加载超时，请重试或换一个书源';
+      } else if (e is DioException &&
+          (e.type == DioExceptionType.connectionError ||
+              e.type == DioExceptionType.badCertificate)) {
+        // Sites that reset the connection are not a rule problem.
+        error = '站点无法连接（可能被拦截），换一个书源试试';
       } else {
         error = '加载失败，请重试或换一个书源';
       }

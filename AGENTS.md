@@ -12,11 +12,11 @@
 
 ## 身份
 
-- 应用名：**琅嬛阁**；当前版本 `2.1.0`。
+- 应用名：**琅嬛阁**；当前版本 `2.1.1`。
 - Android 包名：`com.langhuan.reader`；Dart 包名：`langhuan`。
 - 上游底本：Apache-2.0；固定信息见 `docs/UPSTREAM.md`。
 - 必须保留 `LICENSE`、`NOTICE` 和第三方许可文本；界面不保留上游名称、链接、邮箱、截图。许可归属只放在 `NOTICE` 与 `docs/UPSTREAM.md`，其他文档不重复上游链接。
-- Wenku8 只作视觉参考，不复制其 GPL-3.0 代码。
+- Wenku8-Local（`参考\Wenku8-Local-main`）可直接移植代码用于本项目（2026-10-26 用户决定放弃「只作视觉参考」约束）；其原始许可为 GPL-3.0，仓库对外发布时的许可标注待确认前不动 `LICENSE`。
 
 ## 技术边界
 
@@ -55,4 +55,4 @@ flutter build apk --release --target-platform android-arm64
 ## 版本
 
 `pubspec.yaml` 是唯一版本来源，递增、tag 与发布规则见 `docs/VERSIONING.md`。
-上一发布版 `1.0.0`；当前版本线 `2.1.0`，精确 build 号看 `pubspec.yaml` 与 GitHub Releases。范围与退出标准见 `docs/ROADMAP.md`。
+上一发布版 `1.0.0`；当前版本线 `2.1.1`（待真机验证后发布），精确 build 号看 `pubspec.yaml` 与 GitHub Releases。范围与退出标准见 `docs/ROADMAP.md`。

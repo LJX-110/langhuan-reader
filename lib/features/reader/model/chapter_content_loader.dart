@@ -60,6 +60,7 @@ class ChapterContentLoader {
     final chapter = chapters[idx];
     final r = ReadPage.kong();
     r.chapterName = chapter.title;
+    r.chapterInfo = chapter.info;
     final chapterId = chapter.id;
 
     var contentSource = 'empty';

@@ -115,4 +115,44 @@ void main() {
     );
     await db.close();
   });
+
+  /// v4 → v5: `books` gains `on_shelf`; existing rows stay on the shelf.
+  test('v4 → v5 adds books.on_shelf and keeps existing rows visible', () async {
+    final dir = await Directory.systemTemp.createTemp('langhuan-v5');
+    addTearDown(() => dir.delete(recursive: true));
+    final path = '${dir.path}/reader.db';
+
+    var db = await databaseFactoryFfi.openDatabase(
+      path,
+      options: OpenDatabaseOptions(
+        version: 4,
+        onCreate: (db, _) => _createV3Schema(db),
+        singleInstance: false,
+      ),
+    );
+    await db.insert('books', {'id': 'b1', 'name': '旧书'});
+    await db.close();
+
+    db = await databaseFactoryFfi.openDatabase(
+      path,
+      options: OpenDatabaseOptions(
+        version: ReaderDatabase.version,
+        onCreate: (db, _) => ReaderDatabase.createSchema(db),
+        onUpgrade: (db, _, _) => ReaderDatabase.createSchema(db),
+        singleInstance: false,
+      ),
+    );
+    await ReaderDatabase.createSchema(db);
+
+    final bookColumns = (await db.rawQuery('PRAGMA table_info(books)'))
+        .map((r) => r['name']?.toString() ?? '')
+        .toSet();
+    expect(bookColumns, contains('on_shelf'));
+
+    final rows = await db.query('books');
+    expect(rows, hasLength(1));
+    expect(rows.first['name'], '旧书');
+    expect(rows.first['on_shelf'], 1);
+    await db.close();
+  });
 }

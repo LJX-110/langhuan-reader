@@ -32,10 +32,15 @@ class SourceChapter {
   bool isVolume;
   int index;
 
+  /// Optional per-chapter meta from `ruleToc.updateTime`, e.g.
+  /// 「章节字数：2345　更新时间：2022-12-04」. Rendered in the reader header.
+  String info;
+
   SourceChapter({
     this.name = '',
     this.url = '',
     this.isVolume = false,
     this.index = 0,
+    this.info = '',
   });
 }

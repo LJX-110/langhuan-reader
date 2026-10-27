@@ -29,6 +29,7 @@ class ChapterRepository {
         'ord',
         'volume_title',
         'volume_ord',
+        'info',
       ],
       where: 'book_id = ?',
       whereArgs: [bookId],
@@ -42,6 +43,7 @@ class ChapterRepository {
             url: r['url'] as String? ?? '',
             hasBody: (r['has_body'] as int? ?? 0) == 1,
             ord: r['ord'] as int? ?? 0,
+            info: r['info'] as String? ?? '',
             volumeTitle: r['volume_title'] as String? ?? '',
             volumeOrd: r['volume_ord'] as int? ?? -1,
           ),
@@ -88,6 +90,7 @@ class ChapterRepository {
         'pages_cached_at': 0,
         'volume_title': c.volumeTitle,
         'volume_ord': c.volumeOrd,
+        'info': c.info,
       });
     }
     await batch.commit(noResult: true);
@@ -138,6 +141,7 @@ class ChapterRepository {
               'ord': ord,
               'volume_title': c.volumeTitle,
               'volume_ord': c.volumeOrd,
+              'info': c.info,
             },
           ));
         } else {
@@ -156,6 +160,7 @@ class ChapterRepository {
             'pages_cached_at': 0,
             'volume_title': c.volumeTitle,
             'volume_ord': c.volumeOrd,
+            'info': c.info,
           });
         }
       }
@@ -207,6 +212,7 @@ class ChapterRepository {
         'pages_cached_at': 0,
         'volume_title': c.volumeTitle,
         'volume_ord': c.volumeOrd,
+        'info': c.info,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
     }
     await batch.commit(noResult: true);

@@ -1,4 +1,5 @@
 import 'package:bot_toast/bot_toast.dart';
+import 'package:langhuan/core/utils/redact.dart';
 import 'package:langhuan/app/providers.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/design/components/bookshelf_3d.dart';
@@ -186,7 +187,7 @@ class _SortShelfState extends ConsumerState<SortShelf> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _deleting = false);
-      BotToast.showText(text: '删除失败：$e');
+      BotToast.showText(text: '删除失败：${Redact.userMessage(e)}');
     }
   }
 }
