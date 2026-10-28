@@ -196,6 +196,37 @@ java.md5Encode = __md5;
 java.md5Encode16 = function(s){ return __md5(s).substring(8, 24); };
 java.HMacHex = function(){ return ''; };
 java.digestHex = function(){ return ''; };
+
+// Minimal Jsoup surface: sources use `org.jsoup.Jsoup.parse(html).html()` /
+// `.text()` to post-process a fetched page. CSS `select()` needs a full
+// selector engine, so it returns an empty list instead of throwing.
+var org = {
+  jsoup: {
+    Jsoup: {
+      parse: function(html){
+        var h = String(html == null ? '' : html);
+        return {
+          html: function(){ return h; },
+          outerHtml: function(){ return h; },
+          text: function(){
+            return h
+              .replace(/<script[\s\S]*?<\/script>/gi, '')
+              .replace(/<style[\s\S]*?<\/style>/gi, '')
+              .replace(/<[^>]+>/g, ' ')
+              .replace(/&nbsp;/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim();
+          },
+          title: function(){
+            var m = h.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+            return m ? m[1].trim() : '';
+          },
+          select: function(){ return []; }
+        };
+      }
+    }
+  }
+};
 1
 ''');
       if (init.isError) {

@@ -54,6 +54,12 @@ void main() {
           'issue': search.issue.name,
           'hits': search.hits.length,
           'ms': search.elapsedMs,
+          // Actionable diagnostics: which rule failed, how many raw rows the
+          // list rule produced, and the HTTP status of the request.
+          'detail': search.detail,
+          'rawItems': search.rawItems,
+          'http': search.httpStatus,
+          'requestUrl': search.requestUrl,
         };
 
         final hit = search.hits.isEmpty ? null : search.hits.first;

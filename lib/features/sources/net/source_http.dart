@@ -90,6 +90,31 @@ class SourceHttp {
     'langhuan/charset',
   );
 
+  /// Legado URL options may declare a structured JSON body, e.g.
+  /// `{"method":"POST","body":{"keywords":"…","page":1,"sign":"…"}}`.
+  /// Dio would form-encode a Map; JSON sources need the raw JSON text and the
+  /// matching content type.
+  static Object? _encodeBody(Object? body, Options options) {
+    if (body is! Map && body is! List) return body;
+    final headers = Map<String, String>.from(options.headers ?? const {});
+    final hasJsonType = headers.keys.any(
+      (k) => k.toLowerCase() == 'content-type' &&
+          (headers[k] ?? '').toLowerCase().contains('json'),
+    );
+    if (!hasJsonType) {
+      final hasType = headers.keys.any(
+        (k) => k.toLowerCase() == 'content-type',
+      );
+      if (!hasType) headers['content-type'] = 'application/json';
+      options.headers = headers;
+    }
+    try {
+      return jsonEncode(body);
+    } catch (_) {
+      return body.toString();
+    }
+  }
+
   /// Session cookies per host live in [SessionCookies] so cover loads can use
   /// the same login session as source requests.
   Future<Response<List<int>>> _send(
@@ -181,7 +206,7 @@ class SourceHttp {
           ? Headers.formUrlEncodedContentType
           : null,
     );
-    final response = await _send(url, options, req.body);
+    final response = await _send(url, options, _encodeBody(req.body, options));
     final bytes = response.data ?? <int>[];
     final ctype =
         response.headers.value(Headers.contentTypeHeader)?.toLowerCase() ?? '';

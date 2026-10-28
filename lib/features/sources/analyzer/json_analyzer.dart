@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// Minimal JSONPath-ish accessor for Legado `@json:` rules.
 /// Supports: `$`, `$.a.b`, `$..name` (recursive), `$.list[*]`, `$.list[0]`.
 class JsonAnalyzer {
@@ -22,9 +24,24 @@ class JsonAnalyzer {
     if (v == null) return '';
     if (v is List) {
       return v
-          .map((e) => e?.toString() ?? '')
+          .map(_stringify)
           .where((s) => s.isNotEmpty)
           .join('\n');
+    }
+    return _stringify(v);
+  }
+
+  /// Objects/arrays must come back as **valid JSON**, not `Map.toString()`
+  /// (`{a: 1}`), otherwise a follow-up `$.field` rule cannot parse the result
+  /// — 中文万维's `ruleBookInfo.init = $.data.bookVo` depends on this.
+  static String _stringify(dynamic v) {
+    if (v == null) return '';
+    if (v is Map || v is List) {
+      try {
+        return jsonEncode(v);
+      } catch (_) {
+        return v.toString();
+      }
     }
     return v.toString();
   }
