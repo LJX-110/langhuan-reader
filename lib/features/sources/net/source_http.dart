@@ -6,6 +6,8 @@ import 'package:langhuan/core/net/session_cookies.dart';
 import 'package:langhuan/core/storage/local_store.dart';
 import 'package:langhuan/core/storage/prefs_keys.dart';
 import 'package:langhuan/core/utils/app_log.dart';
+import 'package:langhuan/core/utils/perf_log.dart';
+import 'package:langhuan/core/utils/redact.dart';
 import 'package:langhuan/features/sources/net/analyze_url.dart';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
@@ -122,6 +124,7 @@ class SourceHttp {
     Options options,
     Object? data,
   ) async {
+    final perf = PerfLog.start('Source.http');
     final headers = Map<String, String>.from(options.headers ?? const {});
     final allowInsecureTls = allowsInsecureTls(headers);
     stripInsecureTlsHeader(headers);
@@ -142,6 +145,7 @@ class SourceHttp {
         options: options,
       );
       _saveCookies(host, response.headers);
+      perf.done('${Redact.forLog(url)} status=${response.statusCode}');
       return response;
     } on DioException catch (e) {
       if (!_isTlsError(e)) rethrow;

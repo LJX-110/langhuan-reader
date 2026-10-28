@@ -12,6 +12,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:langhuan/core/storage/prefs_keys.dart';
+import 'package:langhuan/core/utils/perf_log.dart';
 
 class AppInit {
   static FlutterExceptionHandler? _prevFlutterError;
@@ -74,6 +75,7 @@ class AppInit {
   }
 
   static Future init() async {
+    final perf = PerfLog.start('App.init');
     WidgetsFlutterBinding.ensureInitialized();
     GestureBinding.instance.resamplingEnabled = true;
     // Cover CDN WebP/network failures are common; show placeholder, not red dump.
@@ -113,5 +115,6 @@ class AppInit {
     }
     // Default: visible system bars. Only the reader body goes immersive.
     await SystemUiHelper.showSystemBars();
+    perf.done();
   }
 }
