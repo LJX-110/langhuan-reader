@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:langhuan/features/reader/settings/read_setting.dart';
 import 'package:langhuan/core/utils/app_log.dart';
+import 'package:langhuan/core/utils/perf_log.dart';
 import 'package:langhuan/core/storage/prefs_keys.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/data/repositories/chapter_repository.dart';
@@ -398,7 +399,8 @@ class ReadModel with ChangeNotifier {
   }
 
   Future<ReadPage?> loadChapter(int idx) async {
-    return _contentLoader.load(
+    final perf = PerfLog.start('Read.loadChapter');
+    final page = await _contentLoader.load(
       chapters: chapters,
       idx: idx,
       warm: _diskWarm.map,
@@ -406,6 +408,8 @@ class ReadModel with ChangeNotifier {
       bookChapterIndex: book?.chapterIndex ?? idx,
       messagePage: _messagePage,
     );
+    perf.done('idx=$idx pages=${page?.pages.length ?? 0}');
+    return page;
   }
 
   Future<void> relayoutPages() => _reloader.relayoutPages();

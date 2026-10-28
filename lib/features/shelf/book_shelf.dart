@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:bot_toast/bot_toast.dart';
 import 'package:langhuan/core/platform/screen.dart';
+import 'package:langhuan/core/utils/perf_log.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/design/components/bookshelf_3d.dart';
@@ -33,7 +34,9 @@ class _BookShelfState extends ConsumerState<BookShelf> {
     super.initState();
     // Cold start: ShelfModel starts empty. Without this the shelf shows
     // nothing until the user re-adds a book (2.1.0 regression).
+    final perf = PerfLog.start('Shelf.coldStart');
     ref.read(shelfModelProvider).initShelf().then((_) {
+      perf.done('books=${ref.read(shelfModelProvider).shelf.length}');
       if (!mounted) return;
       // Fill covers the source never gave us (runs at most once per book).
       ShelfCoverEnricher().enrich(
