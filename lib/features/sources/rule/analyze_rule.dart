@@ -553,11 +553,50 @@ class AnalyzeRule {
   }
 
   static List<String> _splitJoin(String rule) {
-    return rule
-        .split('&&')
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
+    final out = splitTopLevel(rule, '&&');
+    return out.isEmpty ? [rule] : out;
+  }
+
+  /// Split on a *top-level* separator, ignoring ones inside `[...]`, `(...)`
+  /// or quotes — Legado's RuleAnalyzer does the same so JSONPath filters like
+  /// `$[?(@.name=='a&&b')]` and attribute selectors like `[title="x||y"]`
+  /// are not torn apart.
+  static List<String> splitTopLevel(String rule, String sep) {
+    final out = <String>[];
+    final buf = StringBuffer();
+    var depth = 0;
+    String? quote;
+    for (var i = 0; i < rule.length; i++) {
+      final ch = rule[i];
+      if (quote != null) {
+        buf.write(ch);
+        if (ch == r'\' && i + 1 < rule.length) {
+          buf.write(rule[++i]);
+        } else if (ch == quote) {
+          quote = null;
+        }
+        continue;
+      }
+      if (ch == '"' || ch == "'") {
+        quote = ch;
+        buf.write(ch);
+        continue;
+      }
+      if (ch == '(' || ch == '[') depth++;
+      if (ch == ')' && depth > 0) depth--;
+      if (ch == ']' && depth > 0) depth--;
+      if (depth == 0 && rule.startsWith(sep, i)) {
+        final part = buf.toString().trim();
+        if (part.isNotEmpty) out.add(part);
+        buf.clear();
+        i += sep.length - 1;
+        continue;
+      }
+      buf.write(ch);
+    }
+    final last = buf.toString().trim();
+    if (last.isNotEmpty) out.add(last);
+    return out;
   }
 
   /// Split Legado `||` alternatives, ignoring `||` inside JS blocks.
@@ -572,6 +611,12 @@ class AnalyzeRule {
     if (r.startsWith('@js:') ||
         (r.startsWith('<js>') && !_hasTrailingCssAfterJs(r))) {
       return [r];
+    }
+    // Without embedded JS the generic top-level splitter is enough (it also
+    // protects `[...]` / `(...)` / quotes).
+    if (!r.contains('<js>')) {
+      final out = splitTopLevel(r, '||');
+      return out.isEmpty ? [r] : out;
     }
     // Hybrid: only split the CSS tail after </js>
     final hybrid = _splitLeadingJs(r);

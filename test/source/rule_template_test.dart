@@ -171,6 +171,33 @@ void main() {
     });
   });
 
+  group('top-level rule splitting', () {
+    test('separators inside brackets / quotes stay together', () {
+      expect(AnalyzeRule.splitTopLevel(r'.a[data-x="p&&q"]@text', '&&'), [
+        r'.a[data-x="p&&q"]@text',
+      ]);
+      expect(AnalyzeRule.splitTopLevel(r'.a[title="r||s"]@text', '||'), [
+        r'.a[title="r||s"]@text',
+      ]);
+      expect(
+        AnalyzeRule.splitTopLevel(r"$[?(@.name=='a&&b')]&&$.id", '&&'),
+        [r"$[?(@.name=='a&&b')]", r'$.id'],
+      );
+    });
+
+    test('real joins still split', () {
+      final rule = AnalyzeRule(
+        content: '{}',
+        baseUrl: 'https://x.com',
+        isJson: true,
+      );
+      expect(
+        rule.getString(r'$.a&&$.b', scope: {'a': 'A', 'b': 'B'}),
+        'A B',
+      );
+    });
+  });
+
   group('## group replacement', () {
     test(r'$1 / $2 expand against capture groups', () {
       final rule = AnalyzeRule(
