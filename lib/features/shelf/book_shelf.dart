@@ -7,6 +7,7 @@ import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/design/components/bookshelf_3d.dart';
 import 'package:langhuan/design/components/page_header.dart';
+import 'package:langhuan/design/components/pic_widget.dart';
 import 'package:langhuan/design/components/shelf_book_view.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/core/storage/prefs_keys.dart';
@@ -61,6 +62,7 @@ class _BookShelfState extends ConsumerState<BookShelf> {
     final shelfModel = ref.watch(shelfModelProvider);
     final dark = Theme.of(context).brightness == Brightness.dark;
     final books = shelfModel.visibleShelf;
+    final resume = _resumeBook(books);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiHelper.overlayStyle(context),
@@ -83,6 +85,7 @@ class _BookShelfState extends ConsumerState<BookShelf> {
                 onManage: () => Routes.navigateTo(context, Routes.sortShelf),
                 onHistory: () => Routes.navigateTo(context, Routes.history),
               ),
+              if (resume != null) _continueCard(context, resume, dark),
               Expanded(
                 child: books.isEmpty
                     ? (shelfModel.shelf.isEmpty
@@ -106,6 +109,96 @@ class _BookShelfState extends ConsumerState<BookShelf> {
                       ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 最近在读的一本（书架已按 `sort_time` 倒序，第一本有进度的就是）。
+  Book? _resumeBook(List<Book> books) {
+    for (final book in books) {
+      if (book.readingChapter.trim().isNotEmpty ||
+          book.chapterIndex > 0 ||
+          book.pageIndex > 0) {
+        return book;
+      }
+    }
+    return null;
+  }
+
+  /// 「继续阅读」卡片：封面 + 书名 + 当前章节，点一下直接续读。
+  Widget _continueCard(BuildContext context, Book book, bool dark) {
+    final primary = dark ? AppColors.textOnDark : AppColors.ink;
+    final muted = dark ? AppColors.textMutedDark : AppColors.inkMute;
+    final surface = dark ? AppColors.scaffoldDark : AppColors.paper;
+    final accent = AppColors.accentOf(context);
+    final chapter = book.readingChapter.trim();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppDimens.pagePadding,
+        4,
+        AppDimens.pagePadding,
+        10,
+      ),
+      child: Material(
+        color: surface,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => _openShelfBook(ShelfBookView.fromBook(book)),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: PicWidget(
+                    book.coverUrl,
+                    height: 64,
+                    width: 46,
+                    referer: book.bookUrl,
+                    title: book.name,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '继续阅读',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: accent,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        book.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: primary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        chapter.isEmpty ? '第 ${book.chapterIndex + 1} 章' : chapter,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12, color: muted),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.play_circle_fill, size: 26, color: accent),
+              ],
+            ),
           ),
         ),
       ),

@@ -5,6 +5,7 @@ import 'package:langhuan/features/reader/read_model.dart';
 import 'package:langhuan/features/sources/engine/book_source_engine.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
+import 'package:langhuan/data/repositories/source_repository.dart';
 import 'package:langhuan/features/sources/model/source_groups.dart';
 import 'package:langhuan/features/sources/model/source_search_report.dart';
 import 'package:langhuan/features/sources/util/text_clean.dart';
@@ -40,6 +41,21 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
   String? error;
   final List<_Candidate> candidates = [];
 
+  /// 关键词筛选（对齐阅读换源面板的 `screen(key)`）：按书名 / 作者 / 书源名过滤。
+  String _keyword = '';
+  List<_Candidate> get _visibleCandidates {
+    final kw = _keyword.trim();
+    if (kw.isEmpty) return candidates;
+    return candidates
+        .where(
+          (c) =>
+              c.hit.name.contains(kw) ||
+              cleanAuthor(c.hit.author).contains(kw) ||
+              c.source.bookSourceName.contains(kw),
+        )
+        .toList(growable: false);
+  }
+
   /// Group scope for the candidate sweep ('' = all).
   String _groupFilter = '';
   List<String> _groups = const [];
@@ -49,6 +65,51 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
   final List<({String name, String reason})> _failed = [];
 
   Book? get _book => widget.readModel.book;
+
+  /// 置顶 / 置底（对齐阅读的 `topSource` / `bottomSource`）。
+  ///
+  /// 书源列表按 `custom_order ASC` 排：置顶写 0，置底写一个大数；同时把
+  /// 候选列表就地重排，界面立刻反映，不用重新搜一遍。
+  Future<void> _moveSource(_Candidate c, {required bool toTop}) async {
+    try {
+      await SourceRepository.instance.updateOrder(
+        c.source.bookSourceUrl,
+        toTop ? 0 : 1 << 20,
+      );
+      if (!mounted) return;
+      setState(() {
+        candidates.removeWhere(
+          (x) => x.source.bookSourceUrl == c.source.bookSourceUrl,
+        );
+        if (toTop) {
+          candidates.insert(0, c);
+        } else {
+          candidates.add(c);
+        }
+      });
+    } catch (_) {
+      // 排序失败不影响换源流程。
+    }
+  }
+
+  /// 面板内禁用该源（对齐阅读换源面板的 `disableSource`）：禁用后不再参与
+  /// 换源搜索，但书源本身和它的本地规则都保留，随时可在书源管理里启用。
+  Future<void> _disableSource(_Candidate c) async {
+    try {
+      await SourceRepository.instance.setEnabled(
+        c.source.bookSourceUrl,
+        false,
+      );
+      if (!mounted) return;
+      setState(() {
+        candidates.removeWhere(
+          (x) => x.source.bookSourceUrl == c.source.bookSourceUrl,
+        );
+      });
+    } catch (_) {
+      // 禁用失败不打断换源流程。
+    }
+  }
 
   bool get _dark => SpUtil.getBool(PrefsKeys.dark);
 
@@ -374,6 +435,19 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
                     ],
                   ),
                 ),
+              if (!loading && candidates.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                  child: TextField(
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                      hintText: '筛选结果（书名 / 作者 / 书源）',
+                    ),
+                    style: const TextStyle(fontSize: 13),
+                    onChanged: (value) => setState(() => _keyword = value),
+                  ),
+                ),
               if (!loading && (_noMatch > 0 || _failed.isNotEmpty))
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 2, 8, 6),
@@ -428,23 +502,26 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
                           ],
                         ),
                       )
-                    : candidates.isEmpty
+                    : _visibleCandidates.isEmpty
                     ? Center(
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 32),
                           child: Text(
-                            error ?? '未找到其它可用书源',
+                            error ??
+                                (_keyword.trim().isEmpty
+                                    ? '未找到其它可用书源'
+                                    : '没有匹配「${_keyword.trim()}」的结果'),
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 14, color: _secondary),
                           ),
                         ),
                       )
                     : ListView.separated(
-                        itemCount: candidates.length,
+                        itemCount: _visibleCandidates.length,
                         separatorBuilder: (_, _) =>
                             Divider(height: 1, color: _divider),
                         itemBuilder: (ctx, i) {
-                          final c = candidates[i];
+                          final c = _visibleCandidates[i];
                           final isCurrent =
                               book != null &&
                               c.source.bookSourceUrl == book.sourceUrl;
@@ -479,8 +556,11 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
                                 height: 1.35,
                               ),
                             ),
-                            trailing: isCurrent
-                                ? Text(
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (isCurrent)
+                                  Text(
                                     '当前',
                                     style: TextStyle(
                                       color: AppColors.accentOf(context),
@@ -488,7 +568,44 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
                                       fontWeight: FontWeight.w600,
                                     ),
                                   )
-                                : Icon(Icons.chevron_right, color: _secondary),
+                                else ...[
+                                  Icon(Icons.chevron_right, color: _secondary),
+                                  PopupMenuButton<String>(
+                                    tooltip: '书源操作',
+                                    padding: EdgeInsets.zero,
+                                    icon: Icon(
+                                      Icons.more_vert,
+                                      size: 18,
+                                      color: _secondary,
+                                    ),
+                                    onSelected: (value) {
+                                      switch (value) {
+                                        case 'top':
+                                          _moveSource(c, toTop: true);
+                                        case 'bottom':
+                                          _moveSource(c, toTop: false);
+                                        case 'disable':
+                                          _disableSource(c);
+                                      }
+                                    },
+                                    itemBuilder: (_) => const [
+                                      PopupMenuItem(
+                                        value: 'top',
+                                        child: Text('置顶此书源'),
+                                      ),
+                                      PopupMenuItem(
+                                        value: 'bottom',
+                                        child: Text('置底此书源'),
+                                      ),
+                                      PopupMenuItem(
+                                        value: 'disable',
+                                        child: Text('禁用此书源'),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ],
+                            ),
                             onTap: isCurrent ? null : () => _onPick(c),
                           );
                         },

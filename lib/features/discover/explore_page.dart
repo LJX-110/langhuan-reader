@@ -184,7 +184,9 @@ class _ExploreSourceTrigger extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      '$count',
+                      // 只统计带 exploreUrl 的源；导入总量不等于可发现量，
+                      // 这里写清楚，避免被当成"源丢了"。
+                      '$count 个可发现',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,

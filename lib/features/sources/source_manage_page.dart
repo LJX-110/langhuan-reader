@@ -11,6 +11,7 @@ import 'package:langhuan/features/sources/import/source_import_conflict.dart';
 import 'package:langhuan/features/sources/import/source_importer.dart';
 import 'package:langhuan/features/sources/import/source_validation.dart';
 import 'package:langhuan/features/sources/model/source_groups.dart';
+import 'package:langhuan/features/sources/source_batch_health_sheet.dart';
 import 'package:langhuan/features/sources/source_test_panel.dart';
 import 'package:langhuan/app/providers.dart';
 import 'package:langhuan/features/sources/source_repo_page.dart';
@@ -368,6 +369,14 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                 ),
               ]
             : [
+                TextButton.icon(
+                  onPressed: () async {
+                    await showSourceBatchHealthSheet(context);
+                    if (mounted) ref.read(sourceModelProvider).load();
+                  },
+                  icon: const Icon(Icons.health_and_safety_outlined),
+                  label: const Text('体检'),
+                ),
                 TextButton.icon(
                   onPressed: () async {
                     await Navigator.of(context).push(

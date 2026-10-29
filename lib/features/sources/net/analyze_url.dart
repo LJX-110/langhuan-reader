@@ -28,6 +28,158 @@ class AnalyzeUrl {
   /// [template] examples:
   /// - `https://x.com/search?q={{key}}&page={{page}}`
   /// - `https://x.com/s,{"method":"POST","body":"key={{key}}"}`
+  /// 地址看着能用（非空、不是 JS 语句残渣）。
+  static bool _urlUsable(String url) {
+    final t = url.trim();
+    return t.isNotEmpty && !_looksLikeJsStatement(t);
+  }
+
+  /// `java.ajax` 两阶段（Legado 的 `java.ajax` 是同步的，我们的 JS 桥是异步的，
+  /// 所以拆成两次执行）：
+  ///
+  /// 1. 阶段 A：`java.ajax` 换成"记录调用 + 返回空串"的桩，跑一遍脚本拿到它
+  ///    要请求的 `url,{options}`；
+  /// 2. Dart 侧用本应用网络栈抓这些地址（复用 `build` 的 `url,{options}`
+  ///    解析：gbk / POST / headers 都一致）；
+  /// 3. 阶段 B：把响应按 URL 注入后重跑脚本，拿到最终地址再交给 [build]。
+  ///
+  /// 最多两轮；拿不到就返回 null，调用方继续走原有的失败路径。
+  static Future<AnalyzeRequest?> _buildWithAjax(
+    BookSource source,
+    String template, {
+    required String key,
+    required int page,
+  }) async {
+    try {
+      var code = JsEngine.extractCode(template) ?? template;
+      final host = hostOf(source.bookSourceUrl);
+      final encodedKey = encodeKey(key, _charsetHint(template));
+      code = code
+          .replaceAll('{{key}}', encodedKey)
+          .replaceAll('{{page}}', '$page')
+          .replaceAll('{{host}}', host)
+          .replaceAll('{key}', encodedKey)
+          .replaceAll('{page}', '$page');
+      final script = code.contains('result') ? '$code\n;result' : code;
+      JsEngine.instance.ensureSource(bookSourceUrl: source.bookSourceUrl);
+
+      for (var round = 0; round < 2; round++) {
+        final recorded = JsEngine.instance.evalRecordingAjax(
+          script,
+          result: '',
+          baseUrl: source.bookSourceUrl,
+          src: '',
+          jsLib: source.jsLib,
+        );
+        final calls = recorded.ajax
+            .where((c) => c.trim().isNotEmpty)
+            .toList(growable: false);
+        if (calls.isEmpty) return null;
+
+        final responses = <String, String>{};
+        for (final call in calls.take(6)) {
+          try {
+            final sub = build(source, call, key: key, page: page);
+            final resp = await SourceHttp.instance.fetch(sub);
+            responses[call] = resp.body;
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint('[AnalyzeUrl] java.ajax fetch failed: $e');
+            }
+          }
+        }
+        if (responses.isEmpty) return null;
+
+        final out = JsEngine.instance
+            .evalWithAjaxResponses(
+              script,
+              responses,
+              result: '',
+              baseUrl: source.bookSourceUrl,
+              src: '',
+              jsLib: source.jsLib,
+            )
+            .trim();
+        if (out.isEmpty || _looksLikeJsStatement(out)) continue;
+        final req = build(source, out, key: key, page: page);
+        if (_urlUsable(req.url)) {
+          if (kDebugMode) {
+            debugPrint(
+              '[AnalyzeUrl] java.ajax two-phase ok for '
+              '"${source.bookSourceName}" round=$round ajax=${calls.length}',
+            );
+          }
+          return req;
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[AnalyzeUrl] ajax two-phase failed: $e');
+    }
+    return null;
+  }
+
+  /// 把 `@js:` / `<js>` 模板解析成**原始地址字符串**（同步、不发请求）。
+  ///
+  /// 抽出来是为了让异步入口 [fetch] 能在"脚本自己给不出地址"时接上
+  /// `java.ajax` 两阶段：先用这里拿到脚本、记录它要抓的地址，抓完再用
+  /// [JsEngine.evalWithAjaxResponses] 重跑。给不出地址时返回空串。
+  static String _resolveTemplateUrl(
+    BookSource source,
+    String template, {
+    String key = '',
+    int page = 1,
+  }) {
+    var raw = template.trim();
+    if (!JsEngine.needsJs(raw)) return raw;
+    if (source.jsLib.isNotEmpty) {
+      JsEngine.instance.ensureJsLib(source.jsLib);
+    }
+    var code = JsEngine.extractCode(raw) ?? raw;
+    final host = hostOf(source.bookSourceUrl);
+    final encodedKey = encodeKey(key, _charsetHint(raw));
+    code = code
+        .replaceAll('{{key}}', encodedKey)
+        .replaceAll('{{page}}', '$page')
+        .replaceAll('{{host}}', host)
+        .replaceAll('{key}', encodedKey)
+        .replaceAll('{page}', '$page');
+
+    // Quirk path: `url,{opts};result=…` → use url,{opts} as template.
+    final quirk = RegExp(
+      r"^([^;]+);\s*result\s*=",
+      multiLine: true,
+    ).firstMatch(code.trim());
+    if (quirk != null) return quirk.group(1)!.trim();
+
+    // `source` 绑定先就位：`source.getKey()` 等要能拿到当前书源。
+    JsEngine.instance.ensureSource(bookSourceUrl: source.bookSourceUrl);
+    final evaluated = JsEngine.instance.eval(
+      // Ensure we produce a value: append `; result` if script uses result=
+      code.contains('result') ? '$code\n;result' : code,
+      result: '',
+      baseUrl: source.bookSourceUrl,
+      src: '',
+      jsLib: source.jsLib,
+    );
+    final out = evaluated.trim();
+    // On failure JS returns empty / leftover statements — never treat the
+    // original script body as a URL (Uri.resolve would throw).
+    if (out.isEmpty || _looksLikeJsStatement(out)) {
+      if (kDebugMode) {
+        debugPrint(
+          '[AnalyzeUrl] JS searchUrl/exploreUrl did not yield a URL '
+          'for "${source.bookSourceName}" '
+          '(out="${_clip(out.isEmpty ? code : out)}")',
+        );
+      }
+      return '';
+    }
+    if (out.contains('<js>') || out.startsWith('@js:')) {
+      return JsEngine.extractCode(out) ?? out;
+    }
+    return out;
+  }
+
   static AnalyzeRequest build(
     BookSource source,
     String template, {
@@ -53,54 +205,7 @@ class AnalyzeUrl {
     // 2) Quirk: `<js>/path,{'method':'POST',...};result='';result;</js>`
     //    (URL template disguised as JS — not valid JS expression)
     if (JsEngine.needsJs(raw)) {
-      if (source.jsLib.isNotEmpty) {
-        JsEngine.instance.ensureJsLib(source.jsLib);
-      }
-      var code = JsEngine.extractCode(raw) ?? raw;
-      final host = hostOf(source.bookSourceUrl);
-      final encodedKey = encodeKey(key, charset);
-      code = code
-          .replaceAll('{{key}}', encodedKey)
-          .replaceAll('{{page}}', '$page')
-          .replaceAll('{{host}}', host)
-          .replaceAll('{key}', encodedKey)
-          .replaceAll('{page}', '$page');
-
-      // Quirk path: `url,{opts};result=…` → use url,{opts} as template.
-      final quirk = RegExp(
-        r"^([^;]+);\s*result\s*=",
-        multiLine: true,
-      ).firstMatch(code.trim());
-      if (quirk != null) {
-        raw = quirk.group(1)!.trim();
-      } else {
-        final evaluated = JsEngine.instance.eval(
-          // Ensure we produce a value: append `; result` if script uses result=
-          code.contains('result') ? '$code\n;result' : code,
-          result: '',
-          baseUrl: source.bookSourceUrl,
-          src: '',
-          jsLib: source.jsLib,
-        );
-        final out = evaluated.trim();
-        // On failure JS returns empty / leftover statements — never treat the
-        // original script body as a URL (Uri.resolve would throw).
-        if (out.isEmpty || _looksLikeJsStatement(out)) {
-          if (kDebugMode) {
-            debugPrint(
-              '[AnalyzeUrl] JS searchUrl/exploreUrl did not yield a URL '
-              'for "${source.bookSourceName}" '
-              '(out="${_clip(out.isEmpty ? code : out)}")',
-            );
-          }
-          raw = '';
-        } else {
-          raw = out;
-          if (raw.contains('<js>') || raw.startsWith('@js:')) {
-            raw = JsEngine.extractCode(raw) ?? raw;
-          }
-        }
-      }
+      raw = _resolveTemplateUrl(source, raw, key: key, page: page);
     }
 
     // Options after comma: url,{json}  (JSON may use single quotes).
@@ -228,12 +333,20 @@ class AnalyzeUrl {
     int page = 1,
     String? absoluteUrl,
   }) async {
-    final req = absoluteUrl != null && absoluteUrl.isNotEmpty
-        ? AnalyzeRequest(
-            url: sanitizeUrl(absoluteUrl, base: source.bookSourceUrl),
-            headers: _parseHeader(source.header),
-          )
-        : build(source, template, key: key, page: page);
+    AnalyzeRequest req;
+    if (absoluteUrl != null && absoluteUrl.isNotEmpty) {
+      req = AnalyzeRequest(
+        url: sanitizeUrl(absoluteUrl, base: source.bookSourceUrl),
+        headers: _parseHeader(source.header),
+      );
+    } else {
+      req = build(source, template, key: key, page: page);
+      // `java.ajax` 两阶段：脚本要先抓别的页面才能拼出地址时才走这条新路，
+      // 走得通的源（绝大多数）完全不受影响。
+      if (JsEngine.needsJs(template) && !_urlUsable(req.url)) {
+        req = await _buildWithAjax(source, template, key: key, page: page) ?? req;
+      }
+    }
     return SourceHttp.instance.fetch(req);
   }
 

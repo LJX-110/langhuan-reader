@@ -71,6 +71,41 @@ class _SourceTestSheetState extends State<_SourceTestSheet> {
   String _running = '';
   String _error = '';
 
+  /// 搜索无结果或任何一步失败时，允许直接删掉这个源（失败源一键清理）。
+  bool get _canDelete =>
+      _error.isNotEmpty ||
+      _hits.isEmpty ||
+      _bookInfo?.ok == false ||
+      _toc?.ok == false ||
+      _content?.ok == false;
+
+  Future<void> _deleteThisSource() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除书源'),
+        content: Text('确定删除「${widget.sourceName}」吗？删除后要重新导入才能恢复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await SourceRepository.instance.delete(widget.sourceUrl);
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) setState(() => _error = '删除失败：${e.runtimeType}');
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -295,6 +330,11 @@ class _SourceTestSheetState extends State<_SourceTestSheet> {
         ),
       ),
       actions: [
+        if (_canDelete)
+          TextButton(
+            onPressed: _running.isEmpty ? () => _deleteThisSource() : null,
+            child: const Text('删除此书源'),
+          ),
         TextButton(
           onPressed: _running.isEmpty ? () => Navigator.pop(context) : null,
           child: const Text('关闭'),

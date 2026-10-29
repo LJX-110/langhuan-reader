@@ -263,6 +263,125 @@ var org = {
     }
   }
 
+  /// `java.ajax` 两阶段 · 阶段 A：把 `java.ajax` 换成"记录调用 + 返回空串"的桩，
+  /// 跑一遍 JS，拿到脚本尝试请求的 `url,{options}` 列表。
+  ///
+  /// 源常写 `a = java.ajax(url, opts); b = a.match(/…/)`，所以这一遍的产出
+  /// 通常为空——调用方拿 [ajax] 里的 URL 用 Dart 侧网络栈抓下来，再交给
+  /// [evalWithAjaxResponses] 重跑取最终地址。
+  ({String out, List<String> ajax}) evalRecordingAjax(
+    String code, {
+    String result = '',
+    String baseUrl = '',
+    String src = '',
+    String jsLib = '',
+  }) {
+    final rt = _runtime;
+    if (rt == null) {
+      return (
+        out: eval(
+          code,
+          result: result,
+          baseUrl: baseUrl,
+          src: src,
+          jsLib: jsLib,
+        ),
+        ajax: const <String>[],
+      );
+    }
+    try {
+      rt.evaluate(
+        'java.__ajaxCalls = [];'
+        'java.ajax = function(u){'
+        ' java.__ajaxCalls.push(String(u == null ? "" : u)); return ""; };',
+      );
+      final out = eval(
+        code,
+        result: result,
+        baseUrl: baseUrl,
+        src: src,
+        jsLib: jsLib,
+      );
+      final raw = rt.evaluate('JSON.stringify(java.__ajaxCalls)').stringResult;
+      final decoded = raw.isEmpty ? null : jsonDecode(raw);
+      final calls = decoded is List
+          ? decoded.map((e) => e.toString()).toList(growable: false)
+          : const <String>[];
+      return (out: out, ajax: calls);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[JsEngine] ajax record failed: $e');
+      return (out: '', ajax: const <String>[]);
+    }
+  }
+
+  /// `java.ajax` 两阶段 · 阶段 B：把阶段 A 抓到的响应按 `url` 注入，
+  /// `java.ajax` 变成查表函数，再跑一遍 JS 取最终结果。
+  ///
+  /// 未命中的 URL 仍会被记录进 `java.__ajaxCalls`，方便调用方补抓一轮。
+  String evalWithAjaxResponses(
+    String code,
+    Map<String, String> responses, {
+    String result = '',
+    String baseUrl = '',
+    String src = '',
+    String jsLib = '',
+  }) {
+    final rt = _runtime;
+    if (rt == null) {
+      return eval(
+        code,
+        result: result,
+        baseUrl: baseUrl,
+        src: src,
+        jsLib: jsLib,
+      );
+    }
+    try {
+      rt.evaluate(
+        'java.__ajaxResponses = ${jsonEncode(responses)};'
+        'java.ajax = function(u){'
+        ' var k = String(u == null ? "" : u);'
+        ' if (java.__ajaxResponses[k] != null) return java.__ajaxResponses[k];'
+        ' java.__ajaxCalls.push(k); return ""; };',
+      );
+      return eval(
+        code,
+        result: result,
+        baseUrl: baseUrl,
+        src: src,
+        jsLib: jsLib,
+      );
+    } catch (e) {
+      if (kDebugMode) debugPrint('[JsEngine] ajax inject failed: $e');
+      return '';
+    }
+  }
+
+  String _boundSourceKey = '';
+
+  /// Legado 的 `source` 绑定：`source.getKey()` / `source.bookSourceUrl`
+  /// 都等于书源的 `bookSourceUrl`，很多 `@js:` 搜索地址靠它拼出来
+  /// （例如 `let ul = source.getKey() + "/search.html"`）。
+  ///
+  /// 每个源只注入一次；`source.getVariable()` 暂无变量字段可读，返回空串。
+  void ensureSource({required String bookSourceUrl}) {
+    if (bookSourceUrl.isEmpty || bookSourceUrl == _boundSourceKey) return;
+    final rt = _runtime;
+    if (rt == null) return;
+    try {
+      final key = jsonEncode(bookSourceUrl);
+      rt.evaluate(
+        'source.bookSourceUrl = $key;'
+        'source.getKey = function(){ return $key; };'
+        'source.getVariable = function(){ return ""; };'
+        'source.getVariable2 = source.getVariable;',
+      );
+      _boundSourceKey = bookSourceUrl;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[JsEngine] source bind failed: $e');
+    }
+  }
+
   /// True if [rule] looks like it needs JS evaluation.
   static bool needsJs(String rule) {
     final r = rule.trim();
