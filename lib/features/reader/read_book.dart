@@ -132,7 +132,8 @@ class _ReadBookState extends ConsumerState<ReadBook>
       readModel.toggleShowMenu();
       return false;
     }
-    // Chapter catalog is a full-screen route; system back pops it first.
+    // Chapter catalog is a modal sheet on top of this route; system back
+    // closes the sheet first (the route never sees that pop).
     return true;
   }
 
@@ -142,11 +143,13 @@ class _ReadBookState extends ConsumerState<ReadBook>
     if (readModel.showMenu) {
       readModel.toggleShowMenu();
     }
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const ChapterView(),
-        fullscreenDialog: true,
-      ),
+    // 有界目录面板（对齐文库）：轻遮罩；点空白 / 下拉 / 关闭按钮收起。
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: const Color(0x29000000),
+      builder: (_) => const ChapterView(),
     );
   }
 
@@ -180,7 +183,7 @@ class _ReadBookState extends ConsumerState<ReadBook>
       child: Scaffold(
         key: _scaffoldKey,
         backgroundColor: paper,
-        // Full-screen chapter catalog is pushed as a route (not a Drawer).
+        // Chapter catalog opens as a bounded sheet over this stack.
         // Loading states are painted as normal page content (no overlay text).
         body: Stack(
           children: [

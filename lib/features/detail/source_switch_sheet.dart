@@ -41,19 +41,49 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
   String? error;
   final List<_Candidate> candidates = [];
 
-  /// 关键词筛选（对齐阅读换源面板的 `screen(key)`）：按书名 / 作者 / 书源名过滤。
+  /// 关键词筛选（对齐阅读换源面板的 `screen(key)`）：按书名 / 作者 / 书源名过滤，
+  /// 并按**书源优选分**降序排（同分保持原顺序，对齐阅读的评分排序）。
   String _keyword = '';
   List<_Candidate> get _visibleCandidates {
     final kw = _keyword.trim();
-    if (kw.isEmpty) return candidates;
-    return candidates
-        .where(
-          (c) =>
-              c.hit.name.contains(kw) ||
-              cleanAuthor(c.hit.author).contains(kw) ||
-              c.source.bookSourceName.contains(kw),
-        )
-        .toList(growable: false);
+    final list = kw.isEmpty
+        ? List<_Candidate>.of(candidates)
+        : candidates
+              .where(
+                (c) =>
+                    c.hit.name.contains(kw) ||
+                    cleanAuthor(c.hit.author).contains(kw) ||
+                    c.source.bookSourceName.contains(kw),
+              )
+              .toList();
+    final index = <String, int>{
+      for (var i = 0; i < candidates.length; i++)
+        candidates[i].source.bookSourceUrl: i,
+    };
+    list.sort((a, b) {
+      final byScore = scoreOf(
+        b.source.bookSourceUrl,
+      ).compareTo(scoreOf(a.source.bookSourceUrl));
+      if (byScore != 0) return byScore;
+      return (index[a.source.bookSourceUrl] ?? 0).compareTo(
+        index[b.source.bookSourceUrl] ?? 0,
+      );
+    });
+    return list;
+  }
+
+  /// 书源优选分：本机存储（阅读的评分同样只存本地），换源候选按它排序。
+  static String _scoreKey(String url) => 'src_score_$url';
+
+  static int scoreOf(String url) =>
+      url.isEmpty ? 0 : SpUtil.getInt(_scoreKey(url));
+
+  void _bumpScore(_Candidate c, int delta) {
+    final url = c.source.bookSourceUrl;
+    if (url.isEmpty) return;
+    final next = (scoreOf(url) + delta).clamp(-9, 99);
+    SpUtil.putInt(_scoreKey(url), next);
+    setState(() {});
   }
 
   /// Group scope for the candidate sweep ('' = all).
@@ -586,18 +616,32 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
                                           _moveSource(c, toTop: false);
                                         case 'disable':
                                           _disableSource(c);
+                                        case 'up':
+                                          _bumpScore(c, 1);
+                                        case 'down':
+                                          _bumpScore(c, -1);
                                       }
                                     },
-                                    itemBuilder: (_) => const [
-                                      PopupMenuItem(
+                                    itemBuilder: (_) => [
+                                      const PopupMenuItem(
                                         value: 'top',
                                         child: Text('置顶此书源'),
                                       ),
-                                      PopupMenuItem(
+                                      const PopupMenuItem(
                                         value: 'bottom',
                                         child: Text('置底此书源'),
                                       ),
                                       PopupMenuItem(
+                                        value: 'up',
+                                        child: Text(
+                                          '优选 +1（当前 ${scoreOf(c.source.bookSourceUrl)}）',
+                                        ),
+                                      ),
+                                      const PopupMenuItem(
+                                        value: 'down',
+                                        child: Text('降低 -1'),
+                                      ),
+                                      const PopupMenuItem(
                                         value: 'disable',
                                         child: Text('禁用此书源'),
                                       ),

@@ -78,6 +78,37 @@ void main() {
       expect(byNumber, hasLength(2));
       expect(byNumber[1].chapterIndex, 1);
     });
+
+    test('pure-digit query jumps to the exact chapter number', () {
+      final chapters = List.generate(30, (i) => _chapter('第${i + 1}章'));
+
+      final rows = buildTocRows(chapters, query: '12');
+      expect(rows, hasLength(1));
+      expect(rows.single.chapterIndex, 11);
+
+      // 越界数字 = 无结果（不再做子串匹配）。
+      expect(buildTocRows(chapters, query: '99'), isEmpty);
+
+      // 旧子串语义的回归防护：845 只命中第 845 章，不命中 1845 / 8450。
+      final many = List.generate(9000, (i) => _chapter('第${i + 1}章'));
+      final exact = buildTocRows(many, query: '845');
+      expect(exact, hasLength(1));
+      expect(exact.single.chapterIndex, 844);
+    });
+
+    test('pure-digit query keeps the volume header of that chapter', () {
+      final chapters = [
+        _chapter('第一章', volume: '第一卷'),
+        _chapter('第二章', volume: '第二卷', volumeOrd: 1),
+        _chapter('第三章', volume: '第二卷', volumeOrd: 1),
+      ];
+
+      final rows = buildTocRows(chapters, query: '3');
+      expect(rows, hasLength(2));
+      expect(rows[0].isVolume, isTrue);
+      expect(rows[0].title, '第二卷');
+      expect(rows[1].chapterIndex, 2);
+    });
   });
 
   group('tocRowForChapter', () {

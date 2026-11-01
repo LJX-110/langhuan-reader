@@ -351,6 +351,44 @@ class ChapterRepository {
     await batch.commit(noResult: true);
   }
 
+  /// Delete cached chapter bodies (and derived page layouts) of one book.
+  ///
+  /// Keeps TOC rows, reading progress and bookmarks — only the offline
+  /// content goes away, mirroring Wenku8's "清除这本缓存".
+  Future<int> clearBodies(String bookId) async {
+    final db = await _database;
+    return db.rawUpdate(
+      "UPDATE chapters SET body='', has_body=0, content_len=0, "
+      'pages_json=NULL, layout_fp=NULL, pages_cached_at=0 '
+      'WHERE book_id=? AND (has_body=1 OR pages_json IS NOT NULL)',
+      [bookId],
+    );
+  }
+
+  /// 清除所有书的章节正文（目录行保留），语义同 [clearBodies]。
+  Future<int> clearAllBodies() async {
+    final db = await _database;
+    return db.rawUpdate(
+      "UPDATE chapters SET body='', has_body=0, content_len=0, "
+      'pages_json=NULL, layout_fp=NULL, pages_cached_at=0 '
+      'WHERE has_body=1 OR pages_json IS NOT NULL',
+    );
+  }
+
+  /// 章节正文缓存占用（字节）。
+  Future<int> bodyCacheBytes() async {
+    final db = await _database;
+    final rows = await db.rawQuery(
+      'SELECT IFNULL(SUM(LENGTH(body)),0) AS bytes FROM chapters '
+      'WHERE has_body=1',
+    );
+    if (rows.isEmpty) return 0;
+    final v = rows.first['bytes'];
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v?.toString() ?? '') ?? 0;
+  }
+
   Future<({String? pagesJson, String? layoutFp})> getPageLayout(
     String chapterId,
   ) async {

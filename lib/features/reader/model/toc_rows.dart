@@ -22,14 +22,37 @@ class TocRow {
 
 /// Build the catalog rows for [chapters], optionally filtered by [query].
 ///
-/// Search matches chapter names, volume names and chapter numbers; a volume
-/// header is inserted once, before the first match of that volume.
+/// Search matches chapter names and volume names; a volume header is inserted
+/// once, before the first match of that volume. A pure-digit query is an
+/// exact chapter number (Wenku8 semantics: `845` locates chapter 845 only,
+/// never 1845 / 8450) and returns just that chapter plus its volume header.
 List<TocRow> buildTocRows(
   List<ChapterTocEntry> chapters, {
   String query = '',
 }) {
   final rows = <TocRow>[];
   final q = query.trim().toLowerCase();
+  final chapterNumber = int.tryParse(q);
+  if (chapterNumber != null) {
+    if (chapterNumber < 1 || chapterNumber > chapters.length) return rows;
+    final target = chapterNumber - 1;
+    final chapter = chapters[target];
+    if (chapter.volumeTitle.isNotEmpty) {
+      rows.add(
+        TocRow(
+          isVolume: true,
+          title: chapter.volumeTitle,
+          count: _volumeChapterCount(
+            chapters,
+            chapter.volumeTitle,
+            from: target,
+          ),
+        ),
+      );
+    }
+    rows.add(TocRow(chapterIndex: target, chapter: chapter));
+    return rows;
+  }
   var lastVolume = '';
   for (var i = 0; i < chapters.length; i++) {
     final chapter = chapters[i];
@@ -52,8 +75,7 @@ List<TocRow> buildTocRows(
     final volumeHit =
         chapter.volumeTitle.isNotEmpty &&
         chapter.volumeTitle.toLowerCase().contains(q);
-    final numberHit = '${i + 1}'.contains(q);
-    if (!nameHit && !volumeHit && !numberHit) continue;
+    if (!nameHit && !volumeHit) continue;
     final volume = chapter.volumeTitle;
     if (volume.isNotEmpty && volume != lastVolume) {
       lastVolume = volume;

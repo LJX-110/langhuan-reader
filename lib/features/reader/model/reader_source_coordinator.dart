@@ -1,6 +1,7 @@
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/entities/chapter_toc_entry.dart';
 import 'package:langhuan/features/reader/model/chapter_download_service.dart';
+import 'package:langhuan/features/reader/model/download_center.dart';
 import 'package:langhuan/features/reader/model/source_switch_service.dart';
 import 'package:langhuan/features/sources/source_model.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
@@ -63,18 +64,34 @@ class ReaderSourceCoordinator {
   }
 
   Future<void> downloadAll(int start) async {
-    if (Book.isLocalSource(bookOf()?.sourceUrl ?? '')) return;
+    final book = bookOf();
+    if (book == null || Book.isLocalSource(book.sourceUrl)) return;
     if (chaptersOf().isEmpty) {
       await loadToc(init: true);
     }
     await ensureSource();
-    await downloads.downloadFrom(
+    // 队列化下载：状态 / 暂停 / 继续 / 失败重试由 DownloadCenter 统一管理。
+    DownloadCenter.instance.start(
+      book: book,
       toc: chaptersOf(),
-      start: start,
       source: activeSource,
-      bookName: bookOf()?.name ?? '',
-      batchSize: 100,
+      start: start,
     );
+  }
+
+  /// 清除本书离线缓存（章节正文 + 分页缓存）；书架 / 进度 / 书签保留。
+  /// 对齐文库「清除这本缓存」的语义。
+  Future<void> clearDownloadCache() async {
+    final b = bookOf();
+    if (b == null) return;
+    DownloadCenter.instance.forget(b.id);
+    await downloads.chapters.clearBodies(b.id);
+    for (final chapter in chaptersOf()) {
+      chapter.hasBody = false;
+    }
+    clearDiskWarm();
+    clearPictures();
+    notify();
   }
 
   /// Switch active source for the current book, remap progress, reload toc.
@@ -109,6 +126,8 @@ class ReaderSourceCoordinator {
 
       activeSource = result.source;
       setChapters(result.chapters);
+      // 换源后旧的下载任务描述的章节 id / url 已失效，直接丢弃。
+      DownloadCenter.instance.forget(b.id);
       clearDiskWarm();
       resetPages();
       clearPictures();

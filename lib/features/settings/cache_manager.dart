@@ -20,6 +20,7 @@ class _CacheManagerState extends State<CacheManager> {
 
   bool _loading = true;
   int _pageCacheBytes = 0;
+  int _bodyBytes = 0;
   List<_BookCacheRow> _rows = const [];
 
   @override
@@ -33,6 +34,7 @@ class _CacheManagerState extends State<CacheManager> {
     try {
       final books = await _books.getAll();
       final pageBytes = await _chapters.pageCacheBytes();
+      final bodyBytes = await _chapters.bodyCacheBytes();
       final rows = <_BookCacheRow>[];
       for (final book in books) {
         final stats = await _chapters.bodyStats(book.id);
@@ -42,6 +44,7 @@ class _CacheManagerState extends State<CacheManager> {
       setState(() {
         _rows = rows;
         _pageCacheBytes = pageBytes;
+        _bodyBytes = bodyBytes;
         _loading = false;
       });
     } catch (e, st) {
@@ -69,12 +72,53 @@ class _CacheManagerState extends State<CacheManager> {
     ).showSnackBar(SnackBar(content: Text(done ? '已清除封面缓存' : '封面缓存清理失败')));
   }
 
-  Future<void> _clearBookBodies(String bookId) async {
-    await _chapters.clearBook(bookId);
+  Future<bool> _confirm(String title, String message) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('清除'),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  Future<void> _clearBookBodies(String bookId, String bookName) async {
+    final ok = await _confirm(
+      '清除缓存',
+      '删除《$bookName》已缓存的章节正文与分页缓存？\n目录、书架与阅读进度都会保留。',
+    );
+    if (!ok || !mounted) return;
+    // 只清正文/分页，保留目录行（分卷、章节信息不丢）。
+    await _chapters.clearBodies(bookId);
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('已清除本书章节缓存')));
+    ).showSnackBar(const SnackBar(content: Text('已清除本书章节缓存（目录保留）')));
+    await _reload();
+  }
+
+  Future<void> _clearAllBodies() async {
+    final ok = await _confirm(
+      '清除全部章节正文',
+      '删除所有书已缓存的章节正文与分页缓存？\n目录、书架与阅读进度都会保留。',
+    );
+    if (!ok || !mounted) return;
+    await _chapters.clearAllBodies();
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已清除全部章节正文')));
     await _reload();
   }
 
@@ -121,6 +165,20 @@ class _CacheManagerState extends State<CacheManager> {
                         tooltip: '清除全部分页缓存',
                         icon: const Icon(Icons.delete_outline),
                         onPressed: _clearPageLayouts,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Card(
+                    child: ListTile(
+                      title: const Text('章节正文缓存'),
+                      subtitle: Text(_formatBytes(_bodyBytes)),
+                      trailing: IconButton(
+                        tooltip: '清除全部章节正文',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: _loading || _bodyBytes == 0
+                            ? null
+                            : _clearAllBodies,
                       ),
                     ),
                   ),
@@ -185,8 +243,10 @@ class _CacheManagerState extends State<CacheManager> {
                                   IconButton(
                                     tooltip: '清除章节正文与分页',
                                     icon: const Icon(Icons.delete_outline),
-                                    onPressed: () =>
-                                        _clearBookBodies(row.book.id),
+                                    onPressed: () => _clearBookBodies(
+                                      row.book.id,
+                                      row.book.name,
+                                    ),
                                   ),
                                 ],
                               ),

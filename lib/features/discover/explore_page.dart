@@ -139,7 +139,7 @@ class _ExploreSourceTrigger extends StatelessWidget {
     return SizedBox(
       height: 44,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
         child: Material(
           color: accentSoft,
           borderRadius: BorderRadius.circular(8),
@@ -219,7 +219,7 @@ class _KindBar extends StatelessWidget {
       height: 42,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
         itemCount: model.kinds.length,
         separatorBuilder: (_, _) => const SizedBox(width: 22),
         itemBuilder: (context, i) {
@@ -323,7 +323,7 @@ class _BookList extends StatelessWidget {
       final hasSource = model.exploreSources.isNotEmpty;
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(24, 80, 24, 24),
+        padding: const EdgeInsets.fromLTRB(20, 80, 20, 24),
         children: [
           Text(
             error.isEmpty ? '这个分类下还没有内容' : error,
@@ -369,9 +369,8 @@ class _BookList extends StatelessWidget {
       );
     }
 
-    const picW = 72.0;
+    const picW = 64.0;
     final picH = picW / .65;
-    final rowH = picH + 20;
     final showFooter = model.loading || model.noMore;
 
     return NotificationListener<ScrollNotification>(
@@ -381,13 +380,13 @@ class _BookList extends StatelessWidget {
         }
         return false;
       },
+      // 行高随内容（对齐文库的行节奏）；不再用 itemExtent 固定裁剪。
       child: ListView.builder(
-        itemExtent: rowH,
         itemCount: model.books.length + (showFooter ? 1 : 0),
         itemBuilder: (context, i) {
           if (i >= model.books.length) {
             return SizedBox(
-              height: rowH,
+              height: picH,
               child: Center(
                 child: model.loading
                     ? const CupertinoActivityIndicator()
@@ -403,7 +402,6 @@ class _BookList extends StatelessWidget {
             item: item,
             picW: picW,
             picH: picH,
-            rowH: rowH,
             primary: primary,
             secondary: secondary,
             tertiary: tertiary,
@@ -432,8 +430,8 @@ class _ExploreSkeleton extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 72,
-              height: 100,
+              width: 64,
+              height: 98,
               decoration: BoxDecoration(
                 color: block,
                 borderRadius: BorderRadius.circular(4),
@@ -493,7 +491,6 @@ class _BookRow extends StatelessWidget {
   final SearchItem item;
   final double picW;
   final double picH;
-  final double rowH;
   final Color primary;
   final Color secondary;
   final Color tertiary;
@@ -503,7 +500,6 @@ class _BookRow extends StatelessWidget {
     required this.item,
     required this.picW,
     required this.picH,
-    required this.rowH,
     required this.primary,
     required this.secondary,
     required this.tertiary,
@@ -517,8 +513,7 @@ class _BookRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Container(
-          height: rowH,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          padding: const EdgeInsets.fromLTRB(20, 11, 20, 11),
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
@@ -546,30 +541,38 @@ class _BookRow extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         item.name,
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 15,
                           fontWeight: FontWeight.w600,
+                          height: 1.3,
                           color: primary,
                         ),
                       ),
+                      const SizedBox(height: 4),
                       Text(
                         item.author.isEmpty ? '未知作者' : item.author,
                         maxLines: 1,
                         style: TextStyle(fontSize: 12, color: secondary),
                       ),
+                      const SizedBox(height: 3),
                       Text(
                         item.description.isEmpty ? '暂无简介' : item.description,
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 12, color: secondary),
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.35,
+                          color: secondary,
+                        ),
                       ),
+                      const SizedBox(height: 5),
                       Row(
                         children: [
                           if (item.sourceName.isNotEmpty)
@@ -596,7 +599,7 @@ class _BookRow extends StatelessWidget {
                               item.latestChapter,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 12, color: tertiary),
+                              style: TextStyle(fontSize: 11, color: tertiary),
                             ),
                           ),
                         ],

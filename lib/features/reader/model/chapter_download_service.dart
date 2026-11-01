@@ -1,13 +1,12 @@
 import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/core/utils/redact.dart';
 import 'package:langhuan/data/repositories/chapter_repository.dart';
-import 'package:langhuan/data/entities/chapter_node.dart';
 import 'package:langhuan/data/entities/chapter_toc_entry.dart';
 import 'package:langhuan/features/sources/engine/book_source_engine.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
-import 'package:bot_toast/bot_toast.dart';
 
-/// Network chapter body fetch + optional bulk download into reader.db.
+/// Network chapter body fetch. Bulk download lives in [DownloadCenter],
+/// which reuses [fetchBody] as its per-chapter network step.
 class ChapterDownloadService {
   ChapterDownloadService({required this.engine, required this.chapters});
 
@@ -61,42 +60,4 @@ class ChapterDownloadService {
     }
   }
 
-  /// Download chapter bodies from [start] to end, batching DB writes.
-  Future<void> downloadFrom({
-    required List<ChapterTocEntry> toc,
-    required int start,
-    required BookSource? source,
-    required String bookName,
-    int batchSize = 100,
-  }) async {
-    if (toc.isEmpty) return;
-    final nodes = <ChapterNode>[];
-    for (var i = start; i < toc.length; i++) {
-      final chapter = toc[i];
-      final id = chapter.id;
-      if (chapter.hasBody) continue;
-      final content = await fetchBody(
-        source: source,
-        toc: toc,
-        chapterId: id,
-        idx: i,
-      );
-      if (content.isNotEmpty &&
-          !content.startsWith('章节内容加载失败') &&
-          !content.startsWith('书源不存在') &&
-          !content.startsWith('章节地址为空')) {
-        nodes.add(ChapterNode(content, id));
-        chapter.hasBody = true;
-      }
-      if (nodes.length >= batchSize) {
-        await chapters.updateBodies(nodes);
-        nodes.clear();
-      }
-    }
-    if (nodes.isNotEmpty) {
-      await chapters.updateBodies(nodes);
-      nodes.clear();
-    }
-    BotToast.showText(text: '${bookName.isEmpty ? "本书" : bookName}下载完成');
-  }
 }

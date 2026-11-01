@@ -167,6 +167,7 @@ class ReaderPainter {
       fontFamily: familyOrNull,
       fontSize: fontSize,
       height: lineHeight,
+      fontWeight: ReadSetting.bodyFontWeight,
     );
 
     final tileH = scrollPageHeight(readPage, pageIdx);
@@ -263,8 +264,10 @@ class ReaderPainter {
       fontFamily: familyOrNull,
       fontSize: fontSize,
       height: ReadSetting.getLineHeight(),
+      fontWeight: ReadSetting.bodyFontWeight,
     );
 
+    final focus = ReadSetting.getFocusMode();
     final bodyTop = ReadSetting.contentTopInset();
     final maxLineWidth = (pageW - contentPadding * 2).clamp(1.0, pageW);
 
@@ -277,7 +280,8 @@ class ReaderPainter {
     );
 
     // Chapter header. First page of a chapter gets the book-style header
-    // (title + source meta); later pages keep a muted running head. Placeholder
+    // (title + source meta); later pages keep a muted running head — except in
+    // focus mode, which keeps only the chapter opening header. Placeholder
     // pages are identified by [ReadPage.isPlaceholder], never by a magic title.
     final title = readPage.chapterName.trim();
     if (chrome && title.isNotEmpty) {
@@ -290,7 +294,7 @@ class ReaderPainter {
             text: title,
             style: TextStyle(
               fontSize: 17,
-              fontWeight: FontWeight.w600,
+              fontWeight: ReadSetting.titleFontWeight,
               height: 1.25,
               color: ink,
               fontFamily: familyOrNull,
@@ -314,11 +318,16 @@ class ReaderPainter {
           _labelPainter.layout(maxWidth: maxLineWidth);
           _labelPainter.paint(pageCanvas, Offset(contentPadding, y));
         }
-      } else {
+      } else if (!focus) {
         _labelPainter
           ..maxLines = 1
           ..ellipsis = '…'
-          ..text = TextSpan(text: title, style: chromeStyle);
+          ..text = TextSpan(
+            text: title,
+            style: chromeStyle.copyWith(
+              fontWeight: ReadSetting.runningHeadFontWeight,
+            ),
+          );
         _labelPainter.layout(maxWidth: maxLineWidth);
         final titleY =
             bandTop + (ReadSetting.contentTopChrome - _labelPainter.height) / 2;
@@ -413,24 +422,27 @@ class ReaderPainter {
 
     // Time + page number — vertically centered in the bottom chrome band.
     // Body box ends contentChromeGap above this band (contentBottomInset).
-    final bottomBandTop = ReadSetting.bottomChromeBandTop();
-    _labelPainter.text = TextSpan(
-      text: DateUtil.formatDate(DateTime.now(), format: DateFormats.h_m),
-      style: chromeStyle,
-    );
-    _labelPainter.layout();
-    final bottomTextY =
-        bottomBandTop +
-        (ReadSetting.contentBottomChrome - _labelPainter.height) / 2;
-    _labelPainter.paint(pageCanvas, Offset(contentPadding, bottomTextY));
+    // Focus mode keeps the paper clean: no clock, no page counter.
+    if (!focus) {
+      final bottomBandTop = ReadSetting.bottomChromeBandTop();
+      _labelPainter.text = TextSpan(
+        text: DateUtil.formatDate(DateTime.now(), format: DateFormats.h_m),
+        style: chromeStyle,
+      );
+      _labelPainter.layout();
+      final bottomTextY =
+          bottomBandTop +
+          (ReadSetting.contentBottomChrome - _labelPainter.height) / 2;
+      _labelPainter.paint(pageCanvas, Offset(contentPadding, bottomTextY));
 
-    final pageLabel = '${pageIndex + 1}/${readPage.pages.length}';
-    _labelPainter.text = TextSpan(text: pageLabel, style: chromeStyle);
-    _labelPainter.layout();
-    _labelPainter.paint(
-      pageCanvas,
-      Offset(pageW - contentPadding - _labelPainter.width, bottomTextY),
-    );
+      final pageLabel = '${pageIndex + 1}/${readPage.pages.length}';
+      _labelPainter.text = TextSpan(text: pageLabel, style: chromeStyle);
+      _labelPainter.layout();
+      _labelPainter.paint(
+        pageCanvas,
+        Offset(pageW - contentPadding - _labelPainter.width, bottomTextY),
+      );
+    }
 
     final pic = pageRecorder.endRecording();
     _logPaintPage(readPage, i, lineCount, sw);

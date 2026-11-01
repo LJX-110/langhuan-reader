@@ -41,6 +41,18 @@ class ReadingHistoryRepository {
     return rows.map(ReadingRecord.fromRow).toList(growable: false);
   }
 
+  /// 移除一条记录；书架、阅读进度与离线缓存都保留
+  /// （对齐文库「只移记录」的语义）。再次阅读会自动重新出现。
+  Future<void> remove(String bookId) async {
+    if (bookId.isEmpty) return;
+    final db = await _database;
+    await db.delete(
+      'reading_history',
+      where: 'book_id = ?',
+      whereArgs: [bookId],
+    );
+  }
+
   Future<void> clear() async {
     final db = await _database;
     await db.delete('reading_history');

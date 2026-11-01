@@ -18,6 +18,14 @@ class PrefsKeys {
   static const pageTurnMode = 'turnPageAnima';
   static const readerTextAlign = 'reader_text_align';
 
+  /// Reader focus mode: hides the running chapter head and the time / page
+  /// footer so the page keeps only the chapter opening header and body text.
+  static const readerFocusMode = 'reader_focus_mode';
+
+  /// Body / title font weight tier: 0 中 (default) | 1 粗 | 2 细.
+  /// Aligns with Legado's `textBold` (0 正常 / 1 粗体 / 2 细体).
+  static const readerFontWeight = 'reader_font_weight';
+
   /// Neighbor chapter prefetch range (chapters before / after the current).
   static const readerPrefetchBack = 'reader_prefetch_back';
   static const readerPrefetchForward = 'reader_prefetch_forward';
@@ -40,6 +48,10 @@ class PrefsKeys {
   /// High-risk opt-in: allow a source's `X-Langhuan-Insecure-TLS` header to
   /// trigger the lenient certificate retry. Default is strict validation.
   static const allowInsecureTls = 'allow_insecure_tls';
+
+  /// Offline download runs only while on Wi-Fi / ethernet; non-Wi-Fi pauses
+  /// the job instead of burning mobile data.
+  static const downloadWifiOnly = 'download_wifi_only';
 
   /// Last successful update check (ms). Auto check stays silent for 24h after.
   static const updateLastCheck = 'update_last_check';

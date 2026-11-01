@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'package:langhuan/features/reader/settings/read_setting.dart';
+
 /// Opaque sticky chapter-title band for vertical scroll mode.
 ///
 /// The list paints body-only tiles, so this overlay supplies the title that
@@ -54,7 +56,7 @@ class ScrollChapterTitle extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 14 / scale,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: ReadSetting.runningHeadFontWeight,
                     height: 1.2,
                     letterSpacing: .2,
                     color: color,

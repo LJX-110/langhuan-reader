@@ -83,7 +83,9 @@ class TocService {
       entries.add(
         ChapterTocEntry(
           id: makeChapterId(book.id, c.url),
-          title: normalizeTitle(c.name),
+          // 空章节名兜底「第 N 章」：个别源规则抓歪 / 字段缺失时，
+          // 目录、阅读页与书签都不会出现空白标题。
+          title: displayReadingTitle(c.name, index: entries.length),
           url: c.url,
           hasBody: false,
           ord: entries.length,

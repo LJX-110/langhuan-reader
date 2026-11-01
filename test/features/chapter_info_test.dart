@@ -24,6 +24,19 @@ void main() {
     expect(entries[1].info, isEmpty);
   });
 
+  test('mapChapters falls back to 第 N 章 for empty chapter names', () {
+    final book = Book(id: 'b1', name: '书', sourceUrl: 'https://s.example');
+    final entries = TocService.mapChapters(book, [
+      SourceChapter(name: '', url: '/1'),
+      SourceChapter(name: '第二章 斗之气', url: '/2'),
+      SourceChapter(name: '   ', url: '/3'),
+    ]);
+    expect(
+      entries.map((e) => e.title).toList(),
+      ['第 1 章', '第二章 斗之气', '第 3 章'],
+    );
+  });
+
   test('chapters.info round-trips through syncToc and getToc', () async {
     final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
     addTearDown(db.close);

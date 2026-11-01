@@ -61,6 +61,8 @@ class ReaderSettingsPanel extends StatelessWidget {
               },
             ),
           ),
+          const SizedBox(height: 8),
+          _fontWeightRow(context, chrome, readModel, onChanged),
           const SizedBox(height: 14),
           _sectionLabel('背景', chrome),
           const SizedBox(height: 10),
@@ -297,6 +299,60 @@ Widget _alignRow(
                   if (current == option.$1) return;
                   ReadSetting.setTextAlign(option.$1);
                   readModel.scheduleRelayout();
+                  onChanged();
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  child: Center(
+                    child: Text(
+                      option.$2,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: current == option.$1
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        color: current == option.$1 ? accent : chrome.fg,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+    ],
+  );
+}
+
+/// 字重三段（对齐阅读 `textBold`）：中 / 粗 / 细 —— 只改绘制，不重排。
+Widget _fontWeightRow(
+  BuildContext context,
+  ReaderChrome chrome,
+  ReadModel readModel,
+  VoidCallback onChanged,
+) {
+  final current = ReadSetting.getFontWeightCd();
+  const options = <(int, String)>[(0, '中'), (1, '粗'), (2, '细')];
+  final accent = AppColors.accentOn(context, chrome.panelBg);
+  final accentSoft = accent.withValues(alpha: .10);
+  return Row(
+    children: [
+      SizedBox(
+        width: 36,
+        child: Text('字重', style: TextStyle(fontSize: 13, color: chrome.fg)),
+      ),
+      for (final option in options)
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Material(
+              color: current == option.$1 ? accentSoft : chrome.chipBg,
+              borderRadius: BorderRadius.circular(8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () {
+                  if (current == option.$1) return;
+                  readModel.setReaderFontWeight(option.$1);
                   onChanged();
                 },
                 child: Padding(

@@ -246,6 +246,75 @@ class ReadSetting {
     );
   }
 
+  /// Focus mode: the painted page drops the running chapter head (pages 2+)
+  /// and the time / page footer; the chapter opening header stays because it
+  /// reads as part of the page. Falls back to off when prefs are not ready.
+  static bool getFocusMode() {
+    try {
+      return SpUtil.getBool(PrefsKeys.readerFocusMode, defValue: false);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static void setFocusMode(bool value) {
+    SpUtil.putBool(PrefsKeys.readerFocusMode, value);
+  }
+
+  /// 字重三段（对齐阅读 `textBold`）：0 中（默认）/ 1 粗 / 2 细。
+  /// Falls back to 中 when prefs are not ready (unit tests / early startup).
+  static int getFontWeightCd() {
+    try {
+      return SpUtil.getInt(
+        PrefsKeys.readerFontWeight,
+        defValue: 0,
+      ).clamp(0, 2);
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  static void setFontWeightCd(int value) {
+    SpUtil.putInt(PrefsKeys.readerFontWeight, value.clamp(0, 2));
+  }
+
+  /// 正文字重。单字重字体下 600+ 走 Skia 合成粗体（不改字符步进，
+  /// 分页行断保持稳定）；w300 在无轻字面时视觉等同常规。
+  static FontWeight get bodyFontWeight {
+    switch (getFontWeightCd()) {
+      case 1:
+        return FontWeight.w600;
+      case 2:
+        return FontWeight.w300;
+      default:
+        return FontWeight.w400;
+    }
+  }
+
+  /// 章首大标题字重（参考阅读：中=粗体标题、粗=更粗、细=常规标题）。
+  static FontWeight get titleFontWeight {
+    switch (getFontWeightCd()) {
+      case 1:
+        return FontWeight.w800;
+      case 2:
+        return FontWeight.w400;
+      default:
+        return FontWeight.w600;
+    }
+  }
+
+  /// 行头（第 2 页起的章节小标题）与滚动模式吸顶标题字重。
+  static FontWeight get runningHeadFontWeight {
+    switch (getFontWeightCd()) {
+      case 1:
+        return FontWeight.w700;
+      case 2:
+        return FontWeight.w400;
+      default:
+        return FontWeight.w500;
+    }
+  }
+
   static double getLineHeight() {
     migrateFontDefaultsIfNeeded();
     return SpUtil.getDouble(latterHeight, defValue: 1.7);
@@ -350,7 +419,14 @@ class ReadSetting {
   }
 
   /// Bottom inset of the paginated content box.
+  ///
+  /// Focus mode does not paint the time / page band, so the body keeps only
+  /// the bottom safe area plus the regular breathing gap. The top inset is
+  /// unchanged: the chapter opening header owns that band on the first page.
   static double contentBottomInset() {
+    if (getFocusMode()) {
+      return Screen.bottomSafeHeight + contentChromeGap;
+    }
     return contentBottomChrome + Screen.bottomSafeHeight + contentChromeGap;
   }
 

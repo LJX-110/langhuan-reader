@@ -14,6 +14,7 @@ import 'package:langhuan/features/reader/menu/reader_chapter_panel.dart';
 import 'package:langhuan/features/reader/menu/reader_chrome.dart';
 import 'package:langhuan/features/reader/menu/reader_download_panel.dart';
 import 'package:langhuan/features/reader/menu/reader_find_bar.dart';
+import 'package:langhuan/features/reader/menu/reader_progress_bar.dart';
 import 'package:langhuan/features/reader/menu/reader_settings_panel.dart';
 import 'package:langhuan/features/reader/menu/reader_top_bar.dart';
 import 'package:langhuan/features/reader/read_model.dart';
@@ -45,6 +46,13 @@ class _MenuState extends ConsumerState<ReaderMenu> {
   final BookmarkRepository _bookmarks = BookmarkRepository.instance;
   String? _bookmarkKey;
   bool _bookmarked = false;
+
+  /// 进度条拖动状态：手指按住时用 [_dragValue] 显示，不跟随页面进度。
+  bool _progressDragging = false;
+  double _dragValue = 0;
+
+  /// 指针被父级取消后可能不走 onDragCancel 直接进 onEnd，提交跳转前检查。
+  bool _progressPointerCancelled = false;
 
   @override
   void initState() {
@@ -230,6 +238,93 @@ class _MenuState extends ConsumerState<ReaderMenu> {
     }
   }
 
+  /// 专注模式：阅读页只留章首头与正文（隐藏行头与时间 / 页码）。
+  /// 开启后立即收起菜单，让用户直接看到干净的页面；关闭时保持菜单可见。
+  void _toggleFocus() {
+    final enabled = !ReadSetting.getFocusMode();
+    ReadSetting.setFocusMode(enabled);
+    _readModel.scheduleRelayout();
+    if (enabled) {
+      _dismissMenu();
+    } else {
+      _refresh();
+    }
+  }
+
+  /// 全书进度（0~1）：章节等权 + 章内页码比例。
+  double get _bookProgress {
+    final total = _readModel.chapters.length;
+    if (total == 0) return 0;
+    final b = _readModel.book;
+    final pages = _readModel.curPage?.pages.length ?? 0;
+    final chapter = (b?.chapterIndex ?? 0).clamp(0, total - 1).toInt();
+    final page = (b?.pageIndex ?? 0)
+        .clamp(0, pages > 0 ? pages - 1 : 0)
+        .toInt();
+    return ReaderProgress.valueOf(
+      chapter: chapter,
+      pageIndex: page,
+      pages: pages,
+      total: total,
+    );
+  }
+
+  /// 多章（或单章多页）才显示进度条。
+  bool get _showProgressBar {
+    final total = _readModel.chapters.length;
+    if (total == 0) return false;
+    if (total > 1) return true;
+    return (_readModel.curPage?.pages.length ?? 0) > 1;
+  }
+
+  void _onProgressDragStart() {
+    setState(() {
+      _progressDragging = true;
+      _progressPointerCancelled = false;
+      _dragValue = _bookProgress;
+    });
+  }
+
+  void _onProgressDragUpdate(double value) {
+    setState(() => _dragValue = value);
+  }
+
+  void _onProgressDragCancel() {
+    setState(() {
+      _progressDragging = false;
+      _progressPointerCancelled = false;
+    });
+  }
+
+  Future<void> _onProgressDragEnd() async {
+    final cancelled = _progressPointerCancelled;
+    final target = _dragValue;
+    setState(() {
+      _progressDragging = false;
+      _progressPointerCancelled = false;
+    });
+    if (cancelled) return;
+    await _jumpToProgress(target);
+  }
+
+  /// 松手定位：换算目标章节 + 章内页；跨章先开章，再补页内跳转。
+  Future<void> _jumpToProgress(double value) async {
+    final total = _readModel.chapters.length;
+    if (total == 0) return;
+    final target = ReaderProgress.targetOf(value, total);
+    final current = _readModel.book?.chapterIndex ?? 0;
+    if (target.chapter != current) {
+      _readModel.previewChapter(target.chapter);
+      await _readModel.openChapterAt(target.chapter, true, showLoading: false);
+      if (!mounted || _readModel.chapterLoadError != null) return;
+    }
+    final pages = _readModel.curPage?.pages.length ?? 0;
+    if (pages > 1) {
+      _readModel.jumpToPage((target.ratio * (pages - 1)).round());
+    }
+    _readModel.scheduleProgressSave(delay: Duration.zero);
+  }
+
   @override
   Widget build(BuildContext context) {
     // Rebuild when theme or reader chrome-relevant fields change.
@@ -339,9 +434,31 @@ class _MenuState extends ConsumerState<ReaderMenu> {
                       ),
                       _bottomHead(chrome),
                       Divider(height: 1, color: chrome.divider),
+                      if (_showProgressBar)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                          child: ReaderProgressBar(
+                            chrome: chrome,
+                            value: _progressDragging
+                                ? _dragValue
+                                : _bookProgress,
+                            dragging: _progressDragging,
+                            previewText: ReaderProgress.previewOf(
+                              _progressDragging ? _dragValue : _bookProgress,
+                              _readModel.chapters.length,
+                            ),
+                            onDragStart: _onProgressDragStart,
+                            onDragUpdate: _onProgressDragUpdate,
+                            onDragEnd: _onProgressDragEnd,
+                            onDragCancel: _onProgressDragCancel,
+                            onPointerCancel: () =>
+                                _progressPointerCancelled = true,
+                          ),
+                        ),
                       ReaderBottomBar(
                         chrome: chrome,
                         night: isNight,
+                        focusActive: ReadSetting.getFocusMode(),
                         downloadActive: type == Type.DOWNLOAD,
                         settingsActive: type == Type.MORE_SETTING,
                         onChapters: () {
@@ -356,6 +473,7 @@ class _MenuState extends ConsumerState<ReaderMenu> {
                           );
                           _refresh();
                         },
+                        onFocus: _toggleFocus,
                         onDownload: () {
                           setState(() {
                             type = type == Type.DOWNLOAD

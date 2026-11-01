@@ -3,26 +3,30 @@ import 'package:flutter/material.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/features/reader/menu/reader_chrome.dart';
 
-/// Four fixed tabs under the reader bottom panel.
+/// Fixed tabs under the reader bottom panel.
 class ReaderBottomBar extends StatelessWidget {
   const ReaderBottomBar({
     super.key,
     required this.chrome,
     required this.night,
+    required this.focusActive,
     required this.downloadActive,
     required this.settingsActive,
     required this.onChapters,
     required this.onToggleNight,
+    required this.onFocus,
     required this.onDownload,
     required this.onSettings,
   });
 
   final ReaderChrome chrome;
   final bool night;
+  final bool focusActive;
   final bool downloadActive;
   final bool settingsActive;
   final VoidCallback onChapters;
   final VoidCallback onToggleNight;
+  final VoidCallback onFocus;
   final VoidCallback onDownload;
   final VoidCallback onSettings;
 
@@ -38,6 +42,13 @@ class ReaderBottomBar extends StatelessWidget {
             icon: Icons.menu,
             active: false,
             onTap: onChapters,
+          ),
+          _bottomTab(
+            context: context,
+            label: '专注',
+            icon: Icons.center_focus_strong,
+            active: focusActive,
+            onTap: onFocus,
           ),
           _bottomTab(
             context: context,

@@ -362,6 +362,15 @@ class ReadModel with ChangeNotifier {
   /// WeChat-style solid paper swatch.
   Future<void> setPaperTheme(PaperTheme theme) => _theme.setPaperTheme(theme);
 
+  /// 字重三段（中/粗/细）：只改绘制、不重新分页 —— 合成字重不改字符步进，
+  /// 分页器（Rust 无字重参数）的行断保持稳定。
+  void setReaderFontWeight(int value) {
+    ReadSetting.setFontWeightCd(value);
+    pictureCache.clear();
+    _markNeedsPaint();
+    notifyListeners();
+  }
+
   Future<List<ChapterTocEntry>?> fetchRemoteToc() async {
     final b = book;
     if (b == null || Book.isLocalSource(b.sourceUrl)) return null;
@@ -596,6 +605,9 @@ class ReadModel with ChangeNotifier {
   }
 
   Future<void> downloadAll(int start) => _source.downloadAll(start);
+
+  /// 清除本书离线缓存（正文 + 分页），保留书架 / 进度 / 书签。
+  Future<void> clearDownloadCache() => _source.clearDownloadCache();
 
   Future<String> fetchChapterBody(String id, {int? idx}) =>
       _source.fetchChapterBody(id, idx: idx);

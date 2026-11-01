@@ -11,7 +11,9 @@ import 'package:langhuan/features/sources/import/source_import_conflict.dart';
 import 'package:langhuan/features/sources/import/source_importer.dart';
 import 'package:langhuan/features/sources/import/source_validation.dart';
 import 'package:langhuan/features/sources/model/source_groups.dart';
+import 'package:langhuan/data/repositories/source_repository.dart';
 import 'package:langhuan/features/sources/source_batch_health_sheet.dart';
+import 'package:langhuan/features/sources/source_edit_page.dart';
 import 'package:langhuan/features/sources/source_test_panel.dart';
 import 'package:langhuan/app/providers.dart';
 import 'package:langhuan/features/sources/source_repo_page.dart';
@@ -277,6 +279,25 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
     );
   }
 
+  /// 打开编辑器：列表缓存没有规则负载，先按地址补全。
+  Future<void> _editSource(SourceModel model, BookSource source) async {
+    final full =
+        await SourceRepository.instance.getByUrl(source.bookSourceUrl) ??
+        source;
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => SourceEditPage(source: full)),
+    );
+  }
+
+  Future<void> _newSource() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SourceEditPage(source: BookSource(), isNew: true),
+      ),
+    );
+  }
+
   Future<bool?> _askImportIssues(
     BuildContext context,
     SourceValidationReport report,
@@ -455,10 +476,18 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                                     12 +
                                     MediaQuery.viewPaddingOf(context).bottom,
                               ),
-                              itemCount: visible.length,
+                              itemCount:
+                                  visible.length + (_selectMode ? 0 : 1),
                               separatorBuilder: (_, _) =>
                                   const Divider(height: 1),
                               itemBuilder: (ctx, i) {
+                                if (i >= visible.length) {
+                                  return ListTile(
+                                    leading: const Icon(Icons.add),
+                                    title: const Text('新建书源'),
+                                    onTap: _newSource,
+                                  );
+                                }
                                 final s = visible[i];
                 final url = s.bookSourceUrl;
                 final selected = _selected.contains(url);
@@ -473,7 +502,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                             }
                           });
                         }
-                      : null,
+                      : () => _editSource(model, s),
                   leading: _selectMode
                       ? Checkbox(
                           value: selected,
@@ -519,6 +548,9 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                               tooltip: '更多',
                               icon: const Icon(Icons.more_vert),
                               onSelected: (value) {
+                                if (value == 'edit') {
+                                  _editSource(model, s);
+                                }
                                 if (value == 'test') {
                                   _testSourceDialog(model, s);
                                 }
@@ -527,6 +559,10 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                                 }
                               },
                               itemBuilder: (_) => const [
+                                PopupMenuItem(
+                                  value: 'edit',
+                                  child: Text('编辑'),
+                                ),
                                 PopupMenuItem(
                                   value: 'test',
                                   child: Text('测试搜索'),
@@ -629,6 +665,12 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
               onPressed: () => _showImport(context, model),
               icon: const Icon(Icons.add),
               label: const Text('导入书源'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _newSource,
+              icon: const Icon(Icons.edit_note),
+              label: const Text('新建书源'),
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(

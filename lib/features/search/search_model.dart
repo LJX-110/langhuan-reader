@@ -121,6 +121,20 @@ class SearchModel with ChangeNotifier {
   /// Concurrent source search pool size (slow networks do better at 6 than
   /// at 10; a future settings row can expose this).
   static const int defaultSourceConcurrency = 6;
+
+  /// 搜索暂停闸门（对齐阅读 `SearchModel.pause()/resume()`）：暂停后不再发起
+  /// 新的书源请求，已完成的源照常落袋；继续时从断点接着跑。
+  ///
+  /// 只对**同一轮**搜索生效（记住当时的 generation）：新一轮搜索会自动放行，
+  /// 不会出现"暂停状态下搜不出东西"的死锁。
+  bool searchPaused = false;
+  int _pausedGen = -1;
+
+  void togglePause() {
+    searchPaused = !searchPaused;
+    _pausedGen = searchPaused ? _searchGen : -1;
+    notifyListeners();
+  }
   int sourceConcurrency = defaultSourceConcurrency;
 
   final SearchKeywordCache _keywordCache = SearchKeywordCache();
@@ -222,6 +236,11 @@ class SearchModel with ChangeNotifier {
       final poolSize = sourceConcurrency.clamp(1, 20);
       for (var i = 0; i < searchable.length; i += poolSize) {
         if (gen != _searchGen) return false;
+        // 暂停闸门：当前轮被暂停时在这里等待（120ms 轮询，开销可忽略）。
+        while (searchPaused && _pausedGen == gen) {
+          if (gen != _searchGen) return false;
+          await Future<void>.delayed(const Duration(milliseconds: 120));
+        }
         final chunkMeta = searchable.skip(i).take(poolSize).toList();
         final chunk = await _sources.getByUrls(
           chunkMeta.map((e) => e.bookSourceUrl).toList(),

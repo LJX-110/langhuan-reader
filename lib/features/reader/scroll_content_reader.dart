@@ -716,7 +716,8 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
                       ),
               ),
             ),
-            if (_items.isNotEmpty)
+            // 专注模式隐藏吸顶行头，与分页模式保持一致。
+            if (_items.isNotEmpty && !ReadSetting.getFocusMode())
               Positioned(
                 top: 0,
                 left: 0,

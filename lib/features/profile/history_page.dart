@@ -57,6 +57,43 @@ class _HistoryPageState extends State<HistoryPage> {
     );
   }
 
+  /// 左滑移除：只移记录；书架、阅读进度与离线缓存保留（再次阅读会重新出现）。
+  Future<void> _remove(ReadingRecord record) async {
+    setState(() {
+      _records = _records
+          .where((r) => r.bookId != record.bookId)
+          .toList(growable: false);
+    });
+    await ReadingHistoryRepository.instance.remove(record.bookId);
+    if (!mounted) return;
+    BotToast.showText(text: '已移除记录，书架与阅读进度保留');
+  }
+
+  Future<void> _clearAll() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('清空阅读记录'),
+        content: const Text('清空所有阅读记录？\n书架、阅读进度与离线缓存都会保留。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('清空'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await ReadingHistoryRepository.instance.clear();
+    if (!mounted) return;
+    setState(() => _records = const []);
+    BotToast.showText(text: '已清空阅读记录');
+  }
+
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
@@ -71,6 +108,10 @@ class _HistoryPageState extends State<HistoryPage> {
         title: const Text('阅读记录'),
         elevation: 0,
         backgroundColor: background,
+        actions: [
+          if (!_loading && _records.isNotEmpty)
+            TextButton(onPressed: _clearAll, child: const Text('清空')),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -104,10 +145,23 @@ class _HistoryPageState extends State<HistoryPage> {
               separatorBuilder: (_, _) => Divider(height: .5, color: line),
               itemBuilder: (context, i) {
                 final record = _records[i];
-                return Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () => _open(record),
+                return Dismissible(
+                  key: ValueKey('history-${record.bookId}'),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    color: AppColors.danger,
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 24),
+                    child: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.white,
+                    ),
+                  ),
+                  onDismissed: (_) => _remove(record),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => _open(record),
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(20, 12, 16, 12),
                       child: Row(
@@ -162,6 +216,7 @@ class _HistoryPageState extends State<HistoryPage> {
                       ),
                     ),
                   ),
+                ),
                 );
               },
             ),

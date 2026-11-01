@@ -22,10 +22,6 @@ class ReaderChapterPanel extends StatefulWidget {
 }
 
 class _ReaderChapterPanelState extends State<ReaderChapterPanel> {
-  /// Slider position while the finger is down. Kept local so a drag never
-  /// mutates the reading position before the chapter actually opens.
-  int? _dragIndex;
-
   Future<void> _step(int delta) async {
     final chapters = widget.readModel.chapters;
     final book = widget.readModel.book;
@@ -44,22 +40,13 @@ class _ReaderChapterPanelState extends State<ReaderChapterPanel> {
     widget.onChanged();
   }
 
-  Future<void> _openAt(int index) async {
-    setState(() => _dragIndex = index);
-    await widget.readModel.openChapterAt(index, true);
-    widget.readModel.scheduleProgressSave(delay: Duration.zero);
-    if (mounted) setState(() => _dragIndex = null);
-    widget.onChanged();
-  }
-
   @override
   Widget build(BuildContext context) {
     final chapters = widget.readModel.chapters;
     final chrome = widget.chrome;
-    final max = chapters.isEmpty ? 0.0 : (chapters.length - 1).toDouble();
-    final modelIndex = widget.readModel.book?.chapterIndex ?? 0;
-    final index = (_dragIndex ?? modelIndex).clamp(0, max.toInt()).toInt();
-    final cur = index.toDouble().clamp(0.0, max);
+    final index = (widget.readModel.book?.chapterIndex ?? 0)
+        .clamp(0, chapters.isEmpty ? 0 : chapters.length - 1)
+        .toInt();
     final chapterName = index >= 0 && index < chapters.length
         ? chapters[index].title
         : '';
@@ -79,28 +66,12 @@ class _ReaderChapterPanelState extends State<ReaderChapterPanel> {
                 style: TextStyle(fontSize: 12, color: chrome.muted),
               ),
             ),
+          // 全书拖动定位交给底栏进度条（reader_progress_bar），这里保留章节步进。
           Row(
             children: <Widget>[
-              _miniTextBtn('上一章', () => _step(-1)),
-              Expanded(
-                child: SliderTheme(
-                  data: readerSliderTheme(context, chrome),
-                  child: Slider(
-                    value: cur,
-                    max: max <= 0 ? 1 : max,
-                    min: 0.0,
-                    onChanged: max <= 0
-                        ? null
-                        : (newValue) {
-                            setState(() => _dragIndex = newValue.round());
-                          },
-                    onChangeEnd: max <= 0
-                        ? null
-                        : (newValue) => _openAt(newValue.round()),
-                  ),
-                ),
-              ),
-              _miniTextBtn('下一章', () => _step(1)),
+              Expanded(child: _miniTextBtn('上一章', () => _step(-1))),
+              const SizedBox(width: 10),
+              Expanded(child: _miniTextBtn('下一章', () => _step(1))),
             ],
           ),
         ],

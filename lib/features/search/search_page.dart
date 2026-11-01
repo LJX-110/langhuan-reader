@@ -346,6 +346,10 @@ class _SearchState extends ConsumerState<Search> {
                 style: TextStyle(fontSize: 11, color: muted),
               ),
               TextButton(
+                onPressed: model.togglePause,
+                child: Text(model.searchPaused ? '继续' : '暂停'),
+              ),
+              TextButton(
                 onPressed: model.stopWaiting,
                 child: const Text('停止等待'),
               ),

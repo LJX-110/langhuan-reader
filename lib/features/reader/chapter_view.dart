@@ -1,8 +1,8 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/core/storage/local_store.dart';
-import 'package:langhuan/core/platform/system_ui.dart';
 import 'package:langhuan/features/reader/model/toc_rows.dart';
 import 'package:langhuan/app/providers.dart';
 import 'package:flutter/material.dart';
@@ -11,7 +11,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:langhuan/core/storage/prefs_keys.dart';
 
-/// Full-screen chapter catalog with search + jump-to-index.
+/// Bounded chapter catalog panel (Wenku8-style sheet) with search + jump.
+///
+/// Presented as a modal bottom sheet over the reader: current chapter is the
+/// scroll target, search accepts a chapter name or an exact chapter number.
 class ChapterView extends ConsumerStatefulWidget {
   const ChapterView({super.key});
 
@@ -42,8 +45,7 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
   @override
   void initState() {
     super.initState();
-    // Catalog sits on top of the reader — show status bar here only.
-    SystemUiHelper.showSystemBars();
+    // The sheet overlays the immersive reader; system bars stay hidden.
     _itemPositionsListener.itemPositions.addListener(_onPositionsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _centerCurrentChapter();
@@ -55,8 +57,6 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
     _itemPositionsListener.itemPositions.removeListener(_onPositionsChanged);
     _searchCtrl.dispose();
     _searchFocus.dispose();
-    // Back under ReadBook → immersive; otherwise keep bars visible.
-    SystemUiHelper.restoreAfterOverlay();
     super.dispose();
   }
 
@@ -284,126 +284,142 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
       });
     }
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiHelper.overlayStyle(context),
-      child: Scaffold(
-        backgroundColor: _scaffold,
-        body: Column(
-          children: [
-            _Header(
-              title: bookName,
-              subtitle: chapters.isEmpty
-                  ? '暂无章节'
-                  : '共 ${chapters.length} 章 · 当前第 ${cur + 1} 章',
-              dark: _dark,
-              primary: _primary,
-              secondary: _secondary,
-              surface: _surface,
-              searching: _searching,
-              searchCtrl: _searchCtrl,
-              searchFocus: _searchFocus,
-              onBack: () => Navigator.of(context).maybePop(),
-              onToggleSearch: () {
-                setState(() {
-                  _searching = !_searching;
-                  if (!_searching) {
-                    _query = '';
-                    _searchCtrl.clear();
-                    _searchFocus.unfocus();
-                  } else {
-                    _searchFocus.requestFocus();
-                  }
-                });
-              },
-              onQueryChanged: (v) {
-                setState(() {
-                  _query = v;
-                  _centeredOnce = true; // don't re-center while filtering
-                });
-              },
-              onClearQuery: () {
-                setState(() {
-                  _query = '';
-                  _searchCtrl.clear();
-                });
-              },
-              onJump: chapters.isEmpty ? null : _showJumpDialog,
-              onLocate: chapters.isEmpty ? null : _goCurrent,
+    // 有界面板（对齐文库）：屏高约 64% 封顶；键盘弹出时整体上浮，
+    // 安全区与输入法高度都从可用高度里扣，避免搜索时被键盘遮住。
+    final media = MediaQuery.of(context);
+    final bottomInset = media.viewInsets.bottom;
+    final available = math.max(
+      200.0,
+      media.size.height - media.viewPadding.vertical - bottomInset - 40,
+    );
+    final panelHeight = math.min(media.size.height * .64, available);
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: SizedBox(
+        height: panelHeight,
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          child: Material(
+            color: _scaffold,
+            child: Column(
+              children: [
+                _Header(
+                  title: bookName,
+                  subtitle: chapters.isEmpty
+                      ? '暂无章节'
+                      : '共 ${chapters.length} 章 · 当前第 ${cur + 1} 章',
+                  dark: _dark,
+                  primary: _primary,
+                  secondary: _secondary,
+                  surface: _surface,
+                  searching: _searching,
+                  searchCtrl: _searchCtrl,
+                  searchFocus: _searchFocus,
+                  onClose: () => Navigator.of(context).maybePop(),
+                  onToggleSearch: () {
+                    setState(() {
+                      _searching = !_searching;
+                      if (!_searching) {
+                        _query = '';
+                        _searchCtrl.clear();
+                        _searchFocus.unfocus();
+                      } else {
+                        _searchFocus.requestFocus();
+                      }
+                    });
+                  },
+                  onQueryChanged: (v) {
+                    setState(() {
+                      _query = v;
+                      _centeredOnce = true; // don't re-center while filtering
+                    });
+                  },
+                  onClearQuery: () {
+                    setState(() {
+                      _query = '';
+                      _searchCtrl.clear();
+                    });
+                  },
+                  onJump: chapters.isEmpty ? null : _showJumpDialog,
+                  onLocate: chapters.isEmpty ? null : _goCurrent,
+                ),
+                Expanded(
+                  child: chaptersLoading && chapters.isEmpty
+                      ? Center(
+                          child: Text(
+                            loadingHint.isEmpty ? '正在加载目录…' : loadingHint,
+                            style: TextStyle(color: _secondary, fontSize: 14),
+                          ),
+                        )
+                      : chapters.isEmpty
+                      ? Center(
+                          child: Text(
+                            '暂无章节',
+                            style: TextStyle(color: _secondary, fontSize: 14),
+                          ),
+                        )
+                      : rows.isEmpty
+                      ? Center(
+                          child: Text(
+                            '未找到匹配章节',
+                            style: TextStyle(color: _secondary, fontSize: 14),
+                          ),
+                        )
+                      : ScrollablePositionedList.builder(
+                          itemScrollController: _itemScrollController,
+                          itemPositionsListener: _itemPositionsListener,
+                          padding: const EdgeInsets.fromLTRB(0, 4, 0, 8),
+                          itemCount: rows.length,
+                          itemBuilder: (context, i) {
+                            final row = rows[i];
+                            if (row.isVolume) {
+                              return _VolumeTile(
+                                title: row.title,
+                                count: row.count,
+                                tertiary: _tertiary,
+                              );
+                            }
+                            final index = row.chapterIndex;
+                            final chapter = row.chapter!;
+                            final selected = index == cur;
+                            final cached = chapter.hasBody;
+                            return _ChapterTile(
+                              index: index,
+                              title: chapter.title,
+                              info: chapter.info,
+                              selected: selected,
+                              cached: cached,
+                              dark: _dark,
+                              primary: _primary,
+                              tertiary: _tertiary,
+                              onTap: () => _openChapter(index),
+                            );
+                          },
+                        ),
+                ),
+                _BottomBar(
+                  dark: _dark,
+                  surface: _surface,
+                  primary: _primary,
+                  secondary: _secondary,
+                  divider: _divider,
+                  showToTop: showToTopBtn && _query.isEmpty,
+                  reloading: chaptersLoading,
+                  onReload: chaptersLoading ? null : refresh,
+                  onJumpList: chaptersLoading || _query.isNotEmpty
+                      ? null
+                      : topOrBottom,
+                  onJumpChapter: chaptersLoading || chapters.isEmpty
+                      ? null
+                      : _showJumpDialog,
+                  onLocateCurrent: chaptersLoading || chapters.isEmpty
+                      ? null
+                      : _goCurrent,
+                ),
+              ],
             ),
-            Expanded(
-              child: chaptersLoading && chapters.isEmpty
-                  ? Center(
-                      child: Text(
-                        loadingHint.isEmpty ? '正在加载目录…' : loadingHint,
-                        style: TextStyle(color: _secondary, fontSize: 14),
-                      ),
-                    )
-                  : chapters.isEmpty
-                  ? Center(
-                      child: Text(
-                        '暂无章节',
-                        style: TextStyle(color: _secondary, fontSize: 14),
-                      ),
-                    )
-                  : rows.isEmpty
-                  ? Center(
-                      child: Text(
-                        '未找到匹配章节',
-                        style: TextStyle(color: _secondary, fontSize: 14),
-                      ),
-                    )
-                  : ScrollablePositionedList.builder(
-                      itemScrollController: _itemScrollController,
-                      itemPositionsListener: _itemPositionsListener,
-                      padding: const EdgeInsets.fromLTRB(0, 4, 0, 8),
-                      itemCount: rows.length,
-                      itemBuilder: (context, i) {
-                        final row = rows[i];
-                        if (row.isVolume) {
-                          return _VolumeTile(
-                            title: row.title,
-                            count: row.count,
-                            tertiary: _tertiary,
-                          );
-                        }
-                        final index = row.chapterIndex;
-                        final chapter = row.chapter!;
-                        final selected = index == cur;
-                        final cached = chapter.hasBody;
-                        return _ChapterTile(
-                          index: index,
-                          title: chapter.title,
-                          info: chapter.info,
-                          selected: selected,
-                          cached: cached,
-                          dark: _dark,
-                          primary: _primary,
-                          tertiary: _tertiary,
-                          onTap: () => _openChapter(index),
-                        );
-                      },
-                    ),
-            ),
-            _BottomBar(
-              dark: _dark,
-              surface: _surface,
-              primary: _primary,
-              secondary: _secondary,
-              divider: _divider,
-              showToTop: showToTopBtn && _query.isEmpty,
-              reloading: chaptersLoading,
-              onReload: chaptersLoading ? null : refresh,
-              onJumpList: chaptersLoading || _query.isNotEmpty
-                  ? null
-                  : topOrBottom,
-              onJumpChapter: chaptersLoading || chapters.isEmpty
-                  ? null
-                  : _showJumpDialog,
-              onLocateCurrent: chaptersLoading || chapters.isEmpty
-                  ? null
-                  : _goCurrent,
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -424,7 +440,7 @@ class _Header extends StatelessWidget {
   final bool searching;
   final TextEditingController searchCtrl;
   final FocusNode searchFocus;
-  final VoidCallback onBack;
+  final VoidCallback onClose;
   final VoidCallback onToggleSearch;
   final ValueChanged<String> onQueryChanged;
   final VoidCallback onClearQuery;
@@ -441,7 +457,7 @@ class _Header extends StatelessWidget {
     required this.searching,
     required this.searchCtrl,
     required this.searchFocus,
-    required this.onBack,
+    required this.onClose,
     required this.onToggleSearch,
     required this.onQueryChanged,
     required this.onClearQuery,
@@ -451,95 +467,85 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final topPad = MediaQuery.paddingOf(context).top;
-
     return Material(
       color: surface,
       elevation: 0,
       child: Column(
         children: [
-          // Extend header background into the status bar so they read as one bar.
-          Padding(
-            padding: EdgeInsets.only(top: topPad),
-            child: SizedBox(
-              height: 52,
-              child: Row(
-                children: [
+          SizedBox(
+            height: 52,
+            child: Row(
+              children: [
+                IconButton(
+                  tooltip: '关闭目录',
+                  icon: Icon(Icons.close, size: 22, color: primary),
+                  onPressed: onClose,
+                ),
+                Expanded(
+                  child: searching
+                      ? _SearchField(
+                          controller: searchCtrl,
+                          focusNode: searchFocus,
+                          dark: dark,
+                          primary: primary,
+                          secondary: secondary,
+                          onChanged: onQueryChanged,
+                          onClear: onClearQuery,
+                        )
+                      : Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: primary,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              subtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: secondary,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+                IconButton(
+                  tooltip: searching ? '关闭搜索' : '搜索章节',
+                  icon: Icon(
+                    searching ? Icons.close : Icons.search,
+                    size: 22,
+                    color: primary,
+                  ),
+                  onPressed: onToggleSearch,
+                ),
+                if (!searching) ...[
                   IconButton(
-                    tooltip: '返回',
+                    tooltip: '跳转章节',
+                    icon: Icon(Icons.low_priority, size: 22, color: primary),
+                    onPressed: onJump,
+                  ),
+                  IconButton(
+                    tooltip: '定位当前',
                     icon: Icon(
-                      Icons.arrow_back_ios_new,
-                      size: 18,
+                      Icons.my_location_outlined,
+                      size: 20,
                       color: primary,
                     ),
-                    onPressed: onBack,
+                    onPressed: onLocate,
                   ),
-                  Expanded(
-                    child: searching
-                        ? _SearchField(
-                            controller: searchCtrl,
-                            focusNode: searchFocus,
-                            dark: dark,
-                            primary: primary,
-                            secondary: secondary,
-                            onChanged: onQueryChanged,
-                            onClear: onClearQuery,
-                          )
-                        : Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: primary,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                subtitle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: secondary,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                  ),
-                  IconButton(
-                    tooltip: searching ? '关闭搜索' : '搜索章节',
-                    icon: Icon(
-                      searching ? Icons.close : Icons.search,
-                      size: 22,
-                      color: primary,
-                    ),
-                    onPressed: onToggleSearch,
-                  ),
-                  if (!searching) ...[
-                    IconButton(
-                      tooltip: '跳转章节',
-                      icon: Icon(Icons.low_priority, size: 22, color: primary),
-                      onPressed: onJump,
-                    ),
-                    IconButton(
-                      tooltip: '定位当前',
-                      icon: Icon(
-                        Icons.my_location_outlined,
-                        size: 20,
-                        color: primary,
-                      ),
-                      onPressed: onLocate,
-                    ),
-                  ],
-                  const SizedBox(width: 4),
                 ],
-              ),
+                const SizedBox(width: 4),
+              ],
             ),
           ),
           Divider(
@@ -808,7 +814,8 @@ class _BottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bottom = MediaQuery.paddingOf(context).bottom;
+    // 面板底部贴手势条：用 viewPadding（弹层里 padding 可能被框架移除）。
+    final bottom = MediaQuery.viewPaddingOf(context).bottom;
 
     Widget btn({
       required IconData icon,
