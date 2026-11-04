@@ -70,16 +70,10 @@ class _MainShellState extends State<MainShell> {
             () => Me(embedded: true),
           ],
         ),
-        // 轻小说文库式悬浮胶囊：居中、底部留白；栏位高度只留胶囊本身。
-        bottomNavigationBar: SafeArea(
-          top: false,
-          minimum: const EdgeInsets.only(bottom: 10),
-          child: Center(
-            child: LanhuanDock(
-              index: _index,
-              onTap: (i) => setState(() => _index = i),
-            ),
-          ),
+        // 轻小说文库式悬浮胶囊：居中、底部留白（槽位细节与坑见 DockBar）。
+        bottomNavigationBar: DockBar(
+          index: _index,
+          onTap: (i) => setState(() => _index = i),
         ),
       ),
     );

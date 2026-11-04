@@ -68,6 +68,30 @@ class LanhuanDock extends StatelessWidget {
   }
 }
 
+/// MainShell 的 bottomNavigationBar 槽位：底部安全距 + 居中悬浮胶囊。
+///
+/// [Center] 必须带 `heightFactor: 1`——Scaffold 传给 bottomNavigationBar 的
+/// 是有界松约束，裸 [Center] 会撑满全高、把 body 挤成 0 高
+///（2.3.0+14「整机只剩底栏」事故根因；回归测试 `test/design/dock_bar_layout_test.dart`）。
+class DockBar extends StatelessWidget {
+  const DockBar({super.key, required this.index, required this.onTap});
+
+  final int index;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.only(bottom: 10),
+      child: Center(
+        heightFactor: 1,
+        child: LanhuanDock(index: index, onTap: onTap),
+      ),
+    );
+  }
+}
+
 enum _DockIcon { shelf, discover, local, profile }
 
 class _DockItem extends StatelessWidget {
