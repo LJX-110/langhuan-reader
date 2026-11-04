@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:langhuan/design/motion.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/core/storage/local_store.dart';
 import 'package:langhuan/features/reader/model/toc_rows.dart';
@@ -93,7 +94,7 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
     );
     await _itemScrollController.scrollTo(
       index: row,
-      duration: const Duration(milliseconds: 280),
+      duration: AppMotion.settle,
       curve: Curves.easeOut,
       alignment: alignment,
     );

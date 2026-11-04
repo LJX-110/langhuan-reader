@@ -44,9 +44,16 @@ class CssAnalyzer {
     var t = token.trim();
     if (t.isEmpty) return '';
 
-    // Jsoup index: a.0 / h3.1 / label.2  → tag:eq(n)
+    // Legado `text.xxx` / `text:xxx` — elements whose own text contains xxx
+    // (AnalyzeByJSoup `getElementsContainingOwnText`). 大量源用它找「下一页」。
+    final own = RegExp(r'^text[.:](.+)$').firstMatch(t);
+    if (own != null) {
+      return ':ownText(${own.group(1)})';
+    }
+
+    // Jsoup index: a.0 / a.-1 / h3.1 / label.2  → tag:eq(n)
     // Must run before class./id. so "a.0" is not treated as class "0".
-    final idx = RegExp(r'^([a-zA-Z][\w-]*)\.(\d+)(.*)$').firstMatch(t);
+    final idx = RegExp(r'^([a-zA-Z][\w-]*)\.(-?\d+)(.*)$').firstMatch(t);
     if (idx != null) {
       final tag = idx.group(1)!;
       final n = idx.group(2)!;
@@ -239,7 +246,7 @@ class CssAnalyzer {
   }
 
   static final _pseudoRe = RegExp(
-    r':(eq|gt|lt)\((-?\d+)\)|:contains\(([^)]*)\)',
+    r':(eq|gt|lt)\((-?\d+)\)|:contains\(([^)]*)\)|:ownText\(([^)]*)\)',
     caseSensitive: false,
   );
 
@@ -252,6 +259,12 @@ class CssAnalyzer {
       return _SelectorStep(base: token, filters: const []);
     }
     for (final m in matches) {
+      if (m.group(4) != null) {
+        filters.add(
+          _PseudoFilter.ownText(_unquote((m.group(4) ?? '').trim())),
+        );
+        continue;
+      }
       final kind = (m.group(1) ?? 'contains').toLowerCase();
       if (kind == 'contains' || m.group(1) == null) {
         final text = (m.group(3) ?? '').trim();
@@ -289,7 +302,8 @@ class CssAnalyzer {
       if (cur.isEmpty) return const [];
       switch (f.kind) {
         case _PseudoKind.eq:
-          final i = f.index;
+          var i = f.index;
+          if (i < 0) i += cur.length;
           if (i < 0 || i >= cur.length) return const [];
           cur = [cur[i]];
         case _PseudoKind.gt:
@@ -305,6 +319,11 @@ class CssAnalyzer {
           final needle = f.text;
           cur = cur
               .where((e) => e.text.contains(needle))
+              .toList(growable: false);
+        case _PseudoKind.ownText:
+          final needle = f.text;
+          cur = cur
+              .where((e) => _ownText(e).contains(needle))
               .toList(growable: false);
       }
     }
@@ -459,6 +478,11 @@ class CssAnalyzer {
     }
   }
 
+  /// Direct text of an element (own text only, no descendant text).
+  /// Legado `text.xxx` = `getElementsContainingOwnText`, not subtree text.
+  static String _ownText(Element e) =>
+      e.nodes.whereType<Text>().map((n) => n.text).join();
+
   /// Prefer real cover URL over lazy-load placeholders.
   static String _imageUrl(Element el) {
     const lazyKeys = [
@@ -515,7 +539,7 @@ class _SelectorStep {
   const _SelectorStep({required this.base, required this.filters});
 }
 
-enum _PseudoKind { eq, gt, lt, contains }
+enum _PseudoKind { eq, gt, lt, contains, ownText }
 
 class _PseudoFilter {
   final _PseudoKind kind;
@@ -538,4 +562,7 @@ class _PseudoFilter {
 
   factory _PseudoFilter.contains(String text) =>
       _PseudoFilter._(_PseudoKind.contains, 0, text);
+
+  factory _PseudoFilter.ownText(String text) =>
+      _PseudoFilter._(_PseudoKind.ownText, 0, text);
 }

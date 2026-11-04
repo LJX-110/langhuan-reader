@@ -3,16 +3,16 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/core/utils/redact.dart';
-import 'package:langhuan/data/entities/book_info.dart';
+
 import 'package:langhuan/data/entities/search_item.dart';
 import 'package:langhuan/features/discover/cover_enricher.dart';
 import 'package:langhuan/features/sources/source_model.dart';
 import 'package:langhuan/features/sources/engine/book_source_engine.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
-import 'package:langhuan/features/sources/net/analyze_url.dart';
+
 import 'package:langhuan/features/sources/util/book_id.dart';
-import 'package:bot_toast/bot_toast.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 /// Bottom-tab discovery: book-source exploreUrl kinds + paginated book list.
@@ -62,7 +62,16 @@ class ExploreModel with ChangeNotifier {
     notifyListeners();
     try {
       final model = SourceModel();
-      final all = await model.enabledSources();
+      // 列表与"上次选中源"的 DB 读取并行（原为三连 await），缩短首屏等待。
+      final prevUrl = activeSource?.bookSourceUrl ?? '';
+      final enabledFuture = model.enabledSources();
+      final hydratedPrevFuture = prevUrl.isEmpty
+          ? Future<BookSource?>.value(null)
+          : model.findByUrl(prevUrl).then<BookSource?>(
+              (v) => v,
+              onError: (_) => null,
+            );
+      final all = await enabledFuture;
       exploreSources = all.where((s) => s.canExplore).toList()
         ..sort((a, b) => a.customOrder.compareTo(b.customOrder));
 
@@ -78,12 +87,15 @@ class ExploreModel with ChangeNotifier {
       }
 
       // Keep previous selection if still present; hydrate rules for engine.
-      final prevUrl = activeSource?.bookSourceUrl;
       final meta = exploreSources.firstWhere(
         (s) => s.bookSourceUrl == prevUrl,
         orElse: () => exploreSources.first,
       );
-      activeSource = await model.findByUrl(meta.bookSourceUrl) ?? meta;
+      final hydratedPrev = await hydratedPrevFuture;
+      activeSource = (hydratedPrev != null &&
+              hydratedPrev.bookSourceUrl == meta.bookSourceUrl)
+          ? hydratedPrev
+          : (await model.findByUrl(meta.bookSourceUrl) ?? meta);
       _applyKinds();
       bootstrapped = true;
       await loadBooks(refresh: true);
@@ -138,8 +150,8 @@ class ExploreModel with ChangeNotifier {
 
     if (refresh) {
       page = 1;
-      books = [];
       noMore = false;
+      // 保留旧列表直到新结果到达（切分类/换源不再闪空白，对齐文库）。
     }
 
     loading = true;
@@ -149,10 +161,13 @@ class ExploreModel with ChangeNotifier {
       final hits = await _engine.explore(src, kind.url, page: page);
       if (hits.isEmpty) {
         if (page == 1) {
+          // 刷新后为空：清掉旧列表，让空态/错误可见。
+          if (refresh) books = [];
           error = '该分类没有解析到内容，可能书源失效或站点拦截';
         }
         noMore = true;
       } else {
+        if (refresh) books = [];
         final added = <SearchItem>[];
         for (final h in hits) {
           final item = _toItem(h);
@@ -202,9 +217,11 @@ class ExploreModel with ChangeNotifier {
   }
 
   /// Fill missing covers for the rows just added (visible first screen).
+  ///
+  /// 4 本起补（原 8）：详情页抓封面的请求不再与主列表/书架补齐抢带宽。
   Future<void> _enrich(List<SearchItem> items) => _covers.enrich(
     items,
-    limit: 8,
+    limit: 4,
     onUpdated: () {
       if (!_disposed) notifyListeners();
     },
@@ -219,33 +236,5 @@ class ExploreModel with ChangeNotifier {
     return _engine.fetchCover(src, item.bookUrl);
   }
 
-  Future<BookInfo?> openDetail(SearchItem item) async {
-    final resolved = AnalyzeUrl.sanitizeUrl(item.bookUrl, base: item.sourceUrl);
-    if (item.sourceUrl.isEmpty || resolved.isEmpty) {
-      BotToast.showText(text: '该书详情地址无效，可能书源规则不完整');
-      return null;
-    }
-    final src = await SourceModel().findByUrl(item.sourceUrl);
-    if (src == null) {
-      BotToast.showText(text: '书源不存在：${item.sourceName}');
-      return null;
-    }
-    try {
-      final seed = SearchBook(
-        name: item.name,
-        author: item.author,
-        intro: item.description,
-        coverUrl: item.coverUrl,
-        lastChapter: item.latestChapter,
-        kind: item.category,
-        bookUrl: resolved,
-        sourceUrl: item.sourceUrl,
-        sourceName: item.sourceName,
-      );
-      return await _engine.bookInfo(src, resolved, seed: seed);
-    } catch (e) {
-      BotToast.showText(text: '获取详情失败，请稍后重试');
-      return null;
-    }
-  }
+  // openDetail 已移除：发现页改为"先推详情壳（seed），页内加载"（DetailLoader）。
 }

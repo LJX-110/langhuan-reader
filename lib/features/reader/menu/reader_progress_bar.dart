@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:langhuan/design/motion.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/features/reader/menu/reader_chrome.dart';
 
@@ -47,7 +48,7 @@ class ReaderProgressBar extends StatelessWidget {
           height: 16,
           child: AnimatedOpacity(
             opacity: dragging ? 1 : 0,
-            duration: const Duration(milliseconds: 150),
+            duration: AppMotion.contact,
             child: Text(
               previewText,
               style: TextStyle(fontSize: 12, color: chrome.muted),

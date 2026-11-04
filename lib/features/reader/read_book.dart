@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:langhuan/core/utils/app_log.dart';
+import 'package:langhuan/design/motion.dart';
 import 'package:langhuan/features/reader/settings/read_setting.dart';
 import 'package:langhuan/core/storage/local_store.dart';
 import 'package:langhuan/core/platform/system_ui.dart';
@@ -195,7 +196,35 @@ class _ReadBookState extends ConsumerState<ReadBook>
                   ? const ScrollContentReader()
                   : const PageContentReader(),
             ),
-            if (sessionReady && showMenu) ReaderMenu(onExit: _exitReader),
+            // 菜单进出统一走动效词汇表：进场 120ms 轻快、退场 320ms 从容；
+            // 退场期间忽略指针，避免点到正在淡出的控件（对齐文库 chrome 层）。
+            AnimatedSwitcher(
+              duration: AppMotion.contact,
+              reverseDuration: AppMotion.exit,
+              switchInCurve: AppMotion.ease,
+              switchOutCurve: AppMotion.retract,
+              transitionBuilder: (child, animation) {
+                final slide = Tween<Offset>(
+                  begin: const Offset(0, .015),
+                  end: Offset.zero,
+                ).animate(animation);
+                return FadeTransition(
+                  opacity: animation,
+                  child: IgnorePointer(
+                    ignoring:
+                        animation.status == AnimationStatus.reverse ||
+                        animation.status == AnimationStatus.dismissed,
+                    child: SlideTransition(position: slide, child: child),
+                  ),
+                );
+              },
+              child: (sessionReady && showMenu)
+                  ? ReaderMenu(
+                      key: const ValueKey('reader-menu'),
+                      onExit: _exitReader,
+                    )
+                  : const SizedBox.shrink(key: ValueKey('reader-menu-hidden')),
+            ),
           ],
         ),
       ),

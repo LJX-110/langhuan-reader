@@ -211,6 +211,16 @@ class _HistoryPageState extends State<HistoryPage> {
                               ],
                             ),
                           ),
+                          IconButton(
+                            tooltip: '移除记录',
+                            visualDensity: VisualDensity.compact,
+                            icon: Icon(
+                              Icons.delete_outline,
+                              size: 18,
+                              color: muted,
+                            ),
+                            onPressed: () => _remove(record),
+                          ),
                           Icon(Icons.chevron_right, size: 18, color: muted),
                         ],
                       ),

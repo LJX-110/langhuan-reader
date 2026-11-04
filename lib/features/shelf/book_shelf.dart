@@ -1,12 +1,13 @@
 import 'dart:convert';
 
-import 'package:bot_toast/bot_toast.dart';
 import 'package:langhuan/core/platform/screen.dart';
 import 'package:langhuan/core/utils/perf_log.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/design/components/bookshelf_3d.dart';
+import 'package:langhuan/design/components/feedback.dart';
 import 'package:langhuan/design/components/page_header.dart';
+import 'package:langhuan/design/motion.dart';
 import 'package:langhuan/design/components/pic_widget.dart';
 import 'package:langhuan/design/components/shelf_book_view.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
@@ -225,12 +226,8 @@ class _BookShelfState extends ConsumerState<BookShelf> {
         break;
       }
     }
-    // Prefer durable DB progress over possibly-stale in-memory shelf data.
-    try {
-      final dbBook = await BookRepository.instance.getById(view.id);
-      if (dbBook != null) openBook = dbBook;
-    } catch (_) {}
-    if (!mounted) return;
+    // 立即推页：持久化进度由阅读器 hydrateReadingSession 自行与 DB 合并
+    // （reading_session_opener.dart:79-98），此处不再等待一次 DB 往返。
     await Routes.navigateTo(
       context,
       Routes.read,
@@ -249,7 +246,20 @@ class _BookShelfState extends ConsumerState<BookShelf> {
     }
     if (target == null) return;
     await model.removeBook(target);
-    BotToast.showText(text: '已移除《${target.name}》');
+    if (!mounted) return;
+    final removed = target;
+    // 可撤销：retire 只是 on_shelf 置 0，撤回即恢复（对齐文库的撤销反馈）。
+    showFeedback(
+      context,
+      '已移除《${removed.name}》',
+      actionLabel: '撤销',
+      onAction: () => _undoRemove(removed, model),
+    );
+  }
+
+  Future<void> _undoRemove(Book removed, ShelfModel model) async {
+    await BookRepository.instance.setOnShelf([removed.id], true);
+    await model.initShelf();
   }
 }
 
@@ -401,7 +411,7 @@ class _ShelfHeader extends StatelessWidget {
                         onTap: () => onFilter(value),
                         borderRadius: BorderRadius.circular(8),
                         child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 160),
+                          duration: AppMotion.contact,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 9,
                             vertical: 5,
@@ -431,7 +441,7 @@ class _ShelfHeader extends StatelessWidget {
                               ),
                               const SizedBox(height: 3),
                               AnimatedContainer(
-                                duration: const Duration(milliseconds: 160),
+                                duration: AppMotion.contact,
                                 width: 16,
                                 height: 2,
                                 color: filter == value

@@ -8,6 +8,7 @@ import 'package:langhuan/core/events/event.dart';
 import 'package:langhuan/data/entities/bookmark.dart';
 import 'package:langhuan/data/entities/read_page.dart';
 import 'package:langhuan/data/repositories/bookmark_repository.dart';
+import 'package:langhuan/design/motion.dart';
 import 'package:langhuan/design/theme/color_model.dart';
 import 'package:langhuan/features/reader/menu/reader_bottom_bar.dart';
 import 'package:langhuan/features/reader/menu/reader_chapter_panel.dart';
@@ -199,31 +200,52 @@ class _MenuState extends ConsumerState<ReaderMenu> {
   }
 
   Widget _bottomHead(ReaderChrome chrome) {
-    switch (type) {
-      case Type.MORE_SETTING:
-        return ReaderSettingsPanel(
-          readModel: _readModel,
-          colorModel: _colorModel,
-          chrome: chrome,
-          onChanged: _refresh,
-          onOpenLayout: () => setState(() => type = Type.LAYOUT),
-        );
-      case Type.LAYOUT:
-        return ReaderLayoutPanel(
-          readModel: _readModel,
-          chrome: chrome,
-          onChanged: _refresh,
-          onBack: () => setState(() => type = Type.MORE_SETTING),
-        );
-      case Type.DOWNLOAD:
-        return ReaderDownloadPanel(readModel: _readModel, chrome: chrome);
-      default:
-        return ReaderChapterPanel(
-          readModel: _readModel,
-          chrome: chrome,
-          onChanged: _refresh,
-        );
-    }
+    final panel = switch (type) {
+      Type.MORE_SETTING => ReaderSettingsPanel(
+        readModel: _readModel,
+        colorModel: _colorModel,
+        chrome: chrome,
+        onChanged: _refresh,
+        onOpenLayout: () => setState(() => type = Type.LAYOUT),
+      ),
+      Type.LAYOUT => ReaderLayoutPanel(
+        readModel: _readModel,
+        chrome: chrome,
+        onChanged: _refresh,
+        onBack: () => setState(() => type = Type.MORE_SETTING),
+      ),
+      Type.DOWNLOAD => ReaderDownloadPanel(
+        readModel: _readModel,
+        chrome: chrome,
+      ),
+      _ => ReaderChapterPanel(
+        readModel: _readModel,
+        chrome: chrome,
+        onChanged: _refresh,
+      ),
+    };
+    // 面板互切承接：高度弹性过渡 + 内容淡入微上移（不再瞬间替换、高度跳变）。
+    return AnimatedSize(
+      duration: AppMotion.enter,
+      curve: AppMotion.ease,
+      alignment: Alignment.topCenter,
+      child: AnimatedSwitcher(
+        duration: AppMotion.contact,
+        switchInCurve: AppMotion.ease,
+        switchOutCurve: AppMotion.retract,
+        transitionBuilder: (child, animation) {
+          final slide = Tween<Offset>(
+            begin: const Offset(0, .02),
+            end: Offset.zero,
+          ).animate(animation);
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(position: slide, child: child),
+          );
+        },
+        child: KeyedSubtree(key: ValueKey(type), child: panel),
+      ),
+    );
   }
 
   void _dismissMenu() {

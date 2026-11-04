@@ -95,10 +95,8 @@ class _SourceRepoPageState extends ConsumerState<SourceRepoPage> {
           builder: (dialogContext) => AlertDialog(
             title: const Text('发现已有书源'),
             content: Text(
-              '仓库包含 ${plan.existingCount} 个已存在书源、'
-              '${plan.newCount} 个新书源。\n\n'
-              '默认保留本地规则、顺序和健康度；只有选择'
-              '「覆盖本地规则」才会用仓库内容更新已有书源。',
+              '仓库包含 ${plan.existingCount} 个已存在、'
+              '${plan.newCount} 个新书源；已有默认保留本地规则。',
             ),
             actions: [
               TextButton(
@@ -221,25 +219,10 @@ class _SourceRepoPageState extends ConsumerState<SourceRepoPage> {
           32 + MediaQuery.viewPaddingOf(context).bottom,
         ),
         children: [
-          Text(
-            '应用不内置、不提供任何书源。这里只保存你自己的仓库地址，'
-            '同步时由你主动触发。',
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey[700],
-              height: 1.6,
-            ),
-          ),
           if (duplicateGroups.isNotEmpty) ...[
-            const SizedBox(height: 10),
             Text(
-              '检测到 ${duplicateGroups.length} 组重复的本地书源；'
-              '同步不会自动删除，请在书源管理中手动检查。',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.orange[800],
-                height: 1.5,
-              ),
+              '检测到 ${duplicateGroups.length} 组重复书源（同步不会自动删除）。',
+              style: TextStyle(fontSize: 12, color: Colors.orange[800]),
             ),
           ],
           const SizedBox(height: 16),
@@ -262,8 +245,7 @@ class _SourceRepoPageState extends ConsumerState<SourceRepoPage> {
               border: const OutlineInputBorder(),
               labelText: 'GitHub Token（私有仓库才需要）',
               hintText: 'fine-grained token，仅本仓库 Contents 只读',
-              helperText: '只保存在本机，只发给 GitHub；公共仓库可留空',
-              helperMaxLines: 2,
+              helperText: '公共仓库可留空；仅存本机',
               suffixIcon: IconButton(
                 tooltip: _obscureToken ? '显示' : '隐藏',
                 onPressed: () =>
@@ -344,27 +326,14 @@ class _SourceRepoPageState extends ConsumerState<SourceRepoPage> {
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
             subtitle: const Text(
-              '默认关闭。开启后，只有书源 JSON 自带 '
-              'X-Langhuan-Insecure-TLS: 1 的源才会对自签或缺链证书'
-              '做一次宽松重试。只在你完全信任该站点时开启。',
-              style: TextStyle(fontSize: 12, height: 1.5),
+              '默认关闭；仅对声明宽松 TLS 的书源生效。',
+              style: TextStyle(fontSize: 12),
             ),
             value: _allowInsecureTls,
             onChanged: (v) {
               setState(() => _allowInsecureTls = v);
               SpUtil.putBool(PrefsKeys.allowInsecureTls, v);
             },
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '仓库格式：Legado 书源数组，或 '
-            '{"name":"…","version":"…","sources":[…]}。'
-            '应用不会自动联网更新，也不会内置任何默认地址。',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-              height: 1.5,
-            ),
           ),
           const SizedBox(height: 20),
           TextButton.icon(

@@ -13,6 +13,10 @@
   在视觉模型、几何参数与滚动物理上移植自
   **Wenku8-Local**（https://github.com/Wenku8-Local 系列练习项目），该项目按
   **GNU General Public License v3.0** 分发；移植部分同样受 GPL-3.0 约束。
+- 书源引擎（`engine/`，含 `foundation` / `data` / `modules` 裁剪集与验证工具）
+  裁剪自 **Legado / 开源阅读**（KMP 版，https://github.com/huajideshutiao/legado，
+  提交 `d31c0a2`），按 **GNU General Public License v3.0** 分发；
+  裁剪与本地补丁说明见 `engine/LOCAL_PATCHES.md` 与 `engine/README.md`。
 
 ## 第三方组件
 

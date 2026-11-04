@@ -2,8 +2,10 @@ import 'dart:convert';
 
 import 'package:langhuan/design/components/page_header.dart';
 import 'package:langhuan/design/components/pic_widget.dart';
+import 'package:langhuan/design/motion.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/data/entities/search_item.dart';
+import 'package:langhuan/features/sources/model/search_book.dart';
 import 'package:langhuan/features/discover/explore_model.dart';
 import 'package:langhuan/app/router/routes.dart';
 import 'package:langhuan/app/providers.dart';
@@ -34,17 +36,23 @@ class _ExplorePageState extends ConsumerState<ExplorePage>
     });
   }
 
-  Future<void> _openBook(
-    BuildContext context,
-    ExploreModel model,
-    SearchItem item,
-  ) async {
-    final book = await model.openDetail(item);
-    if (book == null || !context.mounted) return;
+  Future<void> _openBook(BuildContext context, SearchItem item) async {
+    // 立即推壳：详情在页内加载（不再等待网络；失败可在页内重试）。
+    final seed = SearchBook(
+      name: item.name,
+      author: item.author,
+      intro: item.description,
+      coverUrl: item.coverUrl,
+      lastChapter: item.latestChapter,
+      kind: item.category,
+      bookUrl: item.bookUrl,
+      sourceUrl: item.sourceUrl,
+      sourceName: item.sourceName,
+    );
     Routes.navigateTo(
       context,
       Routes.detail,
-      params: {'detail': jsonEncode(book)},
+      params: {'seed': jsonEncode(seed.toJson())},
     );
   }
 
@@ -90,7 +98,7 @@ class _ExplorePageState extends ConsumerState<ExplorePage>
                 IconButton(
                   tooltip: '刷新书源',
                   icon: const Icon(Icons.refresh, size: 21),
-                  onPressed: () => model.reloadSources(),
+                  onPressed: model.loading ? null : () => model.reloadSources(),
                 ),
               ],
             ),
@@ -105,7 +113,7 @@ class _ExplorePageState extends ConsumerState<ExplorePage>
               child: _BookList(
                 model: model,
                 dark: dark,
-                onOpen: (item) => _openBook(context, model, item),
+                onOpen: (item) => _openBook(context, item),
               ),
             ),
           ],
@@ -284,7 +292,7 @@ class _KindTab extends StatelessWidget {
               ),
             ),
             AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
+              duration: AppMotion.contact,
               width: selected ? 18 : 0,
               height: 2,
               color: underlineColor,

@@ -1,3 +1,4 @@
+import 'package:langhuan/design/motion.dart';
 import 'package:langhuan/features/reader/animation/animation_controller_with_listener_number.dart';
 import 'package:langhuan/features/reader/read_model.dart';
 import 'package:langhuan/features/reader/settings/read_setting.dart';
@@ -52,7 +53,7 @@ class _PageContentReaderState extends ConsumerState<PageContentReader>
 
     animationController = AnimationControllerWithListenerNumber(
       vsync: this,
-      duration: const Duration(milliseconds: 180),
+      duration: AppMotion.contact,
     );
 
     pageManager = ReaderPageManager()..onTurnSettled = _onTurnSettled;

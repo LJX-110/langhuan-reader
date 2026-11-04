@@ -12,7 +12,7 @@
 
 ## 身份
 
-- 应用名：**琅嬛阁**；当前版本 `2.2.0`。
+- 应用名：**琅嬛阁**；当前版本 `2.3.0`。
 - Android 包名：`com.langhuan.reader`；Dart 包名：`langhuan`。
 - 上游底本：Apache-2.0；固定信息见 `docs/UPSTREAM.md`。
 - 必须保留 `LICENSE`、`NOTICE` 和第三方许可文本；界面不保留上游名称、链接、邮箱、截图。许可归属只放在 `NOTICE` 与 `docs/UPSTREAM.md`，其他文档不重复上游链接。
@@ -55,4 +55,4 @@ flutter build apk --release --target-platform android-arm64
 ## 版本
 
 `pubspec.yaml` 是唯一版本来源，递增、tag 与发布规则见 `docs/VERSIONING.md`。
-上一发布版 `2.1.1+9`；当前版本线 `2.2.0`（本机构建与自动测试通过，待真机验证后发布），精确 build 号看 `pubspec.yaml` 与 GitHub Releases。范围与退出标准见 `docs/ROADMAP.md`。
+上一发布版 `2.2.0+10`；当前版本线 `2.3.0`（本机构建与自动测试通过，按用户决定跳过真机验证直接发布），精确 build 号看 `pubspec.yaml` 与 GitHub Releases。范围与退出标准见 `docs/ROADMAP.md`。

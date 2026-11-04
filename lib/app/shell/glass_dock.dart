@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import 'package:langhuan/design/motion.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 
-/// Three-tab bottom bar used by [MainShell].
+/// Four-tab dock used by [MainShell].
 ///
-/// White surface, one hairline, and a colour change for the active tab. No
-/// pill, no blur: the dock should disappear behind the page.
+/// 对齐轻小说文库的底栏版式：**居中的悬浮胶囊**（不是通栏横条）。
+/// 结构 = 图标 20 + 11px 文字 + 12x1.5 下划线；颜色随选中态过渡。
+/// 保持实色（AGENTS：不用模糊 / 玻璃）。
 class LanhuanDock extends StatelessWidget {
   const LanhuanDock({super.key, required this.index, required this.onTap});
 
@@ -13,6 +16,10 @@ class LanhuanDock extends StatelessWidget {
   final ValueChanged<int> onTap;
 
   static const _labels = ['书架', '发现', '本地', '我'];
+
+  /// 胶囊尺寸：宽 = 4 格 x 64，高 54（对齐 Wenku8 三格 196x54 的比例）。
+  static const double dockHeight = 54;
+  static const double dockWidth = 256;
 
   @override
   Widget build(BuildContext context) {
@@ -23,38 +30,38 @@ class LanhuanDock extends StatelessWidget {
     final companion = AppColors.companionOf(context);
     final inactive = dark ? AppColors.textMutedDark : AppColors.inkMute;
 
-    return DecoratedBox(
+    return Container(
+      width: dockWidth,
+      height: dockHeight,
       decoration: BoxDecoration(
         color: surface,
-        border: Border(top: BorderSide(color: line, width: .5)),
+        borderRadius: BorderRadius.circular(dockHeight / 2),
+        border: Border.all(color: line, width: .5),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x08141414),
-            blurRadius: 12,
-            offset: Offset(0, -3),
+            color: Color(0x14141414),
+            blurRadius: 16,
+            offset: Offset(0, 6),
           ),
         ],
       ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 62,
-          child: Row(
-            children: [
-              for (var i = 0; i < _labels.length; i++)
-                Expanded(
-                  child: _DockItem(
-                    label: _labels[i],
-                    icon: _DockIcon.values[i],
-                    active: index == i,
-                    activeColor: active,
-                    companionColor: companion,
-                    inactiveColor: inactive,
-                    onTap: () => onTap(i),
-                  ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(dockHeight / 2),
+        child: Row(
+          children: [
+            for (var i = 0; i < _labels.length; i++)
+              Expanded(
+                child: _DockItem(
+                  label: _labels[i],
+                  icon: _DockIcon.values[i],
+                  active: index == i,
+                  activeColor: active,
+                  companionColor: companion,
+                  inactiveColor: inactive,
+                  onTap: () => onTap(i),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );
@@ -92,44 +99,41 @@ class _DockItem extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: onTap,
+          onTap: () {
+            // 点按即时触感（对齐文库 dock 的 selectionClick）。
+            HapticFeedback.selectionClick();
+            onTap();
+          },
           splashColor: activeColor.withValues(alpha: .08),
           highlightColor: activeColor.withValues(alpha: .04),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            color: active
-                ? activeColor.withValues(alpha: .06)
-                : Colors.transparent,
-            child: SizedBox(
-              height: 62,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CustomPaint(
-                    size: const Size(22, 22),
-                    painter: _DockIconPainter(icon: icon, color: color),
+          child: SizedBox(
+            height: LanhuanDock.dockHeight,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CustomPaint(
+                  size: const Size(20, 20),
+                  painter: _DockIconPainter(icon: icon, color: color),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 11,
+                    height: 1,
+                    fontFamily: AppType.sans,
+                    fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 10,
-                      height: 1,
-                      letterSpacing: .4,
-                      fontFamily: AppType.sans,
-                      fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    width: active ? 18 : 0,
-                    height: 2,
-                    color: companionColor,
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 3),
+                AnimatedContainer(
+                  duration: AppMotion.contact,
+                  width: active ? 12 : 0,
+                  height: 1.5,
+                  color: companionColor,
+                ),
+              ],
             ),
           ),
         ),

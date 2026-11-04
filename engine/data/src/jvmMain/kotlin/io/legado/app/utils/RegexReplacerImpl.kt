@@ -1,0 +1,159 @@
+package io.legado.app.utils
+
+import io.legado.app.exception.NoStackTraceException
+import io.legado.app.exception.RegexTimeoutException
+import kotlinx.atomicfu.atomic
+import io.legado.app.help.casUpdate
+import io.legado.app.model.script.JsReplacementEvaluator
+import java.util.regex.Matcher
+import java.util.regex.Pattern
+
+/**
+ * 带超时检测的正则替换 JVM 实现。
+ *
+ * 原 app 端 [CharSequence.replace] 扩展 (io.legado.app.utils.RegexExtensions.kt) 的纯逻辑下沉:
+ * - JsEngines / JsBindings / RegexTimeoutException 已下沉 commonMain
+ * - java.util.regex.Matcher 可用 (Kotlin common Regex 无 appendReplacement/quoteReplacement)
+ * - 超时提示 / 崩溃落盘 / 重启经 [RegexErrorHandlers] 注入 (桌面端注册 DesktopRegexErrorHandler)
+ *
+ * 仅 JVM 宿主注册; Android 的 libcore Matcher 语义不同, 见 [AndroidRegexReplacer]。
+ *
+ * # 超时机制
+ *
+ * 正则不响应中断, 只能在引擎读字符时把它打断: 输入经 [DeadlineCharSequence] 包一层,
+ * 取字符时比对截止时间, 到点抛异常中止匹配。匹配因此同步跑在调用线程上——
+ * 零协程调度、零线程池、超时后不会留下吃满一核的僵尸线程 (旧看门狗方案的固有缺陷)。
+ *
+ * 该包装依赖「正则引擎按需回调查询 CharSequence」这一 JDK 行为。Android 的 libcore
+ * Matcher 在 reset(CharSequence) 里做 text = input.toString(), 而 region 上界仍取
+ * input.length(), 包装对象一旦进入 ICU 就退化成“按正文长度去读身份串所在内存”:
+ * 实测正文静默不替换, 并会随机抛出下标越界异常。故包装只能在 JVM 使用。
+ *
+ * # 字符类语义
+ *
+ * 编译时补 `UNICODE_CHARACTER_CLASS` 以对齐 Android (ICU) 的 `\w` 语义, 详见 [replace] 内注释。
+ * 鸿蒙的 Kotlin/Native stdlib `\w` 为 ASCII-only 且无法等价补齐, 该差异保留 (iOS 已换成系统
+ * 引擎, 见 [io.legado.app.utils.IosRuleRegex]), 见 [io.legado.app.utils.NativeRegexReplacer]
+ * 的“已知字符类差异”节。
+ */
+object JvmRegexReplacer : RegexReplacer {
+
+    /** 毫秒转纳秒的上界, 超过视为不限时 (避免乘法溢出成负数导致立即超时)。 */
+    private const val MAX_TIMEOUT_MS = Long.MAX_VALUE / 1_000_000L
+
+    override fun replace(
+        source: CharSequence,
+        pattern: String,
+        multiline: Boolean,
+        replacement: String,
+        timeout: Long
+    ): String {
+        val javaPattern = compileCached(pattern, multiline)
+        val isJs = replacement.startsWith("@js:")
+        val replacement1 = if (isJs) replacement.substring(4) else replacement
+        val timeoutNanos = if (timeout > MAX_TIMEOUT_MS) Long.MAX_VALUE else timeout * 1_000_000L
+        // 补齐 ICU 字符类语义: JDK 默认 \w 是 ASCII-only 不含中文, 而 Android (ICU) 的 \w
+        // 含中文。净化规则大量使用 [^\n\w…]{4,} 这类“非文字符号串”写法, 不补齐则桌面端
+        // 把整段中文当符号串误替换 (实测同一条规则 JVM 11 处 / Android 0 处)。
+        // Android 的 Pattern 已是 Unicode 语义且不支持该标志, 故只在此处补。
+        // 多行语义来自调用方的 multiline 参数 (对应 `Pattern.MULTILINE`)。
+        val matcher = javaPattern.matcher(DeadlineCharSequence(source, timeoutNanos))
+        try {
+            if (!matcher.find()) {
+                // 无匹配: 不必逐字重建整章字符串
+                return source.toString()
+            }
+            val stringBuffer = StringBuffer()
+            // isJs 路径: 循环外建共享作用域, 避免每次匹配都重新初始化 bootstrap
+            // (性能优化, 应对长文本大量匹配)
+            val jsEvaluator = if (isJs) JsReplacementEvaluator(replacement1) else null
+            try {
+                do {
+                    if (jsEvaluator != null) {
+                        val quotedResult =
+                            Matcher.quoteReplacement(jsEvaluator.evaluate(matcher.group()))
+                        matcher.appendReplacement(stringBuffer, quotedResult)
+                    } else {
+                        matcher.appendReplacement(stringBuffer, replacement1)
+                    }
+                } while (matcher.find())
+            } finally {
+                jsEvaluator?.close()
+            }
+            matcher.appendTail(stringBuffer)
+            return stringBuffer.toString()
+        } catch (_: RegexDeadlineException) {
+            val timeoutMsg = "替换超时\n替换规则$pattern\n替换内容:$source"
+            val exception = RegexTimeoutException(timeoutMsg)
+            // Android 专属副作用经 RegexErrorHandler 注入; 桌面端 null 静默跳过
+            val handler = RegexErrorHandlers.getOrNull()
+            handler?.onTimeoutToast(timeoutMsg)
+            handler?.saveCrashInfo(exception)
+            throw exception
+        }
+    }
+}
+
+/**
+ * 编译缓存: 调用方传的是模式串, 而阅读热路径上每章×每规则都会调用本实现,
+ * 不缓存则每次重新编译 (原 `ReplaceRule.regex` 是挂实例的懒编译)。
+ *
+ * 用不可变快照 (读侧一次原子取值即返回, 不加锁): 本表读远多于写, 且命中后不再写。
+ * 并发未命中时同一模式串最多重复编译一次 (结果等价, 无副作用)。
+ */
+private fun compileCached(pattern: String, multiline: Boolean): Pattern {
+    val key = (if (multiline) 1 else 0) to pattern
+    cacheRef.value[key]?.let { return it }
+    val compiled = Pattern.compile(
+        pattern,
+        (if (multiline) Pattern.MULTILINE else 0) or Pattern.UNICODE_CHARACTER_CLASS
+    )
+    cacheRef.casUpdate { cur ->
+        // 淘汰按插入序取最早的键 (先进先出): 已有键被覆盖不改变其位置,
+        // 故 keys.first() 就是最早插入且未再被写过的那个
+        if (!cur.containsKey(key) && cur.size >= CACHE_LIMIT) {
+            val oldest = cur.keys.firstOrNull()
+            (if (oldest == null) cur else cur - oldest) + (key to compiled)
+        } else {
+            cur + (key to compiled)
+        }
+    }
+    return compiled
+}
+
+/** key → 编译结果; 不可变快照, 写时整体替换。 */
+private val cacheRef = atomic<Map<Pair<Int, String>, Pattern>>(emptyMap())
+
+private const val CACHE_LIMIT = 32
+
+/** 中止匹配用的内部信号, 由 [JvmRegexReplacer] 转成对外的 [RegexTimeoutException]。 */
+private class RegexDeadlineException : NoStackTraceException("regex deadline")
+
+/**
+ * 带截止时间的输入包装: 每 4096 次取字符比对一次 [System.nanoTime], 到点抛 [RegexDeadlineException]。
+ * Matcher 的 group / appendReplacement / appendTail 都会走 [subSequence] 与 [get], 两者必须完整代理。
+ */
+private class DeadlineCharSequence(
+    private val source: CharSequence,
+    private val timeoutNanos: Long,
+) : CharSequence {
+
+    private val startNanos = System.nanoTime()
+    private var readCount = 0
+
+    override val length: Int get() = source.length
+
+    override fun get(index: Int): Char {
+        if ((readCount++ and CHECK_MASK) == 0 && System.nanoTime() - startNanos >= timeoutNanos) {
+            throw RegexDeadlineException()
+        }
+        return source[index]
+    }
+
+    override fun subSequence(startIndex: Int, endIndex: Int): CharSequence =
+        source.subSequence(startIndex, endIndex)
+
+    private companion object {
+        const val CHECK_MASK = 0xFFF
+    }
+}

@@ -71,6 +71,13 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
   /// the visible chapter changes mid-scroll.
   final ValueNotifier<String> _visibleChapterName = ValueNotifier('');
 
+  /// 章首小字（字数/更新时间），章首时才有值。
+  final ValueNotifier<String> _visibleChapterInfo = ValueNotifier('');
+
+  /// 顶部可见页是否为该章第 0 页——决定章节头呈现大标题还是吸顶行头，
+  /// 与分页模式「第 0 页=章首头、后续页=行头」的语义保持一致。
+  final ValueNotifier<bool> _atChapterStart = ValueNotifier(false);
+
   Offset? _downPos;
   int? _activePointer;
   static const double _tapSlop = 18;
@@ -133,6 +140,8 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
     _disposed = true;
     _prewarmToken++;
     _visibleChapterName.dispose();
+    _visibleChapterInfo.dispose();
+    _atChapterStart.dispose();
     _controller?.removeListener(_onScroll);
     _controller?.dispose();
     _controller = null;
@@ -242,6 +251,10 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
     if (_visibleChapterName.value != name) {
       _visibleChapterName.value = name;
     }
+    final atStart = pageIdx <= 0;
+    if (_atChapterStart.value != atStart) _atChapterStart.value = atStart;
+    final info = atStart ? (_chapters[cur]?.chapterInfo ?? '').trim() : '';
+    if (_visibleChapterInfo.value != info) _visibleChapterInfo.value = info;
 
     final target = _indexOf(cur, pageIdx);
     final initial = _scrollOffsetForItem(target);
@@ -501,6 +514,14 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
     if (_visibleChapterName.value != it.chapterName) {
       _visibleChapterName.value = it.chapterName;
     }
+    final atStart = it.pageIndex == 0 && !it.readPage.isPlaceholder;
+    if (_atChapterStart.value != atStart) {
+      _atChapterStart.value = atStart;
+    }
+    final info = atStart ? it.readPage.chapterInfo.trim() : '';
+    if (_visibleChapterInfo.value != info) {
+      _visibleChapterInfo.value = info;
+    }
     try {
       final model = ref.read(readModelProvider);
       model.applyScrollProgress(it.chapterIndex, it.pageIndex);
@@ -601,6 +622,7 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
         SpUtil.getBool(PrefsKeys.dark, defValue: false);
     final paper = ReadSetting.paperColor(dark ? PaperTheme.night : paperTheme);
     final meta = ReadSetting.metaColor(dark ? PaperTheme.night : paperTheme);
+    final ink = ReadSetting.inkColor(dark ? PaperTheme.night : paperTheme);
 
     // openChapterAt / switchSource / TOC reload update model chapterIndex or
     // content revision without rebuilding this State; rebootstrap when the
@@ -716,8 +738,9 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
                       ),
               ),
             ),
-            // 专注模式隐藏吸顶行头，与分页模式保持一致。
-            if (_items.isNotEmpty && !ReadSetting.getFocusMode())
+            // 章节头与分页模式统一：章首大标题（+字数/更新时间），章中吸顶行头；
+            // 专注模式只保留章首大标题（行头隐藏）。
+            if (_items.isNotEmpty)
               Positioned(
                 top: 0,
                 left: 0,
@@ -725,8 +748,12 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
                 child: IgnorePointer(
                   child: ScrollChapterTitle(
                     chapter: _visibleChapterName,
+                    info: _visibleChapterInfo,
+                    full: _atChapterStart,
+                    hideRunning: ReadSetting.getFocusMode(),
                     background: paper,
                     color: meta,
+                    titleColor: ink,
                     topInset: ReadSetting.chapterTitleBandTop(),
                     bandHeight: ReadSetting.contentTopChrome,
                     horizontalPadding: ReadSetting.getPageDis().toDouble(),

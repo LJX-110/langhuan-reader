@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:langhuan/app/router/routes.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
+import 'package:langhuan/design/motion.dart';
 import 'package:langhuan/design/theme/color_model.dart';
 import 'package:langhuan/features/reader/menu/reader_chrome.dart';
 import 'package:langhuan/features/reader/read_model.dart';
@@ -544,7 +545,7 @@ Widget _paperSwatchRow({
           child: Column(
             children: [
               AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
+                duration: AppMotion.contact,
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(

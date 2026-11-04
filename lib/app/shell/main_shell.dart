@@ -59,20 +59,59 @@ class _MainShellState extends State<MainShell> {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiHelper.overlayStyle(context),
       child: Scaffold(
-        body: IndexedStack(
+        // 懒构建：首次进入某标签才创建该页（避免启动时 4 页全建、
+        // 发现页本地页的初始化抢占书架首屏）。
+        body: _LazyIndexedStack(
           index: _index,
-          children: [
-            BookShelf(),
-            const ExplorePage(),
-            const LocalPage(),
-            Me(embedded: true),
+          builders: [
+            () => BookShelf(),
+            () => const ExplorePage(),
+            () => const LocalPage(),
+            () => Me(embedded: true),
           ],
         ),
-        bottomNavigationBar: LanhuanDock(
-          index: _index,
-          onTap: (i) => setState(() => _index = i),
+        // 轻小说文库式悬浮胶囊：居中、底部留白；栏位高度只留胶囊本身。
+        bottomNavigationBar: SafeArea(
+          top: false,
+          minimum: const EdgeInsets.only(bottom: 10),
+          child: Center(
+            child: LanhuanDock(
+              index: _index,
+              onTap: (i) => setState(() => _index = i),
+            ),
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// 懒加载版 IndexedStack：未访问过的标签页不构建；
+/// 一旦构建保持存活（页面状态不丢，切回不重建）。
+class _LazyIndexedStack extends StatefulWidget {
+  const _LazyIndexedStack({required this.index, required this.builders});
+
+  final int index;
+  final List<Widget Function()> builders;
+
+  @override
+  State<_LazyIndexedStack> createState() => _LazyIndexedStackState();
+}
+
+class _LazyIndexedStackState extends State<_LazyIndexedStack> {
+  late final List<Widget?> _built = List<Widget?>.filled(
+    widget.builders.length,
+    null,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    _built[widget.index] ??= widget.builders[widget.index]();
+    return IndexedStack(
+      index: widget.index,
+      children: [
+        for (final child in _built) child ?? const SizedBox.shrink(),
+      ],
     );
   }
 }

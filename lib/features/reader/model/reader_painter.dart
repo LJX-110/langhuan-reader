@@ -115,6 +115,8 @@ class ReaderPainter {
   static int nChars(String text) => text.characters.length;
 
   /// Natural height of a scroll tile (content only + tiny pad).
+  ///
+  /// 章节头由吸顶层（ScrollChapterTitle）统一呈现，瓦片保持纯正文。
   double scrollPageHeight(ReadPage readPage, int pageIdx) {
     if (pageIdx < 0 || pageIdx >= readPage.pages.length) {
       return 120;
@@ -152,7 +154,6 @@ class ReaderPainter {
     final effectivePaper = night ? PaperTheme.night : paperTheme;
     final paper = ReadSetting.paperColor(effectivePaper);
     final ink = ReadSetting.inkColor(effectivePaper);
-
     final contentPadding = ReadSetting.getPageDis().toDouble();
     final pageW = Screen.width;
     final fontFamily = ReadSetting.getFontFamily();

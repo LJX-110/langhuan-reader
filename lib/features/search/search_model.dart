@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:langhuan/core/utils/redact.dart';
 
 import 'package:langhuan/data/repositories/source_repository.dart';
-import 'package:langhuan/data/entities/book_info.dart';
+
 import 'package:langhuan/data/entities/search_item.dart';
 import 'package:langhuan/features/discover/cover_enricher.dart';
 import 'package:langhuan/features/search/search_keyword_cache.dart';
@@ -11,7 +11,7 @@ import 'package:langhuan/features/sources/model/source_groups.dart';
 import 'package:langhuan/features/sources/engine/book_source_engine.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
 import 'package:langhuan/features/sources/model/source_search_report.dart';
-import 'package:langhuan/features/sources/net/analyze_url.dart';
+
 import 'package:langhuan/features/search/search_result_deduper.dart';
 import 'package:langhuan/features/sources/util/book_id.dart';
 import 'package:langhuan/core/storage/local_store.dart';
@@ -447,37 +447,7 @@ class SearchModel with ChangeNotifier {
     return _engine.searchWithReport(src, key, 1);
   }
 
-  /// Open book detail via local source rules.
-  Future<BookInfo?> openDetail(SearchItem item) async {
-    final resolved = AnalyzeUrl.sanitizeUrl(item.bookUrl, base: item.sourceUrl);
-    if (item.sourceUrl.isEmpty || resolved.isEmpty) {
-      BotToast.showText(text: '该书详情地址无效，可能书源规则不完整');
-      return null;
-    }
-    final src = await _sources.getByUrl(item.sourceUrl);
-    if (src == null) {
-      BotToast.showText(text: '书源不存在或已删除：${item.sourceName}');
-      return null;
-    }
-    try {
-      final seed = SearchBook(
-        name: item.name,
-        author: item.author,
-        intro: item.description,
-        coverUrl: item.coverUrl,
-        lastChapter: item.latestChapter,
-        kind: item.category,
-        bookUrl: resolved,
-        sourceUrl: item.sourceUrl,
-        sourceName: item.sourceName,
-      );
-      final info = await _engine.bookInfo(src, resolved, seed: seed);
-      return info;
-    } catch (e) {
-      BotToast.showText(text: '获取详情失败，请稍后重试');
-      return null;
-    }
-  }
+  // openDetail 已移除：搜索页改为"先推详情壳（seed），页内加载"（DetailLoader）。
 
   Future<void> loadMore() async {
     if (loading || noMore || word.isEmpty) return;

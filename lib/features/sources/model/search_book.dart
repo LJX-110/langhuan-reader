@@ -23,6 +23,33 @@ class SearchBook {
     this.sourceUrl = '',
     this.sourceName = '',
   });
+
+  /// 路由参数传递（详情壳先用种子立即推页，页内再补网络详情）。
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'author': author,
+    'kind': kind,
+    'wordCount': wordCount,
+    'lastChapter': lastChapter,
+    'intro': intro,
+    'coverUrl': coverUrl,
+    'bookUrl': bookUrl,
+    'sourceUrl': sourceUrl,
+    'sourceName': sourceName,
+  };
+
+  factory SearchBook.fromJson(Map<String, dynamic> json) => SearchBook(
+    name: (json['name'] ?? '').toString(),
+    author: (json['author'] ?? '').toString(),
+    kind: (json['kind'] ?? '').toString(),
+    wordCount: (json['wordCount'] ?? '').toString(),
+    lastChapter: (json['lastChapter'] ?? '').toString(),
+    intro: (json['intro'] ?? '').toString(),
+    coverUrl: (json['coverUrl'] ?? '').toString(),
+    bookUrl: (json['bookUrl'] ?? '').toString(),
+    sourceUrl: (json['sourceUrl'] ?? '').toString(),
+    sourceName: (json['sourceName'] ?? '').toString(),
+  );
 }
 
 /// Engine-level chapter entry with absolute URL.

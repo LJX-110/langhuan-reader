@@ -627,14 +627,9 @@ class _BookDetailState extends ConsumerState<BookDetail> {
   // Actions
   // ---------------------------------------------------------------------------
 
-  Future<void> _openRead() async {
-    Book? b = await BookRepository.instance.getById(book.id);
-    if (!mounted) return;
-    Routes.navigateTo(
-      context,
-      Routes.read,
-      params: {'read': jsonEncode(b ?? book)},
-    );
+  void _openRead() {
+    // 立即推页：阅读器会自行与 DB 合并最新进度（不再等待一次 DB 往返）。
+    Routes.navigateTo(context, Routes.read, params: {'read': jsonEncode(book)});
   }
 
   String _formatCount(int n) {

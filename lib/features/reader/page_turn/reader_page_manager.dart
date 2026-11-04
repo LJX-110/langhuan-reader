@@ -1,3 +1,4 @@
+import 'package:langhuan/design/motion.dart';
 import 'package:langhuan/features/reader/animation/base_animation_page.dart';
 import 'package:langhuan/features/reader/animation/simulation_turn_page_animation.dart';
 import 'package:langhuan/features/reader/animation/static_page_turn.dart';
@@ -584,7 +585,7 @@ class ReaderPageManager {
 
   void setAnimationController(AnimationController controller) {
     // Crisp and fluid animation duration.
-    controller.duration ??= const Duration(milliseconds: 180);
+    controller.duration ??= AppMotion.contact;
     animationController = controller;
     if (_needsController) {
       currentAnimationPage.setAnimationController(controller);

@@ -94,6 +94,18 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
   int _noMatch = 0;
   final List<({String name, String reason})> _failed = [];
 
+  /// 扫描进度（增量显示用；对齐阅读「边搜边出」的换源体感）。
+  int _done = 0;
+  int _total = 0;
+  bool _sweeping = false;
+  bool _cancelled = false;
+
+  /// 扫描代际：重新触发/切分组时旧循环就地作废，避免互相覆盖状态。
+  int _sweepToken = 0;
+
+  /// 正在切换的书源（行内 loading + 防重复点击）。
+  String? _pickingUrl;
+
   Book? get _book => widget.readModel.book;
 
   /// 置顶 / 置底（对齐阅读的 `topSource` / `bottomSource`）。
@@ -161,6 +173,7 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
       if (!mounted) return;
       setState(() {
         loading = false;
+        _sweeping = false;
         error = '当前没有可换源的书籍';
       });
       return;
@@ -172,6 +185,7 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
       if (!mounted) return;
       setState(() {
         loading = false;
+        _sweeping = false;
         error = '书名未知，无法搜索其它书源';
       });
       return;
@@ -183,16 +197,18 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
       if (!mounted) return;
       setState(() {
         loading = false;
+        _sweeping = false;
         error = '请先在「书源管理」导入并启用书源';
       });
       return;
     }
     _groups = SourceGroups.collect(all);
-    final meta = SourceGroups.filter(all, _groupFilter);
+    var meta = SourceGroups.filter(all, _groupFilter);
     if (meta.isEmpty) {
       if (!mounted) return;
       setState(() {
         loading = false;
+        _sweeping = false;
         candidates.clear();
         _failed.clear();
         _noMatch = 0;
@@ -201,16 +217,45 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
       return;
     }
 
-    final list = <_Candidate>[];
+    // 优选分降序：常胜源先出结果（对齐阅读"评分靠前先搜"的体感）。
+    final order = <String, int>{
+      for (var i = 0; i < meta.length; i++) meta[i].bookSourceUrl: i,
+    };
+    meta = List<BookSource>.of(meta)
+      ..sort((a, b) {
+        final byScore = scoreOf(
+          b.bookSourceUrl,
+        ).compareTo(scoreOf(a.bookSourceUrl));
+        if (byScore != 0) return byScore;
+        return (order[a.bookSourceUrl] ?? 0).compareTo(
+          order[b.bookSourceUrl] ?? 0,
+        );
+      });
+
     var noMatch = 0;
     final failed = <({String name, String reason})>[];
-    const pool = 5;
     final author = cleanAuthor(book.author);
-    for (var i = 0; i < meta.length; i += pool) {
-      if (!mounted) return;
+    setState(() {
+      loading = true;
+      _sweeping = true;
+      _cancelled = false;
+      _done = 0;
+      _total = meta.length;
+      candidates.clear();
+      _failed.clear();
+      _noMatch = 0;
+      error = null;
+    });
+
+    // 并发 12 + 每批完成即增量显示：结果边出边看，可随时点选或停止
+    // （对齐阅读换源的"随出随选"体感；旧实现 5 个一批且全部扫完才显示）。
+    const pool = 12;
+    final token = ++_sweepToken;
+    for (var i = 0; i < meta.length && !_cancelled; i += pool) {
+      if (!mounted || token != _sweepToken) return;
       final chunkMeta = meta.skip(i).take(pool).toList();
       final chunk = await model.hydrateSources(chunkMeta);
-      if (!mounted) return;
+      if (!mounted || token != _sweepToken) return;
       final futures = chunk.map((s) async {
         // searchWithReport never throws and tells失败种类 apart from 无匹配.
         final report = await _engine.searchWithReport(s, key, 1);
@@ -235,12 +280,39 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
         }
       });
       final parts = await Future.wait(futures);
-      for (final p in parts) {
-        list.addAll(p);
-      }
+      if (!mounted || token != _sweepToken) return;
+      setState(() {
+        for (final p in parts) {
+          candidates.addAll(p);
+        }
+        _sortCandidates(candidates, book, author);
+        _noMatch = noMatch;
+        _failed
+          ..clear()
+          ..addAll(failed);
+        _done = (i + pool).clamp(0, meta.length);
+        loading = false; // 首批起即展示增量结果
+      });
     }
 
-    // Prefer exact name, then same source last, then source name.
+    if (!mounted || token != _sweepToken) return;
+    setState(() {
+      _sweeping = false;
+      loading = false;
+      if (_cancelled) {
+        error = (candidates.isEmpty && _failed.isEmpty) ? '已停止搜索' : null;
+      } else {
+        error = candidates.isEmpty
+            ? (failed.isNotEmpty
+                  ? '没有可用结果：${failed.length} 个书源失败'
+                  : '未找到其它可用书源')
+            : null;
+      }
+    });
+  }
+
+  /// 候选排序：书名匹配 > 作者匹配 > 书源名（增量刷新与最终排序共用）。
+  void _sortCandidates(List<_Candidate> list, Book book, String author) {
     list.sort((a, b) {
       final an = _nameScore(a.hit.name, book.name);
       final bn = _nameScore(b.hit.name, book.name);
@@ -250,26 +322,16 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
       if (aa != ba) return aa - ba;
       return a.source.bookSourceName.compareTo(b.source.bookSourceName);
     });
+  }
 
-    if (!mounted) return;
-    setState(() {
-      candidates
-        ..clear()
-        ..addAll(list);
-      _noMatch = noMatch;
-      _failed
-        ..clear()
-        ..addAll(failed);
-      loading = false;
-      error = list.isEmpty
-          ? (failed.isNotEmpty
-                ? '没有可用结果：${failed.length} 个书源失败'
-                : '未找到其它可用书源')
-          : null;
-    });
+  /// 停止扫描：保留已出结果（在途批次的请求最多等一个批次时长）。
+  void _stopSweep() {
+    if (!_sweeping || _cancelled) return;
+    setState(() => _cancelled = true);
   }
 
   void _retry() {
+    _cancelled = false;
     setState(() {
       loading = true;
       error = null;
@@ -360,14 +422,16 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
 
   Future<void> _onPick(_Candidate c) async {
     final book = _book;
-    if (book == null) return;
+    if (book == null || _pickingUrl != null) return;
     final current =
         c.source.bookSourceUrl == book.sourceUrl &&
         (c.hit.bookUrl.isEmpty || c.hit.bookUrl == book.bookUrl);
     if (current) return;
 
+    setState(() => _pickingUrl = c.source.bookSourceUrl);
     final ok = await widget.readModel.switchSource(c.source, c.hit);
     if (!mounted) return;
+    setState(() => _pickingUrl = null);
     if (ok) {
       widget.onSwitched?.call(widget.readModel.book ?? book);
       Navigator.pop(context, true);
@@ -478,38 +542,64 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
                     onChanged: (value) => setState(() => _keyword = value),
                   ),
                 ),
-              if (!loading && (_noMatch > 0 || _failed.isNotEmpty))
+              if (!loading &&
+                  (_sweeping ||
+                      _noMatch > 0 ||
+                      _failed.isNotEmpty ||
+                      candidates.isNotEmpty))
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 2, 8, 6),
                   child: Row(
                     children: [
                       Expanded(
                         child: Text(
-                          '候选 ${candidates.length} · 无匹配 $_noMatch · '
-                          '失败 ${_failed.length}',
+                          _sweeping
+                              ? '已搜 $_done/$_total · 候选 ${candidates.length}'
+                                    ' · 失败 ${_failed.length}'
+                              : '候选 ${candidates.length} · 无匹配 $_noMatch'
+                                    ' · 失败 ${_failed.length}',
                           style: TextStyle(fontSize: 11, color: _secondary),
                         ),
                       ),
-                      if (_failed.isNotEmpty)
+                      if (_sweeping)
                         TextButton(
-                          onPressed: _showFailures,
+                          onPressed: _cancelled ? null : _stopSweep,
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(0, 32),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          child: Text(
+                            _cancelled ? '停止中…' : '停止',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        )
+                      else ...[
+                        if (_failed.isNotEmpty)
+                          TextButton(
+                            onPressed: _showFailures,
+                            style: TextButton.styleFrom(
+                              minimumSize: const Size(0, 32),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                            ),
+                            child: const Text(
+                              '失败原因',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        TextButton(
+                          onPressed: _retry,
                           style: TextButton.styleFrom(
                             minimumSize: const Size(0, 32),
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                           ),
                           child: const Text(
-                            '失败原因',
+                            '重试',
                             style: TextStyle(fontSize: 12),
                           ),
                         ),
-                      TextButton(
-                        onPressed: _retry,
-                        style: TextButton.styleFrom(
-                          minimumSize: const Size(0, 32),
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                        ),
-                        child: const Text('重试', style: TextStyle(fontSize: 12)),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -538,9 +628,11 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
                           padding: const EdgeInsets.symmetric(horizontal: 32),
                           child: Text(
                             error ??
-                                (_keyword.trim().isEmpty
-                                    ? '未找到其它可用书源'
-                                    : '没有匹配「${_keyword.trim()}」的结果'),
+                                (_sweeping
+                                    ? '正在搜索可用书源…'
+                                    : (_keyword.trim().isEmpty
+                                          ? '未找到其它可用书源'
+                                          : '没有匹配「${_keyword.trim()}」的结果')),
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 14, color: _secondary),
                           ),
@@ -589,7 +681,20 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (isCurrent)
+                                if (_pickingUrl == c.source.bookSourceUrl)
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                    ),
+                                    child: SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  )
+                                else if (isCurrent)
                                   Text(
                                     '当前',
                                     style: TextStyle(
@@ -650,7 +755,9 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
                                 ],
                               ],
                             ),
-                            onTap: isCurrent ? null : () => _onPick(c),
+                            onTap: (isCurrent || _pickingUrl != null)
+                                ? null
+                                : () => _onPick(c),
                           );
                         },
                       ),

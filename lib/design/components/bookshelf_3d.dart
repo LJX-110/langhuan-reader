@@ -574,23 +574,9 @@ class _Bookshelf3DState extends State<Bookshelf3D>
         if (widget.onDelete != null)
           Padding(
             padding: const EdgeInsets.only(left: 8, top: 1),
-            child: OutlinedButton(
-              key: const ValueKey('shelf-remove'),
-              onPressed: _deleteBusy
-                  ? null
-                  : () => setState(() => _pendingDelete = book),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.danger,
-                side: BorderSide(
-                  color: AppColors.danger.withValues(alpha: .5),
-                  width: .8,
-                ),
-                minimumSize: const Size(0, 26),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                textStyle: const TextStyle(fontSize: 11),
-              ),
-              child: const Text('移除'),
+            child: _RemoveButton(
+              busy: _deleteBusy,
+              onPressed: () => setState(() => _pendingDelete = book),
             ),
           ),
         Padding(
@@ -651,23 +637,75 @@ class _Bookshelf3DState extends State<Bookshelf3D>
             ),
             child: const Text('取消', style: TextStyle(fontSize: 12)),
           ),
-          TextButton(
+          FilledButton(
             key: const ValueKey('shelf-delete-confirm'),
             onPressed: _deleteBusy ? null : _confirmDelete,
-            style: TextButton.styleFrom(
-              minimumSize: const Size(0, 32),
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              foregroundColor: AppColors.danger,
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.danger,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(0, 30),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              textStyle: const TextStyle(fontSize: 12),
             ),
             child: _deleteBusy
                 ? const SizedBox(
                     width: 12,
                     height: 12,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
-                : const Text('移除', style: TextStyle(fontSize: 12)),
+                : const Text('移除'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 书架移除按钮：低饱和危险色胶囊幽灵按钮（替代原 OutlinedButton）。
+class _RemoveButton extends StatelessWidget {
+  const _RemoveButton({required this.busy, required this.onPressed});
+
+  final bool busy;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final danger = AppColors.danger;
+    return Material(
+      color: danger.withValues(alpha: .07),
+      shape: StadiumBorder(
+        side: BorderSide(color: danger.withValues(alpha: .22), width: .8),
+      ),
+      child: InkWell(
+        key: const ValueKey('shelf-remove'),
+        customBorder: const StadiumBorder(),
+        onTap: busy ? null : onPressed,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.remove_circle_outline,
+                size: 13,
+                color: danger.withValues(alpha: .9),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '移除',
+                style: TextStyle(
+                  fontSize: 11,
+                  height: 1,
+                  fontWeight: FontWeight.w500,
+                  color: danger,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

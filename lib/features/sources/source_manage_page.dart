@@ -656,7 +656,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
             const Text('还没有书源', style: TextStyle(fontSize: 18)),
             const SizedBox(height: 8),
             Text(
-              '请自行导入 Legado / 阅读 书源 JSON。\n应用不附带任何书源。',
+              '导入 Legado / 阅读 书源 JSON 后显示在这里',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey[600]),
             ),
@@ -724,10 +724,9 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
   }
 
   Future<void> _showImport(BuildContext context, SourceModel model) async {
-    final textCtrl = TextEditingController();
     final urlCtrl = TextEditingController();
     var agreed = _agreed;
-    var tab = 0; // 0 paste, 1 url, 2 local file
+    var tab = 1; // 1 url, 2 local file（「粘贴 JSON」已移除，统一走文件/URL 导入）
     var fileName = '';
     var fileText = '';
     var fileBusy = false;
@@ -779,11 +778,6 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                       runSpacing: 8,
                       children: [
                         ChoiceChip(
-                          label: const Text('粘贴 JSON'),
-                          selected: tab == 0,
-                          onSelected: (_) => setSt(() => tab = 0),
-                        ),
-                        ChoiceChip(
                           label: const Text('网络 URL'),
                           selected: tab == 1,
                           onSelected: (_) => setSt(() => tab = 1),
@@ -814,16 +808,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    if (tab == 0)
-                      TextField(
-                        controller: textCtrl,
-                        maxLines: 8,
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
-                          hintText: '粘贴 Legado 书源 JSON（对象或数组）',
-                        ),
-                      )
-                    else if (tab == 1)
+                    if (tab == 1)
                       TextField(
                         controller: urlCtrl,
                         decoration: const InputDecoration(
@@ -891,7 +876,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                           const SizedBox(height: 6),
                           Text(
                             fileText.isEmpty
-                                ? '支持 Legado / 阅读 导出的 .json；大文件在后台解析，不卡界面。'
+                                ? '支持 Legado / 阅读 导出的 .json'
                                 : '已读取 ${(fileText.length / 1024).toStringAsFixed(0)} KB',
                             style: TextStyle(
                               fontSize: 12,
@@ -912,9 +897,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                             BotToast.showText(text: '正在下载书源…');
                           }
                           final SourceParseResult parsed;
-                          if (tab == 0) {
-                            parsed = SourceImporter.parseJson(textCtrl.text);
-                          } else if (tab == 1) {
+                          if (tab == 1) {
                             parsed = await SourceImporter.fromUrl(
                               urlCtrl.text.trim(),
                             );

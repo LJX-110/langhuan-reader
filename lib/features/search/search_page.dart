@@ -10,6 +10,7 @@ import 'package:langhuan/core/storage/prefs_keys.dart';
 import 'package:langhuan/design/components/pic_widget.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/features/search/search_model.dart';
+import 'package:langhuan/features/sources/model/search_book.dart';
 import 'package:langhuan/features/sources/model/source_search_report.dart';
 import 'package:langhuan/features/sources/source_test_panel.dart';
 
@@ -654,13 +655,23 @@ class _SearchState extends ConsumerState<Search> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () async {
-          final book = await model.openDetail(item);
-          if (book == null || !context.mounted) return;
+        onTap: () {
+          // 立即推壳：详情在页内加载（不再等待网络；失败可在页内重试）。
+          final seed = SearchBook(
+            name: item.name,
+            author: item.author,
+            intro: item.description,
+            coverUrl: item.coverUrl,
+            lastChapter: item.latestChapter,
+            kind: item.category,
+            bookUrl: item.bookUrl,
+            sourceUrl: item.sourceUrl,
+            sourceName: item.sourceName,
+          );
           Routes.navigateTo(
             context,
             Routes.detail,
-            params: {'detail': jsonEncode(book)},
+            params: {'seed': jsonEncode(seed.toJson())},
           );
         },
         child: Container(

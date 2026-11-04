@@ -72,7 +72,11 @@ class _CacheManagerState extends State<CacheManager> {
     ).showSnackBar(SnackBar(content: Text(done ? '已清除封面缓存' : '封面缓存清理失败')));
   }
 
-  Future<bool> _confirm(String title, String message) async {
+  Future<bool> _confirm(
+    String title,
+    String message, {
+    String confirmLabel = '清除',
+  }) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -85,7 +89,7 @@ class _CacheManagerState extends State<CacheManager> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('清除'),
+            child: Text(confirmLabel),
           ),
         ],
       ),
@@ -119,6 +123,38 @@ class _CacheManagerState extends State<CacheManager> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('已清除全部章节正文')));
+    await _reload();
+  }
+
+  /// 移出书架：保留记录、进度与缓存（与书架页 retire 语义一致）。
+  Future<void> _retireBook(String bookId, String bookName) async {
+    final ok = await _confirm(
+      '移出书架',
+      '把《$bookName》移出书架？\n阅读记录、进度与章节缓存都会保留。',
+      confirmLabel: '移出',
+    );
+    if (!ok || !mounted) return;
+    await _books.retire([bookId]);
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已移出书架（记录与缓存保留）')));
+    await _reload();
+  }
+
+  /// 彻底删除：书行 + 章节缓存 + 书签 + 阅读记录（数据库级联）。
+  Future<void> _deleteBook(String bookId, String bookName) async {
+    final ok = await _confirm(
+      '彻底删除',
+      '从书库彻底删除《$bookName》？\n章节缓存、书签与阅读记录会一并删除，不可恢复。',
+      confirmLabel: '删除',
+    );
+    if (!ok || !mounted) return;
+    await _books.delete(bookId);
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已彻底删除本书及其缓存')));
     await _reload();
   }
 
@@ -240,13 +276,41 @@ class _CacheManagerState extends State<CacheManager> {
                                     '$withBody / $total',
                                     style: theme.textTheme.bodySmall,
                                   ),
-                                  IconButton(
-                                    tooltip: '清除章节正文与分页',
-                                    icon: const Icon(Icons.delete_outline),
-                                    onPressed: () => _clearBookBodies(
-                                      row.book.id,
-                                      row.book.name,
-                                    ),
+                                  PopupMenuButton<String>(
+                                    tooltip: '更多操作',
+                                    icon: const Icon(Icons.more_vert),
+                                    onSelected: (action) {
+                                      if (action == 'clear') {
+                                        _clearBookBodies(
+                                          row.book.id,
+                                          row.book.name,
+                                        );
+                                      } else if (action == 'retire') {
+                                        _retireBook(
+                                          row.book.id,
+                                          row.book.name,
+                                        );
+                                      } else {
+                                        _deleteBook(
+                                          row.book.id,
+                                          row.book.name,
+                                        );
+                                      }
+                                    },
+                                    itemBuilder: (ctx) => const [
+                                      PopupMenuItem(
+                                        value: 'clear',
+                                        child: Text('清除章节缓存（保留目录/进度）'),
+                                      ),
+                                      PopupMenuItem(
+                                        value: 'retire',
+                                        child: Text('移出书架（保留记录）'),
+                                      ),
+                                      PopupMenuItem(
+                                        value: 'delete',
+                                        child: Text('彻底删除（含缓存与记录）'),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),

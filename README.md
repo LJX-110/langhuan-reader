@@ -4,7 +4,7 @@
 
 个人自用的 Android 网络小说阅读器，Flutter 编写。书架、阅读进度、书签与书源都保存在本机；应用不内置任何书源，也不提供公开书源列表或默认仓库地址。
 
-已发布 `v2.1.1+9`；当前版本线 `v2.2.0`（本机构建与自动测试通过，真机验证暂缓）。已发布版本与 APK 见 [Releases](https://github.com/LJX-110/langhuan-reader/releases/latest)。
+已发布 `v2.2.0+10`；当前版本线 `2.3.0`（合并换源重构、详情零等待、发现页提速、动效地基与批量引擎验证）。已发布版本与 APK 见 [Releases](https://github.com/LJX-110/langhuan-reader/releases/latest)。
 
 ## 功能
 

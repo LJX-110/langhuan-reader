@@ -3,6 +3,8 @@ import 'dart:convert' as convert;
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/entities/book_info.dart';
 import 'package:langhuan/features/detail/book_detail.dart';
+import 'package:langhuan/features/detail/detail_loader.dart';
+import 'package:langhuan/features/sources/model/search_book.dart';
 import 'package:langhuan/features/shelf/book_shelf.dart';
 import 'package:langhuan/features/reader/chapter_view.dart';
 import 'package:langhuan/features/reader/read_book.dart';
@@ -73,6 +75,11 @@ var chaptersHandler = Handler(
 
 var detailHandler = Handler(
   handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
+    // 种子模式：先推壳、详情页内加载（点书零等待）；旧参数保持兼容。
+    final seed = params['seed']?[0];
+    if (seed != null && seed.isNotEmpty) {
+      return DetailLoader(seed: SearchBook.fromJson(convert.jsonDecode(seed)));
+    }
     BookInfo bookInfo = BookInfo.fromJson(
       convert.jsonDecode(params['detail']![0]),
     );
