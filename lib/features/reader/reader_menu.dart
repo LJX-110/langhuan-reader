@@ -1,6 +1,7 @@
 import 'package:bot_toast/bot_toast.dart';
 import 'package:langhuan/core/utils/redact.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:langhuan/app/providers.dart';
@@ -98,11 +99,12 @@ class _MenuState extends ConsumerState<ReaderMenu> {
     final page = _readModel.curPage;
     if (b == null || page == null) return;
     final id = Bookmark.idFor(b.id, b.chapterIndex, b.pageIndex);
+    // 先翻转（乐观更新），失败回滚——图标零等待（批次 7·R6）。
+    final wasBookmarked = _bookmarked;
+    final willBookmark = !wasBookmarked;
+    setState(() => _bookmarked = willBookmark);
     try {
-      final exists = await _bookmarks.exists(id);
-      if (exists) {
-        await _bookmarks.remove(id);
-      } else {
+      if (willBookmark) {
         await _bookmarks.add(
           Bookmark(
             id: id,
@@ -114,11 +116,13 @@ class _MenuState extends ConsumerState<ReaderMenu> {
             createdAt: DateTime.now().millisecondsSinceEpoch,
           ),
         );
+      } else {
+        await _bookmarks.remove(id);
       }
       if (!mounted) return;
-      setState(() => _bookmarked = !exists);
-      BotToast.showText(text: exists ? '已取消书签' : '已添加书签');
+      BotToast.showText(text: willBookmark ? '已添加书签' : '已取消书签');
     } catch (e) {
+      if (mounted) setState(() => _bookmarked = wasBookmarked);
       BotToast.showText(text: '书签操作失败：${Redact.userMessage(e)}');
     }
   }
@@ -299,7 +303,11 @@ class _MenuState extends ConsumerState<ReaderMenu> {
     return (_readModel.curPage?.pages.length ?? 0) > 1;
   }
 
+  /// 上次悬停的章（拖动过章界响一次轻触，批次 7·R8）。
+  int? _lastDragChapter;
+
   void _onProgressDragStart() {
+    _lastDragChapter = _readModel.book?.chapterIndex ?? 0;
     setState(() {
       _progressDragging = true;
       _progressPointerCancelled = false;
@@ -308,6 +316,14 @@ class _MenuState extends ConsumerState<ReaderMenu> {
   }
 
   void _onProgressDragUpdate(double value) {
+    final total = _readModel.chapters.length;
+    if (total > 1) {
+      final target = ReaderProgress.targetOf(value, total);
+      if (target.chapter != _lastDragChapter) {
+        _lastDragChapter = target.chapter;
+        HapticFeedback.selectionClick();
+      }
+    }
     setState(() => _dragValue = value);
   }
 

@@ -723,7 +723,11 @@ class _ChapterTile extends StatelessWidget {
           ? AppColors.accentSoftOf(context)
           : (dark ? AppColors.scaffoldDark : AppColors.scaffold),
       child: InkWell(
-        onTap: onTap,
+        onTap: () {
+          // 目录行按压反馈（批次 7·R10）。
+          HapticFeedback.selectionClick();
+          onTap();
+        },
         child: Container(
           constraints: const BoxConstraints(minHeight: 52),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
