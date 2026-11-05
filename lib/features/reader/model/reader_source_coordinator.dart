@@ -60,6 +60,8 @@ class ReaderSourceCoordinator {
       toc: chaptersOf(),
       chapterId: id,
       idx: idx,
+      bookUrl: b.bookUrl,
+      bookName: b.name,
     );
   }
 

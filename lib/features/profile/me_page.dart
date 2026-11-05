@@ -10,6 +10,7 @@ import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/features/profile/info_page.dart';
 import 'package:langhuan/features/reader/settings/read_setting.dart';
 import 'package:langhuan/features/settings/skin_page.dart';
+import 'package:langhuan/features/profile/native_engine_switch.dart';
 import 'package:langhuan/features/sources/source_repo_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -147,6 +148,7 @@ class Me extends ConsumerWidget {
                         () => Routes.navigateTo(context, Routes.update),
                         line: line,
                       ),
+                      NativeEngineSwitchRow(line: line),
                       _row(
                         context,
                         '关于',

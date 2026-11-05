@@ -43,7 +43,12 @@ class TocService {
             'tocUrl=${Redact.forLog(tocUrl)} '
             'chapterList=${source.ruleToc.chapterList}',
       );
-      final list = await engine.toc(source, tocUrl);
+      final list = await engine.toc(
+        source,
+        tocUrl,
+        bookUrl: book.bookUrl,
+        bookName: book.name,
+      );
       AppLog.i('Read', 'fetchRemoteToc got ${list.length} chapters');
       return mapChapters(book, list);
     } catch (e, st) {

@@ -49,7 +49,12 @@ class SourceSwitchService {
     try {
       final info = await engine.bookInfo(source, hit.bookUrl, seed: hit);
       final tocUrl = info.tocUrl.isNotEmpty ? info.tocUrl : hit.bookUrl;
-      final toc = await engine.toc(source, tocUrl);
+      final toc = await engine.toc(
+        source,
+        tocUrl,
+        bookUrl: hit.bookUrl,
+        bookName: book.name,
+      );
       if (toc.isEmpty) {
         BotToast.showText(text: '目标书源目录为空');
         return null;

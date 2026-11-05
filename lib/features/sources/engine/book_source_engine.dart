@@ -7,6 +7,7 @@ import 'package:langhuan/core/utils/redact.dart';
 import 'package:langhuan/data/entities/book_info.dart';
 import 'package:langhuan/features/sources/analyzer/js_analyzer.dart';
 import 'package:langhuan/features/sources/analyzer/regex_analyzer.dart';
+import 'package:langhuan/features/sources/engine/native_engine_bridge.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
 import 'package:langhuan/features/sources/model/source_diagnostics.dart';
@@ -464,6 +465,13 @@ class BookSourceEngine {
         detail: '详情地址无效',
       );
     }
+    // 原生引擎试点（E3b，默认关）：失败即回落 Dart 引擎。
+    final native = await NativeEngineBridge.bookInfo(
+      source,
+      resolved,
+      seed: seed,
+    );
+    if (native != null) return native;
     try {
       return await _bookInfo(source, resolved, seed: seed);
     } on SourceStageError {
@@ -814,7 +822,12 @@ class BookSourceEngine {
     return content?.group(1)?.trim() ?? '';
   }
 
-  Future<List<SourceChapter>> toc(BookSource source, String tocUrl) async {
+  Future<List<SourceChapter>> toc(
+    BookSource source,
+    String tocUrl, {
+    String bookUrl = '',
+    String bookName = '',
+  }) async {
     if (tocUrl.isEmpty) {
       throw const SourceStageError(
         stage: 'toc',
@@ -822,6 +835,14 @@ class BookSourceEngine {
         detail: '目录地址为空',
       );
     }
+    // 原生引擎试点（E3b，默认关）：失败即回落 Dart 引擎。
+    final native = await NativeEngineBridge.toc(
+      source,
+      tocUrl,
+      bookUrl: bookUrl,
+      bookName: bookName,
+    );
+    if (native != null) return native;
     AppLog.d(
       'Source',
       'toc "${source.bookSourceName}" url=${Redact.forLog(tocUrl)} '
