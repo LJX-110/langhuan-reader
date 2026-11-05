@@ -72,6 +72,10 @@ android {
             // Flutter plugins ship multi-ABI prebuilts; keep the APK arm64-only.
             excludes += setOf("lib/armeabi-v7a/**", "lib/x86_64/**")
         }
+        resources {
+            // 引擎依赖（hutool 等）携带的重复构建元数据
+            excludes += setOf("META-INF/INDEX.LIST", "META-INF/DEPENDENCIES")
+        }
     }
 
     // AGP 9 + FlutterActivity: Instantiatable is a false positive
