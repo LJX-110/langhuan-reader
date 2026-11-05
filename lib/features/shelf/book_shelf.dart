@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:langhuan/core/platform/screen.dart';
 import 'package:langhuan/core/utils/perf_log.dart';
 import 'package:langhuan/data/entities/book.dart';
+import 'package:langhuan/data/entities/book_info.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/design/components/bookshelf_3d.dart';
 import 'package:langhuan/design/components/feedback.dart';
@@ -106,6 +108,7 @@ class _BookShelfState extends ConsumerState<BookShelf> {
                           initialBookId: _initialFocusId(books),
                           onOpen: _openShelfBook,
                           onDelete: _deleteShelfBook,
+                          onLongPress: _longPressShelfBook,
                         ),
                       ),
               ),
@@ -232,6 +235,84 @@ class _BookShelfState extends ConsumerState<BookShelf> {
       context,
       Routes.read,
       params: {'read': jsonEncode(openBook.toJson())},
+    );
+  }
+
+  /// 长按书脊：操作菜单（查看详情 / 移出书架）。整理页由拖动排序占用长按。
+  Future<void> _longPressShelfBook(ShelfBookView view) async {
+    final model = ref.read(shelfModelProvider);
+    Book? target;
+    for (final book in model.shelf) {
+      if (book.id == view.id) {
+        target = book;
+        break;
+      }
+    }
+    if (target == null || !mounted) return;
+    unawaited(HapticFeedback.selectionClick());
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: dark ? AppColors.surfaceDark : AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 6),
+            ListTile(
+              leading: Icon(
+                Icons.info_outline,
+                size: 20,
+                color: AppColors.accentOf(ctx),
+              ),
+              title: const Text('查看详情', style: TextStyle(fontSize: 15)),
+              onTap: () => Navigator.pop(ctx, 'detail'),
+            ),
+            ListTile(
+              leading: Icon(
+                Icons.bookmark_remove_outlined,
+                size: 20,
+                color: AppColors.accentOf(ctx),
+              ),
+              title: const Text('移出书架', style: TextStyle(fontSize: 15)),
+              onTap: () => Navigator.pop(ctx, 'remove'),
+            ),
+            const SizedBox(height: 6),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'detail') {
+      _openShelfDetail(target);
+    } else if (action == 'remove') {
+      await _deleteShelfBook(view);
+    }
+  }
+
+  /// 从书架直接进详情页（无需网络：书架数据转 BookInfo 种子）。
+  void _openShelfDetail(Book book) {
+    final info = BookInfo(
+      id: book.id,
+      name: book.name,
+      author: book.author,
+      coverUrl: book.coverUrl,
+      category: book.category,
+      description: book.description,
+      latestChapter: book.latestChapter,
+      updatedAt: book.updatedAt,
+      sourceUrl: book.sourceUrl,
+      bookUrl: book.bookUrl,
+      originName: book.originName,
+      tocUrl: book.tocUrl,
+    );
+    Routes.navigateTo(
+      context,
+      Routes.detail,
+      params: {'detail': jsonEncode(info.toJson())},
     );
   }
 

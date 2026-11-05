@@ -25,6 +25,7 @@ class ShelfVolume extends StatelessWidget {
     required this.picked,
     required this.selectable,
     required this.onTap,
+    this.onLongPress,
     this.onGrabStart,
     this.onGrabMove,
     this.onGrabEnd,
@@ -41,6 +42,9 @@ class ShelfVolume extends StatelessWidget {
   final bool selectable;
 
   final VoidCallback onTap;
+
+  /// 非拖动场景的长按（主书架长按菜单）；整理页由 onGrabStart 占用长按。
+  final VoidCallback? onLongPress;
   final VoidCallback? onGrabStart;
   final ValueChanged<double>? onGrabMove;
   final VoidCallback? onGrabEnd;
@@ -58,6 +62,7 @@ class ShelfVolume extends StatelessWidget {
         hint: _hint(),
         textDirection: Directionality.of(context),
         onTap: onTap,
+        onLongPress: onLongPress,
         onGrabStart: onGrabStart,
         onGrabMove: onGrabMove,
         onGrabEnd: onGrabEnd,
@@ -130,6 +135,7 @@ class ShelfVolumeSpec {
     required this.hint,
     required this.textDirection,
     required this.onTap,
+    this.onLongPress,
     this.onGrabStart,
     this.onGrabMove,
     this.onGrabEnd,
@@ -142,6 +148,7 @@ class ShelfVolumeSpec {
   final String hint;
   final TextDirection textDirection;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
   final VoidCallback? onGrabStart;
   final ValueChanged<double>? onGrabMove;
   final VoidCallback? onGrabEnd;
@@ -156,6 +163,7 @@ class ShelfVolumeSpec {
       other.hint == hint &&
       other.textDirection == textDirection &&
       other.onTap == onTap &&
+      other.onLongPress == onLongPress &&
       other.onGrabStart == onGrabStart &&
       other.onGrabMove == onGrabMove &&
       other.onGrabEnd == onGrabEnd;
@@ -169,6 +177,7 @@ class ShelfVolumeSpec {
     hint,
     textDirection,
     onTap,
+    onLongPress,
     onGrabStart,
     onGrabMove,
     onGrabEnd,
@@ -186,7 +195,13 @@ class ShelfVolumeRender extends RenderBox
     _tap = TapGestureRecognizer(debugOwner: this)..onTap = () => _spec.onTap();
     _longPress = LongPressGestureRecognizer(debugOwner: this)
       ..onLongPressStart = (_) {
-        _spec.onGrabStart?.call();
+        final grab = _spec.onGrabStart;
+        if (grab != null) {
+          grab();
+        } else {
+          // 主书架：长按打开操作菜单（整理页由 grab 占用）。
+          _spec.onLongPress?.call();
+        }
       }
       ..onLongPressMoveUpdate = (details) {
         _spec.onGrabMove?.call(details.offsetFromOrigin.dx);
@@ -408,7 +423,9 @@ class ShelfVolumeRender extends RenderBox
   void handleEvent(PointerEvent event, BoxHitTestEntry entry) {
     if (event is! PointerDownEvent) return;
     _tap.addPointer(event);
-    if (_spec.onGrabStart != null) _longPress.addPointer(event);
+    if (_spec.onGrabStart != null || _spec.onLongPress != null) {
+      _longPress.addPointer(event);
+    }
   }
 
   @override

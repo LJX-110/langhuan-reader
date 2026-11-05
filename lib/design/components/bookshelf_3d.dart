@@ -27,6 +27,7 @@ class Bookshelf3D extends StatefulWidget {
     required this.onOpen,
     this.initialBookId,
     this.onDelete,
+    this.onLongPress,
     this.deleteWarning = '',
     this.selectable = false,
     this.selectedIds = const <String>{},
@@ -55,6 +56,10 @@ class Bookshelf3D extends StatefulWidget {
 
   /// Sort mode: long-press drag reports the new position.
   final Future<void> Function(int oldIndex, int newIndex)? onReorder;
+
+  /// Main shelf: long-press opens the per-book action menu.
+  /// (Sort mode uses long-press for reorder, so this is ignored there.)
+  final ValueChanged<ShelfBookView>? onLongPress;
 
   /// Staggered rise/fade on first layout; disabled by [MediaQuery.disableAnimations].
   final bool entryAnimation;
@@ -163,6 +168,13 @@ class _Bookshelf3DState extends State<Bookshelf3D>
       final lane =
           _indexOf(_focusId) ?? _pose.focus.round().clamp(0, _lastSlot);
       _scheduleLaneSync(lane);
+      // 书目集合真正变化（筛选切换 / 增删）时整排重新错峰入场（批次 4）；
+      // 进度落库等"同集合重建"不重播。
+      if (!_sameIds(oldWidget.books, widget.books) &&
+          widget.entryAnimation &&
+          !_reduced) {
+        _entry.forward(from: 0);
+      }
     }
     if (_pendingDelete != null &&
         !widget.books.any((book) => book.id == _pendingDelete!.id)) {
@@ -189,6 +201,15 @@ class _Bookshelf3DState extends State<Bookshelf3D>
       if (widget.books[i].id == id) return i;
     }
     return null;
+  }
+
+  /// 两版书目集合是否完全一致（id 序列相同）——筛选/增删检测用。
+  static bool _sameIds(List<ShelfBookView> a, List<ShelfBookView> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id) return false;
+    }
+    return true;
   }
 
   void _assemble() => _pose.present(_entry.value);
@@ -328,6 +349,8 @@ class _Bookshelf3DState extends State<Bookshelf3D>
   }
 
   void _open(int slot) {
+    // 书脊点击触感（克制用法：只在落位与点击时轻触，批次 4·S2）。
+    if (!_reduced) unawaited(HapticFeedback.selectionClick());
     _finishEntrance();
     _command++;
     _hapticGesture = false;
@@ -484,6 +507,9 @@ class _Bookshelf3DState extends State<Bookshelf3D>
       picked: widget.selectedIds.contains(book.id),
       selectable: widget.selectable,
       onTap: () => _tap(slot),
+      onLongPress: widget.onLongPress == null
+          ? null
+          : () => widget.onLongPress!(book),
       onGrabStart: reorderable ? () => _grabStart(slot) : null,
       onGrabMove: reorderable ? _grabMove : null,
       onGrabEnd: reorderable ? _grabEnd : null,
