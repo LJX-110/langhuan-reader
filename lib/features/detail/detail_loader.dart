@@ -113,15 +113,19 @@ class _DetailLoaderState extends ConsumerState<DetailLoader> {
             mainAxisSize: MainAxisSize.min,
             children: [
               // 种子预览：封面 + 书名 + 作者（网络详情到达前的即时内容）。
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: PicWidget(
-                  seed.coverUrl,
-                  width: 92,
-                  height: 130,
-                  referer: seed.bookUrl,
-                  title: seed.name,
-                  baseUrl: seed.sourceUrl,
+              // Hero：与来源列表的封面共用 tag，承接封面飞行（批次 5）。
+              Hero(
+                tag: 'cover-${seed.name}|${seed.author}',
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: PicWidget(
+                    seed.coverUrl,
+                    width: 92,
+                    height: 130,
+                    referer: seed.bookUrl,
+                    title: seed.name,
+                    baseUrl: seed.sourceUrl,
+                  ),
                 ),
               ),
               const SizedBox(height: 14),

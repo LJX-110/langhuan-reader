@@ -682,15 +682,18 @@ class _SearchState extends ConsumerState<Search> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppDimens.coverRadius),
-                child: PicWidget(
-                  item.coverUrl,
-                  width: 58,
-                  height: 84,
-                  referer: item.bookUrl,
-                  title: item.name,
-                  baseUrl: item.sourceUrl,
+              Hero(
+                tag: 'cover-${item.name}|${item.author}',
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppDimens.coverRadius),
+                  child: PicWidget(
+                    item.coverUrl,
+                    width: 58,
+                    height: 84,
+                    referer: item.bookUrl,
+                    title: item.name,
+                    baseUrl: item.sourceUrl,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),

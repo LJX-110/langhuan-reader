@@ -7,6 +7,7 @@ import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/entities/book_info.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/design/components/bookshelf_3d.dart';
+import 'package:langhuan/design/components/empty_state.dart';
 import 'package:langhuan/design/components/feedback.dart';
 import 'package:langhuan/design/components/page_header.dart';
 import 'package:langhuan/design/motion.dart';
@@ -92,10 +93,32 @@ class _BookShelfState extends ConsumerState<BookShelf> {
               Expanded(
                 child: books.isEmpty
                     ? (shelfModel.shelf.isEmpty
-                          ? _EmptyShelf(dark: dark)
-                          : _EmptyFilter(
-                              onShowAll: () =>
-                                  shelfModel.setFilter(ShelfFilter.all),
+                          ? EmptyState(
+                              title: '书架还是空的',
+                              hint: '去发现页或搜索找一本书。',
+                              alignment: EmptyStateAlignment.left,
+                              action: TextButton(
+                                onPressed: () {
+                                  Routes.navigateTo(
+                                    context,
+                                    Routes.search,
+                                    params: {'type': 'book', 'name': ''},
+                                  );
+                                },
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: const Size(0, 32),
+                                ),
+                                child: const Text('去搜索'),
+                              ),
+                            )
+                          : EmptyState(
+                              title: '这个筛选下还没有书',
+                              action: TextButton(
+                                onPressed: () =>
+                                    shelfModel.setFilter(ShelfFilter.all),
+                                child: const Text('查看全部'),
+                              ),
                             ))
                     : Padding(
                         padding: const EdgeInsets.symmetric(
@@ -155,14 +178,17 @@ class _BookShelfState extends ConsumerState<BookShelf> {
             padding: const EdgeInsets.all(10),
             child: Row(
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: PicWidget(
-                    book.coverUrl,
-                    height: 64,
-                    width: 46,
-                    referer: book.bookUrl,
-                    title: book.name,
+                Hero(
+                  tag: 'cover-${book.name}|${book.author}',
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: PicWidget(
+                      book.coverUrl,
+                      height: 64,
+                      width: 46,
+                      referer: book.bookUrl,
+                      title: book.name,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -341,83 +367,6 @@ class _BookShelfState extends ConsumerState<BookShelf> {
   Future<void> _undoRemove(Book removed, ShelfModel model) async {
     await BookRepository.instance.setOnShelf([removed.id], true);
     await model.initShelf();
-  }
-}
-
-class _EmptyShelf extends StatelessWidget {
-  const _EmptyShelf({required this.dark});
-
-  final bool dark;
-
-  @override
-  Widget build(BuildContext context) {
-    final primary = dark ? AppColors.textOnDark : AppColors.ink;
-    final muted = dark ? AppColors.textMutedDark : AppColors.inkMute;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 80, 24, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '书架还是空的',
-            style: TextStyle(
-              color: primary,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '去发现页或搜索找一本书。',
-            style: TextStyle(color: muted, fontSize: 12),
-          ),
-          const SizedBox(height: 6),
-          TextButton(
-            onPressed: () {
-              Routes.navigateTo(
-                context,
-                Routes.search,
-                params: {'type': 'book', 'name': ''},
-              );
-            },
-            style: TextButton.styleFrom(
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(0, 32),
-            ),
-            child: const Text('去搜索'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EmptyFilter extends StatelessWidget {
-  const _EmptyFilter({required this.onShowAll});
-
-  final VoidCallback onShowAll;
-
-  @override
-  Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final primary = dark ? AppColors.textOnDark : AppColors.ink;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '这个筛选下还没有书',
-            style: TextStyle(
-              color: primary,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextButton(onPressed: onShowAll, child: const Text('查看全部')),
-        ],
-      ),
-    );
   }
 }
 

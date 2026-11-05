@@ -534,15 +534,18 @@ class _BookRow extends StatelessWidget {
           ),
           child: Row(
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppDimens.coverRadius),
-                child: PicWidget(
-                  item.coverUrl,
-                  width: picW,
-                  height: picH,
-                  referer: item.bookUrl,
-                  title: item.name,
-                  baseUrl: item.sourceUrl,
+              Hero(
+                tag: 'cover-${item.name}|${item.author}',
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppDimens.coverRadius),
+                  child: PicWidget(
+                    item.coverUrl,
+                    width: picW,
+                    height: picH,
+                    referer: item.bookUrl,
+                    title: item.name,
+                    baseUrl: item.sourceUrl,
+                  ),
                 ),
               ),
               Expanded(

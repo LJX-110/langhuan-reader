@@ -166,14 +166,17 @@ class _BookDetailState extends ConsumerState<BookDetail> {
               borderRadius: BorderRadius.circular(4),
               boxShadow: AppShadows.cover,
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: PicWidget(
-                book.coverUrl,
-                height: 136,
-                width: 98,
-                referer: book.bookUrl,
-                title: book.name,
+            child: Hero(
+              tag: 'cover-${book.name}|${book.author}',
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: PicWidget(
+                  book.coverUrl,
+                  height: 136,
+                  width: 98,
+                  referer: book.bookUrl,
+                  title: book.name,
+                ),
               ),
             ),
           ),
