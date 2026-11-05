@@ -2,6 +2,8 @@ package com.langhuan.engine
 
 import android.content.Context
 import io.legado.app.constant.AndroidIdHolder
+import io.legado.app.data.entities.Book
+import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.help.JsCryptoProviderJvm
 import io.legado.app.help.JsCryptoProviders
@@ -14,6 +16,9 @@ import io.legado.app.help.http.OkHttpClientProviders
 import io.legado.app.help.http.OkHttpProxyClientProvider
 import io.legado.app.help.http.OkHttpProxyClientProviders
 import io.legado.app.help.http.KmpHttpClient
+import io.legado.app.help.http.BackstageWebViewProviders
+import io.legado.app.help.http.CookieStoreProviders
+import io.legado.app.help.http.SharedCookieStore
 import io.legado.app.help.source.SourceCacheProviders
 import io.legado.app.help.source.SourceDebugLogger
 import io.legado.app.help.source.SourceDebugLoggers
@@ -27,6 +32,8 @@ import io.legado.app.model.script.quickjs.QuickJsJsEngine
 import io.legado.app.model.script.quickjs.QuickJsSharedJsScopeBase
 import io.legado.app.model.webBook.WebBook
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -64,6 +71,7 @@ object EngineFacade {
                 File(app.filesDir, "legado").apply { mkdirs() }.absolutePath,
             )
             AndroidIdHolder.value = "langhuan-engine-01"
+            FacadeRuntime.attach(app)
 
             // JS 引擎 + 绑定（quickjs-android-native 随 :modules:quickjs 打包）
             JsBindingInjector.registerImageOps(NoopImageOps)
@@ -84,7 +92,12 @@ object EngineFacade {
                 override fun getProxyClient(proxy: String?): KmpHttpClient = client
             }
 
-            // 缓存 / cookie / 大变量 / 正文处理
+            // cookie 持久化：shared 的 Room 实现（cookieDao + 内存热层）
+            CookieStoreProviders.register(SharedCookieStore)
+            // 后台 WebView（反爬 / CF 源；Android 实现，移植自 app 端）
+            BackstageWebViewProviders.register(BackstageWebViewFactoryImpl)
+
+            // 缓存 / 大变量 / 正文处理
             SourceCacheProviders.impl = MemorySourceCache()
             SourceNetworkProviders.impl = MemorySourceNetwork()
             RuleBigDataProviders.impl = MemoryBigData()
@@ -149,6 +162,101 @@ object EngineFacade {
         } catch (e: Exception) {
             errorJson(e.message ?: e::class.simpleName ?: "搜索失败")
         }
+    }
+
+    /** 详情：书源 JSON + 书籍 JSON → 更新后的书籍 JSON（键 `book`）。 */
+    fun bookInfo(sourceJson: String, bookJson: String): String = runBlocking {
+        val source = decodeSource(sourceJson)
+            ?: return@runBlocking errorJson("书源 JSON 解析失败")
+        val book = try {
+            json.decodeFromString(Book.serializer(), bookJson)
+        } catch (e: Exception) {
+            return@runBlocking errorJson("书籍 JSON 解析失败: ${e.message}")
+        }
+        try {
+            WebBook.getBookInfoAwait(source, book)
+            buildJsonObject {
+                put("ok", true)
+                put("book", json.encodeToString(Book.serializer(), book))
+            }.toString()
+        } catch (e: Exception) {
+            errorJson(e.message ?: e::class.simpleName ?: "详情失败")
+        }
+    }
+
+    /**
+     * 目录：书源 JSON + 书籍 JSON → `{ok, book, chapters:[…]}`。
+     * 返回更新后的书籍（totalChapterNum 等随目录刷新）。
+     */
+    fun toc(sourceJson: String, bookJson: String): String = runBlocking {
+        val source = decodeSource(sourceJson)
+            ?: return@runBlocking errorJson("书源 JSON 解析失败")
+        val book = try {
+            json.decodeFromString(Book.serializer(), bookJson)
+        } catch (e: Exception) {
+            return@runBlocking errorJson("书籍 JSON 解析失败: ${e.message}")
+        }
+        try {
+            val chapters = WebBook.getChapterListAwait(source, book).getOrThrow()
+            buildJsonObject {
+                put("ok", true)
+                put("book", json.encodeToString(Book.serializer(), book))
+                put(
+                    "chapters",
+                    json.encodeToString(
+                        ListSerializer(BookChapter.serializer()),
+                        chapters,
+                    ),
+                )
+            }.toString()
+        } catch (e: Exception) {
+            errorJson(e.message ?: e::class.simpleName ?: "目录失败")
+        }
+    }
+
+    /**
+     * 正文：书源 JSON + 书籍 JSON + 章节 JSON（+ 下一章 URL）→ `{ok, content}`。
+     * 调用方按 TOC 顺序补 `nextChapterUrl`（阅读正常流程要求，缺失会报「未传入下一章节URL」）。
+     */
+    fun content(
+        sourceJson: String,
+        bookJson: String,
+        chapterJson: String,
+        nextChapterUrl: String = "",
+    ): String = runBlocking {
+        val source = decodeSource(sourceJson)
+            ?: return@runBlocking errorJson("书源 JSON 解析失败")
+        val book = try {
+            json.decodeFromString(Book.serializer(), bookJson)
+        } catch (e: Exception) {
+            return@runBlocking errorJson("书籍 JSON 解析失败: ${e.message}")
+        }
+        val chapter = try {
+            json.decodeFromString(BookChapter.serializer(), chapterJson)
+        } catch (e: Exception) {
+            return@runBlocking errorJson("章节 JSON 解析失败: ${e.message}")
+        }
+        try {
+            val text = WebBook.getContentAwait(
+                source,
+                book,
+                chapter,
+                nextChapterUrl = nextChapterUrl.takeIf { it.isNotEmpty() },
+                needSave = false,
+            )
+            buildJsonObject {
+                put("ok", true)
+                put("content", text)
+            }.toString()
+        } catch (e: Exception) {
+            errorJson(e.message ?: e::class.simpleName ?: "正文失败")
+        }
+    }
+
+    private fun decodeSource(sourceJson: String): BookSource? = try {
+        json.decodeFromString(BookSource.serializer(), sourceJson)
+    } catch (_: Exception) {
+        null
     }
 
     private fun errorJson(message: String): String =

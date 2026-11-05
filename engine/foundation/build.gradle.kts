@@ -5,6 +5,7 @@
 plugins {
     id("legado.kmp.library")
     alias(libs.plugins.kotlin.serialization)
+    id("maven-publish")
 }
 
 // JVM+Android 共享依赖 (原 shared 的 sharedJvmAndroidDeps helper, 切分后随本源集移动;

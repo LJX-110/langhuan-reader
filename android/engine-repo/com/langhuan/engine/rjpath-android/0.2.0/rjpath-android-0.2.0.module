@@ -1,0 +1,187 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../rjpath/0.2.0/rjpath-0.2.0.module",
+    "group": "com.langhuan.engine",
+    "module": "rjpath",
+    "version": "0.2.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.0"
+    }
+  },
+  "variants": [
+    {
+      "name": "androidApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-json",
+          "version": {
+            "requires": "1.11.0"
+          },
+          "excludes": [
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core-desktop"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended-desktop"
+            }
+          ]
+        }
+      ],
+      "files": [
+        {
+          "name": "rjpath.aar",
+          "url": "rjpath-android-0.2.0.aar",
+          "size": 91582,
+          "sha512": "f81cd08d913a37a08426adc34c101bf643283bdbc9906ab131be226805c1839915f68ee2729aee7a5474bb2918dd1cae84d16bd218e49a43d78867c2225ac1d5",
+          "sha256": "88ec680e6b88004f218cf382fda698797dff783263c5993025aa7eae80e28f91",
+          "sha1": "aff5aacc5a1112b0878054746f9f92a3239b2e18",
+          "md5": "b14fe0add2d116c7ecec02393ac04af0"
+        }
+      ]
+    },
+    {
+      "name": "androidRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-json",
+          "version": {
+            "requires": "1.11.0"
+          },
+          "excludes": [
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core-desktop"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended-desktop"
+            }
+          ]
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.3.20"
+          },
+          "excludes": [
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core-desktop"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended-desktop"
+            }
+          ]
+        }
+      ],
+      "files": [
+        {
+          "name": "rjpath.aar",
+          "url": "rjpath-android-0.2.0.aar",
+          "size": 91582,
+          "sha512": "f81cd08d913a37a08426adc34c101bf643283bdbc9906ab131be226805c1839915f68ee2729aee7a5474bb2918dd1cae84d16bd218e49a43d78867c2225ac1d5",
+          "sha256": "88ec680e6b88004f218cf382fda698797dff783263c5993025aa7eae80e28f91",
+          "sha1": "aff5aacc5a1112b0878054746f9f92a3239b2e18",
+          "md5": "b14fe0add2d116c7ecec02393ac04af0"
+        }
+      ]
+    },
+    {
+      "name": "androidSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "files": [
+        {
+          "name": "rjpath-android-0.2.0-sources.jar",
+          "url": "rjpath-android-0.2.0-sources.jar",
+          "size": 18655,
+          "sha512": "7ead42bf42ffde6d668cb15095b735cf787f1755acad86fef0b09fabda9a32077329e81d0c04900bf93fdc32cb475aa94549ed0fdadd64d10424264ad8a26ece",
+          "sha256": "2f07dc282c5b62e9b4667cb142bc4c0f731b08d6bfbf00323f384726b7711057",
+          "sha1": "59e4e5e2b8647abaf690d0102819ed776d658370",
+          "md5": "e3be8f2c08d6efacc27665ad35fd7771"
+        }
+      ]
+    }
+  ]
+}

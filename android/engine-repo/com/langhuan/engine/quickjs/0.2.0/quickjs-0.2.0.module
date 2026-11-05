@@ -1,0 +1,169 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.langhuan.engine",
+    "module": "quickjs",
+    "version": "0.2.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.0"
+    }
+  },
+  "variants": [
+    {
+      "name": "metadataApiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "dependencies": [
+        {
+          "group": "com.langhuan.engine",
+          "module": "js-api",
+          "version": {
+            "requires": "0.2.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "quickjs-metadata-0.2.0.jar",
+          "url": "quickjs-0.2.0.jar",
+          "size": 735,
+          "sha512": "ed01d0061068164d0b6382b5701066ea40c5fae78c51a9a6c1d859f07a797a6913476625aa83604276e9941903fe8e44a0bcfbb00d97374e0c1862a1c45d7ba5",
+          "sha256": "6997eb4171e0d11972cbc71e44ea88eaae75bf3d247275c0838c2bc11e7d23a4",
+          "sha1": "0f6dae06be5c0d2d9dff474189b8d04ed7da6664",
+          "md5": "dfddfc08bee72fe4bac00610e028aae8"
+        }
+      ]
+    },
+    {
+      "name": "metadataSourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "files": [
+        {
+          "name": "quickjs-kotlin-0.2.0-sources.jar",
+          "url": "quickjs-0.2.0-sources.jar",
+          "size": 83646,
+          "sha512": "ca9c076b9b63b5fb1146ab42cd1395028c616c4aa128f69baeeb5d1e477743c27b6b0ca95215be5dde80843757dd82a4bca0fe1f00fdd118d131d59f815953b9",
+          "sha256": "aceb1faa1851bfb8d1c819b70d2cbd63f162e53b9ccfd4c94001c0c9a82fbc2b",
+          "sha1": "dc85b18d105424edb9a83a174828b7005eda6cac",
+          "md5": "c5e90739ddd55dc8f3aebd8e533111b8"
+        }
+      ]
+    },
+    {
+      "name": "androidApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../quickjs-android/0.2.0/quickjs-android-0.2.0.module",
+        "group": "com.langhuan.engine",
+        "module": "quickjs-android",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "androidRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../quickjs-android/0.2.0/quickjs-android-0.2.0.module",
+        "group": "com.langhuan.engine",
+        "module": "quickjs-android",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "androidSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../quickjs-android/0.2.0/quickjs-android-0.2.0.module",
+        "group": "com.langhuan.engine",
+        "module": "quickjs-android",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../quickjs-jvm/0.2.0/quickjs-jvm-0.2.0.module",
+        "group": "com.langhuan.engine",
+        "module": "quickjs-jvm",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../quickjs-jvm/0.2.0/quickjs-jvm-0.2.0.module",
+        "group": "com.langhuan.engine",
+        "module": "quickjs-jvm",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../quickjs-jvm/0.2.0/quickjs-jvm-0.2.0.module",
+        "group": "com.langhuan.engine",
+        "module": "quickjs-jvm",
+        "version": "0.2.0"
+      }
+    }
+  ]
+}

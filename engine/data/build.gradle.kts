@@ -15,6 +15,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.room)
     alias(libs.plugins.ksp)
+    id("maven-publish")
 }
 
 room3 {

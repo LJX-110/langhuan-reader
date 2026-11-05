@@ -1,5 +1,6 @@
 plugins {
     id("legado.kmp.library")
+    id("maven-publish")
 }
 
 val isMacHost = System.getProperty("os.name").startsWith("Mac", ignoreCase = true)

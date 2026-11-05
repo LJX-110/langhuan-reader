@@ -7,6 +7,7 @@
 // JsonExtensions.shared.kt 等) 的公开签名里直接出现 JsonElement, 必须随本模块传递可见。
 plugins {
     id("legado.kmp.library")
+    id("maven-publish")
 }
 
 val isMacHost = System.getProperty("os.name").startsWith("Mac", ignoreCase = true)

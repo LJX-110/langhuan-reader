@@ -1,0 +1,280 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.langhuan.engine",
+    "module": "facade",
+    "version": "0.2.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.0"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseVariantReleaseApiPublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.3.20"
+          },
+          "excludes": [
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core-desktop"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended-desktop"
+            }
+          ]
+        }
+      ],
+      "files": [
+        {
+          "name": "facade-0.2.0.aar",
+          "url": "facade-0.2.0.aar",
+          "size": 75084,
+          "sha512": "1c797eb1b700354deccb40b0b7bb719abee52def1b30dc3c6909f3fcde504ed3c11b8e3b8b2f0bbd41e48318406c9ac843aa62e404ccb8508c44f47c0d0d2e51",
+          "sha256": "dfea5601f315088b4ddbfde7c769bfa3d46170876f225e019e3b1fd638e48c9f",
+          "sha1": "e9cf2ca264ea78857cb7134313995e7d3c7d7c9e",
+          "md5": "1a1c4f1b822fa34813b97fbc37ec3179"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseRuntimePublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "com.langhuan.engine",
+          "module": "data",
+          "version": {
+            "requires": "0.2.0"
+          },
+          "excludes": [
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core-desktop"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended-desktop"
+            }
+          ]
+        },
+        {
+          "group": "com.langhuan.engine",
+          "module": "foundation",
+          "version": {
+            "requires": "0.2.0"
+          },
+          "excludes": [
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core-desktop"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended-desktop"
+            }
+          ]
+        },
+        {
+          "group": "androidx.sqlite",
+          "module": "sqlite-framework",
+          "version": {
+            "requires": "2.7.0"
+          },
+          "excludes": [
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core-desktop"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended-desktop"
+            }
+          ]
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-json",
+          "version": {
+            "requires": "1.11.0"
+          },
+          "excludes": [
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core-desktop"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended-desktop"
+            }
+          ]
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.3.20"
+          },
+          "excludes": [
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core-desktop"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended-desktop"
+            }
+          ]
+        }
+      ],
+      "files": [
+        {
+          "name": "facade-0.2.0.aar",
+          "url": "facade-0.2.0.aar",
+          "size": 75084,
+          "sha512": "1c797eb1b700354deccb40b0b7bb719abee52def1b30dc3c6909f3fcde504ed3c11b8e3b8b2f0bbd41e48318406c9ac843aa62e404ccb8508c44f47c0d0d2e51",
+          "sha256": "dfea5601f315088b4ddbfde7c769bfa3d46170876f225e019e3b1fd638e48c9f",
+          "sha1": "e9cf2ca264ea78857cb7134313995e7d3c7d7c9e",
+          "md5": "1a1c4f1b822fa34813b97fbc37ec3179"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseSourcePublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "facade-0.2.0-sources.jar",
+          "url": "facade-0.2.0-sources.jar",
+          "size": 11825,
+          "sha512": "b9be3f27be2b473693e4b48e8d00a331f462e6cc6a82157cf72a3be98cbbed1fdeb03b41ea6aa2ab666939b9e8a977fe2b8a9c90b1838784ca62319c3e523acb",
+          "sha256": "606fecd06bd8822e2533c74ee49e26fc0b39eed5c6c7ef8c4aa4ce30b4b3d9cb",
+          "sha1": "060fe3c386d935bac965281b294ae7d7721f337f",
+          "md5": "525bbb85e8c925c7c8078da11d200152"
+        }
+      ]
+    }
+  ]
+}

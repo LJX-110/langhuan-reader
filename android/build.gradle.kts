@@ -6,6 +6,11 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        // 本地引擎仓库（engine> gradlew publishAllPublicationsToLocalRepo 生成，随仓库提交）
+        maven {
+            url = rootProject.file("engine-repo").toURI()
+            content { includeGroup("com.langhuan.engine") }
+        }
     }
 }
 

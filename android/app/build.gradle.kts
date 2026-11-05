@@ -93,4 +93,6 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // 原生引擎（engine> gradlew publishAllPublicationsToLocalRepo 发布，随仓库提交）
+    implementation("com.langhuan.engine:facade:0.2.0")
 }
