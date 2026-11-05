@@ -64,12 +64,22 @@ class ReaderContentReloader {
 
   /// Coalesce slider drags / repeated +/- taps into one relayout. The value
   /// label still updates immediately; only the expensive pagination waits.
+  ///
+  /// 90ms 节流（原先 260ms）：滑动时正文近似实时跟随（排版即时预览，批次 3）；
+  /// relayoutPages 走 `showLoading: false`，无遮罩闪烁，跟手观感安全。
   void scheduleRelayout() {
     _relayoutTimer?.cancel();
-    _relayoutTimer = Timer(const Duration(milliseconds: 260), () {
+    _relayoutTimer = Timer(const Duration(milliseconds: 90), () {
       _relayoutTimer = null;
       unawaited(relayoutPages());
     });
+  }
+
+  /// 手势落下（滑块 onChangeEnd）：取消待排并立即终排——"落手提交"。
+  void flushRelayout() {
+    _relayoutTimer?.cancel();
+    _relayoutTimer = null;
+    unawaited(relayoutPages());
   }
 
   void cancelScheduledRelayout() {

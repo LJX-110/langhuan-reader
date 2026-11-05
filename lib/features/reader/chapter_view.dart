@@ -114,6 +114,14 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
     query: _query,
   );
 
+  /// 目录首帧的起始行 = 当前章所在行（越界夹取，空目录在第 0 行）。
+  int _initialRow(List<TocRow> rows, int chaptersLength, int cur) {
+    if (rows.isEmpty || chaptersLength <= 0) return 0;
+    final idx = cur.clamp(0, chaptersLength - 1);
+    final row = tocRowForChapter(rows, idx);
+    return row.clamp(0, rows.length - 1);
+  }
+
   Future<void> _openChapter(int index) async {
     final data = ref.read(readModelProvider);
     final book = data.book;
@@ -370,6 +378,10 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
                       : ScrollablePositionedList.builder(
                           itemScrollController: _itemScrollController,
                           itemPositionsListener: _itemPositionsListener,
+                          // 首帧即定位当前章（对齐 0.35，与后续定位一致）：
+                          // 消除"先停第 1 章再跳"的闪现（批次 3·目录定位）。
+                          initialScrollIndex: _initialRow(rows, chapters.length, cur),
+                          initialAlignment: 0.35,
                           padding: const EdgeInsets.fromLTRB(0, 4, 0, 8),
                           itemCount: rows.length,
                           itemBuilder: (context, i) {

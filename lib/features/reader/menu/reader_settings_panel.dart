@@ -60,6 +60,7 @@ class ReaderSettingsPanel extends StatelessWidget {
                 readModel.scheduleRelayout();
                 onChanged();
               },
+              onChangeEnd: () => readModel.flushRelayout(),
             ),
           ),
           const SizedBox(height: 8),
@@ -205,6 +206,7 @@ class ReaderLayoutPanel extends StatelessWidget {
                 readModel.scheduleRelayout();
                 onChanged();
               },
+              onChangeEnd: () => readModel.flushRelayout(),
             ),
           ),
           const SizedBox(height: 4),
@@ -233,6 +235,7 @@ class ReaderLayoutPanel extends StatelessWidget {
                 readModel.scheduleRelayout();
                 onChanged();
               },
+              onChangeEnd: () => readModel.flushRelayout(),
             ),
           ),
           const SizedBox(height: 4),
@@ -261,6 +264,7 @@ class ReaderLayoutPanel extends StatelessWidget {
                 readModel.scheduleRelayout();
                 onChanged();
               },
+              onChangeEnd: () => readModel.flushRelayout(),
             ),
           ),
           const SizedBox(height: 10),
@@ -503,6 +507,7 @@ Widget _buildSlider({
   required double min,
   required double max,
   required ValueChanged<double> onChanged,
+  VoidCallback? onChangeEnd,
 }) {
   return SliderTheme(
     data: readerSliderTheme(context, chrome),
@@ -511,6 +516,7 @@ Widget _buildSlider({
       min: min,
       max: max,
       onChanged: onChanged,
+      onChangeEnd: onChangeEnd == null ? null : (_) => onChangeEnd(),
     ),
   );
 }

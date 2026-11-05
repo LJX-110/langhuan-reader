@@ -426,6 +426,9 @@ class ReadModel with ChangeNotifier {
   /// Debounced sibling of [relayoutPages] for settings sliders / steppers.
   void scheduleRelayout() => _reloader.scheduleRelayout();
 
+  /// 排版滑块落手：立即终排（"手势期间即时预览、落手提交"）。
+  void flushRelayout() => _reloader.flushRelayout();
+
   /// Jump inside the current chapter without a page-turn animation.
   void jumpToPage(int index) {
     final b = book;
