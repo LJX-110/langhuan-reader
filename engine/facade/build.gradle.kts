@@ -11,7 +11,7 @@ plugins {
 
 android {
     namespace = "com.langhuan.engine"
-    compileSdk = 37
+    compileSdk = 36
     defaultConfig {
         minSdk = 24
         consumerProguardFiles("consumer-rules.pro")

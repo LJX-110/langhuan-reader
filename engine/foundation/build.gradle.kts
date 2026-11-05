@@ -21,7 +21,7 @@ kotlin {
 
     android {
         namespace = "io.legado.foundation"
-        compileSdk = 37
+        compileSdk = 36
         minSdk = 24
     }
 

@@ -63,11 +63,11 @@
         {
           "name": "rjpath.aar",
           "url": "rjpath-android-0.2.0.aar",
-          "size": 91582,
-          "sha512": "f81cd08d913a37a08426adc34c101bf643283bdbc9906ab131be226805c1839915f68ee2729aee7a5474bb2918dd1cae84d16bd218e49a43d78867c2225ac1d5",
-          "sha256": "88ec680e6b88004f218cf382fda698797dff783263c5993025aa7eae80e28f91",
-          "sha1": "aff5aacc5a1112b0878054746f9f92a3239b2e18",
-          "md5": "b14fe0add2d116c7ecec02393ac04af0"
+          "size": 91575,
+          "sha512": "aa770831d5b5b1d7bbbed80ee2b30924c597f9d4be99ebf07c16786b30840a9600b7a2222ca43288bcf1fb96a1d39d9c28e5c7e74ad30e1a348996260fe72c15",
+          "sha256": "c131009e519eef0d1da37b75e90c450e856ee04a3016add45a2db88b1248c5b3",
+          "sha1": "05a5cb654cf7626f85acd4c8d892a15aaf7b9ddc",
+          "md5": "06963c3cc55405da5637f0a38fdd3a58"
         }
       ]
     },
@@ -152,11 +152,11 @@
         {
           "name": "rjpath.aar",
           "url": "rjpath-android-0.2.0.aar",
-          "size": 91582,
-          "sha512": "f81cd08d913a37a08426adc34c101bf643283bdbc9906ab131be226805c1839915f68ee2729aee7a5474bb2918dd1cae84d16bd218e49a43d78867c2225ac1d5",
-          "sha256": "88ec680e6b88004f218cf382fda698797dff783263c5993025aa7eae80e28f91",
-          "sha1": "aff5aacc5a1112b0878054746f9f92a3239b2e18",
-          "md5": "b14fe0add2d116c7ecec02393ac04af0"
+          "size": 91575,
+          "sha512": "aa770831d5b5b1d7bbbed80ee2b30924c597f9d4be99ebf07c16786b30840a9600b7a2222ca43288bcf1fb96a1d39d9c28e5c7e74ad30e1a348996260fe72c15",
+          "sha256": "c131009e519eef0d1da37b75e90c450e856ee04a3016add45a2db88b1248c5b3",
+          "sha1": "05a5cb654cf7626f85acd4c8d892a15aaf7b9ddc",
+          "md5": "06963c3cc55405da5637f0a38fdd3a58"
         }
       ]
     },

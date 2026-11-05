@@ -19,7 +19,7 @@ kotlin {
 
     android {
         namespace = "com.github.jershell.rjpath"
-        compileSdk = 37
+        compileSdk = 36
         minSdk = 24
     }
 

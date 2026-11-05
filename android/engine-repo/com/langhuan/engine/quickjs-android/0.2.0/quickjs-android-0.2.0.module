@@ -63,11 +63,11 @@
         {
           "name": "quickjs.aar",
           "url": "quickjs-android-0.2.0.aar",
-          "size": 132123,
-          "sha512": "eec3d6bfad3c597266f466ff1e896bc76dba2da764f269e36457ea25375e71a70bdfd75e7fcd502f588b2f824cb0864a66fce7f262aebf49421a7ca3d0c915f3",
-          "sha256": "e173bbddb0c56d198dc6605cfe05c33f7ff9c7841c724324567a65115390da81",
-          "sha1": "6937b401d8c1288643afeca1cb76f94289eb3c52",
-          "md5": "2f9fb6f9dc0b1e7c04e018c083565be1"
+          "size": 132116,
+          "sha512": "1a32e6da993886f44c265c8f567d072b7795d2fc46259333e94e510539fe5454b4887c7f4ffd2b50c5538acb9f9650e0fef5a8ad415cdeeef3f560906bdd5573",
+          "sha256": "c2e85014b4322e990dedc81eae2db1a32511ba1c538140bc4e5f2037514382aa",
+          "sha1": "b69ba7bf4a71fab79b622d46628de7c471e20b72",
+          "md5": "fa3f81eae3dd45b8841dc4682ab035cf"
         }
       ]
     },
@@ -284,11 +284,11 @@
         {
           "name": "quickjs.aar",
           "url": "quickjs-android-0.2.0.aar",
-          "size": 132123,
-          "sha512": "eec3d6bfad3c597266f466ff1e896bc76dba2da764f269e36457ea25375e71a70bdfd75e7fcd502f588b2f824cb0864a66fce7f262aebf49421a7ca3d0c915f3",
-          "sha256": "e173bbddb0c56d198dc6605cfe05c33f7ff9c7841c724324567a65115390da81",
-          "sha1": "6937b401d8c1288643afeca1cb76f94289eb3c52",
-          "md5": "2f9fb6f9dc0b1e7c04e018c083565be1"
+          "size": 132116,
+          "sha512": "1a32e6da993886f44c265c8f567d072b7795d2fc46259333e94e510539fe5454b4887c7f4ffd2b50c5538acb9f9650e0fef5a8ad415cdeeef3f560906bdd5573",
+          "sha256": "c2e85014b4322e990dedc81eae2db1a32511ba1c538140bc4e5f2037514382aa",
+          "sha1": "b69ba7bf4a71fab79b622d46628de7c471e20b72",
+          "md5": "fa3f81eae3dd45b8841dc4682ab035cf"
         }
       ]
     },

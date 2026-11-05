@@ -350,7 +350,7 @@ kotlin {
 
     android {
         namespace = "io.legado.data"
-        compileSdk = 37
+        compileSdk = 36
         minSdk = 24
         // 真机测试源集 (androidDeviceTest)。jvmAndAndroidTest 只在 JVM 上跑,
         // 而 libcore 的 java.util.regex.Matcher 与 JDK 语义不同 (reset 里 input.toString()),

@@ -61,11 +61,11 @@
         {
           "name": "facade-0.2.0.aar",
           "url": "facade-0.2.0.aar",
-          "size": 75084,
-          "sha512": "1c797eb1b700354deccb40b0b7bb719abee52def1b30dc3c6909f3fcde504ed3c11b8e3b8b2f0bbd41e48318406c9ac843aa62e404ccb8508c44f47c0d0d2e51",
-          "sha256": "dfea5601f315088b4ddbfde7c769bfa3d46170876f225e019e3b1fd638e48c9f",
-          "sha1": "e9cf2ca264ea78857cb7134313995e7d3c7d7c9e",
-          "md5": "1a1c4f1b822fa34813b97fbc37ec3179"
+          "size": 75077,
+          "sha512": "77f9d47b3a2906622904ebf36d6ee92d0c270c793d217a25b7e44da5fe196feb8ee4d4091533c41d6e90e77269c00cef4b9f745dcb189a5f6bafe8d867f4afb3",
+          "sha256": "07c3578f19ce903a291109333867b815880e8560a36ae5f38e9a8fdbb8ca491e",
+          "sha1": "7efffa507d9ef709532886da230639dd118c2947",
+          "md5": "c560a440f554ae76ef79c2993d4400e1"
         }
       ]
     },
@@ -248,11 +248,11 @@
         {
           "name": "facade-0.2.0.aar",
           "url": "facade-0.2.0.aar",
-          "size": 75084,
-          "sha512": "1c797eb1b700354deccb40b0b7bb719abee52def1b30dc3c6909f3fcde504ed3c11b8e3b8b2f0bbd41e48318406c9ac843aa62e404ccb8508c44f47c0d0d2e51",
-          "sha256": "dfea5601f315088b4ddbfde7c769bfa3d46170876f225e019e3b1fd638e48c9f",
-          "sha1": "e9cf2ca264ea78857cb7134313995e7d3c7d7c9e",
-          "md5": "1a1c4f1b822fa34813b97fbc37ec3179"
+          "size": 75077,
+          "sha512": "77f9d47b3a2906622904ebf36d6ee92d0c270c793d217a25b7e44da5fe196feb8ee4d4091533c41d6e90e77269c00cef4b9f745dcb189a5f6bafe8d867f4afb3",
+          "sha256": "07c3578f19ce903a291109333867b815880e8560a36ae5f38e9a8fdbb8ca491e",
+          "sha1": "7efffa507d9ef709532886da230639dd118c2947",
+          "md5": "c560a440f554ae76ef79c2993d4400e1"
         }
       ]
     },

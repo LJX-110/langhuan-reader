@@ -162,11 +162,11 @@
         {
           "name": "foundation.aar",
           "url": "foundation-android-0.2.0.aar",
-          "size": 554993,
-          "sha512": "58870e3b5696bd700da38cdddf6bf7b01a12f753093397d71817cb8bfdf9fe61ec6916f6dfacb9a3c91914fcf7233097dfeba6e3529a733e05fe1742bcf4d48d",
-          "sha256": "5e7e01e97af1206d2401fe0bf8c9034109955986fad54811b6a56f3505364c8f",
-          "sha1": "699ee860eda3305ee27f5acfc437df023297895c",
-          "md5": "bc133103c80af2e1c7eadc1ee5deade7"
+          "size": 554986,
+          "sha512": "99677467f7cd8361047efa190b57b0fe9f07a0227db707690ca8eabec0d6f1cbbabd413badd8582a8d46c400f0b8404ead36110239b515037d0dce6fe1fcdb3c",
+          "sha256": "2c4a6e994dcca797815ce2eb41d287bea840a9e3ade13fbca495dd10bf334f7a",
+          "sha1": "5b95004e24ac7393c18ebaf56cfb580cb5899db7",
+          "md5": "c7e79d48a006ba181646330f24365954"
         }
       ]
     },
@@ -548,11 +548,11 @@
         {
           "name": "foundation.aar",
           "url": "foundation-android-0.2.0.aar",
-          "size": 554993,
-          "sha512": "58870e3b5696bd700da38cdddf6bf7b01a12f753093397d71817cb8bfdf9fe61ec6916f6dfacb9a3c91914fcf7233097dfeba6e3529a733e05fe1742bcf4d48d",
-          "sha256": "5e7e01e97af1206d2401fe0bf8c9034109955986fad54811b6a56f3505364c8f",
-          "sha1": "699ee860eda3305ee27f5acfc437df023297895c",
-          "md5": "bc133103c80af2e1c7eadc1ee5deade7"
+          "size": 554986,
+          "sha512": "99677467f7cd8361047efa190b57b0fe9f07a0227db707690ca8eabec0d6f1cbbabd413badd8582a8d46c400f0b8404ead36110239b515037d0dce6fe1fcdb3c",
+          "sha256": "2c4a6e994dcca797815ce2eb41d287bea840a9e3ade13fbca495dd10bf334f7a",
+          "sha1": "5b95004e24ac7393c18ebaf56cfb580cb5899db7",
+          "md5": "c7e79d48a006ba181646330f24365954"
         }
       ]
     },

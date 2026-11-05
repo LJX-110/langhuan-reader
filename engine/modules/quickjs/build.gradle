@@ -8,7 +8,7 @@ kotlin {
     jvm()
     android {
         namespace = 'com.script.quickjs'
-        compileSdk = 37
+        compileSdk = 36
         minSdk = 24
         withDeviceTest {
         }
