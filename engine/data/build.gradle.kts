@@ -453,6 +453,11 @@ kotlin {
                 implementation(libs.core.ktx)
                 // ImageProvider.android 的 SVG 解码 (与 :shared 同款)
                 implementation(libs.androidsvg)
+                // [本地补丁 2026-11-05] 真实 androidx.preference：Mihon 兼容层
+                // (ConfigurableSource/ConfigurableAnimeSource 的 PreferenceScreen 等) 改从这里解析；
+                // JVM 侧继续用 jvmMain 的 PreferenceShim（Android 变体不再打包 shim → 与 App
+                // 已带的 androidx.preference:1.2.1（shared_preferences_android 依赖）不再重复类）。
+                api("androidx.preference:preference:1.2.1")
             }
         }
         jvmMain {

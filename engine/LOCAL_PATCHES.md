@@ -8,6 +8,8 @@
 | 4 | `settings.gradle.kts` | 两个仓库块的队首插入阿里云镜像（public / google / gradle-plugin），官方仓库保留兜底 | maven central 直连慢、易超时 |
 | 5 | `gradle.properties` | 追加 `org.gradle.java.installations.auto-download=false` 与 `paths=D:\Minecraft\Java\jdk-21` | 不走 foojay 在线下载（曾龟速 78KB/s 且写 C 盘）；改用本机 JDK 21 |
 | 6 | `modules/quickjs/build.gradle` | `buildJvmNativeLib` 增加"预编译库优先"闸门：存在 `prebuilt/jvm/<platformId>/legado_quickjs.dll` 时直接复用并跳过 CMake | 本机无 MSVC/MinGW，无法本地编译 JVM 版 quickjs；用官方桌面便携包中的预编译 DLL |
+| 7 | `data/…/androidx/preference/PreferenceShim.kt` + `data/build.gradle.kts` | shim 从 `jvmAndAndroidMain` 移到 `jvmMain`；`androidMain` 增加 `api("androidx.preference:preference:1.2.1")` | Android 变体不再打包 androidx.preference 的 shim 类，消除与 App 侧（shared_preferences_android 依赖的）真实库的重复类；JVM 目标继续用 shim |
+| 8 | 根 `build.gradle.kts` + 各模块构建脚本 | 本地 Maven 发布：group `com.langhuan.engine` / version `0.2.0` / 仓库 `../android/engine-repo`；关闭 KMP 元数据 KSP 任务与 JVM 发布任务 | Flutter App 以坐标消费引擎，App/CI 构建无需现场编译引擎；元数据 KSP 在 data 上有已知失败且 App 用不到 |
 
 ## 升级上游流程
 

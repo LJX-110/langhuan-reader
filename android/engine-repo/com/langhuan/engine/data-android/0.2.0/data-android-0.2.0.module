@@ -191,6 +191,39 @@
           ]
         },
         {
+          "group": "androidx.preference",
+          "module": "preference",
+          "version": {
+            "requires": "1.2.1"
+          },
+          "excludes": [
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core-desktop"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended-desktop"
+            }
+          ]
+        },
+        {
           "group": "com.langhuan.engine",
           "module": "foundation",
           "version": {
@@ -360,11 +393,11 @@
         {
           "name": "data.aar",
           "url": "data-android-0.2.0.aar",
-          "size": 5005607,
-          "sha512": "a709712d325ece35dba369fcfb939f0a1fb72459fd115f21c7aedbbcbac2687654f052920f75c843b08806420ce64e354b18e8965ae93c3d0bf2a033acbc3ab9",
-          "sha256": "2aef1a484a00b0bde8b126759fc827da3b62dd5264f615188c9f8e07dc6eef43",
-          "sha1": "6c85af6d30bbd9fa4d1656d8fea396b4d58d2e79",
-          "md5": "03378bce2ba600e6ac3902acf586bb31"
+          "size": 4990950,
+          "sha512": "cfd5ab553853e882639229057799ae7df70f69bfe3fedb5462fc15289735c5c844842762f90d4c527291c2084a0eb9543b38f06129851df6804e2f817ef9288e",
+          "sha256": "374b71803b5c86a522bd018bde6f6f5ac6de6c8e55085c1fea7060ba192028a0",
+          "sha1": "89d40ef75c1d5e79c3c464083818b8dd059fc6b4",
+          "md5": "462b26812c6a75ab25b7e326155a3dae"
         }
       ]
     },
@@ -515,6 +548,39 @@
           "module": "documentfile",
           "version": {
             "requires": "1.1.0"
+          },
+          "excludes": [
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "androidx.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-core-desktop"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended"
+            },
+            {
+              "group": "org.jetbrains.compose.material",
+              "module": "material-icons-extended-desktop"
+            }
+          ]
+        },
+        {
+          "group": "androidx.preference",
+          "module": "preference",
+          "version": {
+            "requires": "1.2.1"
           },
           "excludes": [
             {
@@ -1274,11 +1340,11 @@
         {
           "name": "data.aar",
           "url": "data-android-0.2.0.aar",
-          "size": 5005607,
-          "sha512": "a709712d325ece35dba369fcfb939f0a1fb72459fd115f21c7aedbbcbac2687654f052920f75c843b08806420ce64e354b18e8965ae93c3d0bf2a033acbc3ab9",
-          "sha256": "2aef1a484a00b0bde8b126759fc827da3b62dd5264f615188c9f8e07dc6eef43",
-          "sha1": "6c85af6d30bbd9fa4d1656d8fea396b4d58d2e79",
-          "md5": "03378bce2ba600e6ac3902acf586bb31"
+          "size": 4990950,
+          "sha512": "cfd5ab553853e882639229057799ae7df70f69bfe3fedb5462fc15289735c5c844842762f90d4c527291c2084a0eb9543b38f06129851df6804e2f817ef9288e",
+          "sha256": "374b71803b5c86a522bd018bde6f6f5ac6de6c8e55085c1fea7060ba192028a0",
+          "sha1": "89d40ef75c1d5e79c3c464083818b8dd059fc6b4",
+          "md5": "462b26812c6a75ab25b7e326155a3dae"
         }
       ]
     },
@@ -1297,11 +1363,11 @@
         {
           "name": "data-android-0.2.0-sources.jar",
           "url": "data-android-0.2.0-sources.jar",
-          "size": 1247004,
-          "sha512": "876e516f6b8bf6e894c7ab1642ec0a6bc18c43a8e447b05187027210954bce03cbc979cc34239d22da46928a1c9493afe4f3a22f74799460612d4e41f8719e87",
-          "sha256": "875baf987c2c8e10b6eb3c3cf70c2cf9ac9d90868fa5a26c17eaf6ab9dffbd92",
-          "sha1": "21b0f38689d8e0c03573d607bfc8e7f67730b5dd",
-          "md5": "58075e75df5c803b4435b04a3baf806b"
+          "size": 1244287,
+          "sha512": "086706839d17c8fa304831932507ecc44bb0aedbbdc8c60f0337379e2f16a04b52484678570e22fa0f569204e3298ac67c845790d3996e63403a51c8b41eaa18",
+          "sha256": "df489fc420b628bad2659bba1604f0949b14478cfb9509b07b7e6c27ab97b4f9",
+          "sha1": "41845851ce51e6a42a6e0eb1606d9cc59637fb4c",
+          "md5": "9562ebf9e21eabc00af99fdfb3dfd92e"
         }
       ]
     }

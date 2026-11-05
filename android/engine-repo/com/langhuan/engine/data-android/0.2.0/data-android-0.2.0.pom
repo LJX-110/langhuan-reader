@@ -172,6 +172,38 @@
       </exclusions>
     </dependency>
     <dependency>
+      <groupId>androidx.preference</groupId>
+      <artifactId>preference</artifactId>
+      <version>1.2.1</version>
+      <scope>compile</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>androidx.compose.material</groupId>
+          <artifactId>material-icons-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>androidx.compose.material</groupId>
+          <artifactId>material-icons-extended</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.jetbrains.compose.material</groupId>
+          <artifactId>material-icons-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.jetbrains.compose.material</groupId>
+          <artifactId>material-icons-core-desktop</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.jetbrains.compose.material</groupId>
+          <artifactId>material-icons-extended</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.jetbrains.compose.material</groupId>
+          <artifactId>material-icons-extended-desktop</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
       <groupId>com.langhuan.engine</groupId>
       <artifactId>foundation-android</artifactId>
       <version>0.2.0</version>
