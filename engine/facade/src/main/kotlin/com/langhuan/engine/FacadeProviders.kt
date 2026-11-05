@@ -29,22 +29,6 @@ import okhttp3.Request
 
 // ============================== 基础件 ==============================
 
-/** 图片能力占位：文本链路不需要（真图解密后续接 BitmapImageOps）。 */
-object NoopImageOps : ImageOps {
-    override fun decode(bytes: ByteArray): ImageRef = unsupported()
-    override fun decode(base64: String): ImageRef = unsupported()
-    override fun encode(img: ImageRef, format: String, quality: Int): ByteArray = unsupported()
-    override fun split(img: ImageRef, rows: Int, cols: Int): List<ImageRef> = unsupported()
-    override fun stitch(imgs: List<ImageRef>, direction: String): ImageRef = unsupported()
-    override fun crop(img: ImageRef, x: Int, y: Int, w: Int, h: Int): ImageRef = unsupported()
-    override fun rotate(img: ImageRef, deg: Int): ImageRef = unsupported()
-    override fun flip(img: ImageRef, direction: String): ImageRef = unsupported()
-    override fun size(img: ImageRef): Map<String, Int> = unsupported()
-
-    private fun <T> unsupported(): T =
-        throw UnsupportedOperationException("engine facade 未内置图片能力")
-}
-
 /** jsLib 共享 scope：内存缓存 + OkHttp 下载。 */
 class AndroidSharedJsScope : QuickJsSharedJsScopeBase() {
     private val mem = LinkedHashMap<String, String>()

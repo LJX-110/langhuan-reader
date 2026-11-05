@@ -21,10 +21,11 @@ class NativeEngineBridge {
   static const _tag = 'NativeEngine';
 
   /// 用户开关（我的 → 其他 → 原生引擎（实验））。
+  /// **默认开启**（2026-11-05 E5 对拍：原生 10 胜 0 负 4 平）；可手动关闭回落 Dart；
   /// 防御：任何环境异常（如测试中 SpUtil 未初始化）都视为关闭。
   static bool get enabled {
     try {
-      return SpUtil.getBool(PrefsKeys.nativeEngineEnabled);
+      return SpUtil.getBool(PrefsKeys.nativeEngineEnabled, defValue: true);
     } catch (_) {
       return false;
     }

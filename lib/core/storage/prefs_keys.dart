@@ -56,8 +56,8 @@ class PrefsKeys {
   /// Last successful update check (ms). Auto check stays silent for 24h after.
   static const updateLastCheck = 'update_last_check';
 
-  /// Experimental: route bookInfo / toc / content through the native engine
-  /// (阅读裁剪集, MethodChannel `langhuan/engine`). Default off; any native
-  /// failure falls back to the Dart engine. Toggle lives in Me → Other.
+  /// Route bookInfo / toc / content through the native engine
+  /// （阅读裁剪集, MethodChannel `langhuan/engine`）。**默认开启**（E5 对拍：10 胜 0 负）；
+  /// 任何原生失败自动回落 Dart 引擎；可在 我的 → 其他 关闭。键存在且为 false 时用 Dart。
   static const nativeEngineEnabled = 'native_engine_enabled';
 }

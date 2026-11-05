@@ -19,6 +19,7 @@ import io.legado.app.help.http.KmpHttpClient
 import io.legado.app.help.http.BackstageWebViewProviders
 import io.legado.app.help.http.CookieStoreProviders
 import io.legado.app.help.http.SharedCookieStore
+import io.legado.app.help.http.registerSharedCookieJarBridge
 import io.legado.app.help.source.SourceCacheProviders
 import io.legado.app.help.source.SourceDebugLogger
 import io.legado.app.help.source.SourceDebugLoggers
@@ -74,7 +75,7 @@ object EngineFacade {
             FacadeRuntime.attach(app)
 
             // JS 引擎 + 绑定（quickjs-android-native 随 :modules:quickjs 打包）
-            JsBindingInjector.registerImageOps(NoopImageOps)
+            JsBindingInjector.registerImageOps(BitmapImageOps)
             JsEngines.registerProvider { QuickJsJsEngine }
             SharedJsScope.registerProviders { AndroidSharedJsScope() }
             JsCryptoProviders.register(JsCryptoProviderJvm)
@@ -94,6 +95,8 @@ object EngineFacade {
 
             // cookie 持久化：shared 的 Room 实现（cookieDao + 内存热层）
             CookieStoreProviders.register(SharedCookieStore)
+            // OkHttp 层 cookie 桥（HttpHelper 自动 loadRequest/saveResponse）
+            registerSharedCookieJarBridge()
             // 后台 WebView（反爬 / CF 源；Android 实现，移植自 app 端）
             BackstageWebViewProviders.register(BackstageWebViewFactoryImpl)
 
