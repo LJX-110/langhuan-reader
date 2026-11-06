@@ -45,10 +45,13 @@ class ChapterDownloadService {
     final logUrl = Redact.forLog(chapterUrl);
     try {
       AppLog.d('Read', 'fetch content idx=$idx url=$logUrl');
-      // 原生引擎试点（E3b，默认关）：失败即回落 Dart 引擎。
+      // 原生引擎优先（默认开）：失败即回落 Dart 引擎。
       final inToc = resolvedIdx != null &&
           resolvedIdx >= 0 &&
           resolvedIdx < toc.length;
+      // 下一章（跳过卷标题行：url 为空的分组行）：多页正文的边界闸，
+      // 引擎据此避免把下一章正文并进本章（见 BookSourceEngine.content）。
+      final nextChapterUrl = inToc ? _nextChapterUrl(toc, resolvedIdx) : '';
       final native = await NativeEngineBridge.content(
         source: source,
         chapterUrl: chapterUrl,
@@ -56,16 +59,18 @@ class ChapterDownloadService {
         bookName: bookName,
         chapterTitle: inToc ? toc[resolvedIdx].title : '',
         chapterIndex: resolvedIdx ?? 0,
-        nextChapterUrl: (inToc && resolvedIdx + 1 < toc.length)
-            ? toc[resolvedIdx + 1].url
-            : '',
+        nextChapterUrl: nextChapterUrl,
         totalChapterNum: toc.length,
       );
       if (native != null) {
         AppLog.d('Read', 'content ok (native) idx=$idx len=${native.length}');
         return native;
       }
-      final content = await engine.content(source, chapterUrl);
+      final content = await engine.content(
+        source,
+        chapterUrl,
+        nextChapterUrl: nextChapterUrl,
+      );
       if (content.isEmpty) {
         AppLog.w('Read', 'empty content idx=$idx url=$logUrl');
         return '章节内容加载失败，请检查书源或换源后重试';
@@ -85,4 +90,12 @@ class ChapterDownloadService {
     }
   }
 
+  /// TOC 中 [from] 之后第一个有 URL 的章节（跳过卷标题行）。
+  String _nextChapterUrl(List<ChapterTocEntry> toc, int from) {
+    for (var i = from + 1; i < toc.length; i++) {
+      final url = toc[i].url.trim();
+      if (url.isNotEmpty) return url;
+    }
+    return '';
+  }
 }

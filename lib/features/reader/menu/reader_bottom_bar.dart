@@ -39,14 +39,14 @@ class ReaderBottomBar extends StatelessWidget {
           _bottomTab(
             context: context,
             label: '目录',
-            icon: Icons.menu,
+            icon: Icons.format_list_bulleted,
             active: false,
             onTap: onChapters,
           ),
           _bottomTab(
             context: context,
             label: '专注',
-            icon: Icons.center_focus_strong,
+            icon: Icons.center_focus_weak,
             active: focusActive,
             onTap: onFocus,
           ),

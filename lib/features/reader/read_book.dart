@@ -198,6 +198,11 @@ class _ReadBookState extends ConsumerState<ReadBook>
             ),
             // 菜单进出统一走动效词汇表：进场 120ms 轻快、退场 320ms 从容；
             // 退场期间忽略指针，避免点到正在淡出的控件（对齐文库 chrome 层）。
+            //
+            // 注意：ignoring 必须经 AnimatedBuilder 实时求值。transitionBuilder
+            // 在子项创建时先于 forward()/value=1.0 被调用（SDK _newEntry），
+            // 若在此快照 animation.status，会把刚进场的整层菜单判成 dismissed
+            // 而锁死指针——表现为"菜单打开后按钮点了没反应"，直到下一次重建。
             AnimatedSwitcher(
               duration: AppMotion.contact,
               reverseDuration: AppMotion.exit,
@@ -210,10 +215,14 @@ class _ReadBookState extends ConsumerState<ReadBook>
                 ).animate(animation);
                 return FadeTransition(
                   opacity: animation,
-                  child: IgnorePointer(
-                    ignoring:
-                        animation.status == AnimationStatus.reverse ||
-                        animation.status == AnimationStatus.dismissed,
+                  child: AnimatedBuilder(
+                    animation: animation,
+                    builder: (context, inner) => IgnorePointer(
+                      ignoring:
+                          animation.status == AnimationStatus.reverse ||
+                          animation.status == AnimationStatus.dismissed,
+                      child: inner,
+                    ),
                     child: SlideTransition(position: slide, child: child),
                   ),
                 );

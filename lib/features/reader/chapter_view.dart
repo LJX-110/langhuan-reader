@@ -624,7 +624,7 @@ class _SearchField extends StatelessWidget {
           if (controller.text.isNotEmpty)
             GestureDetector(
               onTap: onClear,
-              child: Icon(Icons.cancel, size: 16, color: secondary),
+              child: Icon(Icons.clear, size: 16, color: secondary),
             ),
         ],
       ),
@@ -780,7 +780,11 @@ class _ChapterTile extends StatelessWidget {
               if (selected)
                 Padding(
                   padding: const EdgeInsets.only(left: 8),
-                  child: Icon(Icons.menu_book, size: 16, color: accent),
+                  child: Icon(
+                    Icons.menu_book_outlined,
+                    size: 16,
+                    color: accent,
+                  ),
                 )
               else if (cached)
                 Padding(

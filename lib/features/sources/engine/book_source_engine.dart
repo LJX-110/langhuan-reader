@@ -26,6 +26,24 @@ class BookSourceEngine {
   static const int maxContentPages = 20;
   static const Duration sourceTimeout = Duration(seconds: 12);
 
+  /// 多页正文边界闸（见 [content]）：下一页地址是否已跨到下一章。
+  ///
+  /// 两个入参都应是绝对地址；`#fragment` 差异按同址处理（站点翻页链接
+  /// 常带锚点）。没有下一章信息（`boundaryUrl` 空）时不拦截。
+  @visibleForTesting
+  static bool isNextChapterBoundary({
+    required String nextPageUrl,
+    required String boundaryUrl,
+  }) {
+    if (boundaryUrl.isEmpty || nextPageUrl.isEmpty) return false;
+    String norm(String u) {
+      final i = u.indexOf('#');
+      return i < 0 ? u : u.substring(0, i);
+    }
+
+    return norm(nextPageUrl) == norm(boundaryUrl);
+  }
+
   Future<List<SearchBook>> search(
     BookSource source,
     String key,
@@ -994,7 +1012,17 @@ class BookSourceEngine {
     }
   }
 
-  Future<String> content(BookSource source, String chapterUrl) async {
+  /// 多页正文合并。
+  ///
+  /// [nextChapterUrl]（可空，TOC 顺序中的下一章）用于边界闸：书源规则常用
+  /// `下一页||下一章@href` 兜底，最后一页会拿到「下一章」链接；不拦截就会把
+  /// 下一章正文并进本章（重复内容）。判定与原生引擎/Legado 一致：下一页的
+  /// 绝对地址 == 下一章绝对地址时停（见 [isNextChapterBoundary]）。
+  Future<String> content(
+    BookSource source,
+    String chapterUrl, {
+    String nextChapterUrl = '',
+  }) async {
     if (chapterUrl.isEmpty) {
       throw const SourceStageError(
         stage: 'content',
@@ -1006,6 +1034,9 @@ class BookSourceEngine {
       'Source',
       'content "${source.bookSourceName}" url=${Redact.forLog(chapterUrl)}',
     );
+    final boundary = nextChapterUrl.trim().isEmpty
+        ? ''
+        : urlJoin(chapterUrl, nextChapterUrl.trim());
     final buf = StringBuffer();
     var next = chapterUrl;
     var pages = 0;
@@ -1124,6 +1155,14 @@ class BookSourceEngine {
           if (nextUrl.isNotEmpty) nextUrl = urlJoin(resp.url, nextUrl);
         }
         if (nextUrl.isEmpty || nextUrl == next) break;
+        if (isNextChapterBoundary(
+          nextPageUrl: nextUrl,
+          boundaryUrl: boundary,
+        )) {
+          // `下一页||下一章` 落到下一章：到此为止，不再拼接。
+          AppLog.d('Source', 'content stop at next-chapter page=$pages');
+          break;
+        }
         next = nextUrl;
       }
       final text = buf.toString();

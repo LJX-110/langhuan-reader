@@ -244,7 +244,20 @@ class _MenuState extends ConsumerState<ReaderMenu> {
           ).animate(animation);
           return FadeTransition(
             opacity: animation,
-            child: SlideTransition(position: slide, child: child),
+            // 面板互切期间，淡出中的旧面板不再接收点击——防止"幽灵按钮"
+            // 被二次点到（重复触发；与 read_book 菜单层同一约定）。
+            // 同 read_book 菜单层：ignoring 用 AnimatedBuilder 实时求值，
+            // 避免 transitionBuilder 早期快照 dismissed 造成面板按钮指针锁死。
+            child: AnimatedBuilder(
+              animation: animation,
+              builder: (context, inner) => IgnorePointer(
+                ignoring:
+                    animation.status == AnimationStatus.reverse ||
+                    animation.status == AnimationStatus.dismissed,
+                child: inner,
+              ),
+              child: SlideTransition(position: slide, child: child),
+            ),
           );
         },
         child: KeyedSubtree(key: ValueKey(type), child: panel),

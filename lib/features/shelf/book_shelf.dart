@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:langhuan/core/platform/screen.dart';
+import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/core/utils/perf_log.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/entities/book_info.dart';
@@ -226,7 +227,7 @@ class _BookShelfState extends ConsumerState<BookShelf> {
                     ],
                   ),
                 ),
-                Icon(Icons.play_circle_fill, size: 26, color: accent),
+                Icon(Icons.play_circle_outline, size: 26, color: accent),
               ],
             ),
           ),
@@ -355,6 +356,7 @@ class _BookShelfState extends ConsumerState<BookShelf> {
     await model.removeBook(target);
     if (!mounted) return;
     final removed = target;
+    AppLog.i('Shelf', 'remove book=${removed.id} 「${removed.name}」');
     // 可撤销：retire 只是 on_shelf 置 0，撤回即恢复（对齐文库的撤销反馈）。
     showFeedback(
       context,
@@ -365,6 +367,7 @@ class _BookShelfState extends ConsumerState<BookShelf> {
   }
 
   Future<void> _undoRemove(Book removed, ShelfModel model) async {
+    AppLog.i('Shelf', 'undo remove book=${removed.id}');
     await BookRepository.instance.setOnShelf([removed.id], true);
     await model.initShelf();
   }
