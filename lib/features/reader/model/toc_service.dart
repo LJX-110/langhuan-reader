@@ -4,7 +4,7 @@ import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/data/repositories/chapter_repository.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/entities/chapter_toc_entry.dart';
-import 'package:langhuan/features/sources/engine/book_source_engine.dart';
+import 'package:langhuan/features/sources/engine/source_engine.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
 import 'package:langhuan/features/sources/util/book_id.dart';
@@ -20,7 +20,7 @@ class TocService {
     required this.resolveSource,
   });
 
-  final BookSourceEngine engine;
+  final SourceEngine engine;
   final ChapterRepository chapters;
   final Future<void> Function(Book book) ensureBookRow;
   final Future<BookSource?> Function(Book book) resolveSource;

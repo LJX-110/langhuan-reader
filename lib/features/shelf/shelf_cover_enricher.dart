@@ -5,7 +5,7 @@ import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/data/repositories/source_repository.dart';
-import 'package:langhuan/features/sources/engine/book_source_engine.dart';
+import 'package:langhuan/features/sources/engine/source_engine.dart';
 
 /// Fills shelf covers the source left empty.
 ///
@@ -18,14 +18,14 @@ class ShelfCoverEnricher {
   ShelfCoverEnricher({
     BookRepository? books,
     SourceRepository? sources,
-    BookSourceEngine? engine,
+    SourceEngine? engine,
   }) : _books = books ?? BookRepository.instance,
        _sources = sources ?? SourceRepository.instance,
-       _engine = engine ?? BookSourceEngine();
+       _engine = engine ?? SourceEngine.instance;
 
   final BookRepository _books;
   final SourceRepository _sources;
-  final BookSourceEngine _engine;
+  final SourceEngine _engine;
 
   /// Keeps one cold start from firing dozens of detail-page requests.
   static const int maxPerPass = 8;

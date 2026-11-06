@@ -31,7 +31,7 @@ import 'package:langhuan/features/reader/model/reader_scroll_controller.dart';
 import 'package:langhuan/features/reader/model/reader_source_coordinator.dart';
 import 'package:langhuan/features/reader/model/reader_theme_controller.dart';
 import 'package:langhuan/features/reader/model/text_paginator.dart';
-import 'package:langhuan/features/sources/engine/book_source_engine.dart';
+import 'package:langhuan/features/sources/engine/source_engine.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
 import 'package:langhuan/features/reader/page_turn/novel_page_painter.dart';
@@ -84,7 +84,7 @@ class ReadModel with ChangeNotifier {
   List<ChapterTocEntry> chapters = [];
   final BookRepository _books = BookRepository.instance;
   final ChapterRepository _chapters = ChapterRepository.instance;
-  final BookSourceEngine _engine = BookSourceEngine();
+  final SourceEngine _engine = SourceEngine.instance;
   final TextPaginator _paginator = TextPaginator();
   late final ChapterContentLoader _contentLoader = ChapterContentLoader(
     chaptersRepo: _chapters,

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:langhuan/data/repositories/source_repository.dart';
-import 'package:langhuan/features/sources/engine/book_source_engine.dart';
+import 'package:langhuan/features/sources/engine/source_engine.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
 import 'package:langhuan/features/sources/model/source_diagnostics.dart';
@@ -18,7 +18,7 @@ Future<void> showSourceTestSheet({
   required String initialKeyword,
   Future<SourceSearchReport?> Function(String keyword)? onSearch,
   Future<BookSource?> Function()? hydrate,
-  BookSourceEngine? engine,
+  SourceEngine? engine,
 }) {
   return showDialog<void>(
     context: context,
@@ -28,7 +28,7 @@ Future<void> showSourceTestSheet({
       initialKeyword: initialKeyword,
       onSearch: onSearch,
       hydrate: hydrate,
-      engine: engine ?? BookSourceEngine(),
+      engine: engine ?? SourceEngine.instance,
     ),
   );
 }
@@ -46,7 +46,7 @@ class _SourceTestSheet extends StatefulWidget {
   final String sourceName;
   final String sourceUrl;
   final String initialKeyword;
-  final BookSourceEngine engine;
+  final SourceEngine engine;
   final Future<SourceSearchReport?> Function(String keyword)? onSearch;
   final Future<BookSource?> Function()? hydrate;
 

@@ -12,7 +12,7 @@ import 'package:langhuan/app/providers.dart';
 import 'package:langhuan/core/platform/system_ui.dart';
 import 'package:langhuan/data/repositories/source_repository.dart';
 import 'package:langhuan/features/detail/source_switch_sheet.dart';
-import 'package:langhuan/features/sources/engine/book_source_engine.dart';
+import 'package:langhuan/features/sources/engine/source_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -48,7 +48,10 @@ class _BookDetailState extends ConsumerState<BookDetail> {
     try {
       final source = await SourceRepository.instance.getByUrl(book.sourceUrl);
       if (source == null) return;
-      final cover = await BookSourceEngine().fetchCover(source, book.bookUrl);
+      final cover = await SourceEngine.instance.fetchCover(
+        source,
+        book.bookUrl,
+      );
       if (cover.isEmpty || !mounted) return;
       setState(() {
         book.coverUrl = cover;

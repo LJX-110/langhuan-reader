@@ -4,9 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:langhuan/design/components/pic_widget.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/features/detail/book_detail.dart';
-import 'package:langhuan/features/sources/engine/book_source_engine.dart';
+import 'package:langhuan/features/sources/engine/source_engine.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
-import 'package:langhuan/features/sources/net/analyze_url.dart';
+import 'package:langhuan/features/sources/util/url_sanitize.dart';
 import 'package:langhuan/features/sources/source_model.dart';
 
 /// 详情加载壳：先用搜索结果种子立即推页（点书零等待），
@@ -21,7 +21,7 @@ class DetailLoader extends ConsumerStatefulWidget {
 }
 
 class _DetailLoaderState extends ConsumerState<DetailLoader> {
-  final BookSourceEngine _engine = BookSourceEngine();
+  final SourceEngine _engine = SourceEngine.instance;
   bool _busy = true;
   String? _error;
 
@@ -37,10 +37,7 @@ class _DetailLoaderState extends ConsumerState<DetailLoader> {
       _error = null;
     });
     final item = widget.seed;
-    final resolved = AnalyzeUrl.sanitizeUrl(
-      item.bookUrl,
-      base: item.sourceUrl,
-    );
+    final resolved = sanitizeUrl(item.bookUrl, base: item.sourceUrl);
     if (item.sourceUrl.isEmpty || resolved.isEmpty) {
       setState(() {
         _busy = false;

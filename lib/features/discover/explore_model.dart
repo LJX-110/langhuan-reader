@@ -1,13 +1,13 @@
 import 'dart:async';
 
-import 'package:dio/dio.dart';
 import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/core/utils/redact.dart';
+import 'package:langhuan/features/sources/model/source_diagnostics.dart';
 
 import 'package:langhuan/data/entities/search_item.dart';
 import 'package:langhuan/features/discover/cover_enricher.dart';
 import 'package:langhuan/features/sources/source_model.dart';
-import 'package:langhuan/features/sources/engine/book_source_engine.dart';
+import 'package:langhuan/features/sources/engine/source_engine.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
 
@@ -17,7 +17,7 @@ import 'package:flutter/material.dart';
 
 /// Bottom-tab discovery: book-source exploreUrl kinds + paginated book list.
 class ExploreModel with ChangeNotifier {
-  final BookSourceEngine _engine = BookSourceEngine();
+  final SourceEngine _engine = SourceEngine.instance;
   late final CoverEnricher _covers = CoverEnricher(fetch: _fetchCover);
 
   bool _disposed = false;
@@ -180,11 +180,10 @@ class ExploreModel with ChangeNotifier {
       AppLog.w('Explore', 'load books failed', error: e);
       if (e is TimeoutException) {
         error = '加载超时，请重试或换一个书源';
-      } else if (e is DioException &&
-          (e.type == DioExceptionType.connectionError ||
-              e.type == DioExceptionType.badCertificate)) {
-        // Sites that reset the connection are not a rule problem.
-        error = '站点无法连接（可能被拦截），换一个书源试试';
+      } else if (e is SourceStageError) {
+        error = e.detail.isEmpty
+            ? '加载失败，请重试或换一个书源'
+            : '加载失败：${e.detail}';
       } else {
         error = '加载失败，请重试或换一个书源';
       }

@@ -177,14 +177,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.7"
-  csslib:
-    dependency: transitive
-    description:
-      name: csslib
-      sha256: "09bad715f418841f976c77db72d5398dc1253c21fb9c0c7f0b0b985860b2d58e"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.2"
   dart_style:
     dependency: transitive
     description:
@@ -310,13 +302,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.4.2"
-  flutter_js:
-    dependency: "direct main"
-    description:
-      path: "third_party/flutter_js"
-      relative: true
-    source: path
-    version: "0.8.7"
   flutter_lints:
     dependency: "direct dev"
     description:
@@ -375,14 +360,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.2"
-  html:
-    dependency: "direct main"
-    description:
-      name: html
-      sha256: "43b67b8f43321ab066817dfac5619596c98bb1b61624e77203bb4351785f9699"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.15.7"
   http:
     dependency: transitive
     description:
@@ -940,14 +917,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.1"
-  sync_http:
-    dependency: transitive
-    description:
-      name: sync_http
-      sha256: "7f0cd72eca000d2e026bcd6f990b81d0ca06022ef4e32fb257b30d3d1014a961"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.1"
   synchronized:
     dependency: transitive
     description:

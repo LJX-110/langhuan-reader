@@ -11,7 +11,7 @@ import 'package:langhuan/data/entities/chapter_toc_entry.dart';
 import 'package:langhuan/data/repositories/chapter_repository.dart';
 import 'package:langhuan/core/utils/perf_log.dart';
 import 'package:langhuan/features/reader/model/chapter_download_service.dart';
-import 'package:langhuan/features/sources/engine/book_source_engine.dart';
+import 'package:langhuan/features/sources/engine/source_engine.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:flutter/foundation.dart';
 
@@ -112,7 +112,7 @@ class DownloadCenter extends ChangeNotifier {
   static final DownloadCenter instance = DownloadCenter();
 
   static final ChapterDownloadService _service = ChapterDownloadService(
-    engine: BookSourceEngine(),
+    engine: SourceEngine.instance,
     chapters: ChapterRepository.instance,
   );
 

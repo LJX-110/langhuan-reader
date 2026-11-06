@@ -27,6 +27,7 @@ class SourceStageError implements Exception {
 
   String get stageLabel => switch (stage) {
     'search' => '搜索',
+    'explore' => '发现',
     'bookInfo' => '详情',
     'toc' => '目录',
     'content' => '正文',
@@ -81,6 +82,7 @@ class SourceStageResult {
 
   String get stageLabel => switch (stage) {
     'search' => '搜索',
+    'explore' => '发现',
     'bookInfo' => '详情',
     'toc' => '目录',
     'content' => '正文',

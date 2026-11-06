@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:langhuan/data/repositories/source_repository.dart';
-import 'package:langhuan/features/sources/engine/book_source_engine.dart';
+import 'package:langhuan/features/sources/engine/source_engine.dart';
 import 'package:langhuan/features/sources/import/source_import_conflict.dart';
 import 'package:langhuan/features/sources/import/source_importer.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
@@ -81,7 +81,11 @@ class SourceModel with ChangeNotifier {
     }
     BotToast.showText(text: '正在测试「${source.bookSourceName}」…');
     final hydrated = await _sources.getByUrl(source.bookSourceUrl) ?? source;
-    final report = await BookSourceEngine().searchWithReport(hydrated, key, 1);
+    final report = await SourceEngine.instance.searchWithReport(
+      hydrated,
+      key,
+      1,
+    );
     source.respondTime = report.reachable ? report.elapsedMs : -1;
     source.lastCheckTime = DateTime.now().millisecondsSinceEpoch;
     await _sources.updateHealth(

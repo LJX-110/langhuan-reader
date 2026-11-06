@@ -8,7 +8,7 @@ import 'package:langhuan/features/discover/cover_enricher.dart';
 import 'package:langhuan/features/search/search_keyword_cache.dart';
 import 'package:langhuan/features/search/search_result_ranker.dart';
 import 'package:langhuan/features/sources/model/source_groups.dart';
-import 'package:langhuan/features/sources/engine/book_source_engine.dart';
+import 'package:langhuan/features/sources/engine/source_engine.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
 import 'package:langhuan/features/sources/model/source_search_report.dart';
 
@@ -115,7 +115,7 @@ class SearchModel with ChangeNotifier {
   var word = "";
   TextEditingController? controller;
 
-  final BookSourceEngine _engine = BookSourceEngine();
+  final SourceEngine _engine = SourceEngine.instance;
   final SourceRepository _sources = SourceRepository.instance;
 
   /// Concurrent source search pool size (slow networks do better at 6 than

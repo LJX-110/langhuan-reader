@@ -2,12 +2,13 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:langhuan/features/sources/engine/native_engine_bridge.dart';
+import 'package:langhuan/features/sources/engine/source_engine.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 
+/// 阅读内核入口（唯一引擎）的纯逻辑回归。
 void main() {
   test('buildBookJson 字段名对齐 Kotlin 实体、空值给 null', () {
-    final m = NativeEngineBridge.buildBookJson(
+    final m = SourceEngine.buildBookJson(
       bookUrl: 'https://a.com/b/1',
       tocUrl: 'https://a.com/b/1/toc',
       origin: 'https://a.com',
@@ -28,22 +29,10 @@ void main() {
     expect(jsonEncode(m), isNotEmpty);
   });
 
-  test('parseStagePayload：ok=false / null 一律返回 null', () {
-    expect(
-      NativeEngineBridge.parseStagePayload({'ok': false, 'error': 'x'}, 't'),
-      isNull,
-    );
-    expect(NativeEngineBridge.parseStagePayload(null, 't'), isNull);
-    expect(
-      NativeEngineBridge.parseStagePayload({'ok': true}, 't'),
-      isNotNull,
-    );
-  });
-
-  test('sourceJson：rawJson 为空时返回 null（回落 Dart 引擎）', () {
+  test('sourceJson：rawJson 为空时返回 null（源未存 Legado 原文）', () {
     final s = BookSource(bookSourceUrl: 'https://a.com');
-    expect(NativeEngineBridge.sourceJson(s), isNull);
+    expect(SourceEngine.sourceJson(s), isNull);
     s.rawJson = '{"bookSourceUrl":"https://a.com"}';
-    expect(NativeEngineBridge.sourceJson(s), isNotNull);
+    expect(SourceEngine.sourceJson(s), isNotNull);
   });
 }

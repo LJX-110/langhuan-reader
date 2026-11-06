@@ -4,7 +4,7 @@ import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/data/repositories/chapter_repository.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/entities/chapter_toc_entry.dart';
-import 'package:langhuan/features/sources/engine/book_source_engine.dart';
+import 'package:langhuan/features/sources/engine/source_engine.dart';
 import 'package:langhuan/features/sources/engine/progress_mapper.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
@@ -33,7 +33,7 @@ class SourceSwitchService {
     required this.ensureBookRow,
   });
 
-  final BookSourceEngine engine;
+  final SourceEngine engine;
   final BookRepository books;
   final ChapterRepository chapters;
   final Future<void> Function(Book book) ensureBookRow;

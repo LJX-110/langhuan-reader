@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:langhuan/data/repositories/source_repository.dart';
-import 'package:langhuan/features/sources/engine/book_source_engine.dart';
+import 'package:langhuan/features/sources/engine/source_engine.dart';
 
 /// 批量体检：把所有**启用**的书源跑一遍「搜索」，分类统计，并支持一键删除失败源。
 ///
@@ -31,7 +31,7 @@ class _BatchHealthSheetState extends State<_BatchHealthSheet> {
     text: widget.initialKeyword,
   );
   final SourceRepository _repo = SourceRepository.instance;
-  final BookSourceEngine _engine = BookSourceEngine();
+  final SourceEngine _engine = SourceEngine.instance;
 
   bool _running = false;
   int _done = 0;

@@ -2,7 +2,7 @@ import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/core/storage/local_store.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/features/reader/read_model.dart';
-import 'package:langhuan/features/sources/engine/book_source_engine.dart';
+import 'package:langhuan/features/sources/engine/source_engine.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
 import 'package:langhuan/data/repositories/source_repository.dart';
@@ -36,7 +36,7 @@ class SourceSwitchSheet extends ConsumerStatefulWidget {
 }
 
 class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
-  final BookSourceEngine _engine = BookSourceEngine();
+  final SourceEngine _engine = SourceEngine.instance;
   bool loading = true;
   String? error;
   final List<_Candidate> candidates = [];
