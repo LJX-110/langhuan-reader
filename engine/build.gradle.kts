@@ -31,7 +31,7 @@ subprojects {
 //   engine> gradlew -g E:\WorkSpace\Novel\.gradle-home publishAllPublicationsToLocalRepo
 subprojects {
     group = "com.langhuan.engine"
-    version = "0.2.0"
+    version = "0.3.0"
     // 元数据编译的 KSP 在 :data 上有已知失败（Room @Query 注解解析），
     // 且 App 消费只走 Android 变体；关闭该任务，元数据 JAR 仍可正常产出。
     tasks.matching { it.name == "kspCommonMainKotlinMetadata" }.configureEach {

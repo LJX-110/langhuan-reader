@@ -1,0 +1,176 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.langhuan.engine",
+    "module": "foundation",
+    "version": "0.3.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.0"
+    }
+  },
+  "variants": [
+    {
+      "name": "metadataApiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "dependencies": [
+        {
+          "group": "com.squareup.okio",
+          "module": "okio",
+          "version": {
+            "requires": "3.18.1"
+          }
+        },
+        {
+          "group": "com.langhuan.engine",
+          "module": "rjpath",
+          "version": {
+            "requires": "0.3.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "foundation-metadata-0.3.0.jar",
+          "url": "foundation-0.3.0.jar",
+          "size": 770,
+          "sha512": "a6bc1cff52c8d61ad430061b80714174358703f1f8b34fe7336815cf11405f308518d393332ec6e15a9884fbe188f561b502a3acc3f851d427744296edb2da61",
+          "sha256": "eb99bb191fc520c9acecf9d5bef0a2ea319be9bef2d904123c6713bf1b56da08",
+          "sha1": "9e71cf8e787649c298f65bb920f6e024acd40bdd",
+          "md5": "e30563158961f5db5a21b37ad3d7b13b"
+        }
+      ]
+    },
+    {
+      "name": "metadataSourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "files": [
+        {
+          "name": "foundation-kotlin-0.3.0-sources.jar",
+          "url": "foundation-0.3.0-sources.jar",
+          "size": 144081,
+          "sha512": "384e258d4e555f68917e1510a91d445441c3f65ac4f2af82f944417599c5f39212d7960df820078cffbca30ff4ae201bce4b84f1e70a4788c9f9226372d75960",
+          "sha256": "7cb18215142387345ca5b1f7066e0120e6e85515e630d1b0e8c883b4fd9d4577",
+          "sha1": "3315e3346d2ee23211d022bd346072fbc22df3df",
+          "md5": "8215e624512ba4e178647a0979ab1ef2"
+        }
+      ]
+    },
+    {
+      "name": "androidApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../foundation-android/0.3.0/foundation-android-0.3.0.module",
+        "group": "com.langhuan.engine",
+        "module": "foundation-android",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "androidRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../foundation-android/0.3.0/foundation-android-0.3.0.module",
+        "group": "com.langhuan.engine",
+        "module": "foundation-android",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "androidSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../foundation-android/0.3.0/foundation-android-0.3.0.module",
+        "group": "com.langhuan.engine",
+        "module": "foundation-android",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../foundation-jvm/0.3.0/foundation-jvm-0.3.0.module",
+        "group": "com.langhuan.engine",
+        "module": "foundation-jvm",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../foundation-jvm/0.3.0/foundation-jvm-0.3.0.module",
+        "group": "com.langhuan.engine",
+        "module": "foundation-jvm",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../foundation-jvm/0.3.0/foundation-jvm-0.3.0.module",
+        "group": "com.langhuan.engine",
+        "module": "foundation-jvm",
+        "version": "0.3.0"
+      }
+    }
+  ]
+}

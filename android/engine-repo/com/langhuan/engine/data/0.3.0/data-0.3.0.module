@@ -1,0 +1,197 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.langhuan.engine",
+    "module": "data",
+    "version": "0.3.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.6.0"
+    }
+  },
+  "variants": [
+    {
+      "name": "metadataApiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "dependencies": [
+        {
+          "group": "com.langhuan.engine",
+          "module": "foundation",
+          "version": {
+            "requires": "0.3.0"
+          }
+        },
+        {
+          "group": "com.langhuan.engine",
+          "module": "js-api",
+          "version": {
+            "requires": "0.3.0"
+          }
+        },
+        {
+          "group": "com.squareup.okio",
+          "module": "okio",
+          "version": {
+            "requires": "3.18.1"
+          }
+        },
+        {
+          "group": "androidx.room3",
+          "module": "room3-common",
+          "version": {
+            "requires": "3.0.1"
+          }
+        },
+        {
+          "group": "androidx.room3",
+          "module": "room3-runtime",
+          "version": {
+            "requires": "3.0.1"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "data-metadata-0.3.0.jar",
+          "url": "data-0.3.0.jar",
+          "size": 850,
+          "sha512": "5365a3a4ee7bd240fc0513713172ae495e808a5f06596c9c62913f1314048166f941ac972bb14178e65ba15876d3b53fadf27fe3c3814bfb30bff9b466346df0",
+          "sha256": "cdc5e946d4ac4d817697a1014fa9d2d5ffb94a48ffa03caf0a2f757d5ca7570d",
+          "sha1": "9f59f53d92fea26f3d96475875dd96e0f9df93eb",
+          "md5": "22cffd57f9d29222176c35f2e1f0cd95"
+        }
+      ]
+    },
+    {
+      "name": "metadataSourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "files": [
+        {
+          "name": "data-kotlin-0.3.0-sources.jar",
+          "url": "data-0.3.0-sources.jar",
+          "size": 765094,
+          "sha512": "d527c6d7f8aae7a3653ce02c7d64ba41818125cee00505bf50c0af07b707f084c1d8359d4e5717ebb9a127d1494f84957b7204f2a46f879a4c6d3d1a08413f09",
+          "sha256": "d9d10138d69f2db483bda06fd124fd70db51668f319ce35f584253b2591f8427",
+          "sha1": "2e7549f78644b8b6d740966fc1805ea253d1048d",
+          "md5": "8c94a538d776538729ba91abf9704ce8"
+        }
+      ]
+    },
+    {
+      "name": "androidApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../data-android/0.3.0/data-android-0.3.0.module",
+        "group": "com.langhuan.engine",
+        "module": "data-android",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "androidRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../data-android/0.3.0/data-android-0.3.0.module",
+        "group": "com.langhuan.engine",
+        "module": "data-android",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "androidSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../data-android/0.3.0/data-android-0.3.0.module",
+        "group": "com.langhuan.engine",
+        "module": "data-android",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../data-jvm/0.3.0/data-jvm-0.3.0.module",
+        "group": "com.langhuan.engine",
+        "module": "data-jvm",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../data-jvm/0.3.0/data-jvm-0.3.0.module",
+        "group": "com.langhuan.engine",
+        "module": "data-jvm",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../data-jvm/0.3.0/data-jvm-0.3.0.module",
+        "group": "com.langhuan.engine",
+        "module": "data-jvm",
+        "version": "0.3.0"
+      }
+    }
+  ]
+}

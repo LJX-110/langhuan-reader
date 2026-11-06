@@ -18,7 +18,11 @@ import java.util.concurrent.Executors
  */
 object EngineBridge {
 
-    private val executor = Executors.newSingleThreadExecutor { r ->
+    /**
+     * 受限线程池：搜索 / 发现要并发多源，单线程会整队排队；facade 调用是阻塞式，
+     * 每次请求独占一个线程，4 并发在移动端稳当（引擎内部共用 OkHttp 连接池）。
+     */
+    private val executor = Executors.newFixedThreadPool(4) { r ->
         Thread(r, "langhuan-engine")
     }
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -31,7 +35,7 @@ object EngineBridge {
         MethodChannel(messenger, "langhuan/engine").setMethodCallHandler { call, result ->
             when (call.method) {
                 "ping" -> result.success(true)
-                "search", "bookInfo", "toc", "content" -> {
+                "search", "explore", "bookInfo", "toc", "content" -> {
                     val source = call.argument<String>("source")
                     if (source.isNullOrEmpty()) {
                         result.error("bad_args", "source is required", null)
@@ -73,6 +77,13 @@ object EngineBridge {
         "search" -> EngineFacade.search(
             argument<String>("source").orEmpty(),
             argument<String>("keyword").orEmpty(),
+            argument<Int>("page") ?: 1,
+        )
+        "explore" -> EngineFacade.explore(
+            argument<String>("source").orEmpty(),
+            argument<String>("key").orEmpty(),
+            argument<Int>("page") ?: 1,
+            argument<String>("nextPageUrl"),
         )
         "bookInfo" -> EngineFacade.bookInfo(
             argument<String>("source").orEmpty(),

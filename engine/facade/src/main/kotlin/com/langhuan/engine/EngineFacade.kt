@@ -4,6 +4,7 @@ import android.content.Context
 import io.legado.app.constant.AndroidIdHolder
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
+import io.legado.app.data.entities.BookListPage
 import io.legado.app.data.entities.BookSource
 import io.legado.app.help.JsCryptoProviderJvm
 import io.legado.app.help.JsCryptoProviders
@@ -135,37 +136,70 @@ object EngineFacade {
         explicitNulls = false
     }
 
-    /** 搜索：书源 JSON + 关键词 → `{ok, hits:[{name,author,coverUrl,bookUrl,lastChapter,intro,kind}], error}`。 */
-    fun search(sourceJson: String, keyword: String): String = runBlocking {
-        val source = try {
-            json.decodeFromString(BookSource.serializer(), sourceJson)
-        } catch (e: Exception) {
-            return@runBlocking errorJson("书源 JSON 解析失败: ${e.message}")
-        }
+    /**
+     * 搜索：书源 JSON + 关键词 + 页码
+     * → `{ok, hits:[{name,author,coverUrl,bookUrl,lastChapter,intro,kind}], hasNextPage, nextPageUrl, error}`。
+     */
+    fun search(sourceJson: String, keyword: String, page: Int = 1): String = runBlocking {
+        val source = decodeSource(sourceJson)
+            ?: return@runBlocking errorJson("书源 JSON 解析失败")
         try {
-            val page = WebBook.getBookListAwait(source, keyword, 1)
-            buildJsonObject {
-                put("ok", true)
-                put("hits", buildJsonArray {
-                    page.books.forEach { b ->
-                        add(
-                            buildJsonObject {
-                                put("name", b.name)
-                                put("author", b.author)
-                                put("coverUrl", b.coverUrl ?: "")
-                                put("bookUrl", b.bookUrl)
-                                put("lastChapter", b.latestChapterTitle ?: "")
-                                put("intro", b.intro ?: "")
-                                put("kind", b.kind ?: "")
-                            }
-                        )
-                    }
-                })
-            }.toString()
+            bookListJson(WebBook.getBookListAwait(source, keyword, page.coerceAtLeast(1)))
         } catch (e: Exception) {
             errorJson(e.message ?: e::class.simpleName ?: "搜索失败")
         }
     }
+
+    /**
+     * 发现：书源 JSON + 分类 key（exploreUrl 段）+ 页码 → 回包同 [search]。
+     *
+     * 引擎侧 `isSearch = false`：走 exploreRule（列表规则为空时自动回落搜索规则），
+     * 分类 URL 的 `{{page}}` 变量由引擎按 [page] 展开。
+     */
+    fun explore(
+        sourceJson: String,
+        key: String,
+        page: Int = 1,
+        nextPageUrl: String? = null,
+    ): String = runBlocking {
+        val source = decodeSource(sourceJson)
+            ?: return@runBlocking errorJson("书源 JSON 解析失败")
+        try {
+            bookListJson(
+                WebBook.getBookListAwait(
+                    source,
+                    key,
+                    page.coerceAtLeast(1),
+                    isSearch = false,
+                    nextPageUrl = nextPageUrl?.takeIf { it.isNotBlank() },
+                ),
+            )
+        } catch (e: Exception) {
+            errorJson(e.message ?: e::class.simpleName ?: "发现失败")
+        }
+    }
+
+    /** 书单页 → `{ok, hits, hasNextPage, nextPageUrl}`（search / explore 共用）。 */
+    private fun bookListJson(page: BookListPage): String = buildJsonObject {
+        put("ok", true)
+        put("hits", buildJsonArray {
+            page.books.forEach { b ->
+                add(
+                    buildJsonObject {
+                        put("name", b.name)
+                        put("author", b.author)
+                        put("coverUrl", b.coverUrl ?: "")
+                        put("bookUrl", b.bookUrl)
+                        put("lastChapter", b.latestChapterTitle ?: "")
+                        put("intro", b.intro ?: "")
+                        put("kind", b.kind ?: "")
+                    }
+                )
+            }
+        })
+        put("hasNextPage", page.hasNextPage)
+        put("nextPageUrl", page.nextPageUrl ?: "")
+    }.toString()
 
     /** 详情：书源 JSON + 书籍 JSON → 更新后的书籍 JSON（键 `book`）。 */
     fun bookInfo(sourceJson: String, bookJson: String): String = runBlocking {
