@@ -6,6 +6,16 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        // 阅读内核（data 模块）有两个上游依赖只托管在 JitPack：
+        // quick-chinese-transfer（简繁转换）、injekt（tachiyomi 兼容层）。
+        // 用 content 过滤，避免其他依赖解析时拖慢构建。
+        maven {
+            url = uri("https://jitpack.io")
+            content {
+                includeGroup("com.github.liuyueyi.quick-chinese-transfer")
+                includeGroup("com.github.null2264.injekt")
+            }
+        }
         // 本地引擎仓库（engine> gradlew publishAllPublicationsToLocalRepo 生成，随仓库提交）
         maven {
             url = rootProject.file("engine-repo").toURI()
