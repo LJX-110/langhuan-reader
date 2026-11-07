@@ -111,6 +111,17 @@ class ShelfModel with ChangeNotifier {
   BuildContext? context;
   final BookRepository _books = BookRepository.instance;
 
+  /// Clear the shelf badge after the user opens the book.
+  void markUpdateSeen(String bookId) {
+    for (final book in shelf) {
+      if (book.id != bookId) continue;
+      if (book.hasUpdate == 0) return;
+      book.hasUpdate = 0;
+      notifyListeners();
+      return;
+    }
+  }
+
   /// Local-only shelf refresh (no cloud).
   Future<void> refreshShelf() async {
     shelf = await _books.getAll(includeLocal: false);

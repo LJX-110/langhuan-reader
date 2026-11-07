@@ -14,4 +14,11 @@ void main() {
   test('空白查询匹配全部', () {
     expect(bookMatchesShelfQuery(Book(name: '书'), '   '), isTrue);
   });
+
+  test('更新角标只在旧章节已知且变化时出现', () {
+    expect(shelfHasNewChapter(oldLatest: '第一章', newLatest: '第二章'), isTrue);
+    expect(shelfHasNewChapter(oldLatest: '第一章', newLatest: '第一章'), isFalse);
+    expect(shelfHasNewChapter(oldLatest: '', newLatest: '第一章'), isFalse);
+    expect(shelfHasNewChapter(oldLatest: '第一章', newLatest: ''), isFalse);
+  });
 }

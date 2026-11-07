@@ -550,16 +550,45 @@ class _Bookshelf3DState extends State<Bookshelf3D>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                book.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 15,
-                  height: 1.25,
-                  fontWeight: FontWeight.w600,
-                  color: accent,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      book.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 15,
+                        height: 1.25,
+                        fontWeight: FontWeight.w600,
+                        color: accent,
+                      ),
+                    ),
+                  ),
+                  if (book.hasUpdate)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: .12),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '更新',
+                          style: TextStyle(
+                            fontSize: 9,
+                            height: 1.2,
+                            fontWeight: FontWeight.w600,
+                            color: accent,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 2),
               Text(
@@ -568,7 +597,6 @@ class _Bookshelf3DState extends State<Bookshelf3D>
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 11, height: 1.35, color: muted),
               ),
-
             ],
           ),
         ),

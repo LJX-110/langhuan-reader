@@ -10,6 +10,7 @@ import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/entities/book_info.dart';
 import 'package:langhuan/data/entities/book_tag.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
+import 'package:langhuan/data/repositories/source_repository.dart';
 import 'package:langhuan/design/components/bookshelf_3d.dart';
 import 'package:langhuan/design/components/empty_state.dart';
 import 'package:langhuan/design/components/feedback.dart';
@@ -25,6 +26,7 @@ import 'package:langhuan/app/providers.dart';
 import 'package:langhuan/core/platform/system_ui.dart';
 import 'package:langhuan/features/shelf/shelf_cover_enricher.dart';
 import 'package:langhuan/features/shelf/shelf_model.dart';
+import 'package:langhuan/features/sources/engine/source_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -327,11 +329,18 @@ class _BookShelfState extends ConsumerState<BookShelf> {
 
   Future<void> _openShelfBook(ShelfBookView view) async {
     var openBook = Book.id(view.id);
-    for (final book in ref.read(shelfModelProvider).shelf) {
+    final model = ref.read(shelfModelProvider);
+    for (final book in model.shelf) {
       if (book.id == view.id) {
         openBook = book;
         break;
       }
+    }
+    // 打开即认为已看到更新，清掉书架角标（DB 同步）。
+    if (openBook.hasUpdate != 0) {
+      openBook.hasUpdate = 0;
+      unawaited(BookRepository.instance.setHasUpdate(openBook.id, 0));
+      model.markUpdateSeen(openBook.id);
     }
     // 立即推页：持久化进度由阅读器 hydrateReadingSession 自行与 DB 合并
     // （reading_session_opener.dart:79-98），此处不再等待一次 DB 往返。
@@ -342,7 +351,50 @@ class _BookShelfState extends ConsumerState<BookShelf> {
     );
   }
 
-  /// 长按书脊：操作菜单（查看详情 / 移出书架）。整理页由拖动排序占用长按。
+  /// 手动检查单本更新：只查本书源，不扫全库。
+  Future<void> _checkUpdate(Book book) async {
+    if (Book.isLocalSource(book.sourceUrl)) return;
+    final source = await SourceRepository.instance.getByUrl(book.sourceUrl);
+    if (!mounted) return;
+    if (source == null) {
+      showError('书源不存在：${book.originName}');
+      return;
+    }
+    try {
+      final toc = await SourceEngine.instance.toc(
+        source,
+        book.tocUrl.isNotEmpty ? book.tocUrl : book.bookUrl,
+        bookUrl: book.bookUrl,
+        bookName: book.name,
+      );
+      final readable = toc
+          .where((c) => !c.isVolume && c.name.trim().isNotEmpty)
+          .toList(growable: false);
+      if (readable.isEmpty) {
+        showError('目录为空，暂无法检查更新');
+        return;
+      }
+      final latest = readable.last.name.trim();
+      final old = book.latestChapter.trim();
+      final changed = shelfHasNewChapter(oldLatest: old, newLatest: latest);
+      await BookRepository.instance.updateLatestChapter(
+        bookId: book.id,
+        latestChapter: latest,
+        hasUpdate: changed ? 1 : 0,
+        updatedAt: DateTime.now().toIso8601String(),
+      );
+      if (!mounted) return;
+      showFeedback(
+        changed ? '发现更新：$latest' : (old.isEmpty ? '最新章节：$latest' : '已是最新章节'),
+      );
+      await ref.read(shelfModelProvider).refreshShelf();
+    } catch (_) {
+      if (!mounted) return;
+      showError('检查更新失败，请稍后重试');
+    }
+  }
+
+  /// 长按书脊：操作菜单（查看详情 / 检查更新 / 移出书架）。
   Future<void> _longPressShelfBook(ShelfBookView view) async {
     final model = ref.read(shelfModelProvider);
     Book? target;
@@ -375,6 +427,16 @@ class _BookShelfState extends ConsumerState<BookShelf> {
               title: const Text('查看详情', style: TextStyle(fontSize: 15)),
               onTap: () => Navigator.pop(ctx, 'detail'),
             ),
+            if (!Book.isLocalSource(target!.sourceUrl))
+              ListTile(
+                leading: Icon(
+                  Icons.sync,
+                  size: 20,
+                  color: AppColors.accentOf(ctx),
+                ),
+                title: const Text('检查更新', style: TextStyle(fontSize: 15)),
+                onTap: () => Navigator.pop(ctx, 'update'),
+              ),
             ListTile(
               leading: Icon(
                 Icons.bookmark_remove_outlined,
@@ -392,6 +454,8 @@ class _BookShelfState extends ConsumerState<BookShelf> {
     if (!mounted || action == null) return;
     if (action == 'detail') {
       _openShelfDetail(target);
+    } else if (action == 'update') {
+      await _checkUpdate(target);
     } else if (action == 'remove') {
       await _deleteShelfBook(view);
     }
@@ -448,6 +512,16 @@ class _BookShelfState extends ConsumerState<BookShelf> {
     await BookRepository.instance.setOnShelf([removed.id], true);
     await model.initShelf();
   }
+}
+
+/// 书架角标判定：已知旧章节非空且与最新章节不同。
+bool shelfHasNewChapter({
+  required String oldLatest,
+  required String newLatest,
+}) {
+  final old = oldLatest.trim();
+  final latest = newLatest.trim();
+  return old.isNotEmpty && latest.isNotEmpty && latest != old;
 }
 
 /// 书架内联搜索匹配：书名或作者包含关键词（忽略大小写与首尾空白）。
