@@ -111,6 +111,22 @@ class BookRepository {
     return db.update('books', values, where: 'id = ?', whereArgs: [bookId]);
   }
 
+  /// Update user-visible metadata only (local book name/author edits).
+  Future<void> updateMetadata({
+    required String bookId,
+    required String name,
+    required String author,
+  }) async {
+    if (bookId.isEmpty) return;
+    final db = await _database;
+    await db.update(
+      'books',
+      {'name': name, 'author': author},
+      where: 'id = ?',
+      whereArgs: [bookId],
+    );
+  }
+
   Future<void> updateSource({
     required String bookId,
     required String sourceUrl,

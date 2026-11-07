@@ -74,8 +74,14 @@ class _BookShelfState extends ConsumerState<BookShelf> {
     }
   }
 
+  /// 书架内联搜索：空查询时保留当前筛选，仅按书名 / 作者过滤。
+  final TextEditingController _searchCtrl = TextEditingController();
+  bool _searching = false;
+  String _query = '';
+
   @override
   void dispose() {
+    _searchCtrl.dispose();
     _tagsSub?.cancel();
     super.dispose();
   }
@@ -84,7 +90,12 @@ class _BookShelfState extends ConsumerState<BookShelf> {
   Widget build(BuildContext context) {
     final shelfModel = ref.watch(shelfModelProvider);
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final books = shelfModel.visibleShelf;
+    final visible = shelfModel.visibleShelf;
+    final books = _query.trim().isEmpty
+        ? visible
+        : visible
+              .where((b) => bookMatchesShelfQuery(b, _query))
+              .toList(growable: false);
     final resume = _resumeBook(books);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -98,11 +109,24 @@ class _BookShelfState extends ConsumerState<BookShelf> {
               _ShelfHeader(
                 filter: shelfModel.filter,
                 onFilter: shelfModel.setFilter,
-                onSearch: () {
+                searching: _searching,
+                searchController: _searchCtrl,
+                query: _query,
+                onStartSearch: () => setState(() => _searching = true),
+                onQueryChanged: (value) => setState(() => _query = value),
+                onCloseSearch: () {
+                  _searchCtrl.clear();
+                  FocusScope.of(context).unfocus();
+                  setState(() {
+                    _searching = false;
+                    _query = '';
+                  });
+                },
+                onGlobalSearch: () {
                   Routes.navigateTo(
                     context,
                     Routes.search,
-                    params: {'type': 'book', 'name': ''},
+                    params: {'type': 'book', 'name': _query.trim()},
                   );
                 },
                 onManage: () => Routes.navigateTo(context, Routes.sortShelf),
@@ -133,6 +157,25 @@ class _BookShelfState extends ConsumerState<BookShelf> {
                                   minimumSize: const Size(0, 32),
                                 ),
                                 child: const Text('去搜索'),
+                              ),
+                            )
+                          : _query.trim().isNotEmpty
+                          ? EmptyState(
+                              title: '没有匹配「${_query.trim()}」的书',
+                              hint: '换个书名或作者关键词，或到全网搜索。',
+                              alignment: EmptyStateAlignment.left,
+                              action: TextButton(
+                                onPressed: () {
+                                  Routes.navigateTo(
+                                    context,
+                                    Routes.search,
+                                    params: {
+                                      'type': 'book',
+                                      'name': _query.trim(),
+                                    },
+                                  );
+                                },
+                                child: const Text('搜索全网'),
                               ),
                             )
                           : EmptyState(
@@ -407,11 +450,25 @@ class _BookShelfState extends ConsumerState<BookShelf> {
   }
 }
 
+/// 书架内联搜索匹配：书名或作者包含关键词（忽略大小写与首尾空白）。
+bool bookMatchesShelfQuery(Book book, String query) {
+  final q = query.trim().toLowerCase();
+  if (q.isEmpty) return true;
+  return book.name.toLowerCase().contains(q) ||
+      book.author.toLowerCase().contains(q);
+}
+
 /// 顶栏：标题 + 随机 / 阅读记录 / 整理（不再有网格 / 列表切换）
 class _ShelfHeader extends StatelessWidget {
   final ShelfFilter filter;
   final ValueChanged<ShelfFilter> onFilter;
-  final VoidCallback onSearch;
+  final bool searching;
+  final TextEditingController searchController;
+  final String query;
+  final VoidCallback onStartSearch;
+  final ValueChanged<String> onQueryChanged;
+  final VoidCallback onCloseSearch;
+  final VoidCallback onGlobalSearch;
   final VoidCallback onManage;
   final VoidCallback onHistory;
   final VoidCallback onRandom;
@@ -422,7 +479,13 @@ class _ShelfHeader extends StatelessWidget {
   const _ShelfHeader({
     required this.filter,
     required this.onFilter,
-    required this.onSearch,
+    required this.searching,
+    required this.searchController,
+    required this.query,
+    required this.onStartSearch,
+    required this.onQueryChanged,
+    required this.onCloseSearch,
+    required this.onGlobalSearch,
     required this.onManage,
     required this.onHistory,
     required this.onRandom,
@@ -476,7 +539,89 @@ class _ShelfHeader extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-            child: PaperSearchEntry(onTap: onSearch, hint: '搜索书架或全网书籍'),
+            child: searching
+                ? Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: dark
+                                ? AppColors.surfaceDark
+                                : AppColors.paperLight,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: dark
+                                  ? AppColors.dividerDark
+                                  : AppColors.line,
+                              width: .5,
+                            ),
+                          ),
+                          child: TextField(
+                            controller: searchController,
+                            autofocus: true,
+                            onChanged: onQueryChanged,
+                            textInputAction: TextInputAction.search,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: dark
+                                  ? AppColors.textOnDark
+                                  : AppColors.ink,
+                            ),
+                            decoration: InputDecoration(
+                              isDense: true,
+                              border: InputBorder.none,
+                              hintText: '搜索书架：书名 / 作者',
+                              hintStyle: TextStyle(
+                                fontSize: 12,
+                                color: dark
+                                    ? AppColors.textMutedDark
+                                    : AppColors.inkMute,
+                              ),
+                              prefixIcon: Icon(
+                                Icons.search,
+                                size: 16,
+                                color: dark
+                                    ? AppColors.textMutedDark
+                                    : AppColors.inkMute,
+                              ),
+                              prefixIconConstraints: const BoxConstraints(
+                                minWidth: 34,
+                              ),
+                              suffixIcon: query.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      tooltip: '清空',
+                                      icon: const Icon(Icons.close, size: 16),
+                                      onPressed: () {
+                                        searchController.clear();
+                                        onQueryChanged('');
+                                      },
+                                    ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 9,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      TextButton(
+                        onPressed: onGlobalSearch,
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(0, 34),
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                        ),
+                        child: const Text('全网', style: TextStyle(fontSize: 12)),
+                      ),
+                      IconButton(
+                        tooltip: '关闭书架搜索',
+                        icon: const Icon(Icons.close, size: 18),
+                        onPressed: onCloseSearch,
+                      ),
+                    ],
+                  )
+                : PaperSearchEntry(onTap: onStartSearch, hint: '搜索书架或全网书籍'),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),

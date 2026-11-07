@@ -161,6 +161,78 @@ class _LocalPageState extends State<LocalPage> {
     }
   }
 
+  /// 本地书信息修正：只改书架显示的书名 / 作者，不改原文件。
+  Future<void> _editInfo(String id) async {
+    Book? book;
+    for (final b in _list) {
+      if (b.id == id) {
+        book = b;
+        break;
+      }
+    }
+    if (book == null) return;
+    final nameCtrl = TextEditingController(text: book.name);
+    final authorCtrl = TextEditingController(text: book.author);
+    final result = await showDialog<(String, String)>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('编辑本地书信息'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              autofocus: true,
+              maxLength: 80,
+              decoration: const InputDecoration(
+                labelText: '书名',
+                counterText: '',
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: authorCtrl,
+              maxLength: 40,
+              decoration: const InputDecoration(
+                labelText: '作者',
+                counterText: '',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, (
+              nameCtrl.text.trim(),
+              authorCtrl.text.trim(),
+            )),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    nameCtrl.dispose();
+    authorCtrl.dispose();
+    if (result == null || !mounted) return;
+    final (name, author) = result;
+    if (name.isEmpty) {
+      showError('书名不能为空', context: context);
+      return;
+    }
+    await _books.updateMetadata(bookId: book.id, name: name, author: author);
+    if (!mounted) return;
+    setState(() {
+      book!
+        ..name = name
+        ..author = author;
+    });
+    showFeedback('已更新《$name》');
+  }
+
   /// Default focus: the most recently read local book, else the first one.
   String? _initialFocusId() {
     for (final book in _list) {
@@ -246,6 +318,7 @@ class _LocalPageState extends State<LocalPage> {
         initialBookId: _initialFocusId(),
         onOpen: (view) => _openById(view.id),
         onDelete: (view) => _deleteById(view.id),
+        onLongPress: (view) => _editInfo(view.id),
         deleteWarning: '删除后无法撤销',
       ),
     );
@@ -268,7 +341,7 @@ class _LocalPageState extends State<LocalPage> {
           ),
           const SizedBox(height: 6),
           Text(
-            '导入 TXT 后会出现在这里，不上传、不同步。',
+            '导入 TXT 后会出现在这里，不上传、不同步。长按书脊可改书名 / 作者。',
             style: TextStyle(fontSize: 12, color: muted),
           ),
           const SizedBox(height: 6),
