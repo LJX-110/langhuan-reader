@@ -37,7 +37,7 @@ jobs:
       - name: Runner smoke (offline rules)
         run: |
           cd engine
-          ./gradlew.bat -g "${{ runner.temp }}/gradle-home" -Porg.gradle.java.installations.paths="$env:JAVA_HOME_17_X64,$env:JAVA_HOME_21_X64" :runner:run
+          ./gradlew.bat -g "${{ runner.temp }}/gradle-home" "-Porg.gradle.java.installations.paths=$env:JAVA_HOME_17_X64,$env:JAVA_HOME_21_X64" :runner:run
 
   build:
     runs-on: ubuntu-latest
