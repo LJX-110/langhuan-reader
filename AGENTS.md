@@ -56,4 +56,4 @@ flutter test
 ## 版本
 
 `pubspec.yaml` 是唯一版本来源，递增、tag 与发布规则见 `docs/VERSIONING.md`。
-上一发布版 `2.3.1+15`（底栏布局事故修复）；当前版本线 `2.4.0`。构建统一走 GitHub Actions（2026-11-04 起不本地出包），精确 build 号看 `pubspec.yaml` 与 GitHub Releases。范围与退出标准见 `docs/ROADMAP.md`。
+上一发布版 `2.4.0+17`；当前版本线 `2.4.0`。构建统一走 GitHub Actions（2026-11-04 起不本地出包），精确 build 号看 `pubspec.yaml` 与 GitHub Releases。范围与退出标准见 `docs/ROADMAP.md`。
