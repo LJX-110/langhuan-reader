@@ -14,5 +14,16 @@
 
 其他第三方许可文本随组件保留：
 
-- `third_party/flutter_js/LICENSE`
 - `assets/fonts/HarmonyOS_Sans_SC_LICENSE.txt`
+- QuickJS（https://bellard.org/quickjs/），**MIT License**；
+  引擎与宿主验证用到的 `legado_quickjs` 原生库由其编译而来，
+  版权归 Fabrice Bellard 与 QuickJS 贡献者所有。
+
+## 引擎与移植参考
+
+- 书源内核基于 Legado（KMP 重构版「阅读」）：
+  `https://github.com/huajideshutiao/legado`，GPL-3.0；
+  引擎许可原文见 `engine/LICENSE`，本地改动见 `engine/LOCAL_PATCHES.md`。
+- 外观 / 交互 / 备份 / 标签 / 本地库等参考轻小说文库
+  Wenku8-Local（`MewX/light-novel-library_Wenku8_Android`），
+  GPL-2.0-or-later；移植代码按 GPL-3.0 分发，原始声明保留。

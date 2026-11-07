@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 
 import 'package:langhuan/app/router/routes.dart';
@@ -10,6 +9,9 @@ import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/data/repositories/bookmark_repository.dart';
 import 'package:langhuan/design/components/pic_widget.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
+import 'package:langhuan/design/components/feedback.dart';
+import 'package:langhuan/design/components/loading_view.dart';
+import 'package:langhuan/design/components/pressable.dart';
 
 /// All bookmarks, newest first.
 class BookmarksPage extends StatefulWidget {
@@ -48,7 +50,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
       record.bookmark.bookId,
     );
     if (book == null) {
-      BotToast.showText(text: '这本书已不在书架');
+      showFeedback('这本书已不在书架');
       return;
     }
     book
@@ -88,7 +90,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
         backgroundColor: background,
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const LoadingView.page()
           : _records.isEmpty
           ? Padding(
               padding: const EdgeInsets.fromLTRB(20, 96, 20, 24),
@@ -121,7 +123,7 @@ class _BookmarksPageState extends State<BookmarksPage> {
                 final record = _records[i];
                 return Material(
                   color: Colors.transparent,
-                  child: InkWell(
+                  child: Pressable(
                     onTap: () => _open(record),
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(20, 12, 8, 12),

@@ -17,10 +17,11 @@ import 'package:langhuan/features/sources/source_edit_page.dart';
 import 'package:langhuan/features/sources/source_test_panel.dart';
 import 'package:langhuan/app/providers.dart';
 import 'package:langhuan/features/sources/source_repo_page.dart';
-import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:langhuan/design/components/feedback.dart';
+import 'package:langhuan/design/components/loading_view.dart';
 
 /// 书源管理：导入 / 启用 / 删除 / 导出 / 批量管理
 class SourceManagePage extends ConsumerStatefulWidget {
@@ -74,9 +75,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
 
   void _invertSelection(SourceModel model) {
     setState(() {
-      final all = _visibleSources(
-        model,
-      ).map((e) => e.bookSourceUrl).toSet();
+      final all = _visibleSources(model).map((e) => e.bookSourceUrl).toSet();
       final next = all.difference(_selected);
       _selected
         ..clear()
@@ -111,7 +110,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
   /// 批量移动分组：替换所选书源的 bookSourceGroup（留空 = 清空分组）。
   Future<void> _moveSelectedToGroup(SourceModel model) async {
     if (_selected.isEmpty) {
-      BotToast.showText(text: '请先勾选书源');
+      showFeedback('请先勾选书源');
       return;
     }
     final groups = SourceGroups.collect(model.sources);
@@ -144,10 +143,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                 children: [
                   for (final group in groups)
                     ActionChip(
-                      label: Text(
-                        group,
-                        style: const TextStyle(fontSize: 12),
-                      ),
+                      label: Text(group, style: const TextStyle(fontSize: 12)),
                       onPressed: () => ctrl.text = group,
                     ),
                 ],
@@ -170,55 +166,51 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
     ctrl.dispose();
     if (result == null) return;
     await model.setGroup(_selected.toList(), result);
-    BotToast.showText(
-      text: result.isEmpty
-          ? '已清空所选书源的分组'
-          : '已移动到分组「$result」',
-    );
+    showFeedback(result.isEmpty ? '已清空所选书源的分组' : '已移动到分组「$result」');
     _exitSelectMode();
   }
 
   Future<void> _exportSelected(SourceModel model) async {
     if (_selected.isEmpty) {
-      BotToast.showText(text: '请先勾选书源');
+      showFeedback('请先勾选书源');
       return;
     }
     try {
       final json = await model.exportSelected(_selected.toList());
       if (json.length > 8 * 1024 * 1024) {
-        BotToast.showText(text: '所选书源过大，无法复制到剪贴板，请分批导出');
+        showError('所选书源过大，无法复制到剪贴板，请分批导出');
         return;
       }
       await Clipboard.setData(ClipboardData(text: json));
-      BotToast.showText(text: '已复制 ${_selected.length} 个书源 JSON 到剪贴板');
+      showFeedback('已复制 ${_selected.length} 个书源 JSON 到剪贴板');
     } catch (e) {
-      BotToast.showText(text: '导出失败：${Redact.userMessage(e)}');
+      showError('导出失败：${Redact.userMessage(e)}');
     }
   }
 
   Future<void> _enableSelected(SourceModel model) async {
     if (_selected.isEmpty) {
-      BotToast.showText(text: '请先勾选书源');
+      showFeedback('请先勾选书源');
       return;
     }
     await model.enableMany(_selected.toList());
-    BotToast.showText(text: '已启用 ${_selected.length} 个书源');
+    showFeedback('已启用 ${_selected.length} 个书源');
     _exitSelectMode();
   }
 
   Future<void> _disableSelected(SourceModel model) async {
     if (_selected.isEmpty) {
-      BotToast.showText(text: '请先勾选书源');
+      showFeedback('请先勾选书源');
       return;
     }
     await model.disableMany(_selected.toList());
-    BotToast.showText(text: '已禁用 ${_selected.length} 个书源');
+    showFeedback('已禁用 ${_selected.length} 个书源');
     _exitSelectMode();
   }
 
   Future<void> _deleteSelected(SourceModel model) async {
     if (_selected.isEmpty) {
-      BotToast.showText(text: '请先勾选书源');
+      showFeedback('请先勾选书源');
       return;
     }
     final n = _selected.length;
@@ -241,7 +233,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
     );
     if (ok != true) return;
     await model.removeMany(_selected.toList());
-    BotToast.showText(text: '已删除 $n 个书源');
+    showFeedback('已删除 $n 个书源');
     _exitSelectMode();
   }
 
@@ -285,9 +277,9 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
         await SourceRepository.instance.getByUrl(source.bookSourceUrl) ??
         source;
     if (!mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => SourceEditPage(source: full)),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => SourceEditPage(source: full)));
   }
 
   Future<void> _newSource() async {
@@ -422,17 +414,16 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                       final json = await model.exportAll();
                       // Very large payloads OOM the clipboard MethodChannel.
                       if (json.length > 8 * 1024 * 1024) {
-                        BotToast.showText(
-                          text:
-                              '书源过大（${(json.length / (1024 * 1024)).toStringAsFixed(1)}MB），'
-                              '无法复制到剪贴板，请分批导出或从源文件备份',
+                        showFeedback(
+                          '书源过大（${(json.length / (1024 * 1024)).toStringAsFixed(1)}MB），'
+                          '无法复制到剪贴板，请分批导出或从源文件备份',
                         );
                         return;
                       }
                       await Clipboard.setData(ClipboardData(text: json));
-                      BotToast.showText(text: '已复制全部书源 JSON 到剪贴板');
+                      showFeedback('已复制全部书源 JSON 到剪贴板');
                     } catch (e) {
-                      BotToast.showText(text: '导出失败：${Redact.userMessage(e)}');
+                      showError('导出失败：${Redact.userMessage(e)}');
                     }
                   },
                 ),
@@ -444,7 +435,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
               ],
       ),
       body: model.loading && model.sources.isEmpty
-          ? const Center(child: CircularProgressIndicator())
+          ? const LoadingView.page()
           : model.sources.isEmpty
           ? _empty(context, model)
           : Builder(
@@ -476,8 +467,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                                     12 +
                                     MediaQuery.viewPaddingOf(context).bottom,
                               ),
-                              itemCount:
-                                  visible.length + (_selectMode ? 0 : 1),
+                              itemCount: visible.length + (_selectMode ? 0 : 1),
                               separatorBuilder: (_, _) =>
                                   const Divider(height: 1),
                               itemBuilder: (ctx, i) {
@@ -489,92 +479,96 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                                   );
                                 }
                                 final s = visible[i];
-                final url = s.bookSourceUrl;
-                final selected = _selected.contains(url);
-                return ListTile(
-                  onTap: _selectMode
-                      ? () {
-                          setState(() {
-                            if (selected) {
-                              _selected.remove(url);
-                            } else {
-                              _selected.add(url);
-                            }
-                          });
-                        }
-                      : () => _editSource(model, s),
-                  leading: _selectMode
-                      ? Checkbox(
-                          value: selected,
-                          onChanged: (v) {
-                            setState(() {
-                              if (v == true) {
-                                _selected.add(url);
-                              } else {
-                                _selected.remove(url);
-                              }
-                            });
-                          },
-                        )
-                      : null,
-                  title: Text(
-                    s.bookSourceName.isEmpty
-                        ? s.bookSourceUrl
-                        : s.bookSourceName,
-                  ),
-                  subtitle: Text(
-                    [
-                      if (s.bookSourceGroup.isNotEmpty) s.bookSourceGroup,
-                      if (s.lastCheckTime > 0)
-                        s.respondTime > 0 ? '${s.respondTime}ms' : '测试失败'
-                      else if (s.respondTime > 0 && s.respondTime < 60000)
-                        '${s.respondTime}ms',
-                      s.canExplore ? '可发现' : '仅搜索',
-                      s.bookSourceUrl,
-                    ].where((e) => e.isNotEmpty).join(' · '),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: _selectMode
-                      ? null
-                      : Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Switch(
-                              value: s.enabled,
-                              onChanged: (_) => model.toggle(s),
-                            ),
-                            PopupMenuButton<String>(
-                              tooltip: '更多',
-                              icon: const Icon(Icons.more_vert),
-                              onSelected: (value) {
-                                if (value == 'edit') {
-                                  _editSource(model, s);
-                                }
-                                if (value == 'test') {
-                                  _testSourceDialog(model, s);
-                                }
-                                if (value == 'delete') {
-                                  _deleteSource(model, s);
-                                }
-                              },
-                              itemBuilder: (_) => const [
-                                PopupMenuItem(
-                                  value: 'edit',
-                                  child: Text('编辑'),
-                                ),
-                                PopupMenuItem(
-                                  value: 'test',
-                                  child: Text('测试搜索'),
-                                ),
-                                PopupMenuItem(
-                                  value: 'delete',
-                                  child: Text('删除'),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
+                                final url = s.bookSourceUrl;
+                                final selected = _selected.contains(url);
+                                return ListTile(
+                                  onTap: _selectMode
+                                      ? () {
+                                          setState(() {
+                                            if (selected) {
+                                              _selected.remove(url);
+                                            } else {
+                                              _selected.add(url);
+                                            }
+                                          });
+                                        }
+                                      : () => _editSource(model, s),
+                                  leading: _selectMode
+                                      ? Checkbox(
+                                          value: selected,
+                                          onChanged: (v) {
+                                            setState(() {
+                                              if (v == true) {
+                                                _selected.add(url);
+                                              } else {
+                                                _selected.remove(url);
+                                              }
+                                            });
+                                          },
+                                        )
+                                      : null,
+                                  title: Text(
+                                    s.bookSourceName.isEmpty
+                                        ? s.bookSourceUrl
+                                        : s.bookSourceName,
+                                  ),
+                                  subtitle: Text(
+                                    [
+                                      if (s.bookSourceGroup.isNotEmpty)
+                                        s.bookSourceGroup,
+                                      if (s.lastCheckTime > 0)
+                                        s.respondTime > 0
+                                            ? '${s.respondTime}ms'
+                                            : '测试失败'
+                                      else if (s.respondTime > 0 &&
+                                          s.respondTime < 60000)
+                                        '${s.respondTime}ms',
+                                      s.canExplore ? '可发现' : '仅搜索',
+                                      s.bookSourceUrl,
+                                    ].where((e) => e.isNotEmpty).join(' · '),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  trailing: _selectMode
+                                      ? null
+                                      : Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Switch(
+                                              value: s.enabled,
+                                              onChanged: (_) => model.toggle(s),
+                                            ),
+                                            PopupMenuButton<String>(
+                                              tooltip: '更多',
+                                              icon: const Icon(Icons.more_vert),
+                                              onSelected: (value) {
+                                                if (value == 'edit') {
+                                                  _editSource(model, s);
+                                                }
+                                                if (value == 'test') {
+                                                  _testSourceDialog(model, s);
+                                                }
+                                                if (value == 'delete') {
+                                                  _deleteSource(model, s);
+                                                }
+                                              },
+                                              itemBuilder: (_) => const [
+                                                PopupMenuItem(
+                                                  value: 'edit',
+                                                  child: Text('编辑'),
+                                                ),
+                                                PopupMenuItem(
+                                                  value: 'test',
+                                                  child: Text('测试搜索'),
+                                                ),
+                                                PopupMenuItem(
+                                                  value: 'delete',
+                                                  child: Text('删除'),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
                                 );
                               },
                             ),
@@ -656,7 +650,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
             const Text('还没有书源', style: TextStyle(fontSize: 18)),
             const SizedBox(height: 8),
             Text(
-              '导入 Legado / 阅读 书源 JSON 后显示在这里',
+              '导入书源 JSON 后显示在这里',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey[600]),
             ),
@@ -826,22 +820,23 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                                 : () async {
                                     setSt(() => fileBusy = true);
                                     try {
-                                      final picked = await FilePicker
-                                          .pickFiles(withData: true);
+                                      final picked = await FilePicker.pickFiles(
+                                        withData: true,
+                                      );
                                       if (picked == null ||
                                           picked.files.isEmpty) {
                                         return;
                                       }
                                       final f = picked.files.single;
-                                      final bytes = f.bytes ??
+                                      final bytes =
+                                          f.bytes ??
                                           (f.path != null
-                                              ? await File(f.path!)
-                                                  .readAsBytes()
+                                              ? await File(
+                                                  f.path!,
+                                                ).readAsBytes()
                                               : null);
                                       if (bytes == null) {
-                                        BotToast.showText(
-                                          text: '读取文件失败',
-                                        );
+                                        showError('读取文件失败');
                                         return;
                                       }
                                       var text = const Utf8Decoder(
@@ -856,8 +851,8 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                                         fileText = text;
                                       });
                                     } catch (e) {
-                                      BotToast.showText(
-                                        text: '读取文件失败：${e.runtimeType}',
+                                      showFeedback(
+                                        '读取文件失败：${Redact.userMessage(e)}',
                                       );
                                     } finally {
                                       setSt(() => fileBusy = false);
@@ -876,7 +871,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                           const SizedBox(height: 6),
                           Text(
                             fileText.isEmpty
-                                ? '支持 Legado / 阅读 导出的 .json'
+                                ? '支持通用书源 .json 文件'
                                 : '已读取 ${(fileText.length / 1024).toStringAsFixed(0)} KB',
                             style: TextStyle(
                               fontSize: 12,
@@ -889,12 +884,12 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                     ElevatedButton(
                       onPressed: () async {
                         if (!agreed) {
-                          BotToast.showText(text: '请先勾选同意上述声明');
+                          showFeedback('请先勾选同意上述声明');
                           return;
                         }
                         try {
                           if (tab == 1) {
-                            BotToast.showText(text: '正在下载书源…');
+                            showFeedback('正在下载书源…');
                           }
                           final SourceParseResult parsed;
                           if (tab == 1) {
@@ -903,10 +898,10 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                             );
                           } else {
                             if (fileText.isEmpty) {
-                              BotToast.showText(text: '请先选择书源文件');
+                              showFeedback('请先选择书源文件');
                               return;
                             }
-                            BotToast.showText(text: '正在解析书源文件…');
+                            showFeedback('正在解析书源文件…');
                             // Multi-MB packs would jank the UI thread.
                             parsed = fileText.length > 200 * 1024
                                 ? await compute(
@@ -940,7 +935,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                             );
                           }
                           if (checked.sources.isEmpty) {
-                            BotToast.showText(text: '没有通过校验的书源可导入');
+                            showFeedback('没有通过校验的书源可导入');
                             return;
                           }
 
@@ -952,7 +947,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                             if (choice == null) return;
                             overwrite = choice;
                           } else if (conflict.newCount == 0) {
-                            BotToast.showText(text: '没有需要导入或更新的书源');
+                            showFeedback('没有需要导入或更新的书源');
                             return;
                           }
 
@@ -966,7 +961,7 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
                           );
                           if (ctx.mounted) Navigator.pop(ctx);
                         } catch (e) {
-                          BotToast.showText(text: e.toString());
+                          showError('导入失败：${Redact.userMessage(e)}');
                         }
                       },
                       child: const Text('导入'),

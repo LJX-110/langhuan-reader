@@ -1,3 +1,5 @@
+import 'package:langhuan/data/entities/replace_rule.dart';
+
 /// Apply Legado-style replaceRegex: `pattern##replacement` (optional `###` all).
 String applyReplaceRegex(String input, String replaceRule) {
   if (replaceRule.isEmpty || input.isEmpty) return input;
@@ -18,6 +20,36 @@ String applyReplaceRegex(String input, String replaceRule) {
       );
     } catch (_) {
       // ignore invalid regex
+    }
+  }
+  return text;
+}
+
+/// Apply user replace rules in order, skipping disabled rules and rules that
+/// do not target [scope]. Bad regexes are ignored rather than breaking the
+/// chapter; the settings page validates them before saving.
+String applyReplaceRules(
+  String input,
+  Iterable<ReplaceRule> rules, {
+  required ReplaceRuleScope scope,
+}) {
+  if (input.isEmpty) return input;
+  var text = input;
+  for (final rule in rules) {
+    if (!rule.enabled || !rule.appliesTo(scope) || rule.pattern.isEmpty) {
+      continue;
+    }
+    if (rule.isRegex) {
+      try {
+        text = text.replaceAllMapped(
+          RegExp(rule.pattern, multiLine: true, dotAll: true),
+          (match) => _expandReplacement(rule.replacement, match),
+        );
+      } catch (_) {
+        // Invalid pattern: leave this rule out, keep earlier replacements.
+      }
+    } else {
+      text = text.replaceAll(rule.pattern, rule.replacement);
     }
   }
   return text;

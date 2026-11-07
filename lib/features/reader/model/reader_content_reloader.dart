@@ -6,7 +6,7 @@ import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/entities/chapter_node.dart';
 import 'package:langhuan/data/entities/chapter_toc_entry.dart';
 import 'package:langhuan/data/entities/read_page.dart';
-import 'package:bot_toast/bot_toast.dart';
+import 'package:langhuan/design/components/feedback.dart';
 
 /// Menu-driven content refresh: TOC reload, body refresh, font relayout.
 class ReaderContentReloader {
@@ -24,6 +24,7 @@ class ReaderContentReloader {
     required this.clearPictures,
     required this.openChapterAt,
     required this.restorePageIndex,
+    required this.anchorOf,
     required this.toggleMenu,
     required this.showLoading,
     required this.hideLoading,
@@ -45,7 +46,10 @@ class ReaderContentReloader {
   final void Function(String chapterId) removeWarm;
   final void Function() clearPictures;
   final Future Function(int idx, bool jump, {bool showLoading}) openChapterAt;
-  final void Function(int savedIndex) restorePageIndex;
+  final void Function(int savedIndex, {int? anchor}) restorePageIndex;
+
+  /// Current page's UTF-8 char offset, or -1 when unavailable.
+  final int Function() anchorOf;
   final void Function() toggleMenu;
   final Future<void> Function(String text) showLoading;
   final void Function() hideLoading;
@@ -107,7 +111,7 @@ class ReaderContentReloader {
 
       final list = chaptersOf();
       if (list.isEmpty) {
-        BotToast.showText(text: '目录为空，请检查书源或网络');
+        showError('目录为空，请检查书源或网络');
         return false;
       }
 
@@ -132,7 +136,7 @@ class ReaderContentReloader {
       return true;
     } catch (e) {
       AppLog.w('Read', 'reload chapters failed', error: e);
-      BotToast.showText(text: '目录刷新失败，请稍后重试');
+      showError('目录刷新失败，请稍后重试');
       return false;
     } finally {
       setChaptersLoading(false);
@@ -169,7 +173,7 @@ class ReaderContentReloader {
           !content.startsWith('书源不存在') &&
           !content.startsWith('章节地址为空');
       if (!looksOk) {
-        BotToast.showText(text: '刷新失败，请检查书源或网络');
+        showError('刷新失败，请检查书源或网络');
         return false;
       }
       await chaptersRepo.updateBodies([ChapterNode(content, chapter.id)]);
@@ -185,7 +189,7 @@ class ReaderContentReloader {
       return page != null;
     } catch (e) {
       AppLog.w('Read', 'reload current page failed', error: e);
-      BotToast.showText(text: '刷新失败，请稍后重试');
+      showError('刷新失败，请稍后重试');
       return false;
     } finally {
       _refreshing = false;
@@ -206,8 +210,9 @@ class ReaderContentReloader {
       AppLog.w('Read', 'clearAllPageLayouts failed', error: e);
     }
     final keepIndex = b.pageIndex;
+    final anchor = anchorOf();
     await openChapterAt(b.chapterIndex, false, showLoading: false);
-    restorePageIndex(keepIndex);
+    restorePageIndex(keepIndex, anchor: anchor);
     markNeedsPaint();
     notify();
     onRelayout?.call();

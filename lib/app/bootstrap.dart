@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:langhuan/core/storage/prefs_keys.dart';
 import 'package:langhuan/core/utils/perf_log.dart';
+import 'package:langhuan/features/sources/engine/engine_log_bridge.dart';
 
 class AppInit {
   static FlutterExceptionHandler? _prevFlutterError;
@@ -82,6 +83,8 @@ class AppInit {
     _installQuietImageErrorFilter();
 
     await SpUtil.getInstance();
+    // 引擎原生日志接入应用日志页（失败静默，不阻塞启动）。
+    EngineLogBridge.start();
     // Extract bundled CJK TTF so Rust book_pager uses the same face as Flutter.
     await ReaderFontBootstrap.ensure();
     // Legacy multi-file DBs are imported lazily by ReaderDatabase on first

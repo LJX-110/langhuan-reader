@@ -6,6 +6,24 @@ import 'package:langhuan/features/reader/model/reader_loading_presenter.dart';
 import 'package:langhuan/features/reader/page_turn/novel_page_painter.dart';
 import 'package:flutter/material.dart';
 
+/// Map a saved UTF-8 char offset to the page that starts at or before it.
+///
+/// Returns null when the layout carries no usable offsets (legacy Dart
+/// fallback pages all report 0), so callers keep the page-index fallback.
+int? pageIndexForAnchor(ReadPage page, int anchorOffset) {
+  if (anchorOffset < 0 || page.pages.isEmpty) return null;
+  final pages = page.pages;
+  final hasOffsets = pages.any((p) => p.charStart > 0);
+  if (!hasOffsets && pages.length > 1) return null;
+  var best = 0;
+  for (var i = 0; i < pages.length; i++) {
+    if (pages[i].charStart <= anchorOffset) {
+      best = i;
+    }
+  }
+  return best;
+}
+
 /// Session shell: prepare / clear / fail-open and page-index restore.
 ///
 /// Owns no long-lived state of its own — mutates [ReadModel] session fields
@@ -96,15 +114,27 @@ class ReadingSessionLifecycle {
   }
 
   /// Restore in-chapter page index after pagination.
-  /// Prefer last page over page 0 when layout shrank (font/size change).
-  void restorePageIndex(int savedIndex) {
+  ///
+  /// When [anchor] is a valid char offset, the page containing that text wins
+  /// (font / margin changes reflow the chapter, page numbers alone would drift).
+  /// Otherwise prefer the saved index; clamps to the last page when the layout
+  /// shrank.
+  void restorePageIndex(int savedIndex, {int? anchor}) {
     final b = bookOf();
     if (b == null) return;
-    final pages = curPageOf()?.pageOffsets ?? 0;
+    final page = curPageOf();
+    final pages = page?.pageOffsets ?? 0;
     if (pages <= 0) {
       // Content not ready — keep saved index so we don't wipe progress.
       b.pageIndex = savedIndex < 0 ? 0 : savedIndex;
       return;
+    }
+    if (anchor != null && page != null) {
+      final anchored = pageIndexForAnchor(page, anchor);
+      if (anchored != null) {
+        b.pageIndex = anchored;
+        return;
+      }
     }
     final maxIdx = pages - 1;
     if (savedIndex < 0) {

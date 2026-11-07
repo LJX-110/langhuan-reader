@@ -16,7 +16,6 @@ void main() {
         author: '作者 ${i + 1}',
         coverUrl: '',
         progressLabel: '读到 · 第 ${i + 1} 章',
-        hasUpdate: i == 0,
       ),
   ];
 

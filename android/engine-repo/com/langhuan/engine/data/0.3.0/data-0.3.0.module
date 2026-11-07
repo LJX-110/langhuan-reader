@@ -85,11 +85,11 @@
         {
           "name": "data-kotlin-0.3.0-sources.jar",
           "url": "data-0.3.0-sources.jar",
-          "size": 765094,
-          "sha512": "d527c6d7f8aae7a3653ce02c7d64ba41818125cee00505bf50c0af07b707f084c1d8359d4e5717ebb9a127d1494f84957b7204f2a46f879a4c6d3d1a08413f09",
-          "sha256": "d9d10138d69f2db483bda06fd124fd70db51668f319ce35f584253b2591f8427",
-          "sha1": "2e7549f78644b8b6d740966fc1805ea253d1048d",
-          "md5": "8c94a538d776538729ba91abf9704ce8"
+          "size": 765220,
+          "sha512": "fad796482f76459ad2eca6b92fcc503d2ee9221b4c82d98179db3ed6e19106f62bd56d67148431a3c14c45dd82fc75b776192cb9f7877346dd3f8f0532e0876b",
+          "sha256": "fa776d2e1c86819799d0eb2bd0237c46c13d1489f3913df8717e13619db6a1f9",
+          "sha1": "676b567456644366a5767b7333b2324f3587d1d0",
+          "md5": "41c4e4359501234c9eae1497c777693b"
         }
       ]
     },

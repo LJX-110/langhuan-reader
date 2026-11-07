@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 琅嬛阁 launch screen: paper field + moonlit pavilion mark. -->
+<!-- 琅嬛阁 launch screen: paper field + 月牙与檐 mark（Android 12+ 见 values-v31/styles.xml）。 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/paper" />
     <item>

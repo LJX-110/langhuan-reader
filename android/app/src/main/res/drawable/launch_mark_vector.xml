@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 月牙与檐：与 tool/generate_brand_assets.py 同一几何。
+     称切圆用纸白填充，只用于 Android 12+ 启动动画（背景固定 @color/paper）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="512dp"
+    android:height="512dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+
+    <group
+        android:pivotX="512"
+        android:pivotY="512"
+        android:scaleX="0.82"
+        android:scaleY="0.82">
+
+        <path
+            android:name="moon"
+            android:fillColor="#17283A"
+            android:pathData="M470,100 a300,300 0 1,0 0,600 a300,300 0 1,0 0,-600" />
+
+        <path
+            android:name="cut"
+            android:fillColor="#FFFFFF"
+            android:pathData="M596,62 a268,268 0 1,0 0,536 a268,268 0 1,0 0,-536" />
+
+        <path
+            android:name="eave"
+            android:strokeColor="#17283A"
+            android:strokeWidth="58"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M210,792 L424,744 L600,744 L814,792" />
+    </group>
+</vector>

@@ -2,9 +2,9 @@ import 'package:langhuan/features/reader/page_turn/page_turn_perf.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/entities/chapter_toc_entry.dart';
 import 'package:langhuan/data/entities/read_page.dart';
-import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:langhuan/design/components/feedback.dart';
 
 /// Commits a logical page/chapter advance after a swipe or tap turn.
 ///
@@ -174,7 +174,7 @@ class PageTurnCommitter {
   ) {
     final tempCur = b.chapterIndex + 1;
     if (tempCur >= chapters.length) {
-      BotToast.showText(text: '最后一页');
+      showFeedback('最后一页');
       return;
     }
 
@@ -257,7 +257,7 @@ class PageTurnCommitter {
   ) {
     final tempCur = b.chapterIndex - 1;
     if (tempCur < 0) {
-      BotToast.showText(text: '第一页');
+      showFeedback('第一页');
       return;
     }
     clearQueuedTurns?.call();

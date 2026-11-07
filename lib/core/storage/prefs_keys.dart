@@ -26,6 +26,10 @@ class PrefsKeys {
   /// Aligns with Legado's `textBold` (0 正常 / 1 粗体 / 2 细体).
   static const readerFontWeight = 'reader_font_weight';
 
+  /// Reading script: 0 原样 (default) | 1 简体 | 2 繁体. Applied to body text
+  /// after replace rules, before pagination.
+  static const readerChineseMode = 'reader_chinese_mode';
+
   /// Neighbor chapter prefetch range (chapters before / after the current).
   static const readerPrefetchBack = 'reader_prefetch_back';
   static const readerPrefetchForward = 'reader_prefetch_forward';
@@ -56,4 +60,7 @@ class PrefsKeys {
   /// Last successful update check (ms). Auto check stays silent for 24h after.
   static const updateLastCheck = 'update_last_check';
 
+  /// Low-performance mode: skip 3D shelf entry animation and cover enrichment.
+  /// Reader pagination and themes are unaffected.
+  static const lowPerformance = 'low_performance';
 }

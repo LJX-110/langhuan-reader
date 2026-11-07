@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 
 import 'package:langhuan/app/router/routes.dart';
@@ -10,6 +9,9 @@ import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/data/repositories/reading_history_repository.dart';
 import 'package:langhuan/design/components/pic_widget.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
+import 'package:langhuan/design/components/feedback.dart';
+import 'package:langhuan/design/components/loading_view.dart';
+import 'package:langhuan/design/components/pressable.dart';
 
 /// Recently read books, newest first.
 class HistoryPage extends StatefulWidget {
@@ -46,7 +48,7 @@ class _HistoryPageState extends State<HistoryPage> {
   Future<void> _open(ReadingRecord record) async {
     final Book? book = await BookRepository.instance.getById(record.bookId);
     if (book == null) {
-      BotToast.showText(text: '这本书已不在书架，无法继续阅读');
+      showError('这本书已不在书架，无法继续阅读');
       return;
     }
     if (!mounted) return;
@@ -64,9 +66,17 @@ class _HistoryPageState extends State<HistoryPage> {
           .where((r) => r.bookId != record.bookId)
           .toList(growable: false);
     });
+    final removed = record;
     await ReadingHistoryRepository.instance.remove(record.bookId);
     if (!mounted) return;
-    BotToast.showText(text: '已移除记录，书架与阅读进度保留');
+    showFeedback(
+      '已移除记录，书架与阅读进度保留',
+      actionLabel: '撤销',
+      onAction: () async {
+        await ReadingHistoryRepository.instance.restore(removed);
+        await _reload();
+      },
+    );
   }
 
   Future<void> _clearAll() async {
@@ -91,7 +101,7 @@ class _HistoryPageState extends State<HistoryPage> {
     await ReadingHistoryRepository.instance.clear();
     if (!mounted) return;
     setState(() => _records = const []);
-    BotToast.showText(text: '已清空阅读记录');
+    showFeedback('已清空阅读记录');
   }
 
   @override
@@ -114,7 +124,7 @@ class _HistoryPageState extends State<HistoryPage> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const LoadingView.page()
           : _records.isEmpty
           ? Padding(
               padding: const EdgeInsets.fromLTRB(20, 96, 20, 24),
@@ -160,73 +170,79 @@ class _HistoryPageState extends State<HistoryPage> {
                   onDismissed: (_) => _remove(record),
                   child: Material(
                     color: Colors.transparent,
-                    child: InkWell(
+                    child: Pressable(
                       onTap: () => _open(record),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 16, 12),
-                      child: Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(
-                              AppDimens.coverRadius,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 16, 12),
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(
+                                AppDimens.coverRadius,
+                              ),
+                              child: PicWidget(
+                                record.coverUrl,
+                                width: 46,
+                                height: 62,
+                                referer: record.bookUrl,
+                                title: record.bookName,
+                              ),
                             ),
-                            child: PicWidget(
-                              record.coverUrl,
-                              width: 46,
-                              height: 62,
-                              referer: record.bookUrl,
-                              title: record.bookName,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  record.bookName.isEmpty
-                                      ? '未知书名'
-                                      : record.bookName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontFamily: AppType.serif,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: primary,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    record.bookName.isEmpty
+                                        ? '未知书名'
+                                        : record.bookName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontFamily: AppType.serif,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: primary,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  record.progressLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(fontSize: 12, color: muted),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  _timeLabel(record.readAt),
-                                  style: TextStyle(fontSize: 11, color: muted),
-                                ),
-                              ],
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    record.progressLabel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: muted,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _timeLabel(record.readAt),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: muted,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          IconButton(
-                            tooltip: '移除记录',
-                            visualDensity: VisualDensity.compact,
-                            icon: Icon(
-                              Icons.delete_outline,
-                              size: 18,
-                              color: muted,
+                            IconButton(
+                              tooltip: '移除记录',
+                              visualDensity: VisualDensity.compact,
+                              icon: Icon(
+                                Icons.delete_outline,
+                                size: 18,
+                                color: muted,
+                              ),
+                              onPressed: () => _remove(record),
                             ),
-                            onPressed: () => _remove(record),
-                          ),
-                          Icon(Icons.chevron_right, size: 18, color: muted),
-                        ],
+                            Icon(Icons.chevron_right, size: 18, color: muted),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
                 );
               },
             ),

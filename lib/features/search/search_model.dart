@@ -15,8 +15,8 @@ import 'package:langhuan/features/sources/model/source_search_report.dart';
 import 'package:langhuan/features/search/search_result_deduper.dart';
 import 'package:langhuan/features/sources/util/book_id.dart';
 import 'package:langhuan/core/storage/local_store.dart';
-import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
+import 'package:langhuan/design/components/feedback.dart';
 
 /// One book after duplicate hits from different sources are folded together.
 class SearchGroup {
@@ -105,9 +105,7 @@ class SearchModel with ChangeNotifier {
       counts[report.issue] = (counts[report.issue] ?? 0) + 1;
     }
     if (counts.isEmpty) return '';
-    return counts.entries
-        .map((e) => '${e.key.label} ${e.value}')
-        .join('、');
+    return counts.entries.map((e) => '${e.key.label} ${e.value}').join('、');
   }
 
   String historyKey = "";
@@ -117,6 +115,9 @@ class SearchModel with ChangeNotifier {
 
   final SourceEngine _engine = SourceEngine.instance;
   final SourceRepository _sources = SourceRepository.instance;
+
+  /// Per-source pagination cursor returned by the engine (nextPageUrl).
+  final Map<String, String> _sourceCursors = {};
 
   /// Concurrent source search pool size (slow networks do better at 6 than
   /// at 10; a future settings row can expose this).
@@ -135,6 +136,7 @@ class SearchModel with ChangeNotifier {
     _pausedGen = searchPaused ? _searchGen : -1;
     notifyListeners();
   }
+
   int sourceConcurrency = defaultSourceConcurrency;
 
   final SearchKeywordCache _keywordCache = SearchKeywordCache();
@@ -192,6 +194,7 @@ class SearchModel with ChangeNotifier {
     failedSourceNames.clear();
     reports.clear();
     retryingSources.clear();
+    _sourceCursors.clear();
     _searchGen++;
   }
 
@@ -207,13 +210,14 @@ class SearchModel with ChangeNotifier {
 
     final groups = SourceGroups.collect(meta);
     groupOptions = groups;
-    final searchable = SourceGroups.filter(meta, groupFilter)
-        .where((s) => s.searchUrl.isNotEmpty && s.enabled)
-        .toList();
+    final searchable = SourceGroups.filter(
+      meta,
+      groupFilter,
+    ).where((s) => s.searchUrl.isNotEmpty && s.enabled).toList();
     if (searchable.isEmpty) {
       if (gen != _searchGen) return false;
       noMore = true;
-      BotToast.showText(text: '请先在「书源管理」导入并启用书源');
+      showFeedback('请先在「书源管理」导入并启用书源');
       notifyListeners();
       return true;
     }
@@ -232,6 +236,7 @@ class SearchModel with ChangeNotifier {
     });
 
     try {
+      if (page == 1) _sourceCursors.clear();
       var newHits = 0;
       final poolSize = sourceConcurrency.clamp(1, 20);
       for (var i = 0; i < searchable.length; i += poolSize) {
@@ -251,7 +256,12 @@ class SearchModel with ChangeNotifier {
         final futures = chunk.map((s) async {
           SourceSearchReport report;
           try {
-            report = await _engine.searchWithReport(s, word, page);
+            report = await _engine.searchWithReport(
+              s,
+              word,
+              page,
+              nextPageUrl: _sourceCursors[s.bookSourceUrl],
+            );
           } catch (e) {
             report = SourceSearchReport(
               sourceUrl: s.bookSourceUrl,
@@ -292,7 +302,7 @@ class SearchModel with ChangeNotifier {
       return true;
     } catch (e) {
       if (gen != _searchGen) return false;
-      BotToast.showText(text: '搜索失败：${Redact.userMessage(e)}');
+      showError('搜索失败：${Redact.userMessage(e)}');
       return false;
     }
   }
@@ -338,6 +348,11 @@ class SearchModel with ChangeNotifier {
   }
 
   void _recordReport(SourceSearchReport report) {
+    if (report.hasNextPage && report.nextPageUrl.isNotEmpty) {
+      _sourceCursors[report.sourceUrl] = report.nextPageUrl;
+    } else {
+      _sourceCursors.remove(report.sourceUrl);
+    }
     reports.removeWhere((r) => r.sourceUrl == report.sourceUrl);
     reports.add(report);
     final failed = reports.where((r) => r.failed).toList(growable: false);
@@ -356,14 +371,19 @@ class SearchModel with ChangeNotifier {
     if (word.isEmpty || retryingSources.contains(sourceUrl)) return null;
     final src = await _sources.getByUrl(sourceUrl);
     if (src == null) {
-      BotToast.showText(text: '书源不存在或已删除');
+      showError('书源不存在或已删除');
       return null;
     }
     final gen = _searchGen;
     retryingSources.add(sourceUrl);
     notifyListeners();
     try {
-      final report = await _engine.searchWithReport(src, word, page);
+      final report = await _engine.searchWithReport(
+        src,
+        word,
+        page,
+        nextPageUrl: _sourceCursors[src.bookSourceUrl],
+      );
       if (gen != _searchGen) return null;
       _recordReport(report);
       if (report.hits.isNotEmpty) {
@@ -441,7 +461,7 @@ class SearchModel with ChangeNotifier {
     if (key.isEmpty) return null;
     final src = await _sources.getByUrl(sourceUrl);
     if (src == null) {
-      BotToast.showText(text: '书源不存在或已删除');
+      showError('书源不存在或已删除');
       return null;
     }
     return _engine.searchWithReport(src, key, 1);

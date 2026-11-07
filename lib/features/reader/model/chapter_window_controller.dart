@@ -54,7 +54,7 @@ class ChapterWindowController {
 
   /// Record current page picture + schedule prev/next after chapter open.
   final void Function() warmPictures;
-  final void Function(int savedIndex) restorePageIndex;
+  final void Function(int savedIndex, {int? anchor}) restorePageIndex;
   final void Function() markNeedsPaint;
   final void Function() notify;
 
@@ -225,18 +225,9 @@ class ChapterWindowController {
     return true;
   }
 
-  void _markLoadFailed(
-    int idx,
-    Object error, {
-    required bool keptContent,
-  }) {
+  void _markLoadFailed(int idx, Object error, {required bool keptContent}) {
     _failedIndex = idx;
-    onLoadFailed(
-      idx,
-      chapterTitleOf(idx),
-      error,
-      keptContent: keptContent,
-    );
+    onLoadFailed(idx, chapterTitleOf(idx), error, keptContent: keptContent);
   }
 
   void _preloadNeighbor(
@@ -261,11 +252,7 @@ class ChapterWindowController {
             warmPictures();
           })
           .catchError((Object e, StackTrace st) {
-            AppLog.w(
-              'Read',
-              'preload chapter $target failed',
-              error: e,
-            );
+            AppLog.w('Read', 'preload chapter $target failed', error: e);
           }),
     );
   }

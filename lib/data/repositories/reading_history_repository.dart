@@ -30,6 +30,19 @@ class ReadingHistoryRepository {
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
+  /// 撤销删除：把刚才移除的那一行按原值写回（书架与进度不受影响）。
+  Future<void> restore(ReadingRecord record) async {
+    if (record.bookId.isEmpty) return;
+    final db = await _database;
+    await db.insert('reading_history', {
+      'book_id': record.bookId,
+      'chapter_index': record.chapterIndex,
+      'page_index': record.pageIndex,
+      'chapter_name': record.chapterName,
+      'read_at': record.readAt,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
   Future<List<ReadingRecord>> recent({int limit = 100}) async {
     final db = await _database;
     final rows = await db.rawQuery(

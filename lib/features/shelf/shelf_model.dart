@@ -1,9 +1,11 @@
 import 'package:langhuan/data/repositories/book_repository.dart';
+import 'package:langhuan/data/repositories/tag_repository.dart';
 import 'package:langhuan/data/entities/book.dart';
+import 'package:langhuan/data/entities/book_tag.dart';
 import 'package:langhuan/core/events/event.dart';
-import 'package:bot_toast/bot_toast.dart';
 import 'package:langhuan/core/storage/local_store.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:langhuan/design/components/feedback.dart';
 
 enum ShelfFilter { all, reading, unread }
 
@@ -12,14 +14,26 @@ class ShelfModel with ChangeNotifier {
 
   ShelfFilter filter = ShelfFilter.all;
 
+  /// Tag definitions and the active tag filter (null = all tags).
+  List<BookTag> tags = const [];
+  String? activeTagId;
+  Set<String> _taggedBookIds = const {};
+
   /// No schema field for "has read"; chapter/page progress is the signal we
   /// already persist for every book.
   List<Book> get visibleShelf {
+    var list = shelf;
+    final tagId = activeTagId;
+    if (tagId != null) {
+      list = list
+          .where((b) => _taggedBookIds.contains(b.id))
+          .toList(growable: false);
+    }
     switch (filter) {
       case ShelfFilter.all:
-        return shelf;
+        return list;
       case ShelfFilter.reading:
-        return shelf
+        return list
             .where(
               (b) =>
                   b.readingChapter.trim().isNotEmpty ||
@@ -28,7 +42,7 @@ class ShelfModel with ChangeNotifier {
             )
             .toList(growable: false);
       case ShelfFilter.unread:
-        return shelf
+        return list
             .where(
               (b) =>
                   b.readingChapter.trim().isEmpty &&
@@ -37,6 +51,28 @@ class ShelfModel with ChangeNotifier {
             )
             .toList(growable: false);
     }
+  }
+
+  /// Reload tag definitions and the active filter's book set.
+  Future<void> loadTags() async {
+    tags = await TagRepository.instance.all();
+    final tagId = activeTagId;
+    if (tagId != null && !tags.any((tag) => tag.id == tagId)) {
+      activeTagId = null;
+      _taggedBookIds = const {};
+    } else if (tagId != null) {
+      _taggedBookIds = await TagRepository.instance.bookIdsForTag(tagId);
+    }
+    notifyListeners();
+  }
+
+  Future<void> setTag(String? tagId) async {
+    if (activeTagId == tagId) return;
+    activeTagId = tagId;
+    _taggedBookIds = tagId == null
+        ? const {}
+        : await TagRepository.instance.bookIdsForTag(tagId);
+    notifyListeners();
   }
 
   void setFilter(ShelfFilter value) {
@@ -134,9 +170,7 @@ class ShelfModel with ChangeNotifier {
     }
     shelf = next;
     notifyListeners();
-    await _books.updateSortOrder(
-      next.map((b) => b.id).toList(growable: false),
-    );
+    await _books.updateSortOrder(next.map((b) => b.id).toList(growable: false));
   }
 
   Future<void> modifyShelf(Book book) async {
@@ -151,7 +185,7 @@ class ShelfModel with ChangeNotifier {
       await _books.setOnShelf([book.id], true);
       notifyListeners();
 
-      BotToast.showText(text: "已添加到书架");
+      showFeedback("已添加到书架");
     } else if (action == "del") {
       for (var i = 0; i < shelf.length; i++) {
         if (shelf[i].id == book.id) {
@@ -160,7 +194,7 @@ class ShelfModel with ChangeNotifier {
         }
       }
       await _books.retire([book.id]);
-      BotToast.showText(text: "已移除出书架");
+      showFeedback("已移除出书架");
     }
   }
 

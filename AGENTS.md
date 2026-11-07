@@ -12,7 +12,7 @@
 
 ## 身份
 
-- 应用名：**琅嬛阁**；当前版本 `2.3.1`。
+- 应用名：**琅嬛阁**；当前版本线 `2.3.2`（版本号以 `pubspec.yaml` 为准）。
 - Android 包名：`com.langhuan.reader`；Dart 包名：`langhuan`。
 - 上游底本：Apache-2.0；固定信息见 `docs/UPSTREAM.md`。
 - 必须保留 `LICENSE`、`NOTICE` 和第三方许可文本；界面不保留上游名称、链接、邮箱、截图。许可归属只放在 `NOTICE` 与 `docs/UPSTREAM.md`，其他文档不重复上游链接。
@@ -32,12 +32,11 @@
 flutter pub get
 flutter analyze
 flutter test
-flutter build apk --release --target-platform android-arm64
 ```
 
 发布签名只使用本项目自己的 keystore；`key.properties`、`*.jks`、`google-services.json` 不入库。GitHub Actions 通过仓库 Secrets 获取同一份 keystore，配置见 `docs/SIGNING.md`。
 
-构建统一走 GitHub Actions（推 `v*` 标签发布正式包；main 推送出 artifact）；本地构建仅用于排障。
+**不在本地构建/出包**：AAR、Rust `.so`、APK 全部由 GitHub Actions 构建（推 `v*` 标签发布正式包；main 推送出 artifact）。本地只跑 analyze / test 做代码验证。
 
 ## 提交
 
@@ -57,4 +56,4 @@ flutter build apk --release --target-platform android-arm64
 ## 版本
 
 `pubspec.yaml` 是唯一版本来源，递增、tag 与发布规则见 `docs/VERSIONING.md`。
-上一发布版 `2.3.0`；当前版本线 `2.3.1`（发布 `2.3.1+15`：底栏布局事故修复）。构建统一走 GitHub Actions（2026-11-04 起不本地出包），精确 build 号看 `pubspec.yaml` 与 GitHub Releases。范围与退出标准见 `docs/ROADMAP.md`。
+上一发布版 `2.3.1+15`（底栏布局事故修复）；当前版本线 `2.3.2`。构建统一走 GitHub Actions（2026-11-04 起不本地出包），精确 build 号看 `pubspec.yaml` 与 GitHub Releases。范围与退出标准见 `docs/ROADMAP.md`。

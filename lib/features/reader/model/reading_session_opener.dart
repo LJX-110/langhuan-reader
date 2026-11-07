@@ -5,7 +5,7 @@ import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/entities/chapter_toc_entry.dart';
 import 'package:langhuan/data/entities/read_page.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
-import 'package:bot_toast/bot_toast.dart';
+import 'package:langhuan/design/components/feedback.dart';
 
 /// Opens / hydrates a reading session: DB progress, TOC, first chapter.
 class ReadingSessionOpener {
@@ -43,7 +43,7 @@ class ReadingSessionOpener {
   final Future Function({bool init}) loadToc;
   final Future Function(int idx, bool jump, {bool showLoading}) openChapterAt;
   final Future<bool> Function(int idx) hasPageCache;
-  final void Function(int savedIndex) restorePageIndex;
+  final void Function(int savedIndex, {int? anchor}) restorePageIndex;
   final Future<ReadPage> Function(String title, String message) messagePage;
   final Future<void> Function(String text) showLoading;
   final Book? Function() bookOf;
@@ -84,6 +84,7 @@ class ReadingSessionOpener {
         b.chapterIndex = savedCur;
         b.pageIndex = savedIndex;
         b.scrollOffset = dbBook.scrollOffset;
+        b.anchorOffset = dbBook.anchorOffset;
         if (dbBook.readingChapter.isNotEmpty) {
           b.readingChapter = dbBook.readingChapter;
         }
@@ -105,7 +106,7 @@ class ReadingSessionOpener {
 
     if (b.sourceUrl.isEmpty || b.bookUrl.isEmpty) {
       AppLog.w('Read', 'missing sourceUrl/bookUrl for ${b.id}');
-      BotToast.showText(text: '旧版云端书籍无法继续阅读，请重新搜索添加');
+      showError('旧版云端书籍无法继续阅读，请重新搜索添加');
       setCurPage(await messagePage('无法阅读', '旧版云端书籍缺少书源信息，请重新搜索添加后再阅读。'));
       b.chapterIndex = savedCur < 0 ? 0 : savedCur;
       b.pageIndex = savedIndex < 0 ? 0 : savedIndex;
@@ -141,7 +142,7 @@ class ReadingSessionOpener {
     await ensureSource();
     if (activeSourceOf() == null) {
       AppLog.e('Read', 'source not found: ${b.sourceUrl} (${b.originName})');
-      BotToast.showText(text: '书源不存在：${b.originName}');
+      showError('书源不存在：${b.originName}');
       setCurPage(
         await messagePage(
           '书源不可用',
@@ -171,12 +172,13 @@ class ReadingSessionOpener {
     } else {
       if (savedCur < 0 || savedCur >= toc.length) {
         b.chapterIndex = 0;
+        b.anchorOffset = -1;
       } else {
         b.chapterIndex = savedCur;
       }
       b.pageIndex = savedIndex < 0 ? 0 : savedIndex;
       await openChapterAt(b.chapterIndex, false, showLoading: true);
-      restorePageIndex(savedIndex);
+      restorePageIndex(savedIndex, anchor: b.anchorOffset);
     }
     setSessionReady(true);
     setChaptersLoading(false);
@@ -194,6 +196,7 @@ class ReadingSessionOpener {
     if (savedCur < 0 || savedCur >= localToc.length) {
       AppLog.w('Read', 'clamp cur $savedCur -> 0 (len=${localToc.length})');
       b.chapterIndex = 0;
+      b.anchorOffset = -1;
     } else {
       b.chapterIndex = savedCur;
     }
@@ -206,7 +209,7 @@ class ReadingSessionOpener {
       await ensureSource();
       if (activeSourceOf() == null) {
         AppLog.e('Read', 'source not found: ${b.sourceUrl} (${b.originName})');
-        BotToast.showText(text: '书源不存在：${b.originName}');
+        showError('书源不存在：${b.originName}');
         setCurPage(
           await messagePage(
             '书源不可用',
@@ -224,7 +227,7 @@ class ReadingSessionOpener {
     // With page cache: open silently (prepareOpen showed last chapter title +
     // blank paper). Without cache: openChapterAt paints one loading page.
     await openChapterAt(b.chapterIndex, false, showLoading: !canSkipLoading);
-    restorePageIndex(savedIndex);
+    restorePageIndex(savedIndex, anchor: b.anchorOffset);
     setSessionReady(true);
     setChaptersLoading(false);
     setProgressReady(true);

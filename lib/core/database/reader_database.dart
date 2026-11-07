@@ -27,7 +27,11 @@ class ReaderDatabase {
   /// v5: `books` gains `on_shelf` so removing a book keeps its row (and with
   ///     it reading history / bookmarks) instead of deleting everything;
   ///     `chapters` gains `info` (`ruleToc.updateTime` meta for the header).
-  static const int version = 5;
+  /// v6: `tags` + `book_tags` for shelf organisation.
+  /// v7: `replace_rules` for global text purification.
+  /// v8: `books` gains `anchor_offset` (UTF-8 offset of the current page start,
+  ///     so a font/margin relayout can land on the same text).
+  static const int version = 8;
   static const String fileName = 'reader.db';
 
   /// One-time guard so an old `sources.db` is imported after a v1 `reader.db`
@@ -100,6 +104,8 @@ class ReaderDatabase {
     await _createSources(db);
     await _createBookmarks(db);
     await _createReadingHistory(db);
+    await _createTags(db);
+    await _createReplaceRules(db);
   }
 
   /// Additive migrations only. Existing books / chapters / sources stay intact.
@@ -128,7 +134,8 @@ CREATE TABLE IF NOT EXISTS books (
   sort_time INTEGER NOT NULL DEFAULT 0,
   has_update INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL DEFAULT '',
-  on_shelf INTEGER NOT NULL DEFAULT 1
+  on_shelf INTEGER NOT NULL DEFAULT 1,
+  anchor_offset INTEGER NOT NULL DEFAULT -1
 )''');
     await _ensureColumns(db, 'books', const {
       'name': "TEXT NOT NULL DEFAULT ''",
@@ -149,6 +156,7 @@ CREATE TABLE IF NOT EXISTS books (
       'has_update': 'INTEGER NOT NULL DEFAULT 0',
       'updated_at': "TEXT NOT NULL DEFAULT ''",
       'on_shelf': 'INTEGER NOT NULL DEFAULT 1',
+      'anchor_offset': 'INTEGER NOT NULL DEFAULT -1',
     });
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_books_sort ON books (sort_time DESC)',
@@ -288,6 +296,58 @@ CREATE TABLE IF NOT EXISTS reading_history (
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_history_read '
       'ON reading_history (read_at DESC)',
+    );
+  }
+
+  static Future<void> _createTags(Database db) async {
+    await db.execute('''
+CREATE TABLE IF NOT EXISTS tags (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL DEFAULT 0
+)''');
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_name ON tags (name)',
+    );
+    await db.execute('''
+CREATE TABLE IF NOT EXISTS book_tags (
+  book_id TEXT NOT NULL,
+  tag_id TEXT NOT NULL,
+  PRIMARY KEY (book_id, tag_id),
+  FOREIGN KEY (book_id) REFERENCES books (id) ON DELETE CASCADE,
+  FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE
+)''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_book_tags_tag ON book_tags (tag_id)',
+    );
+  }
+
+  static Future<void> _createReplaceRules(Database db) async {
+    await db.execute('''
+CREATE TABLE IF NOT EXISTS replace_rules (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  pattern TEXT NOT NULL DEFAULT '',
+  replacement TEXT NOT NULL DEFAULT '',
+  is_regex INTEGER NOT NULL DEFAULT 0,
+  scope_content INTEGER NOT NULL DEFAULT 1,
+  scope_title INTEGER NOT NULL DEFAULT 0,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  order_index INTEGER NOT NULL DEFAULT 0
+)''');
+    await _ensureColumns(db, 'replace_rules', const {
+      'name': "TEXT NOT NULL DEFAULT ''",
+      'pattern': "TEXT NOT NULL DEFAULT ''",
+      'replacement': "TEXT NOT NULL DEFAULT ''",
+      'is_regex': 'INTEGER NOT NULL DEFAULT 0',
+      'scope_content': 'INTEGER NOT NULL DEFAULT 1',
+      'scope_title': 'INTEGER NOT NULL DEFAULT 0',
+      'enabled': 'INTEGER NOT NULL DEFAULT 1',
+      'order_index': 'INTEGER NOT NULL DEFAULT 0',
+    });
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_replace_rules_order '
+      'ON replace_rules (order_index ASC)',
     );
   }
 

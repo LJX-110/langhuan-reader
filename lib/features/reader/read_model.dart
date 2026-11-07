@@ -7,6 +7,7 @@ import 'package:langhuan/core/storage/prefs_keys.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/data/repositories/chapter_repository.dart';
 import 'package:langhuan/data/repositories/reading_history_repository.dart';
+import 'package:langhuan/data/repositories/replace_rule_repository.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/entities/chapter_toc_entry.dart';
 import 'package:langhuan/data/entities/read_page.dart';
@@ -90,6 +91,9 @@ class ReadModel with ChangeNotifier {
     chaptersRepo: _chapters,
     paginator: _paginator,
     fetchContent: fetchChapterBody,
+    loadReplaceRules: ReplaceRuleRepository.instance.active,
+    convertChinese: _engine.convertChinese,
+    chineseMode: ReadSetting.getChineseMode,
   );
   late final ChapterDiskWarmCache _diskWarm = ChapterDiskWarmCache(
     chapters: _chapters,
@@ -135,7 +139,9 @@ class ReadModel with ChangeNotifier {
     clearPictures: pictureCache.clear,
     openChapterAt: (idx, jump, {bool showLoading = true}) =>
         openChapterAt(idx, jump, showLoading: showLoading),
-    restorePageIndex: (idx) => _lifecycle.restorePageIndex(idx),
+    restorePageIndex: (idx, {int? anchor}) =>
+        _lifecycle.restorePageIndex(idx, anchor: anchor),
+    anchorOf: _currentPageAnchor,
     toggleMenu: toggleShowMenu,
     showLoading: _showTextLoading,
     hideLoading: _hideTextLoading,
@@ -160,9 +166,7 @@ class ReadModel with ChangeNotifier {
     chapterTitleOf: (idx) =>
         (idx >= 0 && idx < chapters.length) ? chapters[idx].title : '',
     onLoadFailed: (idx, title, error, {required bool keptContent}) {
-      chapterLoadError = keptContent
-          ? '「$title」加载失败，已保留当前章节'
-          : '「$title」加载失败';
+      chapterLoadError = keptContent ? '「$title」加载失败，已保留当前章节' : '「$title」加载失败';
       notifyListeners();
     },
     onLoadSucceeded: () {
@@ -173,7 +177,8 @@ class ReadModel with ChangeNotifier {
     setNextPage: (page) => nextPage = page,
     clearPictures: pictureCache.clear,
     warmPictures: () => _pictures.warmAroundCurrent(),
-    restorePageIndex: (idx) => _lifecycle.restorePageIndex(idx),
+    restorePageIndex: (idx, {int? anchor}) =>
+        _lifecycle.restorePageIndex(idx, anchor: anchor),
     markNeedsPaint: _markNeedsPaint,
     notify: notifyListeners,
   );
@@ -236,6 +241,7 @@ class ReadModel with ChangeNotifier {
     chapters: _chapters,
     history: ReadingHistoryRepository.instance,
     ensureBookRow: _ensureBookRow,
+    anchorOf: _currentPageAnchor,
   );
   late final ReadingSessionLifecycle _lifecycle = ReadingSessionLifecycle(
     bookOf: () => book,
@@ -265,6 +271,7 @@ class ReadModel with ChangeNotifier {
     engine: _engine,
     chapters: _chapters,
     ensureBookRow: _ensureBookRow,
+    loadReplaceRules: ReplaceRuleRepository.instance.active,
     resolveSource: (b) async {
       book = b;
       await _source.ensureSource();
@@ -280,7 +287,8 @@ class ReadModel with ChangeNotifier {
     openChapterAt: (idx, jump, {bool showLoading = true}) =>
         openChapterAt(idx, jump, showLoading: showLoading),
     hasPageCache: (idx) => _diskWarm.hasPageCache(chapters, idx),
-    restorePageIndex: (idx) => _lifecycle.restorePageIndex(idx),
+    restorePageIndex: (idx, {int? anchor}) =>
+        _lifecycle.restorePageIndex(idx, anchor: anchor),
     messagePage: _messagePage,
     showLoading: _showTextLoading,
     bookOf: () => book,
@@ -453,6 +461,16 @@ class ReadModel with ChangeNotifier {
   /// Placeholder pages must never overwrite real reading progress.
   bool get _canPersistProgress =>
       curPage != null && !curPage!.isPlaceholder && curPage!.pages.isNotEmpty;
+
+  /// UTF-8 offset of the current page start, used as a reflow anchor.
+  int _currentPageAnchor() {
+    final b = book;
+    final page = curPage;
+    if (b == null || page == null || page.pages.isEmpty) return -1;
+    if (page.pages.every((p) => p.charStart == 0)) return -1;
+    final i = b.pageIndex.clamp(0, page.pages.length - 1);
+    return page.pages[i].charStart;
+  }
 
   /// Debounced progress save after page turns.
   void scheduleProgressSave({Duration delay = ReadingProgressStore.debounce}) {

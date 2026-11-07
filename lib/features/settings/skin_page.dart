@@ -3,6 +3,7 @@ import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/design/theme/theme_presets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:langhuan/design/components/pressable.dart';
 
 class Skin extends ConsumerWidget {
   const Skin({super.key});
@@ -48,7 +49,7 @@ class Skin extends ConsumerWidget {
                         color: selected
                             ? accent.withValues(alpha: .06)
                             : Colors.transparent,
-                        child: InkWell(
+                        child: Pressable(
                           onTap: () => data.selectTheme(i),
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),

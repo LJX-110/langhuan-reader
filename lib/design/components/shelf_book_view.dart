@@ -12,7 +12,6 @@ class ShelfBookView {
     required this.coverUrl,
     this.referer = '',
     this.progressLabel = '',
-    this.hasUpdate = false,
   });
 
   final String id;
@@ -21,7 +20,6 @@ class ShelfBookView {
   final String coverUrl;
   final String referer;
   final String progressLabel;
-  final bool hasUpdate;
 
   factory ShelfBookView.fromBook(Book book) {
     final chapter = book.readingChapter.trim();
@@ -32,7 +30,6 @@ class ShelfBookView {
       coverUrl: book.coverUrl,
       referer: book.bookUrl,
       progressLabel: chapter.isEmpty ? '未开始阅读' : '读到 · $chapter',
-      hasUpdate: book.hasUpdate != 0,
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/features/reader/menu/reader_chrome.dart';
+import 'package:langhuan/design/components/pressable.dart';
 
 /// Fixed tabs under the reader bottom panel.
 class ReaderBottomBar extends StatelessWidget {
@@ -85,7 +86,7 @@ class ReaderBottomBar extends StatelessWidget {
   }) {
     final color = active ? AppColors.accentOf(context) : chrome.fg;
     return Expanded(
-      child: InkWell(
+      child: Pressable(
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
         child: Padding(

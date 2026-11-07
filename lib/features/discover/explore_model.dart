@@ -44,6 +44,7 @@ class ExploreModel with ChangeNotifier {
   /// True after a page returns empty results — stops further load-more.
   bool noMore = false;
   int page = 1;
+  String _nextPageUrl = '';
   String? error;
 
   Future<void> ensureLoaded() async {
@@ -67,10 +68,9 @@ class ExploreModel with ChangeNotifier {
       final enabledFuture = model.enabledSources();
       final hydratedPrevFuture = prevUrl.isEmpty
           ? Future<BookSource?>.value(null)
-          : model.findByUrl(prevUrl).then<BookSource?>(
-              (v) => v,
-              onError: (_) => null,
-            );
+          : model
+                .findByUrl(prevUrl)
+                .then<BookSource?>((v) => v, onError: (_) => null);
       final all = await enabledFuture;
       exploreSources = all.where((s) => s.canExplore).toList()
         ..sort((a, b) => a.customOrder.compareTo(b.customOrder));
@@ -92,7 +92,8 @@ class ExploreModel with ChangeNotifier {
         orElse: () => exploreSources.first,
       );
       final hydratedPrev = await hydratedPrevFuture;
-      activeSource = (hydratedPrev != null &&
+      activeSource =
+          (hydratedPrev != null &&
               hydratedPrev.bookSourceUrl == meta.bookSourceUrl)
           ? hydratedPrev
           : (await model.findByUrl(meta.bookSourceUrl) ?? meta);
@@ -151,6 +152,7 @@ class ExploreModel with ChangeNotifier {
     if (refresh) {
       page = 1;
       noMore = false;
+      _nextPageUrl = '';
       // 保留旧列表直到新结果到达（切分类/换源不再闪空白，对齐文库）。
     }
 
@@ -158,7 +160,14 @@ class ExploreModel with ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      final hits = await _engine.explore(src, kind.url, page: page);
+      final result = await _engine.explorePage(
+        src,
+        kind.url,
+        page: page,
+        nextPageUrl: _nextPageUrl.isEmpty ? null : _nextPageUrl,
+      );
+      final hits = result.hits;
+      _nextPageUrl = result.hasNextPage ? result.nextPageUrl : '';
       if (hits.isEmpty) {
         if (page == 1) {
           // 刷新后为空：清掉旧列表，让空态/错误可见。
@@ -175,15 +184,14 @@ class ExploreModel with ChangeNotifier {
           added.add(item);
         }
         unawaited(_enrich(added));
+        if (!result.hasNextPage) noMore = true;
       }
     } catch (e) {
       AppLog.w('Explore', 'load books failed', error: e);
       if (e is TimeoutException) {
         error = '加载超时，请重试或换一个书源';
       } else if (e is SourceStageError) {
-        error = e.detail.isEmpty
-            ? '加载失败，请重试或换一个书源'
-            : '加载失败：${e.detail}';
+        error = e.detail.isEmpty ? '加载失败，请重试或换一个书源' : '加载失败：${e.detail}';
       } else {
         error = '加载失败，请重试或换一个书源';
       }

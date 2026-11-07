@@ -8,6 +8,7 @@ import 'package:langhuan/features/sources/engine/source_engine.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
 import 'package:langhuan/features/sources/util/url_sanitize.dart';
 import 'package:langhuan/features/sources/source_model.dart';
+import 'package:langhuan/design/components/loading_view.dart';
 
 /// 详情加载壳：先用搜索结果种子立即推页（点书零等待），
 /// 详情在页内加载（对齐文库 DetailLoaderPage 的"先到壳、内容后补"）。
@@ -72,9 +73,9 @@ class _DetailLoaderState extends ConsumerState<DetailLoader> {
         _busy = false;
       });
       // 替换为正式详情页（详情页自带 Scaffold）。
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => BookDetail(info)),
-      );
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => BookDetail(info)));
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -139,20 +140,11 @@ class _DetailLoaderState extends ConsumerState<DetailLoader> {
               ),
               if (seed.author.isNotEmpty) ...[
                 const SizedBox(height: 4),
-                Text(
-                  seed.author,
-                  style: TextStyle(fontSize: 12, color: muted),
-                ),
+                Text(seed.author, style: TextStyle(fontSize: 12, color: muted)),
               ],
               const SizedBox(height: 22),
               if (_busy) ...[
-                const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2.4),
-                ),
-                const SizedBox(height: 10),
-                Text('正在加载详情…', style: TextStyle(fontSize: 13, color: muted)),
+                const LoadingView(label: '正在加载详情…'),
               ] else ...[
                 Text(
                   _error ?? '获取详情失败，请稍后重试',

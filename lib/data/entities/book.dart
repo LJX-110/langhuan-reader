@@ -27,6 +27,11 @@ class Book {
   int chapterIndex;
   int pageIndex;
   double scrollOffset;
+
+  /// UTF-8 offset of the current page's first character in the chapter body.
+  /// `-1` means "no anchor"; used to survive font/margin relayouts.
+  int anchorOffset;
+
   int sortTime;
 
   /// Non-zero means shelf shows update badge.
@@ -66,6 +71,7 @@ class Book {
     this.chapterIndex = 0,
     this.pageIndex = 0,
     this.scrollOffset = 0,
+    this.anchorOffset = -1,
     this.sortTime = 0,
     this.hasUpdate = 0,
     this.updatedAt = '',
@@ -86,6 +92,7 @@ class Book {
       chapterIndex = 0,
       pageIndex = 0,
       scrollOffset = 0,
+      anchorOffset = -1,
       sortTime = 0,
       hasUpdate = 0,
       updatedAt = '',
@@ -105,6 +112,7 @@ class Book {
       chapterIndex = 0,
       pageIndex = 0,
       scrollOffset = 0,
+      anchorOffset = -1,
       sortTime = 0,
       hasUpdate = 0,
       updatedAt = '',

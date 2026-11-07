@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/features/settings/update_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:langhuan/design/components/loading_view.dart';
 
 /// 检查更新：检查 GitHub Releases，打开对应发布页（不在应用内下载/安装）。
 class UpdatePage extends StatefulWidget {
@@ -83,27 +84,21 @@ class _UpdatePageState extends State<UpdatePage> {
           if (_checking)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 32),
-              child: Center(child: CircularProgressIndicator()),
+              child: LoadingView.page(),
             )
           else if (_error.isNotEmpty) ...[
             Text(_error, style: TextStyle(fontSize: 13, color: primary)),
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerLeft,
-              child: OutlinedButton(
-                onPressed: _run,
-                child: const Text('重试'),
-              ),
+              child: OutlinedButton(onPressed: _run, child: const Text('重试')),
             ),
           ] else if (_info == null)
             Row(
               children: [
                 Icon(Icons.check_circle_outline, size: 18, color: accent),
                 const SizedBox(width: 8),
-                Text(
-                  '已是最新版本',
-                  style: TextStyle(fontSize: 14, color: primary),
-                ),
+                Text('已是最新版本', style: TextStyle(fontSize: 14, color: primary)),
               ],
             )
           else ...[

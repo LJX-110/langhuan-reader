@@ -1,7 +1,7 @@
 import 'package:extended_image/extended_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:langhuan/core/net/session_cookies.dart';
+import 'package:langhuan/core/net/native_cookie_cache.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 
 class PicWidget extends StatelessWidget {
@@ -49,7 +49,8 @@ class PicWidget extends StatelessWidget {
     final maxChars = (height / (fontSize * 1.25)).floor().clamp(1, 5);
     final chars = name.isEmpty
         ? const ['暂', '无', '封', '面']
-        : name.substring(0, name.length > maxChars ? maxChars : name.length)
+        : name
+              .substring(0, name.length > maxChars ? maxChars : name.length)
               .split('');
     return Container(
       width: width,
@@ -127,7 +128,7 @@ class PicWidget extends StatelessWidget {
     final refererValue =
         (ref.startsWith('http://') || ref.startsWith('https://'))
         ? ref
-        : (host.isEmpty ? 'https://www.google.com/' : 'https://$host/');
+        : (host.isEmpty ? '' : 'https://$host/');
     // Header values must stay ASCII — percent-encode CJK paths.
     final safeReferer = Uri.tryParse(refererValue)?.toString() ?? refererValue;
     final headers = <String, String>{
@@ -137,7 +138,7 @@ class PicWidget extends StatelessWidget {
       'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
       'Referer': safeReferer,
     };
-    final cookie = SessionCookies.headerForUrl(src);
+    final cookie = NativeCookieCache.headerForUrl(src);
     if (cookie != null && cookie.isNotEmpty) {
       headers['Cookie'] = cookie;
     }

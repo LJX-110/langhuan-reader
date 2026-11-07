@@ -3,7 +3,7 @@ import 'package:langhuan/design/brand/app_brand.dart';
 import 'package:langhuan/app/router/routes.dart';
 import 'package:langhuan/app/providers.dart';
 import 'package:langhuan/app/shell/main_shell.dart';
-import 'package:bot_toast/bot_toast.dart';
+import 'package:langhuan/design/components/feedback.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -33,8 +33,7 @@ class _MyAppState extends ConsumerState<MyApp> {
     return MaterialApp(
       title: AppBrand.name,
       home: const MainShell(),
-      builder: BotToastInit(),
-      navigatorObservers: [BotToastNavigatorObserver()],
+      scaffoldMessengerKey: rootMessengerKey,
       onGenerateRoute: Routes.router.generator,
       theme: model.theme,
     );

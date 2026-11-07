@@ -33,7 +33,8 @@ void main() {
           events.add('open:$idx:$jump:$showLoading');
           book.chapterIndex = idx;
         },
-        restorePageIndex: (idx) => events.add('restore:$idx'),
+        restorePageIndex: (idx, {int? anchor}) => events.add('restore:$idx'),
+        anchorOf: () => -1,
         toggleMenu: () {},
         showLoading: (text) async {},
         hideLoading: () {},

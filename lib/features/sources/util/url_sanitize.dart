@@ -4,7 +4,7 @@ import 'package:langhuan/features/sources/util/url_join.dart';
 
 /// 从规则输出里净化出可请求的 http(s) URL。
 ///
-/// 移植自旧 Dart 引擎 `AnalyzeUrl.sanitizeUrl`（去双引擎后保留的纯工具）：
+/// 与阅读内核 `AnalyzeUrl.sanitizeUrl` 语义一致的纯工具：
 /// 去掉未求值的 `{{…}}` JS 片段、回收嵌入的 http(s) 地址、拒绝 JS 语句
 /// 残留，并把相对路径按 [base] 拼成绝对地址；无法还原时返回空串。
 String sanitizeUrl(String input, {String base = ''}) {

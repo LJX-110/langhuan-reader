@@ -4,9 +4,10 @@ import 'package:langhuan/core/storage/local_store.dart';
 import 'package:langhuan/features/sources/repo/source_repo.dart';
 import 'package:langhuan/features/sources/sync/source_sync_plan.dart';
 import 'package:langhuan/app/providers.dart';
-import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:langhuan/design/components/feedback.dart';
+import 'package:langhuan/design/components/loading_view.dart';
 
 /// Private source repository: user supplies the URL, app ships nothing.
 class SourceRepoPage extends ConsumerStatefulWidget {
@@ -56,11 +57,11 @@ class _SourceRepoPageState extends ConsumerState<SourceRepoPage> {
   Future<void> _save({required bool sync}) async {
     final url = _urlCtrl.text.trim();
     if (url.isEmpty) {
-      BotToast.showText(text: '请先填写仓库地址');
+      showFeedback('请先填写仓库地址');
       return;
     }
     if (!_agreed) {
-      BotToast.showText(text: '请先确认书源使用声明');
+      showFeedback('请先确认书源使用声明');
       return;
     }
 
@@ -70,7 +71,7 @@ class _SourceRepoPageState extends ConsumerState<SourceRepoPage> {
       if (!sync) {
         SpUtil.putString(PrefsKeys.sourceRepoUrl, url);
         _saveToken();
-        BotToast.showText(text: '仓库地址已保存');
+        showFeedback('仓库地址已保存');
         return;
       }
 
@@ -137,8 +138,8 @@ class _SourceRepoPageState extends ConsumerState<SourceRepoPage> {
       _savedName = fetched.name;
       _lastSync = SpUtil.getString(PrefsKeys.sourceRepoLastSync, defValue: '');
 
-      BotToast.showText(
-        text: overwrite
+      showFeedback(
+        overwrite
             ? '已同步「${fetched.name}」：${stats.total} 个书源'
                   '（覆盖 ${stats.updated}，新增 ${stats.inserted}）'
             : '已同步「${fetched.name}」：${stats.total} 个书源'
@@ -146,16 +147,12 @@ class _SourceRepoPageState extends ConsumerState<SourceRepoPage> {
       );
     } catch (e) {
       if (imported) {
-        BotToast.showText(
-          text: '书源已写入，但同步后处理失败：${Redact.userMessage(e)}',
-        );
+        showError('书源已写入，但同步后处理失败：${Redact.userMessage(e)}');
         try {
           await ref.read(sourceModelProvider).load();
         } catch (_) {}
       } else {
-        BotToast.showText(
-          text: '同步失败，未写入任何书源：${Redact.userMessage(e)}',
-        );
+        showError('同步失败，未写入任何书源：${Redact.userMessage(e)}');
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -248,8 +245,7 @@ class _SourceRepoPageState extends ConsumerState<SourceRepoPage> {
               helperText: '公共仓库可留空；仅存本机',
               suffixIcon: IconButton(
                 tooltip: _obscureToken ? '显示' : '隐藏',
-                onPressed: () =>
-                    setState(() => _obscureToken = !_obscureToken),
+                onPressed: () => setState(() => _obscureToken = !_obscureToken),
                 icon: Icon(
                   _obscureToken
                       ? Icons.visibility_outlined
@@ -279,11 +275,7 @@ class _SourceRepoPageState extends ConsumerState<SourceRepoPage> {
                 child: ElevatedButton.icon(
                   onPressed: _busy ? null : () => _save(sync: true),
                   icon: _busy
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                      ? const LoadingView.inline()
                       : const Icon(Icons.sync),
                   label: Text(_busy ? '同步中…' : '保存并同步'),
                 ),

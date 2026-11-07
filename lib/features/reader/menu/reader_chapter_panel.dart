@@ -1,8 +1,8 @@
-import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 
 import 'package:langhuan/features/reader/menu/reader_chrome.dart';
 import 'package:langhuan/features/reader/read_model.dart';
+import 'package:langhuan/design/components/feedback.dart';
 
 /// Chapter slider shown when the menu first opens.
 class ReaderChapterPanel extends StatefulWidget {
@@ -28,11 +28,11 @@ class _ReaderChapterPanelState extends State<ReaderChapterPanel> {
     if (book == null) return;
     final next = book.chapterIndex + delta;
     if (next < 0) {
-      BotToast.showText(text: '已经是第一章');
+      showFeedback('已经是第一章');
       return;
     }
     if (next >= chapters.length) {
-      BotToast.showText(text: '已经是最后一章');
+      showFeedback('已经是最后一章');
       return;
     }
     await widget.readModel.openChapterAt(next, true);

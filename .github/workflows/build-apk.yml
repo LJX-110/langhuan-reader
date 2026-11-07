@@ -14,6 +14,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  engine-smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Prepare runner native libs
+        run: |
+          New-Item -ItemType Directory -Force engine/modules/quickjs/prebuilt/jvm/windows-x86_64 | Out-Null
+          Copy-Item engine/runner/native/legado_quickjs.dll engine/modules/quickjs/prebuilt/jvm/windows-x86_64/
+
+      - name: Runner smoke (offline rules)
+        run: |
+          cd engine
+          ./gradlew.bat -g "${{ runner.temp }}/gradle-home" :runner:run
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -29,6 +49,23 @@ jobs:
           flutter-version: '3.44.9'
           channel: stable
           cache: true
+
+      - name: Build engine AAR
+        run: |
+          chmod +x engine/gradlew
+          cd engine
+          ./gradlew -g "$RUNNER_TEMP/gradle-home" :runner:compileKotlin publishAllPublicationsToLocalRepo
+
+      - name: Build Rust pagination library
+        run: |
+          rustup target add aarch64-linux-android
+          NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"
+          export AR_aarch64_linux_android="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          cd native
+          cargo build --release --target aarch64-linux-android
+          cp target/aarch64-linux-android/release/libbook_pager.so \
+            ../android/app/src/main/jniLibs/arm64-v8a/libbook_pager.so
 
       - name: Write release keystore
         env:

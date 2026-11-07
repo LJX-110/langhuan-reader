@@ -5,6 +5,7 @@ import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
 import 'package:langhuan/features/sources/model/source_diagnostics.dart';
 import 'package:langhuan/features/sources/model/source_search_report.dart';
+import 'package:langhuan/design/components/loading_view.dart';
 
 /// Single-source test sheet: 搜索 → 详情 → 目录 → 正文（正文按需点）。
 ///
@@ -263,16 +264,17 @@ class _SourceTestSheetState extends State<_SourceTestSheet> {
                 const SizedBox(height: 8),
                 Text(
                   _error,
-                  style: TextStyle(fontSize: 12, color: theme.colorScheme.error),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.colorScheme.error,
+                  ),
                 ),
               ],
               const SizedBox(height: 12),
               if (_running == 'search')
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(8),
-                    child: CircularProgressIndicator(),
-                  ),
+                const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: LoadingView.page(),
                 ),
               if (_report != null) SourceSearchReportCard(report: _report!),
               if (_hits.isNotEmpty) ...[
@@ -411,11 +413,7 @@ class _StageCard extends StatelessWidget {
                 ),
               const Spacer(),
               if (running)
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+                const LoadingView.inline()
               else
                 TextButton(
                   onPressed: enabled ? onRun : null,
@@ -554,10 +552,7 @@ class SourceSearchReportCard extends StatelessWidget {
                 color: muted,
               ),
             ),
-            Text(
-              '查询参数已隐藏',
-              style: TextStyle(fontSize: 10, color: muted),
-            ),
+            Text('查询参数已隐藏', style: TextStyle(fontSize: 10, color: muted)),
           ],
           if (report.httpStatus > 0) ...[
             const SizedBox(height: 4),

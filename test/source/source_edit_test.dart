@@ -1,4 +1,3 @@
-import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,7 +15,7 @@ void main() {
     await SpUtil.getInstance();
   });
 
-  /// 大视口一次渲染整个长表单，避免滚动定位；并装好 BotToast。
+  /// 大视口一次渲染整个长表单，避免滚动定位。
   Future<void> pumpEditor(
     WidgetTester tester, {
     required BookSource source,
@@ -32,8 +31,6 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
-          builder: BotToastInit(),
-          navigatorObservers: [BotToastNavigatorObserver()],
           home: SourceEditPage(source: source, isNew: isNew, onSave: onSave),
         ),
       ),
@@ -53,11 +50,7 @@ void main() {
 
   testWidgets('编辑保存：字段回读正确且 raw_json 重建', (tester) async {
     BookSource? saved;
-    await pumpEditor(
-      tester,
-      source: sample(),
-      onSave: (s) async => saved = s,
-    );
+    await pumpEditor(tester, source: sample(), onSave: (s) async => saved = s);
 
     await tester.enterText(find.byKey(const ValueKey('edit-name')), '新名');
     await tester.enterText(

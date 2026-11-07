@@ -9,7 +9,7 @@ import 'package:langhuan/features/sources/engine/progress_mapper.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
 import 'package:langhuan/features/sources/util/book_id.dart';
-import 'package:bot_toast/bot_toast.dart';
+import 'package:langhuan/design/components/feedback.dart';
 
 /// Result of a successful source switch (caller reloads pages).
 class SourceSwitchResult {
@@ -56,7 +56,7 @@ class SourceSwitchService {
         bookName: book.name,
       );
       if (toc.isEmpty) {
-        BotToast.showText(text: '目标书源目录为空');
+        showError('目标书源目录为空');
         return null;
       }
       final mapped = ProgressMapper.map(
@@ -79,6 +79,8 @@ class SourceSwitchService {
       book.chapterIndex = mapped;
       book.pageIndex = 0;
       book.scrollOffset = 0;
+      // New TOC body: the old text anchor no longer describes this chapter.
+      book.anchorOffset = -1;
 
       await chapters.clearBook(book.id);
 
@@ -114,6 +116,7 @@ class SourceSwitchService {
         chapterIndex: book.chapterIndex,
         pageIndex: book.pageIndex,
         scrollOffset: book.scrollOffset,
+        anchorOffset: -1,
         readingChapter: readName,
       );
 
@@ -128,7 +131,7 @@ class SourceSwitchService {
       );
     } catch (e, st) {
       AppLog.e('Read', 'switchSource failed', error: e, stackTrace: st);
-      BotToast.showText(text: '换源失败：${Redact.userMessage(e)}');
+      showError('换源失败：${Redact.userMessage(e)}');
       return null;
     }
   }

@@ -6,8 +6,8 @@ import 'package:langhuan/features/sources/import/source_import_conflict.dart';
 import 'package:langhuan/features/sources/import/source_importer.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/model/source_search_report.dart';
-import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
+import 'package:langhuan/design/components/feedback.dart';
 
 class SourceModel with ChangeNotifier {
   final SourceRepository _sources = SourceRepository.instance;
@@ -63,7 +63,7 @@ class SourceModel with ChangeNotifier {
   Future<void> testSource(BookSource source) async {
     final report = await testSourceSearch(source, '测试');
     if (report == null) return;
-    BotToast.showText(text: '${report.label}：${report.summary}');
+    showFeedback('${report.label}：${report.summary}');
   }
 
   /// Single-source test search with a user-supplied keyword.
@@ -76,10 +76,10 @@ class SourceModel with ChangeNotifier {
   ) async {
     final key = keyword.trim();
     if (key.isEmpty) {
-      BotToast.showText(text: '请输入搜索关键词');
+      showFeedback('请输入搜索关键词');
       return null;
     }
-    BotToast.showText(text: '正在测试「${source.bookSourceName}」…');
+    showFeedback('正在测试「${source.bookSourceName}」…');
     final hydrated = await _sources.getByUrl(source.bookSourceUrl) ?? source;
     final report = await SourceEngine.instance.searchWithReport(
       hydrated,
@@ -191,7 +191,7 @@ class SourceModel with ChangeNotifier {
       throw StateError('请先确认书源使用声明');
     }
     if (parsed.sources.isEmpty) {
-      if (!silent) BotToast.showText(text: '未解析到有效书源');
+      if (!silent) showFeedback('未解析到有效书源');
       return const SourceUpsertStats(inserted: 0, updated: 0);
     }
     final usable = parsed.sources
@@ -202,10 +202,9 @@ class SourceModel with ChangeNotifier {
         .length;
     if (usable == 0) {
       if (!silent) {
-        BotToast.showText(
-          text:
-              '这是订阅源（RSS），不能用于搜书或阅读。'
-              '请从源仓库导入「书源」JSON（地址含 shuyuans/json）。',
+        showFeedback(
+          '这是订阅源（RSS），不能用于搜书或阅读。'
+          '请从源仓库导入「书源」JSON（地址含 shuyuans/json）。',
         );
       }
       return const SourceUpsertStats(inserted: 0, updated: 0);
@@ -216,8 +215,8 @@ class SourceModel with ChangeNotifier {
     );
     if (!silent) {
       await load();
-      BotToast.showText(
-        text: _importToast(
+      showFeedback(
+        _importToast(
           stats,
           skipped: parsed.skipped,
           duplicatesInBatch: parsed.duplicatesInBatch,

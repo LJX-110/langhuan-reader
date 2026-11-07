@@ -4,7 +4,9 @@ import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/data/repositories/chapter_repository.dart';
 import 'package:langhuan/data/entities/book.dart';
+import 'package:langhuan/features/sources/engine/source_engine.dart';
 import 'package:flutter/material.dart';
+import 'package:langhuan/design/components/loading_view.dart';
 
 /// Cache management against [reader.db] chapter bodies + page layouts.
 class CacheManager extends StatefulWidget {
@@ -21,6 +23,7 @@ class _CacheManagerState extends State<CacheManager> {
   bool _loading = true;
   int _pageCacheBytes = 0;
   int _bodyBytes = 0;
+  int _engineBytes = 0;
   List<_BookCacheRow> _rows = const [];
 
   @override
@@ -35,6 +38,7 @@ class _CacheManagerState extends State<CacheManager> {
       final books = await _books.getAll();
       final pageBytes = await _chapters.pageCacheBytes();
       final bodyBytes = await _chapters.bodyCacheBytes();
+      final engineBytes = await SourceEngine.instance.engineCacheBytes();
       final rows = <_BookCacheRow>[];
       for (final book in books) {
         final stats = await _chapters.bodyStats(book.id);
@@ -45,6 +49,7 @@ class _CacheManagerState extends State<CacheManager> {
         _rows = rows;
         _pageCacheBytes = pageBytes;
         _bodyBytes = bodyBytes;
+        _engineBytes = engineBytes;
         _loading = false;
       });
     } catch (e, st) {
@@ -70,6 +75,35 @@ class _CacheManagerState extends State<CacheManager> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(done ? '已清除封面缓存' : '封面缓存清理失败')));
+  }
+
+  Future<void> _clearEngineCache() async {
+    final ok = await _confirm(
+      '清除引擎缓存',
+      '将清除书源临时缓存与源变量；不会删除书架、阅读记录与登录状态。',
+      confirmLabel: '清除',
+    );
+    if (!ok || !mounted) return;
+    await SourceEngine.instance.clearEngineCache();
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已清除引擎缓存')));
+    await _reload();
+  }
+
+  Future<void> _clearLoginState() async {
+    final ok = await _confirm(
+      '清除登录状态',
+      '将清除所有书源的 Cookie / 登录态；下次访问需要重新登录。',
+      confirmLabel: '清除',
+    );
+    if (!ok || !mounted) return;
+    await SourceEngine.instance.clearCookies();
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已清除登录状态')));
   }
 
   Future<bool> _confirm(
@@ -182,7 +216,7 @@ class _CacheManagerState extends State<CacheManager> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const LoadingView.page()
           : RefreshIndicator(
               onRefresh: _reload,
               child: ListView(
@@ -231,6 +265,30 @@ class _CacheManagerState extends State<CacheManager> {
                     ),
                   ),
                   const SizedBox(height: 8),
+                  Card(
+                    child: ListTile(
+                      title: const Text('引擎缓存'),
+                      subtitle: Text(_formatBytes(_engineBytes)),
+                      trailing: IconButton(
+                        tooltip: '清除引擎缓存',
+                        icon: const Icon(Icons.cleaning_services_outlined),
+                        onPressed: _loading ? null : _clearEngineCache,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Card(
+                    child: ListTile(
+                      title: const Text('登录状态 / Cookie'),
+                      subtitle: const Text('清除所有书源的登录态；不会删除书架与阅读记录'),
+                      trailing: IconButton(
+                        tooltip: '清除登录状态',
+                        icon: const Icon(Icons.logout_outlined),
+                        onPressed: _loading ? null : _clearLoginState,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   Text('书籍章节缓存', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 8),
                   if (_rows.isEmpty)
@@ -264,7 +322,7 @@ class _CacheManagerState extends State<CacheManager> {
                                   Expanded(
                                     child: ClipRRect(
                                       borderRadius: BorderRadius.circular(4),
-                                      child: LinearProgressIndicator(
+                                      child: LoadingBar(
                                         value: progress,
                                         minHeight: 6,
                                         backgroundColor: AppColors.divider,
@@ -286,15 +344,9 @@ class _CacheManagerState extends State<CacheManager> {
                                           row.book.name,
                                         );
                                       } else if (action == 'retire') {
-                                        _retireBook(
-                                          row.book.id,
-                                          row.book.name,
-                                        );
+                                        _retireBook(row.book.id, row.book.name);
                                       } else {
-                                        _deleteBook(
-                                          row.book.id,
-                                          row.book.name,
-                                        );
+                                        _deleteBook(row.book.id, row.book.name);
                                       }
                                     },
                                     itemBuilder: (ctx) => const [

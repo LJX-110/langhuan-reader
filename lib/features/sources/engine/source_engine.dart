@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'package:langhuan/core/net/native_cookie_cache.dart';
 import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/core/utils/redact.dart';
 import 'package:langhuan/data/entities/book_info.dart';
@@ -11,6 +12,19 @@ import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
 import 'package:langhuan/features/sources/model/source_diagnostics.dart';
 import 'package:langhuan/features/sources/model/source_search_report.dart';
+
+/// 引擎列表页结果：条目 + 翻页游标。
+class BookListResult {
+  const BookListResult({
+    required this.hits,
+    this.hasNextPage = false,
+    this.nextPageUrl = '',
+  });
+
+  final List<SearchBook> hits;
+  final bool hasNextPage;
+  final String nextPageUrl;
+}
 
 /// 阅读内核的唯一入口 —— Legado 裁剪集（AAR）经 `langhuan/engine` 通道调用。
 ///
@@ -24,27 +38,13 @@ class SourceEngine {
 
   static const String _tag = 'Engine';
   static const MethodChannel _channel = MethodChannel('langhuan/engine');
+  static int _requestSeq = 0;
 
   /// 列表类调用（搜索 / 发现 / 详情 / 目录）的单请求上限。
   static const Duration _listTimeout = Duration(seconds: 20);
 
   /// 正文可跨多页拼合，给更宽的上限。
   static const Duration _contentTimeout = Duration(seconds: 60);
-
-  // ── 探测 ───────────────────────────────────────────────────────────────
-
-  static bool? _pinged;
-
-  /// 通道是否可用（未接线 / 旧包装返回 false）。仅用于诊断，不做兜底分流。
-  static Future<bool> ping() async {
-    if (_pinged != null) return _pinged!;
-    try {
-      _pinged = await _channel.invokeMethod<bool>('ping') == true;
-    } catch (_) {
-      _pinged = false;
-    }
-    return _pinged!;
-  }
 
   // ── 搜索 / 发现 ────────────────────────────────────────────────────────
 
@@ -53,27 +53,38 @@ class SourceEngine {
   Future<SourceSearchReport> searchWithReport(
     BookSource source,
     String key,
-    int page,
-  ) async {
+    int page, {
+    String? nextPageUrl,
+  }) async {
     final sw = Stopwatch()..start();
     try {
       final resp = await _call(
         'search',
-        {'source': sourceJson(source), 'keyword': key, 'page': page},
+        {
+          'source': _requireSourceJson(source),
+          'keyword': key,
+          'page': page,
+          'nextPageUrl': nextPageUrl ?? '',
+        },
         stage: 'search',
         field: 'searchUrl',
         rule: source.searchUrl,
       );
       sw.stop();
-      final hits = _hits(resp, source);
+      final result = _bookList(resp, source);
+      _rememberCookie(source.bookSourceUrl);
       return SourceSearchReport(
         sourceUrl: source.bookSourceUrl,
         sourceName: source.bookSourceName,
         keyword: key,
         page: page,
-        issue: hits.isEmpty ? SourceSearchIssue.noResult : SourceSearchIssue.none,
-        hits: hits,
+        issue: result.hits.isEmpty
+            ? SourceSearchIssue.noResult
+            : SourceSearchIssue.none,
+        hits: result.hits,
         elapsedMs: sw.elapsedMilliseconds,
+        hasNextPage: result.hasNextPage,
+        nextPageUrl: result.nextPageUrl,
       );
     } catch (e) {
       sw.stop();
@@ -91,17 +102,19 @@ class SourceEngine {
   }
 
   /// 发现列表（exploreUrl 分类）。失败抛 [SourceStageError]（stage: explore）。
-  Future<List<SearchBook>> explore(
+  Future<BookListResult> explorePage(
     BookSource source,
     String url, {
     int page = 1,
     String? nextPageUrl,
   }) async {
-    if (url.trim().isEmpty) return const [];
+    if (url.trim().isEmpty) {
+      return const BookListResult(hits: []);
+    }
     final resp = await _call(
       'explore',
       {
-        'source': sourceJson(source),
+        'source': _requireSourceJson(source),
         'key': url,
         'page': page,
         'nextPageUrl': nextPageUrl ?? '',
@@ -110,7 +123,8 @@ class SourceEngine {
       field: 'exploreUrl',
       rule: source.exploreUrl,
     );
-    return _hits(resp, source);
+    _rememberCookie(source.bookSourceUrl);
+    return _bookList(resp, source);
   }
 
   // ── 详情 / 目录 / 正文 ─────────────────────────────────────────────────
@@ -124,7 +138,7 @@ class SourceEngine {
     final resp = await _call(
       'bookInfo',
       {
-        'source': sourceJson(source),
+        'source': _requireSourceJson(source),
         'book': jsonEncode(
           buildBookJson(
             bookUrl: bookUrl,
@@ -156,6 +170,7 @@ class SourceEngine {
     }
     final resolvedBookUrl = (map['bookUrl'] ?? '').toString();
     AppLog.i(_tag, 'bookInfo ok "${source.bookSourceName}"');
+    _rememberCookie(resolvedBookUrl.isEmpty ? bookUrl : resolvedBookUrl);
     return BookInfo(
       name: (map['name'] ?? '').toString(),
       author: (map['author'] ?? '').toString(),
@@ -181,7 +196,7 @@ class SourceEngine {
     final resp = await _call(
       'toc',
       {
-        'source': sourceJson(source),
+        'source': _requireSourceJson(source),
         'book': jsonEncode(
           buildBookJson(
             bookUrl: baseBookUrl,
@@ -223,6 +238,7 @@ class SourceEngine {
       );
     }
     AppLog.i(_tag, 'toc ok "${source.bookSourceName}" chapters=${out.length}');
+    _rememberCookie(tocUrl);
     return out;
   }
 
@@ -242,7 +258,7 @@ class SourceEngine {
     final resp = await _call(
       'content',
       {
-        'source': sourceJson(source),
+        'source': _requireSourceJson(source),
         'book': jsonEncode(
           buildBookJson(
             bookUrl: baseBookUrl,
@@ -275,7 +291,98 @@ class SourceEngine {
       );
     }
     AppLog.i(_tag, 'content ok len=${text.length}');
+    _rememberCookie(chapterUrl);
     return text;
+  }
+
+  // ── 正文简繁转换（阅读内核的词典） ─────────────────────────────────────
+
+  /// 简体 ↔ 繁体；失败抛 [SourceStageError]（stage: convert）。
+  Future<String> convertChinese(
+    String text, {
+    required bool traditional,
+  }) async {
+    if (text.isEmpty) return text;
+    final resp = await _call(
+      'convertChinese',
+      {'text': text, 'traditional': traditional},
+      stage: 'convert',
+      field: 'text',
+    );
+    return (resp['text'] ?? text).toString();
+  }
+
+  // ── Cookie（统一由阅读内核的 SharedCookieStore 持有） ───────────────────
+
+  /// 当前 URL 的 Cookie；失败返回空串。成功后同步更新 [NativeCookieCache]。
+  Future<String> cookieHeader(String url) async {
+    try {
+      final resp = await _call(
+        'cookie',
+        {'url': url},
+        stage: 'cookie',
+        field: 'url',
+        rule: '',
+      );
+      final cookie = (resp['cookie'] ?? '').toString();
+      NativeCookieCache.put(url, cookie);
+      return cookie;
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /// 引擎私有缓存字节数（不含登录态）。
+  Future<int> engineCacheBytes() async {
+    try {
+      final resp = await _call(
+        'cacheStats',
+        const {},
+        stage: 'cache',
+        field: 'cache',
+        rule: '',
+      );
+      final bytes = resp['bytes'];
+      return bytes is num ? bytes.toInt() : 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// 清除引擎私有缓存（filesDir/legado + cacheDao + 内存源变量）。
+  Future<void> clearEngineCache() async {
+    try {
+      await _call(
+        'clearEngineCache',
+        const {},
+        stage: 'cache',
+        field: 'cache',
+        rule: '',
+      );
+    } catch (_) {
+      // 清理失败不阻塞 UI。
+    }
+  }
+
+  /// 清除全部登录态（持久 Cookie + 内存热层 + Dart 缓存）。
+  Future<void> clearCookies() async {
+    try {
+      await _call(
+        'clearCookies',
+        const {},
+        stage: 'cookie',
+        field: 'url',
+        rule: '',
+      );
+    } catch (_) {
+      // 清理失败不阻塞 UI；下次请求仍会走引擎。
+    }
+    NativeCookieCache.clear();
+  }
+
+  void _rememberCookie(String url) {
+    if (url.isEmpty) return;
+    unawaited(cookieHeader(url));
   }
 
   /// 详情页封面补抓（供书架 / 列表补封面）。失败返回 ''，不抛。
@@ -415,6 +522,18 @@ class SourceEngine {
   static String? sourceJson(BookSource source) =>
       source.rawJson.trim().isEmpty ? null : source.rawJson;
 
+  static String _requireSourceJson(BookSource source) {
+    final raw = sourceJson(source);
+    if (raw == null) {
+      throw const SourceStageError(
+        stage: 'source',
+        field: 'rawJson',
+        detail: '书源规则缺失，请重新导入或编辑保存',
+      );
+    }
+    return raw;
+  }
+
   /// 构造 Kotlin `Book` 可解码的 JSON（字段名对齐实体序列化名；
   /// 空值给 null，Kotlin 侧全部有默认值）。
   @visibleForTesting
@@ -441,7 +560,9 @@ class SourceEngine {
     'kind': kind.isEmpty ? null : kind,
     'intro': intro.isEmpty ? null : intro,
     'coverUrl': coverUrl.isEmpty ? null : coverUrl,
-    'latestChapterTitle': latestChapterTitle.isEmpty ? null : latestChapterTitle,
+    'latestChapterTitle': latestChapterTitle.isEmpty
+        ? null
+        : latestChapterTitle,
     'wordCount': wordCount.isEmpty ? null : wordCount,
     'totalChapterNum': totalChapterNum,
   };
@@ -454,15 +575,28 @@ class SourceEngine {
     String rule = '',
     Duration timeout = _listTimeout,
   }) async {
+    final requestId = '${_requestSeq++}';
+    final payload = <String, dynamic>{...args, 'requestId': requestId};
     final String? raw;
     try {
-      raw = await _channel.invokeMethod<String>(method, args).timeout(timeout);
-    } on PlatformException catch (e) {
+      raw = await _channel
+          .invokeMethod<String>(method, payload)
+          .timeout(timeout);
+    } on TimeoutException {
+      unawaited(_cancel(requestId));
       throw SourceStageError(
         stage: stage,
         field: field,
         rule: rule,
-        detail: e.message ?? '引擎调用失败',
+        detail: '请求超时（${timeout.inSeconds}s），已取消',
+      );
+    } on PlatformException catch (e) {
+      unawaited(_cancel(requestId));
+      throw SourceStageError(
+        stage: stage,
+        field: field,
+        rule: rule,
+        detail: _platformDetail(e),
       );
     } on MissingPluginException {
       throw SourceStageError(
@@ -471,13 +605,9 @@ class SourceEngine {
         rule: rule,
         detail: '阅读内核不可用（通道未接线）',
       );
-    } on TimeoutException {
-      throw SourceStageError(
-        stage: stage,
-        field: field,
-        rule: rule,
-        detail: '请求超时（${timeout.inSeconds}s）',
-      );
+    } catch (e) {
+      unawaited(_cancel(requestId));
+      rethrow;
     }
     Map<String, dynamic>? decoded;
     try {
@@ -505,29 +635,53 @@ class SourceEngine {
     return decoded;
   }
 
-  List<SearchBook> _hits(Map<String, dynamic> resp, BookSource source) {
-    final raw = resp['hits'];
-    if (raw is! List) return const [];
-    final out = <SearchBook>[];
-    for (final item in raw) {
-      if (item is! Map) continue;
-      final bookUrl = (item['bookUrl'] ?? '').toString().trim();
-      if (bookUrl.isEmpty) continue;
-      out.add(
-        SearchBook(
-          name: (item['name'] ?? '').toString(),
-          author: (item['author'] ?? '').toString(),
-          kind: (item['kind'] ?? '').toString(),
-          lastChapter: (item['lastChapter'] ?? '').toString(),
-          intro: (item['intro'] ?? '').toString(),
-          coverUrl: (item['coverUrl'] ?? '').toString(),
-          bookUrl: bookUrl,
-          sourceUrl: source.bookSourceUrl,
-          sourceName: source.bookSourceName,
-        ),
-      );
+  /// 结构化错误码 → 用户可行动的短文案（细节只进日志）。
+  static String _platformDetail(PlatformException e) => switch (e.code) {
+    'engine_busy' => '引擎繁忙，请稍后重试',
+    'engine_cancelled' => '请求已取消',
+    'engine_timeout' => '请求超时，已取消',
+    'engine_network' => '网络不可用，检查网络或换个书源',
+    'bad_args' => '请求参数不完整',
+    _ => e.message ?? '引擎调用失败',
+  };
+
+  static Future<void> _cancel(String requestId) async {
+    try {
+      await _channel.invokeMethod<bool>('cancel', {'requestId': requestId});
+    } catch (_) {
+      // Best effort: timeout already reported to the caller.
     }
-    return out;
+  }
+
+  BookListResult _bookList(Map<String, dynamic> resp, BookSource source) {
+    final raw = resp['hits'];
+    final hits = <SearchBook>[];
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is! Map) continue;
+        final bookUrl = (item['bookUrl'] ?? '').toString().trim();
+        if (bookUrl.isEmpty) continue;
+        hits.add(
+          SearchBook(
+            name: (item['name'] ?? '').toString(),
+            author: (item['author'] ?? '').toString(),
+            kind: (item['kind'] ?? '').toString(),
+            wordCount: (item['wordCount'] ?? '').toString(),
+            lastChapter: (item['lastChapter'] ?? '').toString(),
+            intro: (item['intro'] ?? '').toString(),
+            coverUrl: (item['coverUrl'] ?? '').toString(),
+            bookUrl: bookUrl,
+            sourceUrl: source.bookSourceUrl,
+            sourceName: source.bookSourceName,
+          ),
+        );
+      }
+    }
+    return BookListResult(
+      hits: hits,
+      hasNextPage: resp['hasNextPage'] == true,
+      nextPageUrl: (resp['nextPageUrl'] ?? '').toString(),
+    );
   }
 
   static String _detailOf(Object e) {
@@ -553,9 +707,7 @@ class SourceEngine {
     if (detail.contains('未接线') || detail.contains('格式异常')) {
       return SourceSearchIssue.unknown;
     }
-    if (d.contains('url') ||
-        detail.contains('规则') ||
-        detail.contains('不能为空')) {
+    if (d.contains('url') || detail.contains('规则') || detail.contains('不能为空')) {
       return SourceSearchIssue.incompatibleRule;
     }
     return SourceSearchIssue.parse;

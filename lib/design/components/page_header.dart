@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:langhuan/design/tokens/app_colors.dart';
+import 'package:langhuan/design/components/pressable.dart';
 
 /// One-line page header: title on the left, actions on the right.
 class PageHeader extends StatelessWidget {
@@ -64,7 +65,7 @@ class PaperSearchEntry extends StatelessWidget {
     return Material(
       color: surface,
       borderRadius: BorderRadius.circular(8),
-      child: InkWell(
+      child: Pressable(
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Container(

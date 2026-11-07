@@ -6,7 +6,7 @@ import 'package:langhuan/features/reader/model/source_switch_service.dart';
 import 'package:langhuan/features/sources/source_model.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
-import 'package:bot_toast/bot_toast.dart';
+import 'package:langhuan/design/components/feedback.dart';
 
 /// Active book source resolution + download / switch orchestration.
 class ReaderSourceCoordinator {
@@ -104,7 +104,7 @@ class ReaderSourceCoordinator {
     final b = bookOf();
     if (b == null) return false;
     if (Book.isLocalSource(b.sourceUrl)) {
-      BotToast.showText(text: '本地书不支持换源');
+      showFeedback('本地书不支持换源');
       return false;
     }
     final chapters = chaptersOf();
@@ -140,9 +140,9 @@ class ReaderSourceCoordinator {
         final name = (mapped >= 0 && mapped < updated.length)
             ? updated[mapped].title
             : '';
-        BotToast.showText(text: '已切换至「${source.bookSourceName}」，定位到：$name');
+        showFeedback('已切换至「${source.bookSourceName}」，定位到：$name');
       } else {
-        BotToast.showText(text: '已切换至「${source.bookSourceName}」');
+        showFeedback('已切换至「${source.bookSourceName}」');
       }
       notify();
       return true;

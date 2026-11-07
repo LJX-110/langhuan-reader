@@ -5,7 +5,7 @@ import 'package:langhuan/features/reader/model/text_paginator.dart';
 
 /// In-page loading / error placeholders drawn as normal [ReadPage]s.
 ///
-/// No BotToast overlay — the reader canvas paints these like chapter content.
+/// No floating overlay — the reader canvas paints these like chapter content.
 class ReaderLoadingPresenter {
   ReaderLoadingPresenter({
     required this.paginator,

@@ -4,12 +4,14 @@ import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/data/repositories/chapter_repository.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/entities/chapter_toc_entry.dart';
+import 'package:langhuan/data/entities/replace_rule.dart';
 import 'package:langhuan/features/sources/engine/source_engine.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
 import 'package:langhuan/features/sources/util/book_id.dart';
+import 'package:langhuan/features/sources/util/text_clean.dart';
 import 'package:langhuan/features/sources/util/title_format.dart';
-import 'package:bot_toast/bot_toast.dart';
+import 'package:langhuan/design/components/feedback.dart';
 
 /// Remote TOC fetch + local catalog persistence for the active book.
 class TocService {
@@ -18,18 +20,20 @@ class TocService {
     required this.chapters,
     required this.ensureBookRow,
     required this.resolveSource,
+    required this.loadReplaceRules,
   });
 
   final SourceEngine engine;
   final ChapterRepository chapters;
   final Future<void> Function(Book book) ensureBookRow;
   final Future<BookSource?> Function(Book book) resolveSource;
+  final Future<List<ReplaceRule>> Function() loadReplaceRules;
 
   /// Fetch TOC from the active book source.
   Future<List<ChapterTocEntry>?> fetchRemote(Book book) async {
     final source = await resolveSource(book);
     if (source == null) {
-      BotToast.showText(text: '书源不存在：${book.originName}');
+      showError('书源不存在：${book.originName}');
       return null;
     }
     final tocUrl = book.tocUrl.isNotEmpty
@@ -50,7 +54,7 @@ class TocService {
         bookName: book.name,
       );
       AppLog.i('Read', 'fetchRemoteToc got ${list.length} chapters');
-      return mapChapters(book, list);
+      return mapChapters(book, list, rules: await _activeRules());
     } catch (e, st) {
       AppLog.e(
         'Read',
@@ -58,8 +62,19 @@ class TocService {
         error: e,
         stackTrace: st,
       );
-      BotToast.showText(text: '目录加载失败：${Redact.userMessage(e)}');
+      showError('目录加载失败：${Redact.userMessage(e)}');
       return null;
+    }
+  }
+
+  /// Title rules must never block a TOC refresh; a failed read just means
+  /// "no purification" for this fetch.
+  Future<List<ReplaceRule>> _activeRules() async {
+    try {
+      return await loadReplaceRules();
+    } catch (e) {
+      AppLog.w('Read', 'replace rules load failed', error: e);
+      return const [];
     }
   }
 
@@ -71,14 +86,17 @@ class TocService {
   @visibleForTesting
   static List<ChapterTocEntry> mapChapters(
     Book book,
-    List<SourceChapter> list,
-  ) {
+    List<SourceChapter> list, {
+    List<ReplaceRule> rules = const [],
+  }) {
     var currentVolume = '';
     var volumeOrd = -1;
     final entries = <ChapterTocEntry>[];
     for (final c in list) {
       if (c.isVolume) {
-        final name = normalizeTitle(c.name);
+        final name = normalizeTitle(
+          applyReplaceRules(c.name, rules, scope: ReplaceRuleScope.title),
+        );
         if (name.isEmpty) continue;
         currentVolume = name;
         volumeOrd++;
@@ -90,7 +108,10 @@ class TocService {
           id: makeChapterId(book.id, c.url),
           // 空章节名兜底「第 N 章」：个别源规则抓歪 / 字段缺失时，
           // 目录、阅读页与书签都不会出现空白标题。
-          title: displayReadingTitle(c.name, index: entries.length),
+          title: displayReadingTitle(
+            applyReplaceRules(c.name, rules, scope: ReplaceRuleScope.title),
+            index: entries.length,
+          ),
           url: c.url,
           hasBody: false,
           ord: entries.length,

@@ -22,4 +22,7 @@ interface CookieDao {
 
     @Query("delete from cookies where url like '%|%'")
     suspend fun deleteOkHttp()
+
+    @Query("delete from cookies")
+    suspend fun deleteAll()
 }

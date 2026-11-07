@@ -58,7 +58,7 @@ class _Harness {
       setNextPage: (page) => nextPage = page,
       clearPictures: () => picturesCleared++,
       warmPictures: () {},
-      restorePageIndex: (idx) => book.pageIndex = idx,
+      restorePageIndex: (idx, {int? anchor}) => book.pageIndex = idx,
       markNeedsPaint: () {},
       notify: () => notifyCount++,
     );

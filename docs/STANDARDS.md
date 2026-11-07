@@ -17,11 +17,12 @@
 ## 二、设计标准（必须）
 
 1. **动效只取 `AppMotion`**（`lib/design/motion.dart`）：contact 120 / enter 420 / exit 320 / settle 280 / coverFlight·coverReturn；曲线 ease/retract/settleCurve；spring；jelly。同一交互各页时长必须一致。
-2. **反馈只走 `showFeedback`**（`lib/design/components/feedback.dart`）：新消息替换旧的；**删除类操作优先"可撤销"**（actionLabel: 撤销）。BotToast 仅保留轻提示（非关键路径）。
+2. **反馈只走 `showFeedback` / `showError`**（`lib/design/components/feedback.dart`）：新消息替换旧的；无 context 时落到全局 `scaffoldMessengerKey`；错误用 `showError`（停留 4s），异常信息先过 `Redact.userMessage`。**删除类操作优先"可撤销"**（actionLabel: 撤销）。不得再引入其他 toast 库。
 3. **主题双色都要有体现**：`accentOf`=主可见强调（标题/CTA/选中）；`companionOf`=中面积点缀（下划线、进度、标签、边线、图标点缀）。禁止只用一色；文字/图标必须用校正色，不得直接用原始亮色。
 4. **弹层两种容器**：列表选择/表单 = sheet；就地操作 = 生长菜单（后续统一）。确认框统一：取消左、危险动作右、危险色 FilledButton。
 5. **顶栏两种**：主标签页 = `PageHeader`；二级页 = AppBar（统一左对齐，标题 16）。不再新增第三种。
-6. **空态/加载**：目标统一为 `empty_state` / `skeleton` 组件（待建，见批次 7）；在此之前不得新增"自绘空态"。
+6. **空态/加载**：空态用 `empty_state.dart`；加载只用 `loading_view.dart` 的 `LoadingView` / `LoadingBar`，页面内不得直接写 `CircularProgressIndicator` / `LinearProgressIndicator`。
+7. **按压**：只走 `pressable.dart` 的 `Pressable`（轻缩放 + selectionClick，无水波纹）；页面内不得直接写 `InkWell`。
 
 ## 三、交互标准（必须）
 
@@ -46,7 +47,7 @@
 1. 命名清晰、结构简洁、注释讲意图；不新增"可能用到"的抽象。
 2. 页面/组件不得硬编码 `Duration`（除帧对齐的 16ms 类）、主题色、长段说明文案（防 AI 味：说明性小字只留功能必要信息）。
 3. 异步一律 `unawaited(...)` 显式标注 fire-and-forget；跨页校正走 provider/notifier，不靠回调链。
-4. 引擎边界：`lib/features/sources/**`（Dart 引擎）与 `engine/**`（原生引擎）互不引用 UI；原生引擎切换完成后 Dart 引擎降级为回退。
+4. 引擎边界：`lib/features/sources/engine` 只做 `SourceEngine` 通道适配；`engine/**` 是唯一书源内核。Dart 不得再实现第二套规则/JS/HTTP 引擎，也不设回落分支。
 5. 测试口径：每个修复批次 `flutter analyze` 0 + 全量 `flutter test --concurrency=1`；引擎侧 `runner` 冒烟。
 
 ## 六、待收敛清单（追踪）

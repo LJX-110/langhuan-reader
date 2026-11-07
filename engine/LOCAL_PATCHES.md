@@ -20,9 +20,10 @@
 
 ## runner 依赖（宿主验证）
 
-- `runner/native/legado_quickjs.dll`：从官方桌面便携包提取（不随仓库分发）：
+- `runner/native/legado_quickjs.dll`：从官方桌面便携包提取，**仓库保留这一份供 CI 冒烟**：
   `https://github.com/huajideshutiao/legado/releases/download/3.26.110111/windows_x64_portable.zip`
   → 解压 `legado-portable-windows-x64/app/resources/legado_quickjs.dll` 到 `engine/runner/native/`。
+  CI 会把它复制到 `engine/modules/quickjs/prebuilt/jvm/windows-x86_64/` 再跑 `:runner:run`。
 - 跑法：`gradlew -g E:\WorkSpace\Novel\.gradle-home :runner:run`
 
 ## 环境备注

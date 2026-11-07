@@ -23,3 +23,9 @@ class OpenChapters {
   final String name;
   OpenChapters(this.name);
 }
+
+/// Tags created / renamed / deleted or a book's tag set changed.
+/// Shelf listens to refresh its tag filter without a full reload.
+class ShelfTagsChanged {
+  ShelfTagsChanged();
+}

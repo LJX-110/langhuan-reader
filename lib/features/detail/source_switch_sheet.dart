@@ -10,10 +10,11 @@ import 'package:langhuan/features/sources/model/source_groups.dart';
 import 'package:langhuan/features/sources/model/source_search_report.dart';
 import 'package:langhuan/features/sources/util/text_clean.dart';
 import 'package:langhuan/app/providers.dart';
-import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:langhuan/core/storage/prefs_keys.dart';
+import 'package:langhuan/design/components/feedback.dart';
+import 'package:langhuan/design/components/loading_view.dart';
 
 /// Bottom sheet: search enabled sources for the current book and switch.
 ///
@@ -138,10 +139,7 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
   /// 换源搜索，但书源本身和它的本地规则都保留，随时可在书源管理里启用。
   Future<void> _disableSource(_Candidate c) async {
     try {
-      await SourceRepository.instance.setEnabled(
-        c.source.bookSourceUrl,
-        false,
-      );
+      await SourceRepository.instance.setEnabled(c.source.bookSourceUrl, false);
       if (!mounted) return;
       setState(() {
         candidates.removeWhere(
@@ -178,15 +176,13 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
       });
       return;
     }
-    final key = book.name.trim().isNotEmpty
-        ? book.name.trim()
-        : book.author.trim();
+    final key = book.name.trim();
     if (key.isEmpty) {
       if (!mounted) return;
       setState(() {
         loading = false;
         _sweeping = false;
-        error = '书名未知，无法搜索其它书源';
+        error = '书名未知，无法精确搜索其它书源';
       });
       return;
     }
@@ -260,7 +256,7 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
         // searchWithReport never throws and tells失败种类 apart from 无匹配.
         final report = await _engine.searchWithReport(s, key, 1);
         final matched = report.hits
-            .where((h) => _isLikelyMatch(book, h, author))
+            .where((h) => _isPreciseMatch(book, h, author))
             .map((h) => _Candidate(s, h))
             .toList();
         switch (switchOutcomeOf(report, matched.length)) {
@@ -285,7 +281,6 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
         for (final p in parts) {
           candidates.addAll(p);
         }
-        _sortCandidates(candidates, book, author);
         _noMatch = noMatch;
         _failed
           ..clear()
@@ -308,19 +303,6 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
                   : '未找到其它可用书源')
             : null;
       }
-    });
-  }
-
-  /// 候选排序：书名匹配 > 作者匹配 > 书源名（增量刷新与最终排序共用）。
-  void _sortCandidates(List<_Candidate> list, Book book, String author) {
-    list.sort((a, b) {
-      final an = _nameScore(a.hit.name, book.name);
-      final bn = _nameScore(b.hit.name, book.name);
-      if (an != bn) return an - bn;
-      final aa = _authorScore(a.hit.author, author);
-      final ba = _authorScore(b.hit.author, author);
-      if (aa != ba) return aa - ba;
-      return a.source.bookSourceName.compareTo(b.source.bookSourceName);
     });
   }
 
@@ -383,42 +365,10 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
     );
   }
 
-  /// Strict-ish match: same/similar title; author only when both sides have one.
-  bool _isLikelyMatch(Book book, SearchBook hit, String bookAuthor) {
-    final bn = book.name.trim();
-    final hn = hit.name.trim();
-    if (bn.isEmpty || hn.isEmpty) return false;
-    // Name must overlap (exact, contains, or strip spaces).
-    final bnN = bn.replaceAll(RegExp(r'\s+'), '');
-    final hnN = hn.replaceAll(RegExp(r'\s+'), '');
-    final nameOk =
-        bn == hn || bnN == hnN || bnN.contains(hnN) || hnN.contains(bnN);
-    if (!nameOk) return false;
-
-    final ha = cleanAuthor(hit.author);
-    if (bookAuthor.isEmpty || ha.isEmpty) return true;
-    return ha.contains(bookAuthor) ||
-        bookAuthor.contains(ha) ||
-        ha == bookAuthor;
-  }
-
-  int _nameScore(String hit, String book) {
-    if (hit == book) return 0;
-    final a = hit.replaceAll(RegExp(r'\s+'), '');
-    final b = book.replaceAll(RegExp(r'\s+'), '');
-    if (a == b) return 1;
-    if (a.contains(b) || b.contains(a)) return 2;
-    return 3;
-  }
-
-  int _authorScore(String hit, String book) {
-    if (book.isEmpty) return 1;
-    final h = cleanAuthor(hit);
-    if (h.isEmpty) return 2;
-    if (h == book) return 0;
-    if (h.contains(book) || book.contains(h)) return 1;
-    return 3;
-  }
+  /// Precise match: same title (whitespace-insensitive) and, when both sides
+  /// have an author, the same author. Avoids picking same-name remakes.
+  bool _isPreciseMatch(Book book, SearchBook hit, String bookAuthor) =>
+      isPreciseSourceHit(book.name, bookAuthor, hit);
 
   Future<void> _onPick(_Candidate c) async {
     final book = _book;
@@ -436,7 +386,7 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
       widget.onSwitched?.call(widget.readModel.book ?? book);
       Navigator.pop(context, true);
     } else {
-      BotToast.showText(text: '换源失败');
+      showError('换源失败');
     }
   }
 
@@ -606,22 +556,7 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
               Divider(height: 1, color: _divider),
               Expanded(
                 child: loading
-                    ? const Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            CircularProgressIndicator(strokeWidth: 2.5),
-                            SizedBox(height: 12),
-                            Text(
-                              '正在搜索可用书源…',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
+                    ? const LoadingView.page(label: '正在搜索可用书源…')
                     : _visibleCandidates.isEmpty
                     ? Center(
                         child: Padding(
@@ -686,13 +621,7 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
                                     padding: EdgeInsets.symmetric(
                                       horizontal: 6,
                                     ),
-                                    child: SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    ),
+                                    child: LoadingView.inline(),
                                   )
                                 else if (isCurrent)
                                   Text(
@@ -772,6 +701,18 @@ class _SourceSwitchSheetState extends ConsumerState<SourceSwitchSheet> {
 
 /// Outcome of one source during a 换源 sweep.
 enum SwitchSourceOutcome { hit, noMatch, failed }
+
+/// 换源精搜：书名去空白后完全一致；双方都有作者时作者也须一致。
+/// 同名不同书（续写 / 重制）不会被当作换源候选。
+bool isPreciseSourceHit(String bookName, String bookAuthor, SearchBook hit) {
+  final bn = bookName.replaceAll(RegExp(r'\s+'), '');
+  final hn = hit.name.replaceAll(RegExp(r'\s+'), '');
+  if (bn.isEmpty || hn.isEmpty || bn != hn) return false;
+  final ba = cleanAuthor(bookAuthor);
+  final ha = cleanAuthor(hit.author);
+  if (ba.isEmpty || ha.isEmpty) return true;
+  return ba == ha;
+}
 
 /// Classify a switch-search report for the status row.
 ///

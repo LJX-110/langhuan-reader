@@ -13,6 +13,8 @@ import 'package:langhuan/features/search/search_model.dart';
 import 'package:langhuan/features/sources/model/search_book.dart';
 import 'package:langhuan/features/sources/model/source_search_report.dart';
 import 'package:langhuan/features/sources/source_test_panel.dart';
+import 'package:langhuan/design/components/loading_view.dart';
+import 'package:langhuan/design/components/pressable.dart';
 
 class Search extends ConsumerStatefulWidget {
   final String type;
@@ -223,7 +225,7 @@ class _SearchState extends ConsumerState<Search> {
                   for (final value in model.searchHistory)
                     Material(
                       color: Colors.transparent,
-                      child: InkWell(
+                      child: Pressable(
                         borderRadius: BorderRadius.circular(16),
                         onTap: () {
                           controller.text = value;
@@ -283,7 +285,7 @@ class _SearchState extends ConsumerState<Search> {
               ),
               const Spacer(),
               if (model.failures.isNotEmpty)
-                InkWell(
+                Pressable(
                   onTap: () => _showDiagnostics(context, model),
                   child: Text(
                     _statusLabel(model),
@@ -385,9 +387,7 @@ class _SearchState extends ConsumerState<Search> {
               child: OutlinedButton.icon(
                 onPressed: () => _showDiagnostics(context, model),
                 icon: const Icon(Icons.troubleshoot, size: 18),
-                label: Text(
-                  model.failures.isEmpty ? '查看搜索诊断' : '查看诊断并重试',
-                ),
+                label: Text(model.failures.isEmpty ? '查看搜索诊断' : '查看诊断并重试'),
               ),
             ),
           ],
@@ -576,19 +576,12 @@ class _SearchState extends ConsumerState<Search> {
                                         padding: EdgeInsets.symmetric(
                                           horizontal: 12,
                                         ),
-                                        child: SizedBox(
-                                          width: 14,
-                                          height: 14,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        ),
+                                        child: LoadingView.inline(),
                                       )
                                     else if (report.failed)
                                       TextButton(
-                                        onPressed: () => model.retrySource(
-                                          report.sourceUrl,
-                                        ),
+                                        onPressed: () =>
+                                            model.retrySource(report.sourceUrl),
                                         child: const Text(
                                           '重试',
                                           style: TextStyle(fontSize: 12),
@@ -654,7 +647,7 @@ class _SearchState extends ConsumerState<Search> {
         : (item.sourceName.isEmpty ? '书源' : item.sourceName);
     return Material(
       color: Colors.transparent,
-      child: InkWell(
+      child: Pressable(
         onTap: () {
           // 立即推壳：详情在页内加载（不再等待网络；失败可在页内重试）。
           final seed = SearchBook(

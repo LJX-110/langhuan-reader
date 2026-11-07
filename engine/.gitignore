@@ -46,7 +46,9 @@ hs_err_pid*.log
 replay_pid*.log
 
 # 宿主验证 runner 的 quickjs 原生库（从官方桌面便携包提取，见 LOCAL_PATCHES.md）
-runner/native/
+# CI 冒烟只保留 runner 所需的一份 DLL；其余本地验证文件不入库。
+runner/native/*
+!runner/native/legado_quickjs.dll
 
 # quickjs JVM 预编译库（从官方桌面便携包提取，见 LOCAL_PATCHES.md）
 modules/quickjs/prebuilt/

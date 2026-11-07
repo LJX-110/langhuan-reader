@@ -13,6 +13,7 @@ import 'package:langhuan/features/discover/explore_source_picker_sheet.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:langhuan/design/components/pressable.dart';
 
 /// Bottom-tab discovery page driven by book-source `exploreUrl` / `ruleExplore`.
 class ExplorePage extends ConsumerStatefulWidget {
@@ -151,7 +152,7 @@ class _ExploreSourceTrigger extends StatelessWidget {
         child: Material(
           color: accentSoft,
           borderRadius: BorderRadius.circular(8),
-          child: InkWell(
+          child: Pressable(
             borderRadius: BorderRadius.circular(8),
             onTap: () {
               final sources = List.of(model.exploreSources);
@@ -273,10 +274,8 @@ class _KindTab extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      child: InkWell(
+      child: Pressable(
         onTap: onTap,
-        splashColor: activeColor.withValues(alpha: .06),
-        highlightColor: Colors.transparent,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
@@ -518,7 +517,7 @@ class _BookRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
-      child: InkWell(
+      child: Pressable(
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.fromLTRB(20, 11, 20, 11),

@@ -13,11 +13,13 @@ import 'package:langhuan/core/platform/system_ui.dart';
 import 'package:langhuan/data/repositories/source_repository.dart';
 import 'package:langhuan/features/detail/source_switch_sheet.dart';
 import 'package:langhuan/features/sources/engine/source_engine.dart';
+import 'package:langhuan/features/tags/tag_editor_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:readmore/readmore.dart';
 import 'package:langhuan/core/storage/prefs_keys.dart';
+import 'package:langhuan/design/components/pressable.dart';
 
 /// 书籍详情（微信读书风格）
 class BookDetail extends ConsumerStatefulWidget {
@@ -311,7 +313,7 @@ class _BookDetailState extends ConsumerState<BookDetail> {
               if (trailing != null)
                 Material(
                   color: Colors.transparent,
-                  child: InkWell(
+                  child: Pressable(
                     onTap: onTrailingTap,
                     borderRadius: BorderRadius.circular(6),
                     child: trailing,
@@ -371,7 +373,7 @@ class _BookDetailState extends ConsumerState<BookDetail> {
   Widget _catalogBody() {
     final latest = info.latestChapter.trim();
     final time = info.updatedAt.trim();
-    return InkWell(
+    return Pressable(
       onTap: _openRead,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
@@ -515,6 +517,11 @@ class _BookDetailState extends ConsumerState<BookDetail> {
               },
             ),
             _barIconBtn(
+              icon: Icons.sell_outlined,
+              label: '标签',
+              onTap: () => TagEditorSheet.show(context, book),
+            ),
+            _barIconBtn(
               icon: Icons.swap_horiz,
               label: '换源',
               onTap: () async {
@@ -611,7 +618,7 @@ class _BookDetailState extends ConsumerState<BookDetail> {
   }) {
     return Material(
       color: Colors.transparent,
-      child: InkWell(
+      child: Pressable(
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: SizedBox(

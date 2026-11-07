@@ -1,4 +1,3 @@
-import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 
 import 'package:langhuan/core/storage/local_store.dart';
@@ -8,6 +7,8 @@ import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/features/reader/menu/reader_chrome.dart';
 import 'package:langhuan/features/reader/model/download_center.dart';
 import 'package:langhuan/features/reader/read_model.dart';
+import 'package:langhuan/design/components/feedback.dart';
+import 'package:langhuan/design/components/loading_view.dart';
 
 /// 缓存面板：离线下载的队列状态、暂停 / 继续、失败重试、清除缓存与
 /// 「仅 WiFi」。机制对齐 Wenku8 的离线下载：一次跑一本书、暂停保留进度、
@@ -82,7 +83,7 @@ class _ReaderDownloadPanelState extends State<ReaderDownloadPanel> {
     final book = model.book;
     if (book == null) return;
     if (model.chapters.isEmpty) {
-      BotToast.showText(text: '目录还没加载，稍后再试');
+      showFeedback('目录还没加载，稍后再试');
       return;
     }
     final start = fromCurrent
@@ -152,7 +153,7 @@ class _ReaderDownloadPanelState extends State<ReaderDownloadPanel> {
             const SizedBox(height: 8),
             ClipRRect(
               borderRadius: BorderRadius.circular(2),
-              child: LinearProgressIndicator(
+              child: LoadingBar(
                 value: activeJob.total > 0
                     ? activeJob.completed / activeJob.total
                     : null,
@@ -167,10 +168,7 @@ class _ReaderDownloadPanelState extends State<ReaderDownloadPanel> {
             children: [
               Expanded(
                 child: activeJob != null
-                    ? _actionBtn(
-                        '暂停下载',
-                        () => _center.pause(activeJob.bookId),
-                      )
+                    ? _actionBtn('暂停下载', () => _center.pause(activeJob.bookId))
                     : resumableJob != null
                     ? _actionBtn(
                         '继续下载',
@@ -213,10 +211,7 @@ class _ReaderDownloadPanelState extends State<ReaderDownloadPanel> {
                 ),
               ),
               const Spacer(),
-              Text(
-                '仅 WiFi',
-                style: TextStyle(fontSize: 12, color: chrome.fg),
-              ),
+              Text('仅 WiFi', style: TextStyle(fontSize: 12, color: chrome.fg)),
               SizedBox(
                 height: 30,
                 child: Switch.adaptive(
@@ -241,7 +236,9 @@ class _ReaderDownloadPanelState extends State<ReaderDownloadPanel> {
     return OutlinedButton(
       onPressed: onTap,
       style: OutlinedButton.styleFrom(
-        foregroundColor: enabled ? chrome.fg : chrome.muted.withValues(alpha: .5),
+        foregroundColor: enabled
+            ? chrome.fg
+            : chrome.muted.withValues(alpha: .5),
         side: BorderSide(color: chrome.divider),
         backgroundColor: chrome.chipBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),

@@ -1,8 +1,8 @@
 import 'package:langhuan/features/reader/animation/base_animation_page.dart';
 import 'package:langhuan/features/reader/page_turn/page_turn_perf.dart';
 import 'package:langhuan/features/reader/page_turn/touch_event.dart';
-import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
+import 'package:langhuan/design/components/feedback.dart';
 
 /// 覆盖翻页：拖动时顶页平移露出底页，松手确认/取消。
 ///
@@ -61,11 +61,11 @@ class CoverPageAnimation extends BaseAnimationPage {
     GlobalKey canvasKey,
   ) {
     if (!isTurnNext && !canTurnPrevious()) {
-      BotToast.showText(text: '已经是第一页');
+      showFeedback('已经是第一页');
       return null;
     }
     if (isTurnNext && !canTurnNext()) {
-      BotToast.showText(text: '已经是最后一页');
+      showFeedback('已经是最后一页');
       return null;
     }
     _ensureAnimation(controller);

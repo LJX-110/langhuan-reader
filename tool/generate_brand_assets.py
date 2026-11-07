@@ -1,8 +1,13 @@
 """Generate the 琅嬛阁 app icon and launch mark.
 
-Direction C · 月照琅嬛: a deep ink field, a moon-white disc, and a single
-dark-gold pavilion. The mark is drawn at 4x and downsampled so every density
-keeps clean edges, including the 48 px legacy icon.
+Direction B · 月牙与檐: an ink field, a moon-white crescent, and one moon-white
+eave stroke. Only two colours, no gradient, shadow, text or pavilion detail.
+The mark is drawn at 4x and downsampled so every density keeps clean edges,
+including the 48 px legacy icon.
+
+Android 12+ splash animation lives in
+`android/app/src/main/res/drawable/launch_mark_animated.xml`; the vector and
+this raster script must keep the same geometry.
 """
 
 from __future__ import annotations
@@ -13,9 +18,8 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
 
-INK = (23, 40, 58, 255)          # #17283A 墨蓝
+INK = (23, 40, 58, 255)          # #17283A 墨
 MOON = (242, 233, 215, 255)      # #F2E9D7 月白
-GOLD = (184, 154, 104, 255)      # #B89A68 柔金
 CLEAR = (0, 0, 0, 0)
 WHITE = (255, 255, 255, 255)
 
@@ -27,48 +31,15 @@ MIPMAPS = {
     "xxxhdpi": (192, 432),
 }
 
-# Composition geometry in a 1024 x 1024 design box.
-ROOF_TIPS = ((128, 620), (896, 620))
-MOON_CENTER = (512, 410)
-MOON_RADIUS = 238
+# 1024 x 1024 design box.
+MOON_CENTER = (470, 400)
+MOON_RADIUS = 300
+CUT_CENTER = (596, 330)
+CUT_RADIUS = 268
 
-
-def _cubic(
-    start: tuple[float, float],
-    control1: tuple[float, float],
-    control2: tuple[float, float],
-    end: tuple[float, float],
-    steps: int = 24,
-) -> list[tuple[float, float]]:
-    points = []
-    for i in range(steps + 1):
-        t = i / steps
-        u = 1 - t
-        x = (
-            u**3 * start[0]
-            + 3 * u**2 * t * control1[0]
-            + 3 * u * t**2 * control2[0]
-            + t**3 * end[0]
-        )
-        y = (
-            u**3 * start[1]
-            + 3 * u**2 * t * control1[1]
-            + 3 * u * t**2 * control2[1]
-            + t**3 * end[1]
-        )
-        points.append((x, y))
-    return points
-
-
-def _roof_points() -> list[tuple[float, float]]:
-    """Single-eave roof with upturned tips and a flat ridge."""
-    points = _cubic((128, 620), (240, 620), (300, 575), (356, 520))
-    points += [(400, 500), (624, 500), (668, 520)]
-    points += _cubic((668, 520), (724, 575), (784, 620), (896, 620))
-    points += _cubic((896, 620), (820, 665), (730, 680), (640, 680))
-    points += [(384, 680)]
-    points += _cubic((384, 680), (294, 680), (204, 665), (128, 620))
-    return points
+# 一笔屋檐：平脊，两端起翘；落在月牙下方。
+EAVE = ((210, 792), (424, 744), (600, 744), (814, 792))
+EAVE_WIDTH = 58
 
 
 class _Pen:
@@ -87,79 +58,37 @@ class _Pen:
             (512 + (y - 512) * self.scale) * self.unit,
         )
 
-    def points(self, points: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    def points(self, points: tuple[tuple[float, float], ...]) -> list[tuple[float, float]]:
         return [self.xy(x, y) for x, y in points]
 
-    def width(self, width: float) -> int:
-        return max(1, round(width * self.scale * self.unit))
+    def radius(self, value: float) -> float:
+        return value * self.scale * self.unit
+
+    def width(self, value: float) -> int:
+        return max(1, round(value * self.scale * self.unit))
 
 
-def _draw_pavilion(
+def _draw_mark(
     draw: ImageDraw.ImageDraw,
     pen: _Pen,
     *,
-    simplify: bool,
-    mono: bool = False,
-    draw_moon: bool = True,
+    moon_fill: tuple[int, int, int, int],
+    cut_fill: tuple[int, int, int, int],
+    eave_fill: tuple[int, int, int, int],
 ) -> None:
-    roof_fill = WHITE if mono else INK
-    body_fill = WHITE if mono else INK
-    line_fill = WHITE if mono else GOLD
-    door_fill = CLEAR if mono else GOLD
-
-    if draw_moon:
-        cx, cy = pen.xy(*MOON_CENTER)
-        radius = MOON_RADIUS * pen.scale * pen.unit
-        draw.ellipse(
-            (cx - radius, cy - radius, cx + radius, cy + radius),
-            fill=WHITE if mono else MOON,
-        )
-
-    roof = pen.points(_roof_points())
-    draw.polygon(roof, fill=roof_fill)
-    # Draw the closed outline in two passes; PIL leaves a small notch where the
-    # first and last segments meet at the sharp left eave tip.
-    draw.line(roof, fill=line_fill, width=pen.width(14), joint="curve")
+    cx, cy = pen.xy(*MOON_CENTER)
+    r = pen.radius(MOON_RADIUS)
+    draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=moon_fill)
+    # 月牙 = 月盘减去右上方的圆；有底色时用底色，无底色时用透明。
+    cx, cy = pen.xy(*CUT_CENTER)
+    r = pen.radius(CUT_RADIUS)
+    draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=cut_fill)
     draw.line(
-        [roof[-1], roof[0], roof[1]],
-        fill=line_fill,
-        width=pen.width(14),
+        pen.points(EAVE),
+        fill=eave_fill,
+        width=pen.width(EAVE_WIDTH),
         joint="curve",
     )
-
-    # Ridge finial: a small diamond, still visible as a gold dot at 48 px.
-    finial = pen.points([(512, 472), (530, 490), (512, 508), (494, 490)])
-    draw.polygon(finial, fill=line_fill)
-
-    body = [pen.xy(340, 680), pen.xy(684, 840)]
-    draw.rectangle(body, fill=body_fill)
-    draw.rectangle(body, outline=line_fill, width=pen.width(12))
-
-    if not simplify:
-        for x in (400, 624):
-            draw.line(
-                [pen.xy(x, 680), pen.xy(x, 840)],
-                fill=door_fill if mono else line_fill,
-                width=pen.width(8),
-            )
-
-    # Door: a solid gold spine in colour, an opening in monochrome.
-    draw.rectangle(
-        [pen.xy(476, 716), pen.xy(548, 840)],
-        fill=door_fill,
-    )
-
-    draw.line(
-        [pen.xy(270, 858), pen.xy(754, 858)],
-        fill=line_fill,
-        width=pen.width(14),
-    )
-    if not simplify:
-        draw.line(
-            [pen.xy(310, 880), pen.xy(714, 880)],
-            fill=line_fill,
-            width=pen.width(8),
-        )
 
 
 def _render(
@@ -169,32 +98,34 @@ def _render(
     circular: bool = False,
     background: bool = True,
     mono: bool = False,
-    draw_moon: bool = True,
-    simplify: bool | None = None,
+    inverted: bool = False,
 ) -> Image.Image:
     pen = _Pen(size, scale)
     canvas = Image.new("RGBA", (pen.canvas, pen.canvas), CLEAR)
     draw = ImageDraw.Draw(canvas)
 
     if background:
+        field = INK
         if circular:
-            draw.ellipse((0, 0, pen.canvas - 1, pen.canvas - 1), fill=INK)
+            draw.ellipse((0, 0, pen.canvas - 1, pen.canvas - 1), fill=field)
         else:
             draw.rounded_rectangle(
                 (0, 0, pen.canvas - 1, pen.canvas - 1),
                 radius=round(pen.canvas * 0.215),
-                fill=INK,
+                fill=field,
             )
 
-    if simplify is None:
-        simplify = size <= 96
-    _draw_pavilion(
-        draw,
-        pen,
-        simplify=simplify,
-        mono=mono,
-        draw_moon=draw_moon,
-    )
+    if mono:
+        # Android 主题图标只取 alpha：月牙 + 屋檐合成单色剪影。
+        _draw_mark(draw, pen, moon_fill=WHITE, cut_fill=CLEAR, eave_fill=WHITE)
+    elif inverted:
+        # 启动页在纸白底上：墨色月牙 + 墨色屋檐，切割处透明。
+        _draw_mark(draw, pen, moon_fill=INK, cut_fill=CLEAR, eave_fill=INK)
+    elif background:
+        _draw_mark(draw, pen, moon_fill=MOON, cut_fill=INK, eave_fill=MOON)
+    else:
+        # 自适应前景：切割处透明，底色层由 @color/brand_deep 提供。
+        _draw_mark(draw, pen, moon_fill=MOON, cut_fill=CLEAR, eave_fill=MOON)
     return canvas.resize((size, size), Image.LANCZOS)
 
 
@@ -204,36 +135,17 @@ def _icon(size: int = 1024, circular: bool = False) -> Image.Image:
 
 def _foreground(size: int = 1024) -> Image.Image:
     # Adaptive foregrounds are cropped to the 66/108 safe zone; 0.78 keeps the
-    # eave tips inside it while leaving the mark large enough to read.
+    # crescent and eave inside it while leaving the mark large enough to read.
     return _render(size, scale=0.78, background=False)
 
 
 def _monochrome(size: int = 1024) -> Image.Image:
-    return _render(
-        size,
-        scale=0.78,
-        background=False,
-        mono=True,
-        draw_moon=False,
-    )
+    return _render(size, scale=0.78, background=False, mono=True)
 
 
 def _splash(size: int = 512) -> Image.Image:
-    # Inverted mark for the paper-white launch screen: a gold moon ring and an
-    # ink pavilion, no solid field.
-    canvas = Image.new("RGBA", (2048, 2048), CLEAR)
-    draw = ImageDraw.Draw(canvas)
-    pen = _Pen(512, 0.62)
-    # _Pen renders at 4x; use the same helper on the 512 design box.
-    ring = pen.xy(512, 512)
-    radius = 360 * pen.scale * pen.unit
-    draw.ellipse(
-        (ring[0] - radius, ring[1] - radius, ring[0] + radius, ring[1] + radius),
-        outline=GOLD,
-        width=pen.width(8),
-    )
-    _draw_pavilion(draw, pen, simplify=False, draw_moon=False)
-    return canvas.resize((size, size), Image.LANCZOS)
+    # Transparent mark for the paper-white launch screen, no solid field.
+    return _render(size, scale=0.62, background=False, inverted=True)
 
 
 def main() -> None:

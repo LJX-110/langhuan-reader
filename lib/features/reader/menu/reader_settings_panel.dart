@@ -7,6 +7,7 @@ import 'package:langhuan/design/theme/color_model.dart';
 import 'package:langhuan/features/reader/menu/reader_chrome.dart';
 import 'package:langhuan/features/reader/read_model.dart';
 import 'package:langhuan/features/reader/settings/read_setting.dart';
+import 'package:langhuan/design/components/pressable.dart';
 
 /// Settings level 1: font size, paper, page-turn mode and shortcuts.
 class ReaderSettingsPanel extends StatelessWidget {
@@ -269,6 +270,8 @@ class ReaderLayoutPanel extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _alignRow(context, chrome, readModel, onChanged),
+          const SizedBox(height: 10),
+          _chineseModeRow(context, chrome, readModel, onChanged),
         ],
       ),
     );
@@ -298,11 +301,66 @@ Widget _alignRow(
             child: Material(
               color: current == option.$1 ? accentSoft : chrome.chipBg,
               borderRadius: BorderRadius.circular(8),
-              child: InkWell(
+              child: Pressable(
                 borderRadius: BorderRadius.circular(8),
                 onTap: () {
                   if (current == option.$1) return;
                   ReadSetting.setTextAlign(option.$1);
+                  readModel.scheduleRelayout();
+                  onChanged();
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  child: Center(
+                    child: Text(
+                      option.$2,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: current == option.$1
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        color: current == option.$1 ? accent : chrome.fg,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+    ],
+  );
+}
+
+/// 正文简繁：原样 / 简体 / 繁体。改动会重排当前章。
+Widget _chineseModeRow(
+  BuildContext context,
+  ReaderChrome chrome,
+  ReadModel readModel,
+  VoidCallback onChanged,
+) {
+  final current = ReadSetting.getChineseMode();
+  const options = <(int, String)>[(0, '原样'), (1, '简体'), (2, '繁体')];
+  final accent = AppColors.accentOn(context, chrome.panelBg);
+  final accentSoft = accent.withValues(alpha: .10);
+  return Row(
+    children: [
+      SizedBox(
+        width: 36,
+        child: Text('简繁', style: TextStyle(fontSize: 13, color: chrome.fg)),
+      ),
+      for (final option in options)
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Material(
+              color: current == option.$1 ? accentSoft : chrome.chipBg,
+              borderRadius: BorderRadius.circular(8),
+              child: Pressable(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () {
+                  if (current == option.$1) return;
+                  ReadSetting.setChineseMode(option.$1);
                   readModel.scheduleRelayout();
                   onChanged();
                 },
@@ -353,7 +411,7 @@ Widget _fontWeightRow(
             child: Material(
               color: current == option.$1 ? accentSoft : chrome.chipBg,
               borderRadius: BorderRadius.circular(8),
-              child: InkWell(
+              child: Pressable(
                 borderRadius: BorderRadius.circular(8),
                 onTap: () {
                   if (current == option.$1) return;
@@ -419,7 +477,7 @@ Widget _pageTurnModeRow(
           child: Material(
             color: selected ? accentSoft : chrome.chipBg,
             borderRadius: BorderRadius.circular(10),
-            child: InkWell(
+            child: Pressable(
               borderRadius: BorderRadius.circular(10),
               onTap: () {
                 readModel.setAnimationMode(m.$1);
@@ -487,7 +545,7 @@ Widget _stepperRow({
 }
 
 Widget _roundIconBtn(ReaderChrome chrome, IconData icon, VoidCallback onTap) {
-  return InkWell(
+  return Pressable(
     onTap: onTap,
     borderRadius: BorderRadius.circular(16),
     child: Container(
@@ -537,7 +595,7 @@ Widget _paperSwatchRow({
       return Material(
         color: Colors.transparent,
         shape: const CircleBorder(),
-        child: InkWell(
+        child: Pressable(
           customBorder: const CircleBorder(),
           onTap: () async {
             final wasDark = colorModel.dark;
@@ -607,7 +665,7 @@ Widget _settingTile({
   return Material(
     color: chrome.chipBg,
     borderRadius: BorderRadius.circular(10),
-    child: InkWell(
+    child: Pressable(
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
       child: Padding(

@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -9,6 +8,7 @@ import 'package:langhuan/data/entities/book_info.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/features/reader/menu/reader_chrome.dart';
 import 'package:langhuan/features/reader/read_model.dart';
+import 'package:langhuan/design/components/feedback.dart';
 
 class ReaderTopBar extends StatelessWidget {
   const ReaderTopBar({
@@ -33,7 +33,7 @@ class ReaderTopBar extends StatelessWidget {
   Future<void> _openOriginalPage(BuildContext context) async {
     final b = readModel.book;
     if (b == null) {
-      BotToast.showText(text: '暂无书籍信息');
+      showFeedback('暂无书籍信息');
       return;
     }
     final chapters = readModel.chapters;
@@ -45,17 +45,17 @@ class ReaderTopBar extends StatelessWidget {
     if (raw.isEmpty) raw = b.bookUrl.trim();
     if (raw.isEmpty) raw = b.tocUrl.trim();
     if (raw.isEmpty) {
-      BotToast.showText(text: '暂无原网页地址');
+      showFeedback('暂无原网页地址');
       return;
     }
     final uri = Uri.tryParse(raw);
     if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
-      BotToast.showText(text: '原网页地址无效');
+      showError('原网页地址无效');
       return;
     }
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok) {
-      BotToast.showText(text: '无法打开浏览器');
+      showError('无法打开浏览器');
     }
   }
 

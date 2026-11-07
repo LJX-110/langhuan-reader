@@ -530,9 +530,7 @@ class _SpinePanel extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: selected
                       ? palette.companion
-                      : (book.hasUpdate
-                            ? palette.companion
-                            : ink.withValues(alpha: .40)),
+                      : ink.withValues(alpha: .40),
                   shape: selected ? BoxShape.rectangle : BoxShape.circle,
                 ),
               ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
+import 'package:langhuan/design/components/pressable.dart';
 import 'package:langhuan/design/motion.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 
@@ -122,14 +122,8 @@ class _DockItem extends StatelessWidget {
       label: label,
       child: Material(
         color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            // 点按即时触感（对齐文库 dock 的 selectionClick）。
-            HapticFeedback.selectionClick();
-            onTap();
-          },
-          splashColor: activeColor.withValues(alpha: .08),
-          highlightColor: activeColor.withValues(alpha: .04),
+        child: Pressable(
+          onTap: onTap,
           child: SizedBox(
             height: LanhuanDock.dockHeight,
             child: Column(

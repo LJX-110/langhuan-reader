@@ -1,12 +1,15 @@
-import 'package:bot_toast/bot_toast.dart';
 import 'package:langhuan/core/utils/redact.dart';
 import 'package:langhuan/app/providers.dart';
 import 'package:langhuan/data/entities/book.dart';
+import 'package:langhuan/core/storage/local_store.dart';
+import 'package:langhuan/core/storage/prefs_keys.dart';
 import 'package:langhuan/design/components/bookshelf_3d.dart';
 import 'package:langhuan/design/components/shelf_book_view.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:langhuan/design/components/feedback.dart';
+import 'package:langhuan/design/components/loading_view.dart';
 
 /// 书架整理：与书架相同的 3D 形态，负责排序与批量删除。
 ///
@@ -74,6 +77,7 @@ class _SortShelfState extends ConsumerState<SortShelf> {
                 horizontal: AppDimens.pagePadding,
               ),
               child: Bookshelf3D(
+                entryAnimation: !SpUtil.getBool(PrefsKeys.lowPerformance),
                 books: books
                     .map(ShelfBookView.fromBook)
                     .toList(growable: false),
@@ -126,13 +130,7 @@ class _SortShelfState extends ConsumerState<SortShelf> {
             TextButton(
               onPressed: _deleting ? null : _deleteSelected,
               style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-              child: _deleting
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('删除'),
+              child: _deleting ? const LoadingView.inline() : const Text('删除'),
             ),
           ],
         ),
@@ -144,9 +142,7 @@ class _SortShelfState extends ConsumerState<SortShelf> {
         children: [
           Expanded(
             child: Text(
-              _selected.isEmpty
-                  ? '点击书本选择，长按拖动排序'
-                  : '已选 ${_selected.length} 本',
+              _selected.isEmpty ? '点击书本选择，长按拖动排序' : '已选 ${_selected.length} 本',
               style: TextStyle(fontSize: 12, color: muted),
             ),
           ),
@@ -183,11 +179,11 @@ class _SortShelfState extends ConsumerState<SortShelf> {
         _confirming = false;
         _deleting = false;
       });
-      BotToast.showText(text: '已删除 $count 本');
+      showFeedback('已删除 $count 本');
     } catch (e) {
       if (!mounted) return;
       setState(() => _deleting = false);
-      BotToast.showText(text: '删除失败：${Redact.userMessage(e)}');
+      showError('删除失败：${Redact.userMessage(e)}');
     }
   }
 }

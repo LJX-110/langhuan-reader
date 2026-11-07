@@ -51,6 +51,8 @@ class SourceSearchReport {
     this.detail = '',
     this.httpStatus = 0,
     this.rawItems = 0,
+    this.hasNextPage = false,
+    this.nextPageUrl = '',
   });
 
   final String sourceUrl;
@@ -68,6 +70,10 @@ class SourceSearchReport {
 
   /// Number of list nodes matched before field extraction.
   final int rawItems;
+
+  /// Search / explore pagination cursor returned by the engine.
+  final bool hasNextPage;
+  final String nextPageUrl;
 
   bool get ok => issue == SourceSearchIssue.none;
 

@@ -61,6 +61,15 @@ object AppCacheManager {
         }
     }
 
+    /** 清除 Cookie 内存热层（与 cookieDao.deleteAll 配合，避免清库后仍读到旧登录态）。 */
+    fun clearCookieMemory() {
+        memoryLruCache.snapshot().keys.forEach {
+            if (it.endsWith("_cookie") || it.endsWith("_session_cookie")) {
+                memoryLruCache.remove(it)
+            }
+        }
+    }
+
 }
 
 

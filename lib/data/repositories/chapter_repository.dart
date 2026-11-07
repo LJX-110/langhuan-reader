@@ -63,6 +63,37 @@ class ChapterRepository {
     return int.tryParse(v?.toString() ?? '') ?? 0;
   }
 
+  /// Cached chapters whose raw body contains [query] (literal substring).
+  ///
+  /// Cross-chapter search only reads local cache; it never fetches online
+  /// chapters. [ord] is the chapter index in the current TOC.
+  Future<List<({String id, String title, int ord, String body})>>
+  searchCachedBodies(String bookId, String query, {int limit = 80}) async {
+    if (bookId.isEmpty || query.isEmpty) return const [];
+    final db = await _database;
+    // Escape LIKE wildcards so a user typing `%` or `_` searches literally.
+    final escaped = query
+        .replaceAll(r'\', r'\\')
+        .replaceAll('%', r'\%')
+        .replaceAll('_', r'\_');
+    final rows = await db.rawQuery(
+      "SELECT id, title, ord, body FROM chapters "
+      "WHERE book_id = ? AND has_body = 1 AND body LIKE ? ESCAPE '\\' "
+      'ORDER BY ord ASC LIMIT ?',
+      [bookId, '%$escaped%', limit],
+    );
+    return rows
+        .map(
+          (r) => (
+            id: r['id'] as String? ?? '',
+            title: r['title'] as String? ?? '',
+            ord: r['ord'] as int? ?? 0,
+            body: r['body'] as String? ?? '',
+          ),
+        )
+        .toList(growable: false);
+  }
+
   /// Full TOC rewrite — **wipes body/page caches**. Prefer [syncToc].
   Future<void> replaceToc(
     List<ChapterTocEntry> chapters,

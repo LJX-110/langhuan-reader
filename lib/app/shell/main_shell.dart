@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:bot_toast/bot_toast.dart';
 import 'package:langhuan/core/events/event.dart';
 import 'package:langhuan/core/platform/system_ui.dart';
 import 'package:langhuan/features/settings/update_service.dart';
@@ -12,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'glass_dock.dart';
+import 'package:langhuan/design/components/feedback.dart';
 
 /// App root shell: 书架 / 发现 / 本地 / 我.
 class MainShell extends StatefulWidget {
@@ -42,7 +42,7 @@ class _MainShellState extends State<MainShell> {
     try {
       final info = await UpdateService().check();
       if (info == null || !mounted) return;
-      BotToast.showText(text: '发现新版本 ${info.version}，可在「我的」页查看');
+      showFeedback('发现新版本 ${info.version}，可在「我的」页查看');
     } catch (_) {
       // Silent: the manual entry in 我的 reports errors instead.
     }
@@ -103,9 +103,7 @@ class _LazyIndexedStackState extends State<_LazyIndexedStack> {
     _built[widget.index] ??= widget.builders[widget.index]();
     return IndexedStack(
       index: widget.index,
-      children: [
-        for (final child in _built) child ?? const SizedBox.shrink(),
-      ],
+      children: [for (final child in _built) child ?? const SizedBox.shrink()],
     );
   }
 }

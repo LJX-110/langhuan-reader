@@ -19,9 +19,7 @@ class BookRepository {
       'books',
       // `on_shelf = 0` rows stay in the table so reading history and
       // bookmarks survive a "移出书架"; they just do not show in the grid.
-      where: includeLocal
-          ? null
-          : 'on_shelf = 1 AND source_url NOT LIKE ?',
+      where: includeLocal ? null : 'on_shelf = 1 AND source_url NOT LIKE ?',
       whereArgs: includeLocal ? null : ['${Book.localSourcePrefix}%'],
       orderBy: 'sort_time DESC',
     );
@@ -95,6 +93,7 @@ class BookRepository {
     required int chapterIndex,
     required int pageIndex,
     double scrollOffset = 0,
+    int? anchorOffset,
     String? readingChapter,
   }) async {
     final db = await _database;
@@ -103,6 +102,9 @@ class BookRepository {
       'page_index': pageIndex,
       'scroll_offset': scrollOffset,
     };
+    if (anchorOffset != null) {
+      values['anchor_offset'] = anchorOffset;
+    }
     if (readingChapter != null) {
       values['reading_chapter'] = readingChapter;
     }
@@ -234,12 +236,7 @@ class BookRepository {
     final db = await _database;
     final batch = db.batch();
     for (final id in bookIds) {
-      batch.update(
-        'books',
-        {'on_shelf': 0},
-        where: 'id = ?',
-        whereArgs: [id],
-      );
+      batch.update('books', {'on_shelf': 0}, where: 'id = ?', whereArgs: [id]);
       batch.delete('chapters', where: 'book_id = ?', whereArgs: [id]);
     }
     await batch.commit(noResult: true);
@@ -267,6 +264,7 @@ class BookRepository {
       chapterIndex: row['chapter_index'] as int? ?? 0,
       pageIndex: row['page_index'] as int? ?? 0,
       scrollOffset: (row['scroll_offset'] as num?)?.toDouble() ?? 0,
+      anchorOffset: row['anchor_offset'] as int? ?? -1,
       sortTime: row['sort_time'] as int? ?? 0,
       hasUpdate: row['has_update'] as int? ?? 0,
       updatedAt: s(row['updated_at']),
@@ -292,6 +290,7 @@ class BookRepository {
       'chapter_index': book.chapterIndex,
       'page_index': book.pageIndex,
       'scroll_offset': book.scrollOffset,
+      'anchor_offset': book.anchorOffset,
       'reading_chapter': book.readingChapter,
       'latest_chapter': book.latestChapter.isNotEmpty
           ? book.latestChapter

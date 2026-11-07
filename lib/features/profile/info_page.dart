@@ -36,7 +36,7 @@ class InfoState extends State<InfoPage> {
               ),
               SizedBox(height: 12),
               Text(
-                '请在「书源管理」自行导入 Legado / 阅读 书源 JSON。\n\n'
+                '请在「书源管理」自行导入书源 JSON。\n\n'
                 '请勿导入或使用侵犯他人版权的书源。',
                 textAlign: TextAlign.start,
                 style: TextStyle(height: 1.5),

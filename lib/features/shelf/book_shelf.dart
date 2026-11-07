@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
+import 'package:langhuan/core/events/event.dart';
 import 'package:langhuan/core/platform/screen.dart';
 import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/core/utils/perf_log.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/entities/book_info.dart';
+import 'package:langhuan/data/entities/book_tag.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/design/components/bookshelf_3d.dart';
 import 'package:langhuan/design/components/empty_state.dart';
@@ -25,6 +28,7 @@ import 'package:langhuan/features/shelf/shelf_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:langhuan/design/components/pressable.dart';
 
 /// 书架：只有 3D 书架一种形态；整理页负责排序与批量删除。
 class BookShelf extends ConsumerStatefulWidget {
@@ -35,20 +39,28 @@ class BookShelf extends ConsumerStatefulWidget {
 }
 
 class _BookShelfState extends ConsumerState<BookShelf> {
+  StreamSubscription<ShelfTagsChanged>? _tagsSub;
+
   @override
   void initState() {
     super.initState();
+    _tagsSub = eventBus.on<ShelfTagsChanged>().listen((_) {
+      ref.read(shelfModelProvider).loadTags();
+    });
     // Cold start: ShelfModel starts empty. Without this the shelf shows
     // nothing until the user re-adds a book (2.1.0 regression).
     final perf = PerfLog.start('Shelf.coldStart');
-    ref.read(shelfModelProvider).initShelf().then((_) {
+    ref.read(shelfModelProvider).initShelf().then((_) async {
       perf.done('books=${ref.read(shelfModelProvider).shelf.length}');
+      await ref.read(shelfModelProvider).loadTags();
       if (!mounted) return;
       // Fill covers the source never gave us (runs at most once per book).
-      ShelfCoverEnricher().enrich(
-        ref.read(shelfModelProvider).shelf,
-        onUpdated: () => ref.read(shelfModelProvider).refreshShelf(),
-      );
+      if (!SpUtil.getBool(PrefsKeys.lowPerformance)) {
+        ShelfCoverEnricher().enrich(
+          ref.read(shelfModelProvider).shelf,
+          onUpdated: () => ref.read(shelfModelProvider).refreshShelf(),
+        );
+      }
     });
     if (!SpUtil.containsKey(PrefsKeys.topSafeHeight)) {
       SpUtil.putDouble(PrefsKeys.topSafeHeight, Screen.topSafeHeight);
@@ -60,6 +72,12 @@ class _BookShelfState extends ConsumerState<BookShelf> {
             25,
       );
     }
+  }
+
+  @override
+  void dispose() {
+    _tagsSub?.cancel();
+    super.dispose();
   }
 
   @override
@@ -89,6 +107,10 @@ class _BookShelfState extends ConsumerState<BookShelf> {
                 },
                 onManage: () => Routes.navigateTo(context, Routes.sortShelf),
                 onHistory: () => Routes.navigateTo(context, Routes.history),
+                onRandom: () => _openRandom(books),
+                tags: shelfModel.tags,
+                activeTagId: shelfModel.activeTagId,
+                onTag: shelfModel.setTag,
               ),
               if (resume != null) _continueCard(context, resume, dark),
               Expanded(
@@ -126,6 +148,9 @@ class _BookShelfState extends ConsumerState<BookShelf> {
                           horizontal: AppDimens.pagePadding,
                         ),
                         child: Bookshelf3D(
+                          entryAnimation: !SpUtil.getBool(
+                            PrefsKeys.lowPerformance,
+                          ),
                           books: books
                               .map(ShelfBookView.fromBook)
                               .toList(growable: false),
@@ -141,6 +166,13 @@ class _BookShelfState extends ConsumerState<BookShelf> {
         ),
       ),
     );
+  }
+
+  /// 随机抽书：尊重当前筛选（在读 / 未读 / 全部）。
+  void _openRandom(List<Book> books) {
+    if (books.isEmpty) return;
+    final pick = books[Random().nextInt(books.length)];
+    _openShelfBook(ShelfBookView.fromBook(pick));
   }
 
   /// 最近在读的一本（书架已按 `sort_time` 倒序，第一本有进度的就是）。
@@ -172,7 +204,7 @@ class _BookShelfState extends ConsumerState<BookShelf> {
       child: Material(
         color: surface,
         borderRadius: BorderRadius.circular(10),
-        child: InkWell(
+        child: Pressable(
           borderRadius: BorderRadius.circular(10),
           onTap: () => _openShelfBook(ShelfBookView.fromBook(book)),
           child: Padding(
@@ -219,7 +251,9 @@ class _BookShelfState extends ConsumerState<BookShelf> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        chapter.isEmpty ? '第 ${book.chapterIndex + 1} 章' : chapter,
+                        chapter.isEmpty
+                            ? '第 ${book.chapterIndex + 1} 章'
+                            : chapter,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 12, color: muted),
@@ -359,8 +393,8 @@ class _BookShelfState extends ConsumerState<BookShelf> {
     AppLog.i('Shelf', 'remove book=${removed.id} 「${removed.name}」');
     // 可撤销：retire 只是 on_shelf 置 0，撤回即恢复（对齐文库的撤销反馈）。
     showFeedback(
-      context,
       '已移除《${removed.name}》',
+      context: context,
       actionLabel: '撤销',
       onAction: () => _undoRemove(removed, model),
     );
@@ -373,13 +407,17 @@ class _BookShelfState extends ConsumerState<BookShelf> {
   }
 }
 
-/// 顶栏：标题 + 阅读记录 + 整理（不再有网格 / 列表切换）
+/// 顶栏：标题 + 随机 / 阅读记录 / 整理（不再有网格 / 列表切换）
 class _ShelfHeader extends StatelessWidget {
   final ShelfFilter filter;
   final ValueChanged<ShelfFilter> onFilter;
   final VoidCallback onSearch;
   final VoidCallback onManage;
   final VoidCallback onHistory;
+  final VoidCallback onRandom;
+  final List<BookTag> tags;
+  final String? activeTagId;
+  final ValueChanged<String?> onTag;
 
   const _ShelfHeader({
     required this.filter,
@@ -387,6 +425,10 @@ class _ShelfHeader extends StatelessWidget {
     required this.onSearch,
     required this.onManage,
     required this.onHistory,
+    required this.onRandom,
+    required this.tags,
+    required this.activeTagId,
+    required this.onTag,
   });
 
   String _filterLabel(ShelfFilter value) {
@@ -416,6 +458,11 @@ class _ShelfHeader extends StatelessWidget {
             title: '书架',
             actions: [
               _HeaderIcon(
+                icon: Icons.casino_outlined,
+                tooltip: '随机一本',
+                onTap: onRandom,
+              ),
+              _HeaderIcon(
                 icon: Icons.history,
                 tooltip: '阅读记录',
                 onTap: onHistory,
@@ -440,7 +487,7 @@ class _ShelfHeader extends StatelessWidget {
                     padding: const EdgeInsets.only(right: 8),
                     child: Material(
                       color: Colors.transparent,
-                      child: InkWell(
+                      child: Pressable(
                         onTap: () => onFilter(value),
                         borderRadius: BorderRadius.circular(8),
                         child: AnimatedContainer(
@@ -490,7 +537,62 @@ class _ShelfHeader extends StatelessWidget {
               ],
             ),
           ),
+          if (tags.isNotEmpty)
+            SizedBox(
+              height: 32,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
+                children: [
+                  _tagChip(
+                    dark,
+                    accent,
+                    '全部',
+                    activeTagId == null,
+                    () => onTag(null),
+                  ),
+                  for (final tag in tags)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: _tagChip(
+                        dark,
+                        accent,
+                        tag.name,
+                        activeTagId == tag.id,
+                        () => onTag(tag.id),
+                      ),
+                    ),
+                ],
+              ),
+            ),
         ],
+      ),
+    );
+  }
+
+  Widget _tagChip(
+    bool dark,
+    Color accent,
+    String label,
+    bool selected,
+    VoidCallback onTap,
+  ) {
+    final line = dark ? AppColors.dividerDark : AppColors.line;
+    final muted = dark ? AppColors.textMutedDark : AppColors.inkMute;
+    return Pressable(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: selected ? accent : line, width: .5),
+          color: selected ? accent.withValues(alpha: .08) : Colors.transparent,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(fontSize: 11.5, color: selected ? accent : muted),
+        ),
       ),
     );
   }

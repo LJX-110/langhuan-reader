@@ -1,10 +1,10 @@
-import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:langhuan/app/providers.dart';
 import 'package:langhuan/data/repositories/source_repository.dart';
 import 'package:langhuan/features/sources/model/book_source.dart';
+import 'package:langhuan/design/components/feedback.dart';
 
 /// 书源编辑器：Legado 字段口径的全字段表单（基础 / 搜索 / 发现 / 详情 /
 /// 目录 / 正文）。
@@ -66,7 +66,7 @@ class _SourceEditPageState extends ConsumerState<SourceEditPage> {
     final url = _c.text('url');
     if (url.isEmpty ||
         !(url.startsWith('http://') || url.startsWith('https://'))) {
-      BotToast.showText(text: '书源地址需以 http:// 或 https:// 开头');
+      showFeedback('书源地址需以 http:// 或 https:// 开头');
       return;
     }
     final s = widget.source;
@@ -147,7 +147,7 @@ class _SourceEditPageState extends ConsumerState<SourceEditPage> {
     await SourceRepository.instance.upsert(source);
     ref.read(sourceModelProvider).load();
     if (!mounted) return;
-    BotToast.showText(text: widget.isNew ? '已新建书源' : '已保存书源');
+    showFeedback(widget.isNew ? '已新建书源' : '已保存书源');
     Navigator.of(context).pop(true);
   }
 
@@ -176,13 +176,13 @@ class _SourceEditPageState extends ConsumerState<SourceEditPage> {
           _field('名称', 'name', s.bookSourceName),
           _field('分组', 'group', s.bookSourceGroup),
           widget.isNew
-              ? _field('书源地址', 'url', s.bookSourceUrl, keyboard: TextInputType.url)
-              : _field(
-                  '书源地址（不可改）',
+              ? _field(
+                  '书源地址',
                   'url',
                   s.bookSourceUrl,
-                  readOnly: true,
-                ),
+                  keyboard: TextInputType.url,
+                )
+              : _field('书源地址（不可改）', 'url', s.bookSourceUrl, readOnly: true),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             dense: true,
@@ -198,7 +198,12 @@ class _SourceEditPageState extends ConsumerState<SourceEditPage> {
           ..._searchRuleFields('s', s.ruleSearch),
 
           _section(theme, '发现'),
-          _field('发现地址 exploreUrl（可多行「分类::地址」）', 'exploreUrl', s.exploreUrl, lines: 6),
+          _field(
+            '发现地址 exploreUrl（可多行「分类::地址」）',
+            'exploreUrl',
+            s.exploreUrl,
+            lines: 6,
+          ),
           ..._searchRuleFields('e', s.ruleExplore),
 
           _section(theme, '详情（ruleBookInfo）'),
@@ -207,14 +212,23 @@ class _SourceEditPageState extends ConsumerState<SourceEditPage> {
           _field('作者 author', 'i.author', s.ruleBookInfo.author),
           _field('分类 kind', 'i.kind', s.ruleBookInfo.kind),
           _field('字数 wordCount', 'i.wordCount', s.ruleBookInfo.wordCount),
-          _field('最新章节 lastChapter', 'i.lastChapter', s.ruleBookInfo.lastChapter),
+          _field(
+            '最新章节 lastChapter',
+            'i.lastChapter',
+            s.ruleBookInfo.lastChapter,
+          ),
           _field('简介 intro', 'i.intro', s.ruleBookInfo.intro, lines: 2),
           _field('封面 coverUrl', 'i.coverUrl', s.ruleBookInfo.coverUrl),
           _field('目录地址 tocUrl', 'i.tocUrl', s.ruleBookInfo.tocUrl),
           _field('允许重命名 canReName', 'i.canReName', s.ruleBookInfo.canReName),
 
           _section(theme, '目录（ruleToc）'),
-          _field('章节列表 chapterList', 't.chapterList', s.ruleToc.chapterList, lines: 3),
+          _field(
+            '章节列表 chapterList',
+            't.chapterList',
+            s.ruleToc.chapterList,
+            lines: 3,
+          ),
           _field('章节名 chapterName', 't.chapterName', s.ruleToc.chapterName),
           _field('章节地址 chapterUrl', 't.chapterUrl', s.ruleToc.chapterUrl),
           _field('分卷标记 isVolume', 't.isVolume', s.ruleToc.isVolume),
@@ -223,15 +237,28 @@ class _SourceEditPageState extends ConsumerState<SourceEditPage> {
 
           _section(theme, '正文（ruleContent）'),
           _field('正文规则 content', 'c.content', s.ruleContent.content, lines: 3),
-          _field('下一页正文 nextContentUrl', 'c.nextContentUrl', s.ruleContent.nextContentUrl),
-          _field('来源正则 sourceRegex', 'c.sourceRegex', s.ruleContent.sourceRegex),
-          _field('替换正则 replaceRegex', 'c.replaceRegex', s.ruleContent.replaceRegex, lines: 3),
+          _field(
+            '下一页正文 nextContentUrl',
+            'c.nextContentUrl',
+            s.ruleContent.nextContentUrl,
+          ),
+          _field(
+            '来源正则 sourceRegex',
+            'c.sourceRegex',
+            s.ruleContent.sourceRegex,
+          ),
+          _field(
+            '替换正则 replaceRegex',
+            'c.replaceRegex',
+            s.ruleContent.replaceRegex,
+            lines: 3,
+          ),
           _field('图片样式 imageStyle', 'c.imageStyle', s.ruleContent.imageStyle),
 
           const SizedBox(height: 12),
           Center(
             child: Text(
-              '规则为 Legado 子集：CSS / JsonPath / @js: / {{}} 插值 / ## 替换',
+              '规则支持 CSS / JsonPath / @js: / {{}} 插值 / ## 替换',
               style: TextStyle(
                 fontSize: 11,
                 color: theme.colorScheme.onSurfaceVariant,

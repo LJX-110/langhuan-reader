@@ -14,12 +14,16 @@ class ReadingProgressStore {
     required this.chapters,
     required this.history,
     required this.ensureBookRow,
+    this.anchorOf,
   });
 
   final BookRepository books;
   final ChapterRepository chapters;
   final ReadingHistoryRepository history;
   final Future<void> Function(Book book) ensureBookRow;
+
+  /// Current page's UTF-8 char offset, or -1 when the layout has no offsets.
+  final int Function()? anchorOf;
 
   BookRepository get _books => books;
   ChapterRepository get _chapters => chapters;
@@ -107,6 +111,7 @@ class ReadingProgressStore {
     final cur = b.chapterIndex;
     final idx = b.pageIndex;
     final pos = b.scrollOffset;
+    final anchor = anchorOf?.call() ?? -1;
     final id = b.id;
     final sourceUrl = b.sourceUrl;
     final tocSnapshot = chapters.isNotEmpty
@@ -141,6 +146,7 @@ class ReadingProgressStore {
       chapterIndex: cur,
       pageIndex: idx,
       scrollOffset: pos,
+      anchorOffset: anchor,
       readingChapter: chapterName,
     );
     if (updated == 0) {
@@ -151,6 +157,7 @@ class ReadingProgressStore {
           chapterIndex: cur,
           pageIndex: idx,
           scrollOffset: pos,
+          anchorOffset: anchor,
           readingChapter: chapterName,
         );
       } catch (e) {

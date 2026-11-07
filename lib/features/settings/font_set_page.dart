@@ -10,7 +10,6 @@ import 'package:langhuan/core/platform/system_ui.dart';
 import 'package:langhuan/design/theme/color_model.dart';
 import 'package:langhuan/core/cache/custom_cache_manager.dart';
 import 'package:langhuan/app/providers.dart';
-import 'package:bot_toast/bot_toast.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -18,6 +17,9 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:langhuan/core/storage/prefs_keys.dart';
+import 'package:langhuan/design/components/feedback.dart';
+import 'package:langhuan/design/components/loading_view.dart';
+import 'package:langhuan/design/components/pressable.dart';
 
 /// Reader font picker: built-in CDN fonts + local TTF/OTF import.
 /// WeChat Reading–style layout (preview card + section lists).
@@ -117,7 +119,7 @@ class _FontSetState extends ConsumerState<FontSet> {
     final readModel = ref.read(readModelProvider);
     final ok = await colorModel.setFontFamily(key);
     if (!ok) {
-      BotToast.showText(text: '字体加载失败，请重新下载或导入');
+      showError('字体加载失败，请重新下载或导入');
       return;
     }
     await readModel.relayoutPages();
@@ -129,7 +131,7 @@ class _FontSetState extends ConsumerState<FontSet> {
         ? row.urlOrPath
         : FontCatalog.downloadUrl(row.key);
     if (url.isEmpty) {
-      BotToast.showText(text: '无可用下载地址');
+      showFeedback('无可用下载地址');
       return;
     }
     if (mounted) {
@@ -167,7 +169,7 @@ class _FontSetState extends ConsumerState<FontSet> {
       }
       final path = await FontCatalog.resolvePath(row.key);
       if (path.isEmpty) {
-        BotToast.showText(text: '下载未完成，请重试');
+        showFeedback('下载未完成，请重试');
         return;
       }
       final i = _rows.indexWhere((e) => e.key == row.key);
@@ -176,7 +178,7 @@ class _FontSetState extends ConsumerState<FontSet> {
       }
       await _applyFont(row.key);
     } catch (e) {
-      BotToast.showText(text: '下载失败：${Redact.userMessage(e)}');
+      showError('下载失败：${Redact.userMessage(e)}');
     } finally {
       if (mounted) {
         setState(() {
@@ -200,7 +202,7 @@ class _FontSetState extends ConsumerState<FontSet> {
     }
     if (row.key.startsWith(FontCatalog.localPrefix)) {
       if (!row.ready) {
-        BotToast.showText(text: '本地字体文件不存在');
+        showError('本地字体文件不存在');
         return;
       }
       await _applyFont(row.key);
@@ -232,17 +234,17 @@ class _FontSetState extends ConsumerState<FontSet> {
       final picked = result.files.single;
       final path = picked.path;
       if (path == null || path.isEmpty) {
-        BotToast.showText(text: '无法读取所选文件');
+        showError('无法读取所选文件');
         return;
       }
       final src = File(path);
       if (!await src.exists()) {
-        BotToast.showText(text: '文件不存在');
+        showError('文件不存在');
         return;
       }
       final ext = p.extension(path).toLowerCase();
       if (!const {'.ttf', '.otf', '.ttc', '.otc'}.contains(ext)) {
-        BotToast.showText(text: '仅支持 ttf / otf 字体文件');
+        showFeedback('仅支持 ttf / otf 字体文件');
         return;
       }
       final key = await FontCatalog.importLocalFile(
@@ -252,9 +254,9 @@ class _FontSetState extends ConsumerState<FontSet> {
       ref.read(colorModelProvider).reloadFontMap();
       await _applyFont(key);
       await _reload();
-      BotToast.showText(text: '已导入 ${FontCatalog.displayName(key)}');
+      showFeedback('已导入 ${FontCatalog.displayName(key)}');
     } catch (e) {
-      BotToast.showText(text: '导入失败：${Redact.userMessage(e)}');
+      showError('导入失败：${Redact.userMessage(e)}');
     } finally {
       if (mounted) setState(() => _importing = false);
     }
@@ -321,14 +323,7 @@ class _FontSetState extends ConsumerState<FontSet> {
             TextButton(
               onPressed: (_importing || _downloading) ? null : _importLocal,
               child: _importing
-                  ? SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColors.accentOf(context),
-                      ),
-                    )
+                  ? LoadingView.inline(color: AppColors.accentOf(context))
                   : Text(
                       '导入',
                       style: TextStyle(
@@ -342,11 +337,7 @@ class _FontSetState extends ConsumerState<FontSet> {
           ],
         ),
         body: _loading
-            ? Center(
-                child: CircularProgressIndicator(
-                  color: AppColors.accentOf(context),
-                ),
-              )
+            ? LoadingView.page(color: AppColors.accentOf(context))
             : ListView(
                 padding: EdgeInsets.fromLTRB(
                   16,
@@ -523,7 +514,7 @@ class _FontSetState extends ConsumerState<FontSet> {
     return Material(
       color: _surface,
       borderRadius: BorderRadius.circular(AppDimens.cardRadius),
-      child: InkWell(
+      child: Pressable(
         borderRadius: BorderRadius.circular(AppDimens.cardRadius),
         onTap: (_importing || _downloading) ? null : _importLocal,
         child: Container(
@@ -587,7 +578,7 @@ class _FontSetState extends ConsumerState<FontSet> {
 
     return Material(
       color: Colors.transparent,
-      child: InkWell(
+      child: Pressable(
         onTap: downloading ? null : () => _onTapRow(row),
         onLongPress: canDelete ? () => _deleteLocal(row) : null,
         child: Padding(
@@ -617,7 +608,7 @@ class _FontSetState extends ConsumerState<FontSet> {
                           Expanded(
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(2),
-                              child: LinearProgressIndicator(
+                              child: LoadingBar(
                                 value: _downloadProgress > 0
                                     ? _downloadProgress
                                     : null,

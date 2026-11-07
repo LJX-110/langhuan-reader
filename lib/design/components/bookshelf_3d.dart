@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+import 'package:langhuan/design/components/loading_view.dart';
 import 'package:langhuan/design/components/shelf_book_view.dart';
 import 'package:langhuan/design/components/shelf_geometry.dart';
 import 'package:langhuan/design/components/shelf_palette.dart';
@@ -12,7 +13,9 @@ import 'package:langhuan/design/components/shelf_pose.dart';
 import 'package:langhuan/design/components/shelf_scene.dart';
 import 'package:langhuan/design/components/shelf_scroll_physics.dart';
 import 'package:langhuan/design/components/shelf_volume.dart';
+import 'package:langhuan/design/motion.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
+import 'package:langhuan/design/components/pressable.dart';
 
 /// 3D 书架：一排书脊 + 景深，滚动位置是唯一时钟。
 ///
@@ -73,13 +76,6 @@ class _Bookshelf3DState extends State<Bookshelf3D>
   /// 行框下方留给书名 / 作者 / 计数的固定高度。
   static const double _metaHeight = 76;
 
-  /// 点按邻书后滚到中心的时间，末段带一点点回弹。
-  static const Duration _centreDuration = Duration(milliseconds: 280);
-  static const Curve _centreCurve = Cubic(.2, 1.06, .35, 1);
-
-  /// 入场装配：整排从后场推上来。
-  static const Duration _entryDuration = Duration(milliseconds: 720);
-
   late final ShelfPose _pose;
   late final ValueNotifier<int> _active;
   late final AnimationController _entry;
@@ -115,7 +111,7 @@ class _Bookshelf3DState extends State<Bookshelf3D>
   void initState() {
     super.initState();
     _pose = ShelfPose(count: widget.books.length);
-    _entry = AnimationController(vsync: this, duration: _entryDuration)
+    _entry = AnimationController(vsync: this, duration: AppMotion.shelfEntry)
       ..value = widget.entryAnimation ? 0 : 1
       ..addListener(_assemble);
     _metaFade = _entry.drive(
@@ -341,8 +337,8 @@ class _Bookshelf3DState extends State<Bookshelf3D>
     } else {
       await _scroll!.animateTo(
         target,
-        duration: _centreDuration,
-        curve: _centreCurve,
+        duration: AppMotion.settle,
+        curve: AppMotion.settleCurve,
       );
     }
     if (mounted && command == _command) _hapticGesture = false;
@@ -542,7 +538,6 @@ class _Bookshelf3DState extends State<Bookshelf3D>
   Widget _metaLine(ShelfPalette palette, ShelfBookView book, int lane) {
     final muted = palette.muted;
     final accent = palette.accent;
-    final companion = palette.companion;
     final meta = book.progressLabel.isEmpty
         ? book.author
         : '${book.author.isEmpty ? '未知作者' : book.author} · '
@@ -573,27 +568,7 @@ class _Bookshelf3DState extends State<Bookshelf3D>
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 11, height: 1.35, color: muted),
               ),
-              if (book.hasUpdate) ...[
-                const SizedBox(height: 2),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: companion,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '有更新',
-                      style: TextStyle(fontSize: 10, color: companion),
-                    ),
-                  ],
-                ),
-              ],
+
             ],
           ),
         ),
@@ -674,13 +649,10 @@ class _Bookshelf3DState extends State<Bookshelf3D>
               textStyle: const TextStyle(fontSize: 12),
             ),
             child: _deleteBusy
-                ? const SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
+                ? const LoadingView(
+                    size: 12,
+                    strokeWidth: 2,
+                    color: Colors.white,
                   )
                 : const Text('移除'),
           ),
@@ -705,7 +677,7 @@ class _RemoveButton extends StatelessWidget {
       shape: StadiumBorder(
         side: BorderSide(color: danger.withValues(alpha: .22), width: .8),
       ),
-      child: InkWell(
+      child: Pressable(
         key: const ValueKey('shelf-remove'),
         customBorder: const StadiumBorder(),
         onTap: busy ? null : onPressed,

@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:langhuan/core/storage/prefs_keys.dart';
+import 'package:langhuan/design/components/pressable.dart';
 
 /// Bounded chapter catalog panel (Wenku8-style sheet) with search + jump.
 ///
@@ -109,10 +110,8 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
     _centeredOnce = true;
   }
 
-  List<TocRow> _rows() => buildTocRows(
-    ref.read(readModelProvider).chapters,
-    query: _query,
-  );
+  List<TocRow> _rows() =>
+      buildTocRows(ref.read(readModelProvider).chapters, query: _query);
 
   /// 目录首帧的起始行 = 当前章所在行（越界夹取，空目录在第 0 行）。
   int _initialRow(List<TocRow> rows, int chaptersLength, int cur) {
@@ -380,7 +379,11 @@ class _ChapterViewState extends ConsumerState<ChapterView> {
                           itemPositionsListener: _itemPositionsListener,
                           // 首帧即定位当前章（对齐 0.35，与后续定位一致）：
                           // 消除"先停第 1 章再跳"的闪现（批次 3·目录定位）。
-                          initialScrollIndex: _initialRow(rows, chapters.length, cur),
+                          initialScrollIndex: _initialRow(
+                            rows,
+                            chapters.length,
+                            cur,
+                          ),
                           initialAlignment: 0.35,
                           padding: const EdgeInsets.fromLTRB(0, 4, 0, 8),
                           itemCount: rows.length,
@@ -524,10 +527,7 @@ class _Header extends StatelessWidget {
                               subtitle,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: secondary,
-                                fontSize: 12,
-                              ),
+                              style: TextStyle(color: secondary, fontSize: 12),
                             ),
                           ],
                         ),
@@ -722,12 +722,8 @@ class _ChapterTile extends StatelessWidget {
       color: selected
           ? AppColors.accentSoftOf(context)
           : (dark ? AppColors.scaffoldDark : AppColors.scaffold),
-      child: InkWell(
-        onTap: () {
-          // 目录行按压反馈（批次 7·R10）。
-          HapticFeedback.selectionClick();
-          onTap();
-        },
+      child: Pressable(
+        onTap: onTap,
         child: Container(
           constraints: const BoxConstraints(minHeight: 52),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -756,7 +752,9 @@ class _ChapterTile extends StatelessWidget {
                       style: TextStyle(
                         color: titleColor,
                         fontSize: 15,
-                        fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
                         height: 1.35,
                       ),
                     ),
@@ -846,7 +844,7 @@ class _BottomBar extends StatelessWidget {
       final enabled = onTap != null;
       final color = enabled ? primary : secondary.withValues(alpha: 0.45);
       return Expanded(
-        child: InkWell(
+        child: Pressable(
           onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),

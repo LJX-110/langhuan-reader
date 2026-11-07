@@ -7,13 +7,18 @@ import 'package:langhuan/core/storage/prefs_keys.dart';
 import 'package:langhuan/design/brand/app_brand.dart';
 import 'package:langhuan/design/components/page_header.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
+import 'package:langhuan/features/backup/backup_page.dart';
 import 'package:langhuan/features/profile/info_page.dart';
 import 'package:langhuan/features/reader/settings/read_setting.dart';
+import 'package:langhuan/features/settings/performance_page.dart';
+import 'package:langhuan/features/settings/replace_rules_page.dart';
 import 'package:langhuan/features/settings/skin_page.dart';
 import 'package:langhuan/features/sources/source_repo_page.dart';
+import 'package:langhuan/features/tags/tag_manage_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:langhuan/design/components/pressable.dart';
 
 /// 我的：私人书阁的入口，不是账号中心。
 class Me extends ConsumerWidget {
@@ -89,6 +94,44 @@ class Me extends ConsumerWidget {
                         context,
                         '缓存管理',
                         () => Routes.navigateTo(context, Routes.cache),
+                        line: line,
+                      ),
+                      _row(
+                        context,
+                        '备份与恢复',
+                        () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const BackupPage()),
+                        ),
+                        line: line,
+                      ),
+                      _row(
+                        context,
+                        '标签管理',
+                        () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const TagManagePage(),
+                          ),
+                        ),
+                        line: line,
+                      ),
+                      _row(
+                        context,
+                        '替换净化',
+                        () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const ReplaceRulesPage(),
+                          ),
+                        ),
+                        line: line,
+                      ),
+                      _row(
+                        context,
+                        '低性能模式',
+                        () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const PerformancePage(),
+                          ),
+                        ),
                         line: line,
                       ),
                       _row(
@@ -208,7 +251,7 @@ class Me extends ConsumerWidget {
       children: [
         Material(
           color: Colors.transparent,
-          child: InkWell(
+          child: Pressable(
             onTap: onTap,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),

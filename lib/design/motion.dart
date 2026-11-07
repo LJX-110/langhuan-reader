@@ -23,6 +23,9 @@ abstract final class AppMotion {
   static const coverFlight = Duration(milliseconds: 1000);
   static const coverReturn = Duration(milliseconds: 840);
 
+  /// 书架入库：整排从后场推上来。
+  static const shelfEntry = Duration(milliseconds: 720);
+
   static const reveal = enter;
 
   /// 进入类曲线 / 退出类曲线 / 落位回弹曲线。
@@ -38,5 +41,6 @@ abstract final class AppMotion {
   );
 
   /// 文本抖动函数（标题 / 菜单点按用），对齐文库 `NovelMotion.jelly`。
-  static double jelly(double t) => math.sin(t * math.pi * 3) * (1 - t) * (1 - t);
+  static double jelly(double t) =>
+      math.sin(t * math.pi * 3) * (1 - t) * (1 - t);
 }

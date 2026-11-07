@@ -14,4 +14,4 @@
   - 引擎 JVM 测试：`./gradlew :data:jvmTest`（quickjs 桌面 native 需 cmake 工具链）
   - Android 目标：`./gradlew :data:assembleRelease`
 - **本地改动**：见 `LOCAL_PATCHES.md`（升级上游时按该清单重放）。
-- **许可**：GPL-3.0（见 `LICENSE`）；署名并入仓库根 `NOTICE`（M5 收尾时完成）。
+- **许可**：GPL-3.0（见 `LICENSE`）；署名已并入仓库根 `NOTICE`。

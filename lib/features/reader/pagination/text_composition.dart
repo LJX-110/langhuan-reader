@@ -1,303 +1,21 @@
-import 'dart:convert';
-import 'dart:isolate';
-import 'dart:ui' as ui;
-
 import 'package:langhuan/features/reader/settings/read_setting.dart';
 import 'package:langhuan/core/platform/screen.dart';
 import 'package:langhuan/core/utils/app_log.dart';
 import 'package:langhuan/features/reader/pagination/book_pager.dart';
 import 'package:langhuan/data/entities/read_page.dart';
-import 'package:langhuan/data/entities/text_line.dart';
 import 'package:langhuan/data/entities/text_page.dart';
-import 'package:flutter/material.dart';
 
-/// * 暂不支持图片
-/// * 文本排版
-/// * 两端对齐
-/// * 底栏对齐
+/// 分页唯一实现：Rust `book_pager`。
+///
+/// 2026-11-06 起删除 Dart 运行时兜底；Rust 不可用/结果异常时抛出
+/// [StateError]，由上层展示错误页 + 重试。Dart 不再参与生产分页。
 class TextComposition {
-  /// 待渲染文本段落
-  /// 已经预处理: 不重新计算空行 不重新缩进
-  static Color darkFont = Color(0x5FFFFFFF);
-  ReadPage? readPage;
-  final List<String> paragraphs;
-  bool? justRender;
-
-  /// 字体样式 字号 [size] 行高 [height] 字体 [family] 字色[Color]
-  TextStyle? style;
-
-  /// 段间距
-  final double paragraph;
-
-  /// 每一页内容
-  List<TextPage> pages;
-
-  int get pageCount => pages.length;
-
-  /// 单栏宽度
-  final double columnWidth;
-
-  /// 容器大小
-  final Size boxSize;
-
-  /// 内部边距
-  final EdgeInsets? padding;
-
-  /// When true, stretch line gaps to fill the content box (bottom-align look).
-  /// Prefer false so short pages can be **vertically centered** at paint time.
-  final bool shouldJustifyHeight;
-
-  /// 前景 页眉页脚 菜单等
-  final Widget Function(int pageIndex)? getForeground;
-
-  /// 背景 背景色或者背景图片
-  final ui.Image Function(int pageIndex)? getBackground;
-
-  /// 是否显示动画
-  bool showAnimation;
-
-  /// * 文本排版
-  /// * 两端对齐
-  /// * 底栏对齐
-  /// * 多栏布局
-  ///
-  ///
-  /// * [text] 待渲染文本内容 已经预处理: 不重新计算空行 不重新缩进
-  /// * [paragraphs] 待渲染文本内容 已经预处理: 不重新计算空行 不重新缩进
-  /// * [paragraphs] 为空时使用[text], 否则忽略[text],
-  /// * [style] 字体样式 字号 [size] 行高 [height] 字体 [family] 字色[Color]
-  /// * [title] 标题
-  /// * [titleStyle] 标题样式
-  /// * [boxSize] 容器大小
-  /// * [paragraph] 段间距
-  /// * [shouldJustifyHeight] 是否底栏对齐
-  /// * [columnCount] 分栏个数
-  /// * [columnGap] 分栏间距
-  /// * onLinkTap canvas 点击事件不生效
-  TextComposition({
-    String? text,
-    List<String>? paragraphs,
-    this.style,
-    this.readPage,
-    this.justRender,
-    Size? boxSize,
-    this.padding,
-    this.shouldJustifyHeight = false,
-    this.paragraph = 10.0,
-    this.getForeground,
-    this.getBackground,
-    this.debug = false,
-    List<TextPage>? pages,
-    this.showAnimation = true,
-    // this.linkPattern,
-    // this.linkStyle,
-    // this.linkText,
-    // this.onLinkTap,
-  }) : pages = pages ?? <TextPage>[],
-       paragraphs = paragraphs ?? text?.split("\n") ?? <String>[],
-       boxSize =
-           boxSize ??
-           (ui.PlatformDispatcher.instance.views.isNotEmpty
-               ? ui.PlatformDispatcher.instance.views.first.physicalSize /
-                     ui.PlatformDispatcher.instance.views.first.devicePixelRatio
-               : const Size(360, 640)),
-       columnWidth =
-           ((boxSize ??
-                   (ui.PlatformDispatcher.instance.views.isNotEmpty
-                       ? ui
-                                 .PlatformDispatcher
-                                 .instance
-                                 .views
-                                 .first
-                                 .physicalSize /
-                             ui
-                                 .PlatformDispatcher
-                                 .instance
-                                 .views
-                                 .first
-                                 .devicePixelRatio
-                       : const Size(360, 640)))
-               .width -
-           (padding?.horizontal ?? 0)) {
-    // ABI v3 Dart fallback: emit semantic lines (top/height/justify/targetWidth).
-    // letterSpacing is computed at paint time by Flutter TextPainter.
-    final tp = TextPainter(textDirection: TextDirection.ltr, maxLines: 1);
-    final size = style?.fontSize ?? 14;
-    final width = columnWidth;
-    final width2 = width - size;
-    final height = this.boxSize.height - (padding?.vertical ?? 0);
-    final height2 = height - size * (style?.height ?? 1.0);
-    final lineBoxH = size * (style?.height ?? 1.0);
-
-    var lines = <TextLine>[];
-    var top = 0.0;
-    var startLine = 0;
-    var pageIndex = 0;
-
-    void newPage([bool shouldJustifyHeight = true, bool lastPage = false]) {
-      if (shouldJustifyHeight && this.shouldJustifyHeight) {
-        final len = lines.length - startLine;
-        if (len > 1) {
-          final justifyGap = (height - top) / (len - 1);
-          if (justifyGap.isFinite && justifyGap > 0) {
-            for (var i = 0; i < len; i++) {
-              lines[i + startLine].justifyDy(justifyGap * i);
-            }
-          }
-        }
-      }
-      final pageLines = lines;
-      final pageH = pageLines.isEmpty
-          ? 0.0
-          : pageLines.last.top + pageLines.last.height;
-      this.pages.add(TextPage(pageLines, pageH, pageIndex: pageIndex));
-      pageIndex++;
-      lines = <TextLine>[];
-      top = 0.0;
-      startLine = 0;
-    }
-
-    void newParagraph() {
-      if (top > height2) {
-        newPage();
-      } else {
-        top += paragraph;
-      }
-    }
-
-    // Leave 1% width slack so paint-side metrics don't overflow.
-    final measureWidth = width * 0.99;
-    final measureOffset = Offset(measureWidth, 1);
-
-    for (var p in this.paragraphs) {
-      while (true) {
-        tp.text = TextSpan(text: p, style: style);
-        tp.layout(maxWidth: measureWidth);
-        final textCount = tp.getPositionForOffset(measureOffset).offset;
-        if (textCount <= 0) {
-          final forceEnd = p.isEmpty
-              ? 0
-              : (p.length > 1 &&
-                            p.codeUnitAt(0) >= 0xD800 &&
-                            p.codeUnitAt(0) <= 0xDBFF
-                        ? 2
-                        : 1)
-                    .clamp(1, p.length);
-          final text = p.substring(0, forceEnd);
-          final isEnd = p.length == forceEnd;
-          lines.add(
-            TextLine(
-              text,
-              top: top,
-              height: lineBoxH,
-              justify: false,
-              isLastLine: isEnd,
-              isParagraphEnd: isEnd,
-              targetWidth: width,
-            ),
-          );
-          top += lineBoxH;
-          if (isEnd) {
-            newParagraph();
-            break;
-          }
-          p = p.substring(forceEnd);
-          if (top > height2) newPage();
-          continue;
-        }
-        final text = p.substring(0, textCount);
-        tp.text = TextSpan(text: text, style: style);
-        tp.layout();
-        final measured = tp.width;
-        final isEnd = p.length == textCount;
-        final n = text.characters.length;
-        final nearlyFull = measured > width2 && measured > size * 0.5;
-        final doJustify = !isEnd && nearlyFull && n > 1;
-        final h = tp.height > 0 ? tp.height : lineBoxH;
-        lines.add(
-          TextLine(
-            text,
-            top: top,
-            height: h,
-            justify: doJustify,
-            isLastLine: isEnd,
-            isParagraphEnd: isEnd,
-            targetWidth: width,
-          ),
-        );
-        top += h;
-        if (isEnd) {
-          newParagraph();
-          break;
-        } else {
-          p = p.substring(textCount);
-          if (top > height2) {
-            newPage();
-          }
-        }
-      }
-    }
-    if (lines.isNotEmpty) {
-      newPage(false, true);
-    }
-    if (this.pages.isEmpty) {
-      this.pages.add(const TextPage([], 0));
-    }
-  }
-
-  /// 调试模式 输出布局信息
-  bool debug;
-
-  static void dataLoader(SendPort sendPort) async {
-    // 打开ReceivePort①以接收传入的消息
-    ReceivePort port = ReceivePort();
-
-    // 通知其他的isolates，本isolate 所监听的端口
-    sendPort.send(port.sendPort);
-    // 获取其他端口发送的异步消息 msg② -> ["https://jsonplaceholder.typicode.com/posts", response.sendPort]
-    await for (var msg in port) {
-      SendPort replyToPort = msg[0];
-      ReadPage readPage = ReadPage.fromJson(jsonDecode(msg[1]));
-
-      double w = double.parse(msg[2].toString());
-      double h = double.parse(msg[3].toString());
-      String fontFamily = msg[4].toString();
-      double fontSize = double.parse(msg[5].toString());
-      double height = double.parse(msg[6].toString());
-      double dis = double.parse(msg[7].toString());
-      double paragraph = double.parse(msg[8].toString());
-
-      TextComposition textComposition = TextComposition(
-        text: readPage.chapterContent,
-        readPage: readPage,
-        style: TextStyle(
-          // color: dark == 1 ? darkFont : Colors.black,
-          // locale: Locale('zh_CN'),
-          fontFamily: fontFamily,
-          fontSize: fontSize,
-          height: height,
-        ),
-        paragraph: paragraph,
-        justRender: true,
-        boxSize: Size(w, h),
-        padding: EdgeInsets.symmetric(horizontal: dis),
-        shouldJustifyHeight: false,
-        debug: false,
-      );
-      List<TextPage> parseContent2 = textComposition.pages;
-
-      String result = jsonEncode(parseContent2);
-
-      replyToPort.send([result]);
-    }
-  }
+  TextComposition._();
 
   /// Collect layout metrics on the UI isolate (SpUtil / Screen are main-only).
   static Map<String, dynamic> layoutParams({bool shouldJustifyHeight = false}) {
     final fontSize = ReadSetting.getFontSize();
     final lineHeight = ReadSetting.getLineHeight();
-    // Content box uses shared insets from ReadSetting so paint + paginate match.
-    // Never allow a non-positive height — that collapses pagination to one line.
     final topPad = ReadSetting.contentTopInset();
     final bottomPad = ReadSetting.contentBottomInset();
     final rawH = Screen.height - topPad - bottomPad;
@@ -315,7 +33,6 @@ class TextComposition {
       'fontFamily': ReadSetting.getFontFamily(),
       'fontPath': ReadSetting.getFontPath(),
       'shouldJustifyHeight': shouldJustifyHeight,
-      // Bump cache when pager contract changes.
       'abi': bookPagerAbiVersion,
       'engineRevision': bookPagerLayoutRevision,
       'textAlign': ReadSetting.getTextAlign(),
@@ -325,137 +42,85 @@ class TextComposition {
   /// Sync parse — may block the current isolate. Prefer [parseContentAsync].
   static List<TextPage> parseContent(
     ReadPage readPage, {
-    shouldJustifyHeight = true,
-    justRender = false,
+    bool shouldJustifyHeight = true,
   }) {
-    final p = layoutParams(shouldJustifyHeight: shouldJustifyHeight == true);
-    return _parseWithParams(readPage, p, justRender: justRender == true);
+    final p = layoutParams(shouldJustifyHeight: shouldJustifyHeight);
+    return _parseWithParams(readPage, p);
   }
 
-  /// Async parse: Rust path runs in a **background isolate**; Dart fallback
-  /// stays on the caller isolate (TextPainter needs the Flutter binding).
+  /// Async parse on the caller isolate; Rust FFI is not isolate-safe here.
   static Future<List<TextPage>> parseContentAsync(
     ReadPage readPage, {
     bool shouldJustifyHeight = true,
-    bool justRender = false,
   }) async {
     final p = layoutParams(shouldJustifyHeight: shouldJustifyHeight);
-    final fontSize = p['fontSize'] as double;
-    final lineHeight = p['lineHeight'] as double;
-    final paragraph = p['paragraph'] as double;
-    final padH = p['padH'] as double;
-    final boxW = p['boxW'] as double;
-    final boxH = p['boxH'] as double;
-    final fontFamily = p['fontFamily'] as String;
     final fontPath = p['fontPath'] as String? ?? '';
-
-    final nativeOk = BookPager.isAvailable;
-    // Always print engine probe so real-device logcat can filter "PagerEngine".
-    debugPrint(
-      '[PagerEngine] probe native=$nativeOk '
-      'err=${BookPager.lastError ?? "-"} '
-      'contentLen=${readPage.chapterContent.length} '
-      'box=${boxW.toStringAsFixed(0)}x${boxH.toStringAsFixed(0)} '
-      'font=$fontSize',
-    );
-    AppLog.i(
-      'Pager',
-      'layout boxW=$boxW boxH=$boxH fontSize=$fontSize '
-          'lineHeight=$lineHeight padH=$padH family=$fontFamily '
-          'fontPath=${fontPath.isEmpty ? "-" : fontPath} '
-          'contentLen=${readPage.chapterContent.length} '
-          'native=$nativeOk err=${BookPager.lastError ?? "-"}',
-    );
-
-    if (nativeOk && fontPath.isNotEmpty) {
-      try {
-        final pages = await BookPager.paginateAsync(
-          text: readPage.chapterContent,
-          fontSize: fontSize,
-          lineHeight: lineHeight,
-          paragraph: paragraph,
-          boxWidth: boxW,
-          boxHeight: boxH,
-          paddingHorizontal: padH,
-          paddingVertical: 0,
-          shouldJustifyHeight: shouldJustifyHeight,
-          fontPath: fontPath,
-          fontFamily: fontFamily,
-          textAlign: p['textAlign'] as String,
-        );
-        final totalLines = pages.fold<int>(0, (n, p) => n + p.lines.length);
-        if (!_looksBrokenPagination(
-          pages,
-          readPage.chapterContent,
-          boxW,
-          fontSize,
-        )) {
-          debugPrint(
-            '[PagerEngine] ENGINE=RUST pages=${pages.length} '
-            'lines=$totalLines lines0=${pages.isEmpty ? 0 : pages.first.lines.length}',
-          );
-          AppLog.i(
-            'Pager',
-            'ENGINE=RUST pages=${pages.length} totalLines=$totalLines '
-                'lines0=${pages.isEmpty ? 0 : pages.first.lines.length}',
-          );
-          return pages;
-        }
-        debugPrint(
-          '[PagerEngine] ENGINE=DART reason=rust_broken_pagination '
-          'pages=${pages.length} lines=$totalLines',
-        );
-        AppLog.w(
-          'Pager',
-          'ENGINE=DART reason=rust_broken (single overlong line) '
-              'pages=${pages.length} lines=$totalLines',
-        );
-      } catch (e, st) {
-        debugPrint('[PagerEngine] ENGINE=DART reason=rust_exception $e');
-        AppLog.w('Pager', 'ENGINE=DART reason=rust_exception', error: e);
-        debugPrint('BookPager async failed, falling back to Dart: $e\n$st');
-      }
-    } else if (nativeOk && fontPath.isEmpty) {
-      debugPrint(
-        '[PagerEngine] ENGINE=DART reason=font_path_empty '
-        '(need assets/fonts/HarmonyOS_Sans_SC_Regular.ttf or custom font)',
-      );
-      AppLog.i('Pager', 'ENGINE=DART reason=font_path_empty');
-    } else {
-      debugPrint(
-        '[PagerEngine] ENGINE=DART reason=native_unavailable '
-        'err=${BookPager.lastError ?? "-"}',
-      );
-      AppLog.i(
-        'Pager',
-        'ENGINE=DART reason=native_unavailable err=${BookPager.lastError ?? "-"}',
-      );
+    if (!BookPager.isAvailable) {
+      throw StateError('Rust 分页库不可用：${BookPager.lastError ?? "unknown"}');
+    }
+    if (fontPath.isEmpty) {
+      throw StateError('Rust 分页缺少字体路径');
     }
 
-    // Yield once so loading UI can paint before heavy TextPainter work.
-    await Future<void>.delayed(Duration.zero);
-    final dartPages = _dartParse(
-      readPage,
-      fontSize: fontSize,
-      lineHeight: lineHeight,
-      paragraph: paragraph,
-      padH: padH,
-      boxW: boxW,
-      boxH: boxH,
-      fontFamily: fontFamily,
+    final pages = await BookPager.paginateAsync(
+      text: readPage.chapterContent,
+      fontSize: p['fontSize'] as double,
+      lineHeight: p['lineHeight'] as double,
+      paragraph: p['paragraph'] as double,
+      boxWidth: p['boxW'] as double,
+      boxHeight: p['boxH'] as double,
+      paddingHorizontal: p['padH'] as double,
+      paddingVertical: 0,
       shouldJustifyHeight: shouldJustifyHeight,
-      justRender: justRender,
+      fontPath: fontPath,
+      fontFamily: p['fontFamily'] as String,
+      textAlign: p['textAlign'] as String,
     );
-    final dartLines = dartPages.fold<int>(0, (n, p) => n + p.lines.length);
-    debugPrint(
-      '[PagerEngine] ENGINE=DART pages=${dartPages.length} lines=$dartLines',
-    );
+    final totalLines = pages.fold<int>(0, (n, page) => n + page.lines.length);
+    if (_looksBrokenPagination(
+      pages,
+      readPage.chapterContent,
+      p['boxW'] as double,
+      p['fontSize'] as double,
+    )) {
+      AppLog.w(
+        'Pager',
+        'Rust broken pagination pages=${pages.length} lines=$totalLines',
+      );
+      throw StateError('Rust 分页结果异常（整章单行）');
+    }
     AppLog.i(
       'Pager',
-      'ENGINE=DART pages=${dartPages.length} totalLines=$dartLines '
-          'lines0=${dartPages.isEmpty ? 0 : dartPages.first.lines.length}',
+      'ENGINE=RUST pages=${pages.length} totalLines=$totalLines',
     );
-    return dartPages;
+    return pages;
+  }
+
+  static List<TextPage> _parseWithParams(
+    ReadPage readPage,
+    Map<String, dynamic> p,
+  ) {
+    final fontPath = p['fontPath'] as String? ?? '';
+    if (!BookPager.isAvailable) {
+      throw StateError('Rust 分页库不可用：${BookPager.lastError ?? "unknown"}');
+    }
+    if (fontPath.isEmpty) {
+      throw StateError('Rust 分页缺少字体路径');
+    }
+    return BookPager.paginate(
+      text: readPage.chapterContent,
+      fontSize: p['fontSize'] as double,
+      lineHeight: p['lineHeight'] as double,
+      paragraph: p['paragraph'] as double,
+      boxWidth: p['boxW'] as double,
+      boxHeight: p['boxH'] as double,
+      paddingHorizontal: p['padH'] as double,
+      paddingVertical: 0,
+      shouldJustifyHeight: p['shouldJustifyHeight'] as bool? ?? true,
+      fontPath: fontPath,
+      fontFamily: p['fontFamily'] as String,
+      textAlign: p['textAlign'] as String,
+    );
   }
 
   /// Detect "whole chapter as one TextLine" failure mode from native pager.
@@ -469,103 +134,13 @@ class TextComposition {
     if (pages.isEmpty) return true;
     final totalLines = pages.fold<int>(0, (n, p) => n + p.lines.length);
     if (totalLines == 0) return true;
-    // One visual line for a long chapter is always wrong.
     if (totalLines == 1 && content.trim().length > 60) return true;
     final maxChars = (boxW / (fontSize * 0.85)).floor().clamp(8, 200);
     for (final p in pages) {
       for (final line in p.lines) {
-        if (line.text.characters.length > maxChars * 2) return true;
+        if (line.text.runes.length > maxChars * 2) return true;
       }
     }
     return false;
-  }
-
-  static List<TextPage> _parseWithParams(
-    ReadPage readPage,
-    Map<String, dynamic> p, {
-    bool justRender = false,
-  }) {
-    final fontSize = p['fontSize'] as double;
-    final lineHeight = p['lineHeight'] as double;
-    final paragraph = p['paragraph'] as double;
-    final padH = p['padH'] as double;
-    final boxW = p['boxW'] as double;
-    final boxH = p['boxH'] as double;
-    final fontFamily = p['fontFamily'] as String;
-    final fontPath = p['fontPath'] as String? ?? '';
-    final shouldJustifyHeight = p['shouldJustifyHeight'] as bool? ?? true;
-
-    if (BookPager.isAvailable && fontPath.isNotEmpty) {
-      try {
-        return BookPager.paginate(
-          text: readPage.chapterContent,
-          fontSize: fontSize,
-          lineHeight: lineHeight,
-          paragraph: paragraph,
-          boxWidth: boxW,
-          boxHeight: boxH,
-          paddingHorizontal: padH,
-          paddingVertical: 0,
-          shouldJustifyHeight: shouldJustifyHeight,
-          fontPath: fontPath,
-          fontFamily: fontFamily,
-          textAlign: p['textAlign'] as String,
-        );
-      } catch (e, st) {
-        AppLog.w('Pager', 'BookPager sync failed, Dart fallback', error: e);
-        debugPrint('[PagerEngine] ENGINE=DART reason=rust_exception $e');
-        debugPrint('BookPager failed, falling back to Dart: $e\n$st');
-      }
-    } else if (nativeOkMissingPath(fontPath)) {
-      debugPrint('[PagerEngine] ENGINE=DART reason=font_path_empty');
-    }
-    return _dartParse(
-      readPage,
-      fontSize: fontSize,
-      lineHeight: lineHeight,
-      paragraph: paragraph,
-      padH: padH,
-      boxW: boxW,
-      boxH: boxH,
-      fontFamily: fontFamily,
-      shouldJustifyHeight: shouldJustifyHeight,
-      justRender: justRender,
-    );
-  }
-
-  static bool nativeOkMissingPath(String fontPath) =>
-      BookPager.isAvailable && fontPath.isEmpty;
-
-  static List<TextPage> _dartParse(
-    ReadPage readPage, {
-    required double fontSize,
-    required double lineHeight,
-    required double paragraph,
-    required double padH,
-    required double boxW,
-    required double boxH,
-    required String fontFamily,
-    required bool shouldJustifyHeight,
-    bool justRender = false,
-  }) {
-    final textComposition = TextComposition(
-      text: readPage.chapterContent,
-      readPage: readPage,
-      style: TextStyle(
-        locale: Locale('zh_CN'),
-        fontFamily: (fontFamily.isEmpty || fontFamily == 'Roboto')
-            ? ReadSetting.defaultFontFamily
-            : fontFamily,
-        fontSize: fontSize,
-        height: lineHeight,
-      ),
-      paragraph: paragraph,
-      justRender: justRender,
-      boxSize: Size(boxW, boxH),
-      padding: EdgeInsets.symmetric(horizontal: padH),
-      shouldJustifyHeight: shouldJustifyHeight,
-      debug: false,
-    );
-    return textComposition.pages;
   }
 }

@@ -2,11 +2,12 @@ import 'dart:convert';
 
 import 'package:langhuan/core/utils/redact.dart';
 
-import 'package:bot_toast/bot_toast.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import 'package:langhuan/app/router/routes.dart';
+import 'package:langhuan/core/storage/local_store.dart';
+import 'package:langhuan/core/storage/prefs_keys.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/design/components/bookshelf_3d.dart';
@@ -14,6 +15,8 @@ import 'package:langhuan/design/components/page_header.dart';
 import 'package:langhuan/design/components/shelf_book_view.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/features/local/local_import_service.dart';
+import 'package:langhuan/design/components/feedback.dart';
+import 'package:langhuan/design/components/loading_view.dart';
 
 /// Local TXT library: imported files live in reader.db and open in the
 /// existing reader without a book source.
@@ -64,7 +67,7 @@ class _LocalPageState extends State<LocalPage> {
         allowMultiple: true,
       );
     } catch (e) {
-      BotToast.showText(text: '无法打开文件选择器：${Redact.userMessage(e)}');
+      showError('无法打开文件选择器：${Redact.userMessage(e)}');
       return;
     }
     if (picked == null || picked.files.isEmpty) return;
@@ -94,7 +97,7 @@ class _LocalPageState extends State<LocalPage> {
     await _reload();
     if (failures.isEmpty) {
       final name = last?.book.name ?? '';
-      BotToast.showText(text: ok == 1 ? '已导入《$name》' : '已导入 $ok 本');
+      showFeedback(ok == 1 ? '已导入《$name》' : '已导入 $ok 本');
       return;
     }
     if (!mounted) return;
@@ -153,7 +156,7 @@ class _LocalPageState extends State<LocalPage> {
     try {
       await _books.delete(book.id);
     } catch (e) {
-      BotToast.showText(text: '删除失败：${Redact.userMessage(e)}');
+      showError('删除失败：${Redact.userMessage(e)}');
       await _reload();
     }
   }
@@ -219,7 +222,7 @@ class _LocalPageState extends State<LocalPage> {
               ),
             ),
             if (_importing)
-              LinearProgressIndicator(
+              LoadingBar(
                 minHeight: 2,
                 value: _importTotal > 0 ? _importDone / _importTotal : null,
               ),
@@ -232,12 +235,13 @@ class _LocalPageState extends State<LocalPage> {
 
   Widget _body(bool dark) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const LoadingView.page();
     }
     if (_list.isEmpty) return _empty(dark);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppDimens.pagePadding),
       child: Bookshelf3D(
+        entryAnimation: !SpUtil.getBool(PrefsKeys.lowPerformance),
         books: _list.map(ShelfBookView.fromBook).toList(growable: false),
         initialBookId: _initialFocusId(),
         onOpen: (view) => _openById(view.id),

@@ -36,7 +36,7 @@ subprojects {
 }
 
 // Align Java/Kotlin JVM targets across Flutter plugins.
-// flutter_js (and some older plugins) hardcode Kotlin jvmTarget 1.8 while AGP 9
+// Some older plugins hardcode Kotlin jvmTarget 1.8 while AGP 9
 // defaults JavaCompile to 11, which fails with:
 //   Inconsistent JVM-target compatibility ... Java (11) and Kotlin (1.8)
 //

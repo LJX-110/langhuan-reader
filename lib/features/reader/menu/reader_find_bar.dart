@@ -12,9 +12,12 @@ class ReaderFindBar extends StatelessWidget {
     required this.index,
     required this.total,
     required this.snippet,
+    required this.cachedScope,
+    required this.searching,
     required this.onChanged,
     required this.onPrev,
     required this.onNext,
+    required this.onToggleScope,
     required this.onClose,
   });
 
@@ -23,9 +26,16 @@ class ReaderFindBar extends StatelessWidget {
   final int index;
   final int total;
   final String snippet;
+
+  /// true = search all cached chapters of this book; false = current chapter.
+  final bool cachedScope;
+
+  /// Cross-chapter search is running (local cache scan).
+  final bool searching;
   final ValueChanged<String> onChanged;
   final VoidCallback onPrev;
   final VoidCallback onNext;
+  final VoidCallback onToggleScope;
   final VoidCallback onClose;
 
   @override
@@ -33,7 +43,9 @@ class ReaderFindBar extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final surface = dark ? AppColors.surfaceDark : AppColors.paperLight;
     final line = chrome.divider;
-    final label = total == 0 ? '无结果' : '${index + 1}/$total';
+    final label = searching
+        ? '…'
+        : (total == 0 ? '无结果' : '${index + 1}/$total');
 
     return Container(
       decoration: BoxDecoration(
@@ -76,7 +88,7 @@ class ReaderFindBar extends StatelessWidget {
                         decoration: InputDecoration(
                           isDense: true,
                           border: InputBorder.none,
-                          hintText: '在本章查找',
+                          hintText: cachedScope ? '在已缓存章节查找' : '在本章查找',
                           hintStyle: TextStyle(
                             fontSize: 13,
                             color: chrome.muted,
@@ -127,6 +139,38 @@ class ReaderFindBar extends StatelessWidget {
                     onPressed: total == 0 ? null : onNext,
                   ),
                 ],
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(48, 0, 8, 0),
+                child: Row(
+                  children: [
+                    TextButton.icon(
+                      onPressed: onToggleScope,
+                      icon: Icon(
+                        cachedScope
+                            ? Icons.menu_book_outlined
+                            : Icons.description_outlined,
+                        size: 14,
+                      ),
+                      label: Text(
+                        cachedScope ? '已缓存章节' : '仅本章',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(0, 26),
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        foregroundColor: cachedScope
+                            ? AppColors.accentOf(context)
+                            : chrome.muted,
+                      ),
+                    ),
+                    if (cachedScope)
+                      Text(
+                        searching ? '正在搜索缓存…' : '只搜索本地已缓存章节',
+                        style: TextStyle(fontSize: 11, color: chrome.muted),
+                      ),
+                  ],
+                ),
               ),
               if (snippet.isNotEmpty)
                 Padding(

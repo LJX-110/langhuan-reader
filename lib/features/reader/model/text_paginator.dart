@@ -16,13 +16,13 @@ class PaginateOutcome {
     required this.pages,
     this.complete = true,
     this.nextChar = 0,
-    this.engine = 'dart',
+    this.engine = 'rust',
     this.jobId = 0,
     this.fallbackReason,
   });
 }
 
-/// 统一分页入口：metrics 采集 + Rust/Dart 分页 + cancel/progress.
+/// 统一分页入口：Rust `book_pager` 单一实现 + cancel/progress.
 ///
 /// 从 [TextComposition] 静态 API 薄封装，便于 ReadModel 与测试注入。
 class TextPaginator {
@@ -69,7 +69,7 @@ class TextPaginator {
   /// 2. Continues in background chunks via [onProgress]
   /// 3. Honors [cancelActive] between chunks
   ///
-  /// Falls back to full Dart/Rust one-shot when progressive path is unavailable.
+  /// Falls back to the Rust one-shot when progressive path is unavailable.
   Future<PaginateOutcome> paginateProgressive(
     ReadPage readPage, {
     bool shouldJustifyHeight = false,
@@ -123,9 +123,9 @@ class TextPaginator {
           pages: pages,
           complete: true,
           nextChar: text.length,
-          engine: canNative ? 'rust' : 'dart',
+          engine: 'rust',
           jobId: jobId,
-          fallbackReason: canNative ? null : (BookPager.lastError ?? 'dart'),
+          fallbackReason: canNative ? null : BookPager.lastError,
         );
       } finally {
         if (_activeJobId == jobId) _activeJobId = 0;
@@ -231,7 +231,7 @@ class TextPaginator {
         return PaginateOutcome(
           pages: pages,
           complete: true,
-          engine: 'dart',
+          engine: 'rust',
           jobId: jobId,
           fallbackReason: 'rust_empty',
         );
@@ -246,7 +246,7 @@ class TextPaginator {
         fallbackReason: reason,
       );
     } catch (e) {
-      // Native progressive failed → full fallback.
+      // Native progressive failed → Rust one-shot retry (same engine).
       final pages = await paginate(
         readPage,
         shouldJustifyHeight: shouldJustifyHeight,
@@ -257,7 +257,7 @@ class TextPaginator {
       return PaginateOutcome(
         pages: pages,
         complete: true,
-        engine: 'dart',
+        engine: 'rust',
         jobId: jobId,
         fallbackReason: 'rust_exception:$e',
       );
@@ -301,7 +301,8 @@ class TextPaginator {
     final fontPath = '${layoutParams['fontPath'] ?? ''}';
     final justify = layoutParams['shouldJustifyHeight'] == true ? '1' : '0';
     final abi = '${layoutParams['abi'] ?? bookPagerAbiVersion}';
-    final engine = '${layoutParams['engineRevision'] ?? bookPagerLayoutRevision}';
+    final engine =
+        '${layoutParams['engineRevision'] ?? bookPagerLayoutRevision}';
     final align = '${layoutParams['textAlign'] ?? 'justify'}';
     return 'abi$abi|eng$engine|$fontSize|$lineHeight|$paragraph|$padH|'
         '$boxW|$boxH|$topSafe|$bottomSafe|$fontFamily|$fontPath|$justify|'

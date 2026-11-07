@@ -6,6 +6,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookListPage
 import io.legado.app.data.entities.BookSource
+import io.legado.app.help.AppCacheManager
 import io.legado.app.help.JsCryptoProviderJvm
 import io.legado.app.help.JsCryptoProviders
 import io.legado.app.help.RuleBigDataProviders
@@ -25,6 +26,7 @@ import io.legado.app.help.source.SourceCacheProviders
 import io.legado.app.help.source.SourceDebugLogger
 import io.legado.app.help.source.SourceDebugLoggers
 import io.legado.app.help.source.SourceNetworkProviders
+import io.legado.app.data.AppDatabase
 import io.legado.app.data.AppDatabaseProviders
 import io.legado.app.data.AppDbProviders
 import io.legado.app.model.SharedJsScope
@@ -33,6 +35,7 @@ import io.legado.app.model.script.JsEngines
 import io.legado.app.model.script.quickjs.QuickJsJsEngine
 import io.legado.app.model.script.quickjs.QuickJsSharedJsScopeBase
 import io.legado.app.model.webBook.WebBook
+import io.legado.app.utils.ChineseUtils
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.encodeToString
@@ -57,6 +60,7 @@ object EngineFacade {
 
     @Volatile
     private var initialized = false
+    private lateinit var appContext: Context
 
     /** 引擎日志回流（琅嬛阁日志页用；由宿主设置）。 */
     @Volatile
@@ -66,8 +70,8 @@ object EngineFacade {
         if (initialized) return
         synchronized(this) {
             if (initialized) return
-            initialized = true
             val app = context.applicationContext
+            appContext = app
             System.setProperty(
                 "legado.portable.root",
                 File(app.filesDir, "legado").apply { mkdirs() }.absolutePath,
@@ -127,6 +131,7 @@ object EngineFacade {
                     logSink?.invoke(msg)
                 }
             }
+            initialized = true
         }
     }
 
@@ -140,11 +145,23 @@ object EngineFacade {
      * 搜索：书源 JSON + 关键词 + 页码
      * → `{ok, hits:[{name,author,coverUrl,bookUrl,lastChapter,intro,kind}], hasNextPage, nextPageUrl, error}`。
      */
-    fun search(sourceJson: String, keyword: String, page: Int = 1): String = runBlocking {
+    fun search(
+        sourceJson: String,
+        keyword: String,
+        page: Int = 1,
+        nextPageUrl: String? = null,
+    ): String = runBlocking {
         val source = decodeSource(sourceJson)
             ?: return@runBlocking errorJson("书源 JSON 解析失败")
         try {
-            bookListJson(WebBook.getBookListAwait(source, keyword, page.coerceAtLeast(1)))
+            bookListJson(
+                WebBook.getBookListAwait(
+                    source,
+                    keyword,
+                    page.coerceAtLeast(1),
+                    nextPageUrl = nextPageUrl?.takeIf { it.isNotBlank() },
+                ),
+            )
         } catch (e: Exception) {
             errorJson(e.message ?: e::class.simpleName ?: "搜索失败")
         }
@@ -193,6 +210,7 @@ object EngineFacade {
                         put("lastChapter", b.latestChapterTitle ?: "")
                         put("intro", b.intro ?: "")
                         put("kind", b.kind ?: "")
+                        put("wordCount", b.wordCount ?: "")
                     }
                 )
             }
@@ -200,6 +218,47 @@ object EngineFacade {
         put("hasNextPage", page.hasNextPage)
         put("nextPageUrl", page.nextPageUrl ?: "")
     }.toString()
+
+    /** 正文简繁转换：`traditional=true` 转繁体，否则转简体。 */
+    fun convertChinese(text: String, traditional: Boolean): String = try {
+        buildJsonObject {
+            put("ok", true)
+            put(
+                "text",
+                if (traditional) ChineseUtils.s2t(text) else ChineseUtils.t2s(text),
+            )
+        }.toString()
+    } catch (e: Exception) {
+        errorJson(e.message ?: e::class.simpleName ?: "简繁转换失败")
+    }
+
+    /** 当前 URL 所属域名的 Cookie（含 session；无则空串）。 */
+    fun cookieHeader(url: String): String = buildJsonObject {
+        put("ok", true)
+        put("cookie", CookieStoreProviders.get()?.getCookie(url).orEmpty())
+    }.toString()
+
+    /** 清除全部登录态：OkHttp cookie + Room cookie + 内存热层。 */
+    fun clearCookies(): String {
+        CookieStoreProviders.get()?.clear()
+        runBlocking { AppDbProviders.get().cookieDao.deleteAll() }
+        AppCacheManager.clearCookieMemory()
+        return okJson()
+    }
+
+    /** 引擎私有缓存字节数（不含登录态 Cookie）。 */
+    fun cacheStats(): String = buildJsonObject {
+        put("ok", true)
+        put("bytes", engineDataBytes())
+    }.toString()
+
+    /** 清除引擎私有缓存：filesDir/legado + cacheDao + 内存源变量。 */
+    fun clearEngineCache(): String {
+        File(appContext.filesDir, "legado").deleteRecursively()
+        runBlocking { AppDbProviders.get().cacheDao.deleteAll() }
+        AppCacheManager.clearSourceVariables()
+        return okJson()
+    }
 
     /** 详情：书源 JSON + 书籍 JSON → 更新后的书籍 JSON（键 `book`）。 */
     fun bookInfo(sourceJson: String, bookJson: String): String = runBlocking {
@@ -301,4 +360,13 @@ object EngineFacade {
             put("ok", false)
             put("error", message.take(200))
         }.toString()
+
+    private fun okJson(): String = buildJsonObject { put("ok", true) }.toString()
+
+    private fun engineDataBytes(): Long {
+        val root = File(appContext.filesDir, "legado")
+        val db = appContext.getDatabasePath(AppDatabase.DATABASE_NAME)
+        return listOf(root, db, File("${db.path}-wal"), File("${db.path}-shm"))
+            .sumOf { file -> if (file.exists()) file.walkTopDown().filter { it.isFile }.sumOf { it.length() } else 0L }
+    }
 }

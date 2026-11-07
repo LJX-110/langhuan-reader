@@ -1,5 +1,6 @@
-import 'package:bot_toast/bot_toast.dart';
 import 'package:langhuan/core/utils/redact.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +12,7 @@ import 'package:langhuan/data/entities/read_page.dart';
 import 'package:langhuan/data/repositories/bookmark_repository.dart';
 import 'package:langhuan/design/motion.dart';
 import 'package:langhuan/design/theme/color_model.dart';
+import 'package:langhuan/features/reader/model/cached_chapter_search.dart';
 import 'package:langhuan/features/reader/menu/reader_bottom_bar.dart';
 import 'package:langhuan/features/reader/menu/reader_chapter_panel.dart';
 import 'package:langhuan/features/reader/menu/reader_chrome.dart';
@@ -21,6 +23,7 @@ import 'package:langhuan/features/reader/menu/reader_settings_panel.dart';
 import 'package:langhuan/features/reader/menu/reader_top_bar.dart';
 import 'package:langhuan/features/reader/read_model.dart';
 import 'package:langhuan/features/reader/settings/read_setting.dart';
+import 'package:langhuan/design/components/feedback.dart';
 
 /// Reader chrome overlay: top bar plus a bottom panel whose content switches
 /// between chapters, settings, layout and download.
@@ -42,8 +45,14 @@ class _MenuState extends ConsumerState<ReaderMenu> {
 
   bool _finding = false;
   final TextEditingController _findCtrl = TextEditingController();
-  List<({int page, String snippet})> _findMatches = const [];
+  List<({int chapter, int page, String snippet})> _findMatches = const [];
   int _findIndex = 0;
+
+  /// 跨章搜索开关：true 搜索本书全部已缓存正文，false 只搜当前章。
+  bool _findCached = false;
+  bool _findSearching = false;
+  int _findSeq = 0;
+  Timer? _findTimer;
 
   final BookmarkRepository _bookmarks = BookmarkRepository.instance;
   String? _bookmarkKey;
@@ -65,6 +74,7 @@ class _MenuState extends ConsumerState<ReaderMenu> {
 
   @override
   void dispose() {
+    _findTimer?.cancel();
     _findCtrl.dispose();
     super.dispose();
   }
@@ -120,10 +130,10 @@ class _MenuState extends ConsumerState<ReaderMenu> {
         await _bookmarks.remove(id);
       }
       if (!mounted) return;
-      BotToast.showText(text: willBookmark ? '已添加书签' : '已取消书签');
+      showFeedback(willBookmark ? '已添加书签' : '已取消书签');
     } catch (e) {
       if (mounted) setState(() => _bookmarked = wasBookmarked);
-      BotToast.showText(text: '书签操作失败：${Redact.userMessage(e)}');
+      showError('书签操作失败：${Redact.userMessage(e)}');
     }
   }
 
@@ -141,37 +151,103 @@ class _MenuState extends ConsumerState<ReaderMenu> {
       _findCtrl.clear();
       _findMatches = const [];
       _findIndex = 0;
+      _findCached = false;
+      _findSearching = false;
     });
   }
 
   void _closeFind() {
+    _findTimer?.cancel();
+    _findSeq++;
     FocusScope.of(context).unfocus();
     setState(() {
       _finding = false;
       _findCtrl.clear();
       _findMatches = const [];
       _findIndex = 0;
+      _findSearching = false;
     });
   }
 
   void _onFindChanged(String value) {
     final query = value.trim();
-    final List<({int page, String snippet})> matches = query.isEmpty
-        ? const []
-        : _collectMatches(query);
+    _findTimer?.cancel();
+    if (query.isEmpty) {
+      _findSeq++;
+      setState(() {
+        _findMatches = const [];
+        _findIndex = 0;
+        _findSearching = false;
+      });
+      return;
+    }
+    if (!_findCached) {
+      final matches = _collectMatches(query);
+      setState(() {
+        _findMatches = matches;
+        _findIndex = 0;
+        _findSearching = false;
+      });
+      if (matches.isNotEmpty) _jumpToMatch(0);
+      return;
+    }
+    setState(() {
+      _findMatches = const [];
+      _findIndex = 0;
+      _findSearching = true;
+    });
+    final seq = ++_findSeq;
+    // Debounce cache scans while the user is still typing.
+    _findTimer = Timer(const Duration(milliseconds: 300), () {
+      unawaited(_searchCached(query, seq));
+    });
+  }
+
+  Future<void> _searchCached(String query, int seq) async {
+    final book = _readModel.book;
+    if (book == null || book.id.isEmpty) {
+      if (!mounted || seq != _findSeq) return;
+      setState(() => _findSearching = false);
+      return;
+    }
+    final hits = await CachedChapterSearch.search(
+      bookId: book.id,
+      query: query,
+    );
+    if (!mounted || seq != _findSeq || _findCtrl.text.trim() != query) {
+      return;
+    }
+    final matches = [
+      for (final hit in hits)
+        (chapter: hit.chapterIndex, page: 0, snippet: hit.snippet),
+    ];
     setState(() {
       _findMatches = matches;
       _findIndex = 0;
+      _findSearching = false;
     });
     if (matches.isNotEmpty) _jumpToMatch(0);
   }
 
+  void _toggleFindScope() {
+    setState(() {
+      _findCached = !_findCached;
+      _findMatches = const [];
+      _findIndex = 0;
+      _findSearching = false;
+    });
+    _onFindChanged(_findCtrl.text);
+  }
+
   /// Search each rendered line so results map to pages without relying on the
   /// pager's byte offsets.
-  List<({int page, String snippet})> _collectMatches(String query) {
+  List<({int chapter, int page, String snippet})> _collectMatches(
+    String query,
+  ) {
     final pages = _readModel.curPage?.pages ?? const [];
+    final chapter = _readModel.book?.chapterIndex ?? 0;
     final needle = query.toLowerCase();
-    final matches = <({int page, String snippet})>[];
+    final matches = <({int chapter, int page, String snippet})>[];
     for (var p = 0; p < pages.length; p++) {
       for (final line in pages[p].lines) {
         final text = line.text;
@@ -182,7 +258,11 @@ class _MenuState extends ConsumerState<ReaderMenu> {
           if (at < 0) break;
           final start = (at - 8).clamp(0, text.length);
           final end = (at + query.length + 8).clamp(0, text.length);
-          matches.add((page: p, snippet: text.substring(start, end).trim()));
+          matches.add((
+            chapter: chapter,
+            page: p,
+            snippet: text.substring(start, end).trim(),
+          ));
           from = at + needle.length;
         }
       }
@@ -190,9 +270,29 @@ class _MenuState extends ConsumerState<ReaderMenu> {
     return matches;
   }
 
-  void _jumpToMatch(int index) {
+  Future<void> _jumpToMatch(int index) async {
     if (_findMatches.isEmpty) return;
-    _readModel.jumpToPage(_findMatches[index].page);
+    final match = _findMatches[index];
+    final current = _readModel.book?.chapterIndex ?? 0;
+    if (match.chapter == current) {
+      _readModel.jumpToPage(match.page);
+      return;
+    }
+    // Cached-chapter hit: open that chapter, then locate the page locally.
+    await _readModel.openChapterAt(match.chapter, true);
+    if (!mounted) return;
+    final query = _findCtrl.text.trim().toLowerCase();
+    final pages = _readModel.curPage?.pages ?? const [];
+    var page = 0;
+    for (var p = 0; p < pages.length; p++) {
+      if (pages[p].lines.any(
+        (line) => line.text.toLowerCase().contains(query),
+      )) {
+        page = p;
+        break;
+      }
+    }
+    _readModel.jumpToPage(page);
   }
 
   void _stepFind(int delta) {
@@ -200,7 +300,7 @@ class _MenuState extends ConsumerState<ReaderMenu> {
     final next = (_findIndex + delta) % _findMatches.length;
     final wrapped = next < 0 ? next + _findMatches.length : next;
     setState(() => _findIndex = wrapped);
-    _jumpToMatch(wrapped);
+    unawaited(_jumpToMatch(wrapped));
   }
 
   Widget _bottomHead(ReaderChrome chrome) {
@@ -428,9 +528,12 @@ class _MenuState extends ConsumerState<ReaderMenu> {
                     snippet: _findMatches.isEmpty
                         ? ''
                         : _findMatches[_findIndex].snippet,
+                    cachedScope: _findCached,
+                    searching: _findSearching,
                     onChanged: _onFindChanged,
                     onPrev: () => _stepFind(-1),
                     onNext: () => _stepFind(1),
+                    onToggleScope: _toggleFindScope,
                     onClose: _closeFind,
                   )
                 : ReaderTopBar(

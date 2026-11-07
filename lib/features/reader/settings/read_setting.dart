@@ -265,10 +265,7 @@ class ReadSetting {
   /// Falls back to 中 when prefs are not ready (unit tests / early startup).
   static int getFontWeightCd() {
     try {
-      return SpUtil.getInt(
-        PrefsKeys.readerFontWeight,
-        defValue: 0,
-      ).clamp(0, 2);
+      return SpUtil.getInt(PrefsKeys.readerFontWeight, defValue: 0).clamp(0, 2);
     } catch (_) {
       return 0;
     }
@@ -276,6 +273,22 @@ class ReadSetting {
 
   static void setFontWeightCd(int value) {
     SpUtil.putInt(PrefsKeys.readerFontWeight, value.clamp(0, 2));
+  }
+
+  /// 正文简繁：0 原样 / 1 简体 / 2 繁体。读不到偏好时保持原样。
+  static int getChineseMode() {
+    try {
+      return SpUtil.getInt(
+        PrefsKeys.readerChineseMode,
+        defValue: 0,
+      ).clamp(0, 2);
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  static void setChineseMode(int value) {
+    SpUtil.putInt(PrefsKeys.readerChineseMode, value.clamp(0, 2));
   }
 
   /// 正文字重。单字重字体下 600+ 走 Skia 合成粗体（不改字符步进，

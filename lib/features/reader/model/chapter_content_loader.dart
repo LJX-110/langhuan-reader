@@ -7,6 +7,7 @@ import 'package:langhuan/data/repositories/chapter_repository.dart';
 import 'package:langhuan/data/entities/chapter_node.dart';
 import 'package:langhuan/data/entities/chapter_toc_entry.dart';
 import 'package:langhuan/data/entities/read_page.dart';
+import 'package:langhuan/data/entities/replace_rule.dart';
 import 'package:langhuan/data/entities/text_line.dart';
 import 'package:langhuan/data/entities/text_page.dart';
 import 'package:langhuan/features/reader/model/text_paginator.dart';
@@ -21,11 +22,24 @@ class ChapterContentLoader {
     required this.chaptersRepo,
     required this.paginator,
     required this.fetchContent,
+    required this.loadReplaceRules,
+    required this.convertChinese,
+    required this.chineseMode,
   });
 
   final ChapterRepository chaptersRepo;
   final TextPaginator paginator;
   final Future<String> Function(String chapterId, {int? idx}) fetchContent;
+
+  /// Active global replace rules (正文净化), loaded once per chapter.
+  final Future<List<ReplaceRule>> Function() loadReplaceRules;
+
+  /// Engine-backed 简繁 conversion; [traditional] true = 简→繁.
+  final Future<String> Function(String text, {required bool traditional})
+  convertChinese;
+
+  /// 0 原样 / 1 简体 / 2 繁体.
+  final int Function() chineseMode;
 
   ChapterRepository get _chapters => chaptersRepo;
   TextPaginator get _paginator => paginator;
@@ -111,6 +125,28 @@ class ChapterContentLoader {
     // before this rule are fixed here as well.
     if (!_isMessageContent(r.chapterContent)) {
       r.chapterContent = normalizeChapterBody(r.chapterContent);
+      // User replace rules run after normalization so their patterns see the
+      // same indented text the reader displays. Bodies stay raw in the cache:
+      // rules are re-applied on every load and can be changed at any time.
+      final rules = await loadReplaceRules();
+      if (rules.isNotEmpty) {
+        r.chapterContent = applyReplaceRules(
+          r.chapterContent,
+          rules,
+          scope: ReplaceRuleScope.content,
+        );
+      }
+      final mode = chineseMode();
+      if (mode != 0) {
+        try {
+          r.chapterContent = await convertChinese(
+            r.chapterContent,
+            traditional: mode == 2,
+          );
+        } catch (e) {
+          AppLog.w('Read', 'chinese convert failed idx=$idx', error: e);
+        }
+      }
     }
 
     _logContentDiag(idx, r.chapterName, r.chapterContent, contentSource);

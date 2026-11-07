@@ -9,9 +9,17 @@
 琅嬛阁在该底本上做了大量删改与重写，但以下内容仍然保留：
 
 - 上游许可原文 `third_party/Apache-2.0.txt`
-- 第三方组件自己的许可文本，例如 `third_party/flutter_js/LICENSE`
-- 字体许可，例如 `assets/fonts/HarmonyOS_Sans_SC_LICENSE.txt`
+- 字体许可 `assets/fonts/HarmonyOS_Sans_SC_LICENSE.txt`
 - 根目录 `NOTICE` 中的上游归属说明
+
+## 引擎与移植参考
+
+- 书源内核基于 Legado（KMP 重构版「阅读」）：
+  `https://github.com/huajideshutiao/legado`，GPL-3.0；
+  引擎许可原文见 `engine/LICENSE`，本地改动见 `engine/LOCAL_PATCHES.md`。
+- 外观 / 交互 / 备份 / 标签 / 本地库等参考轻小说文库
+  Wenku8-Local（`MewX/light-novel-library_Wenku8_Android`），
+  GPL-2.0-or-later；移植代码按 GPL-3.0 分发，原始声明保留。
 
 ## 本仓库许可
 

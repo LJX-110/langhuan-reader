@@ -8,13 +8,14 @@
 
 ## 品牌资产
 
-图标与启动图由 `tool/generate_brand_assets.py` 生成，方向 **月照琅嬛**：
+图标与启动图由 `tool/generate_brand_assets.py` 生成，方向 **月牙与檐**（B）：
 
-- 墨蓝底 `#17283A`，月白圆盘 `#F2E9D7`，一阁柔金楼阁 `#B89A68`
-- 楼阁为单檐、平脊、两侧起翘；无月亮以外的额外装饰元素
-- 1024 px 设计稿在 4 倍画布上绘制后按密度降采样
+- 只有两色：墨 `#17283A`、月白 `#F2E9D7`；无金色、渐变、阴影、文字
+- 构图：一枚月白月牙 + 一道月白屋檐（平脊、两端起翘）；月牙由大圆减去右上小圆
+- 1024 px 设计稿在 4 倍画布上绘制后按密度降采样，48 px 仍可辨认
 - 输出 `assets/brand/icon_master.png`、`icon_foreground.png`、`launch_logo.png`
-- Android 自适应图标底色 `@color/brand_deep` `#0F1B2B`；每档 mipmap 还包括 `ic_launcher_monochrome.png`（Android 13 主题图标）
+- Android 自适应图标底色 `@color/brand_deep` `#17283A`；每档 mipmap 还包括 `ic_launcher_monochrome.png`（Android 13 主题图标，月牙 + 屋檐单色剪影）
+- 启动动画（Android 12+）：`drawable/launch_mark_vector.xml` + `launch_mark_animated.xml`，月牙 260ms 淡入、屋檐 180ms 后 420ms 画出；`values-v31/styles.xml` 启用。低版本使用同一几何的 `launch_logo.png` 静态图。
 - 顶栏已删除，图标只用于启动器与启动页；不再出现在页面顶部
 
 重新生成：
