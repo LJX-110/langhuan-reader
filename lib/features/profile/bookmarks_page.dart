@@ -55,12 +55,23 @@ class _BookmarksPageState extends State<BookmarksPage> {
     }
     book
       ..chapterIndex = record.bookmark.chapterIndex
-      ..pageIndex = record.bookmark.pageIndex;
+      ..pageIndex = record.bookmark.pageIndex
+      ..anchorOffset = -1;
+    if (!mounted) return;
+    // Persist the bookmark as the current position first: hydrateReadingSession
+    // merges DB progress and would otherwise land on the last-read page.
+    await BookRepository.instance.saveProgress(
+      bookId: book.id,
+      chapterIndex: book.chapterIndex,
+      pageIndex: book.pageIndex,
+      anchorOffset: -1,
+      readingChapter: record.bookmark.chapterName,
+    );
     if (!mounted) return;
     Routes.navigateTo(
       context,
       Routes.read,
-      params: {'read': jsonEncode(book.toJson())},
+      params: {'read': jsonEncode(book.toJson()), 'landing': '1'},
     );
   }
 

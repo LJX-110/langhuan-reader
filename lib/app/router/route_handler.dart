@@ -64,7 +64,8 @@ var bookmarksHandler = Handler(
 var readHandler = Handler(
   handlerFunc: (BuildContext? context, Map<String, List<String>> params) {
     Book bookInfo = Book.fromJson(convert.jsonDecode(params['read']![0]));
-    return ReadBook(bookInfo);
+    final landing = params['landing']?[0] == '1';
+    return ReadBook(bookInfo, landing: landing);
   },
 );
 var chaptersHandler = Handler(

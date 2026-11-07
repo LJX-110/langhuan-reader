@@ -12,6 +12,7 @@ import 'package:langhuan/features/reader/read_model.dart';
 import 'package:langhuan/features/shelf/shelf_model.dart';
 import 'package:langhuan/app/providers.dart';
 import 'package:langhuan/features/reader/chapter_view.dart';
+import 'package:langhuan/features/reader/reader_landing_highlight.dart';
 import 'package:langhuan/features/reader/reader_menu.dart';
 import 'package:langhuan/features/reader/page_content_reader.dart';
 import 'package:langhuan/features/reader/scroll_content_reader.dart';
@@ -23,7 +24,15 @@ class ReadBook extends ConsumerStatefulWidget {
   final Book book;
   final bool reading;
 
-  const ReadBook(this.book, {super.key, this.reading = false});
+  /// Opened from a bookmark: flash the landing plane once content is ready.
+  final bool landing;
+
+  const ReadBook(
+    this.book, {
+    super.key,
+    this.reading = false,
+    this.landing = false,
+  });
 
   @override
   ConsumerState<ReadBook> createState() => _ReadBookState();
@@ -35,6 +44,8 @@ class _ReadBookState extends ConsumerState<ReadBook>
   late ShelfModel shelfModel;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   StreamSubscription? _chaptersSub;
+  Timer? _landingTimer;
+  bool _landingVisible = false;
 
   @override
   void initState() {
@@ -59,6 +70,13 @@ class _ReadBookState extends ConsumerState<ReadBook>
     if (!mounted) return;
     try {
       await readModel.hydrateReadingSession();
+      if (widget.landing && mounted && readModel.curPage != null) {
+        setState(() => _landingVisible = true);
+        _landingTimer?.cancel();
+        _landingTimer = Timer(const Duration(milliseconds: 1900), () {
+          if (mounted) setState(() => _landingVisible = false);
+        });
+      }
       AppLog.i(
         'Reader',
         'open_reader book=${widget.book.id} '
@@ -79,6 +97,7 @@ class _ReadBookState extends ConsumerState<ReadBook>
 
   @override
   void dispose() {
+    _landingTimer?.cancel();
     _chaptersSub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     // Flush progress (cancels debounce, snapshots cur/index) before clear().
@@ -196,6 +215,16 @@ class _ReadBookState extends ConsumerState<ReadBook>
                   ? const ScrollContentReader()
                   : const PageContentReader(),
             ),
+            if (_landingVisible)
+              Positioned(
+                left: ReadSetting.getPageDis().toDouble(),
+                right: ReadSetting.getPageDis().toDouble(),
+                top: ReadSetting.contentTopInset(),
+                bottom: ReadSetting.contentBottomInset(),
+                child: ReaderLandingHighlight(
+                  reduceMotion: MediaQuery.disableAnimationsOf(context),
+                ),
+              ),
             // 菜单进出统一走动效词汇表：进场 120ms 轻快、退场 320ms 从容；
             // 退场期间忽略指针，避免点到正在淡出的控件（对齐文库 chrome 层）。
             //
