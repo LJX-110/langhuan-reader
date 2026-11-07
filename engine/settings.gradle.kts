@@ -4,14 +4,15 @@
 pluginManagement {
     includeBuild("build-logic")
     repositories {
-        // [本地补丁 2026-11-02] 国内镜像优先（加速 + 减少超时）；官方仓库保留作兜底。
+        // 官方仓库优先：Aliyun 镜像对部分插件 marker（如 KSP 2.3.11）返回 502，
+        // Gradle 会把 5xx 当仓库故障而不继续兜底；国内镜像仍保留作回退。
+        google()
+        mavenCentral()
+        gradlePluginPortal()
         maven("https://maven.aliyun.com/repository/public")
         maven("https://maven.aliyun.com/repository/google")
         maven("https://maven.aliyun.com/repository/gradle-plugin")
         maven { url = uri("https://jitpack.io") }
-        google()
-        mavenCentral()
-        gradlePluginPortal()
         maven("https://maven.eazytec-cloud.com/nexus/repository/maven-public/")
         mavenLocal()
     }
@@ -28,12 +29,12 @@ dependencyResolutionManagement {
             forRepository { mavenCentral() }
             filter { includeGroup("io.github.pdvrieze.xmlutil") }
         }
-        // [本地补丁 2026-11-02] 国内镜像优先；官方仓库保留作兜底。
+        // 官方仓库优先（同 pluginManagement：镜像 5xx 会中断解析），国内镜像兜底。
+        google()
+        mavenCentral()
         maven("https://maven.aliyun.com/repository/public")
         maven("https://maven.aliyun.com/repository/google")
         maven { url = uri("https://jitpack.io") }
-        google()
-        mavenCentral()
         maven("https://maven.eazytec-cloud.com/nexus/repository/maven-public/")
         mavenLocal()
     }
