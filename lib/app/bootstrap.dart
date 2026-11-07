@@ -2,17 +2,17 @@ import 'dart:ui' as ui;
 
 import 'package:langhuan/design/components/pic_widget.dart';
 import 'package:langhuan/core/storage/local_store.dart';
+import 'package:langhuan/core/utils/perf_log.dart';
 import 'package:langhuan/features/reader/settings/reader_font_bootstrap.dart';
 import 'package:langhuan/core/platform/system_ui.dart';
 import 'package:langhuan/app/router/routes.dart';
 import 'package:langhuan/app/version_label.dart';
 import 'package:fluro/fluro.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:langhuan/core/storage/prefs_keys.dart';
-import 'package:langhuan/core/utils/perf_log.dart';
+import 'package:langhuan/app/touch_sampling.dart';
 import 'package:langhuan/features/sources/engine/engine_log_bridge.dart';
 
 class AppInit {
@@ -78,7 +78,9 @@ class AppInit {
   static Future init() async {
     final perf = PerfLog.start('App.init');
     WidgetsFlutterBinding.ensureInitialized();
-    GestureBinding.instance.resamplingEnabled = true;
+    // Registers itself on the binding (observer + global pointer route) and
+    // lives for the app lifetime; no dispose needed.
+    TouchSamplingPolicy(WidgetsBinding.instance);
     // Cover CDN WebP/network failures are common; show placeholder, not red dump.
     _installQuietImageErrorFilter();
 
