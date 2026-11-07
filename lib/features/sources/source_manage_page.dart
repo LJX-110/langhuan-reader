@@ -20,6 +20,7 @@ import 'package:langhuan/features/sources/source_repo_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:langhuan/design/components/empty_state.dart';
 import 'package:langhuan/design/components/feedback.dart';
 import 'package:langhuan/design/components/loading_view.dart';
 
@@ -635,50 +636,35 @@ class _SourceManagePageState extends ConsumerState<SourceManagePage> {
   }
 
   Widget _empty(BuildContext context, SourceModel model) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.library_books_outlined,
-              size: 56,
-              color: Colors.grey,
-            ),
-            const SizedBox(height: 12),
-            const Text('还没有书源', style: TextStyle(fontSize: 18)),
-            const SizedBox(height: 8),
-            Text(
-              '导入书源 JSON 后显示在这里',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: () => _showImport(context, model),
-              icon: const Icon(Icons.add),
-              label: const Text('导入书源'),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: _newSource,
-              icon: const Icon(Icons.edit_note),
-              label: const Text('新建书源'),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const SourceRepoPage()),
-                );
-                if (mounted) ref.read(sourceModelProvider).load();
-              },
-              icon: const Icon(Icons.cloud_download_outlined),
-              label: const Text('从私有仓库同步'),
-            ),
-          ],
-        ),
+    return EmptyState(
+      title: '还没有书源',
+      hint: '导入书源 JSON 后显示在这里',
+      alignment: EmptyStateAlignment.left,
+      action: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextButton(
+            onPressed: () => _showImport(context, model),
+            style: TextButton.styleFrom(padding: EdgeInsets.zero),
+            child: const Text('导入书源'),
+          ),
+          TextButton(
+            onPressed: _newSource,
+            style: TextButton.styleFrom(padding: EdgeInsets.zero),
+            child: const Text('新建书源'),
+          ),
+          TextButton(
+            onPressed: () async {
+              await Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const SourceRepoPage()));
+              if (mounted) ref.read(sourceModelProvider).load();
+            },
+            style: TextButton.styleFrom(padding: EdgeInsets.zero),
+            child: const Text('从私有仓库同步'),
+          ),
+        ],
       ),
     );
   }

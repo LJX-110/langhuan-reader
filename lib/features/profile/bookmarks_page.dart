@@ -8,6 +8,7 @@ import 'package:langhuan/data/entities/bookmark_record.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/data/repositories/bookmark_repository.dart';
 import 'package:langhuan/design/components/pic_widget.dart';
+import 'package:langhuan/design/components/empty_state.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/design/components/feedback.dart';
 import 'package:langhuan/design/components/loading_view.dart';
@@ -103,26 +104,10 @@ class _BookmarksPageState extends State<BookmarksPage> {
       body: _loading
           ? const LoadingView.page()
           : _records.isEmpty
-          ? Padding(
-              padding: const EdgeInsets.fromLTRB(20, 96, 20, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '还没有书签',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: primary,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '阅读时点顶栏的书签图标，可保存当前页。',
-                    style: TextStyle(fontSize: 12, color: muted, height: 1.6),
-                  ),
-                ],
-              ),
+          ? const EmptyState(
+              title: '还没有书签',
+              hint: '阅读时点顶栏的书签图标，可保存当前页。',
+              alignment: EmptyStateAlignment.left,
             )
           : ListView.separated(
               padding: EdgeInsets.only(

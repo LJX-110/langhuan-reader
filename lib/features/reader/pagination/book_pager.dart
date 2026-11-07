@@ -88,7 +88,7 @@ class BookPager {
             'native book_pager ABI $abi < $_minAbiVersion (rebuild with build_book_pager.bat --android)';
         AppLog.w(
           'BookPager',
-          'skipping outdated native lib (abi=$abi); using Dart pager',
+          'native book_pager unavailable (abi=$abi); pagination will show retry',
         );
         _paginate = null;
         _free = null;
@@ -124,15 +124,17 @@ class BookPager {
           msg.contains('Failed to load dynamic library');
       if (missing) {
         debugPrint(
-          '[PagerEngine] native lib missing for this ABI → DART pager '
-          '(build with build_book_pager.bat --android)',
+          '[PagerEngine] native lib missing for this ABI; '
+          'pagination will show retry',
         );
         AppLog.i(
           'BookPager',
-          'native lib not packaged for this ABI; using Dart pager',
+          'native lib not packaged for this ABI; pagination unavailable',
         );
       } else {
-        debugPrint('[PagerEngine] native load failed → DART pager: $e');
+        debugPrint(
+          '[PagerEngine] native load failed; pagination unavailable: $e',
+        );
         AppLog.w('BookPager', 'failed to load native lib', error: e);
         debugPrint('BookPager: failed to load native lib: $e\n$st');
       }

@@ -182,9 +182,14 @@ class _BookShelfState extends ConsumerState<BookShelf> {
                             )
                           : EmptyState(
                               title: '这个筛选下还没有书',
+                              alignment: EmptyStateAlignment.left,
                               action: TextButton(
                                 onPressed: () =>
                                     shelfModel.setFilter(ShelfFilter.all),
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: const Size(0, 32),
+                                ),
                                 child: const Text('查看全部'),
                               ),
                             ))

@@ -83,6 +83,17 @@ class LocalImportService {
       throw const FormatException('无法读取文件路径');
     }
     final fileName = file.name.isNotEmpty ? file.name : p.basename(path);
+    return importPath(path, fileName: fileName);
+  }
+
+  /// Import a TXT already readable as a local path (file picker or SAF cache copy).
+  ///
+  /// [bookUrl] keeps the original content URI when the path is a temporary copy.
+  Future<LocalImportResult> importPath(
+    String path, {
+    required String fileName,
+    String? bookUrl,
+  }) async {
     final parsed = await compute(
       parseLocalTxtFile,
       LocalTxtSource(path: path, fileName: fileName),
@@ -110,7 +121,7 @@ class LocalImportService {
       sortTime: existing?.sortTime ?? 0,
       updatedAt: now.toIso8601String(),
       sourceUrl: sourceUrl,
-      bookUrl: path,
+      bookUrl: bookUrl ?? path,
       originName: '本地导入',
     );
 

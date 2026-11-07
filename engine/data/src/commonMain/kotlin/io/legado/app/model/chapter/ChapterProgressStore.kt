@@ -1,21 +1,12 @@
 package io.legado.app.model.chapter
 
-import io.legado.app.constant.AppLog
-import io.legado.app.constant.EventBus
 import io.legado.app.data.AppDbProviders
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
-import io.legado.app.data.entities.BookProgress
-import io.legado.app.help.AppWebDavShared
 import io.legado.app.help.book.ContentProcessorProviders
 import io.legado.app.help.book.isNotShelf
 import io.legado.app.model.ReadTimeRecorder
-import io.legado.app.utils.postEvent
 import io.legado.app.utils.systemCurrentTimeMillis
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.launch
 
 /**
  * 阅读进度落库与云端同步 (四模式共用)。
@@ -63,66 +54,5 @@ object ChapterProgressStore {
             durChapterTitle = durChapterTitle,
         )
         ReadTimeRecorder.flushAll()
-    }
-
-    /**
-     * 落库 + 通知书架刷新 + 上传云端进度 (原版 onPause 的「先 saveRead 再 uploadProgress」顺序)。
-     *
-     * 上传读的是 DB 刚落的最新行而非内存实体, 避免长持有实体整行冲写并发修改。
-     */
-    suspend fun saveAndUpload(
-        book: Book,
-        durChapterIndex: Int,
-        durChapterPos: Int,
-        chapter: BookChapter?,
-    ) {
-        save(book, durChapterIndex, durChapterPos, chapter)
-        // 落库后通知书架重查 (Room 失效推送为主, 显式事件作双保险, 保证立即刷新)
-        postEvent(EventBus.UP_BOOKSHELF, book.bookUrl)
-        uploadAwait(book.bookUrl)
-    }
-
-    /**
-     * 上传进度: 读 DB 最新行上传, 成功后只落 syncTime。
-     *
-     * 失败只记日志: 上传是尽力而为, 不该把宿主协程 (音频侧 = Service 生命周期) 拖死。
-     */
-    suspend fun uploadAwait(bookUrl: String) {
-        runCatching {
-            val bookDao = AppDbProviders.get().bookDao
-            val fresh = bookDao.getBook(bookUrl) ?: return
-            val syncTimeBefore = fresh.syncTime
-            // 内部已守卫 syncBookProgress / authorization, 成功时写 fresh.syncTime
-            AppWebDavShared.uploadBookProgress(fresh)
-            currentCoroutineContext().ensureActive()
-            if (fresh.syncTime != syncTimeBefore) {
-                bookDao.update(fresh)
-            }
-        }.onFailure {
-            currentCoroutineContext().ensureActive()
-            AppLog.put("上传阅读进度失败\n${it.message}", it)
-        }
-    }
-
-    /**
-     * 三路云端进度比对 (原版 `BaseReadViewModel.syncProgress`)。
-     *
-     * @param onNewProgress 云端较新时回调 (通常弹确认框); 不给则不弹, 仅「本地较新→上传」生效
-     */
-    fun pullCloud(
-        scope: CoroutineScope,
-        book: Book,
-        enabled: Boolean,
-        onNewProgress: ((BookProgress) -> Unit)? = null,
-    ) {
-        if (!enabled) return
-        if (book.isNotShelf) return
-        scope.launch {
-            AppWebDavShared.syncProgress(
-                book = book,
-                manual = false,
-                onNewProgress = onNewProgress,
-            )
-        }
     }
 }

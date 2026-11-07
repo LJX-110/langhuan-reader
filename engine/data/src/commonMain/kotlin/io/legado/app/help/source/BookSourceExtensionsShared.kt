@@ -12,7 +12,6 @@ import io.legado.app.help.ExploreKindsCacheProviders
 import io.legado.app.help.coroutine.IoDispatcher
 import io.legado.app.help.coroutine.printStackTraceOnDebug
 import io.legado.app.model.script.runScriptWithContext
-import io.legado.app.model.webBook.PluginSourceDelegates
 import io.legado.app.utils.GSON
 import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.fromJsonArray
@@ -79,37 +78,13 @@ suspend fun BookSource.exploreKinds(): List<ExploreKind> {
     val exploreKindsKey = getExploreKindsKey()
     exploreKindsMap[exploreKindsKey]?.let { return it }
     val exploreUrl = exploreUrl
-    val delegate = PluginSourceDelegates.resolve(this)
-    if (exploreUrl.isNullOrBlank() && delegate == null) {
-        return emptyList()
-    }
+    if (exploreUrl.isNullOrBlank()) return emptyList()
     val mutex = mutexMap[bookSourceUrl] ?: Mutex().apply { mutexMap[bookSourceUrl] = this }
     mutex.withLock {
         exploreKindsMap[exploreKindsKey]?.let { return it }
         val kinds = arrayListOf<ExploreKind>()
-        // 委托返回空表时不落缓存: 站点可能要登录后才列分类, 落盘/内存缓存会让发现面永久为空
-        var emptyFromDelegate = false
         withContext(IoDispatcher) {
             kotlin.runCatching {
-                // 插件虚拟源分类由取数委派运行时枚举 (站点分类是 spider 数据, 不写 exploreUrl 规则);
-                // 结果与源规则解析共用同一份磁盘缓存
-                if (delegate != null) {
-                    val cached = ExploreKindsCacheProviders.impl?.getAsString(exploreKindsKey)
-                    val fromCache = cached?.takeIf { it.isNotBlank() }
-                        ?.let { text -> GSON.fromJsonArray<ExploreKind>(text).getOrNull() }
-                    if (fromCache != null) {
-                        kinds.addAll(fromCache)
-                        return@runCatching
-                    }
-                    delegate.getExploreKinds(this@exploreKinds)?.let { fromDelegate ->
-                        kinds.addAll(fromDelegate)
-                        emptyFromDelegate = fromDelegate.isEmpty()
-                        if (fromDelegate.isNotEmpty()) {
-                            ExploreKindsCacheProviders.impl?.put(exploreKindsKey, GSON.toJson(fromDelegate))
-                        }
-                        return@runCatching
-                    }
-                }
                 val rawRule = exploreUrl
                 if (rawRule.isNullOrBlank()) return@runCatching
                 var ruleStr: String? = rawRule
@@ -168,7 +143,7 @@ suspend fun BookSource.exploreKinds(): List<ExploreKind> {
                 it.printStackTraceOnDebug()
             }
         }
-        if (!emptyFromDelegate) exploreKindsMap[exploreKindsKey] = kinds
+        exploreKindsMap[exploreKindsKey] = kinds
         return kinds
     }
 }

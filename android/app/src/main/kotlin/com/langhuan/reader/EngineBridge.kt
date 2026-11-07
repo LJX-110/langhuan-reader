@@ -73,7 +73,6 @@ object EngineBridge {
         )
         MethodChannel(messenger, "langhuan/engine").setMethodCallHandler { call, result ->
             when (call.method) {
-                "ping" -> result.success(true)
                 "cancel" -> {
                     val requestId = call.argument<String>("requestId").orEmpty()
                     running.remove(requestId)?.interrupt()

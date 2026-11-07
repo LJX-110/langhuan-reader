@@ -20,7 +20,6 @@ import io.legado.app.help.source.SourceNetworkProvider
 import io.legado.app.model.analyzeRule.AnalyzeRuleCore
 import io.legado.app.model.analyzeRule.AnalyzeUrlCore
 import io.legado.app.model.analyzeRule.QueryTTF
-import io.legado.app.ui.rss.RssJsApi
 import io.legado.app.utils.GSON
 import io.legado.app.utils.JsURL
 import io.legado.app.utils.fromJsonObject
@@ -223,9 +222,6 @@ object NativeJsExtensionsBridge {
             is StrResponse -> "__createStrResponseObj"
             is JsURL -> "__createJsUrlObj"
             // 复杂对象属性桥 (NativeJsPropertyBridge): 工厂带属性 getter
-            // RSS 拦截 JS 专属: RssJsApi 分支须在 BaseSource 之前 (RssJsExtensionsNative 同时是两者),
-            // 工厂在 __createBaseSourceObj 基础上叠 searchBook/addBook (方法面分派表见 1610/1611)
-            is RssJsApi -> "__createRssJsObj"
             is BaseSource -> "__createBaseSourceObj"
             is BaseBook -> "__createBookObj"
             is BookChapterLike -> "__createChapterObj"
@@ -897,20 +893,6 @@ object NativeJsExtensionsBridge {
             obj is BaseSource && methodId == 1608 -> stringToJsValue(ctx, obj.concurrentRate)
             obj is BaseSource && methodId == 1609 -> stringToJsValue(ctx, obj.jsLib)
             obj is BaseSource && methodId == 1623 -> stringToJsValue(ctx, obj.loginUi)
-
-            // ============ RssJsApi 对象方法 (1610-1611, RSS 拦截 JS 专属) ============
-            // RssJsExtensionsNative 包装 (BaseSource + RssJsApi) 经 __createRssJsObj 注入;
-            // 非 RSS 上下文的 BaseSource 对象不含这两个方法, 不会走到此分支
-            obj is RssJsApi && methodId == 1610 -> {
-                // searchBook(key)
-                obj.searchBook(args.getString(0))
-                jsUndefined()
-            }
-            obj is RssJsApi && methodId == 1611 -> {
-                // addBook(bookUrl)
-                obj.addBook(args.getString(0))
-                jsUndefined()
-            }
 
             else -> jsUndefined()
         }

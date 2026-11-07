@@ -12,8 +12,6 @@ import io.legado.app.help.config.AppConfigProviders
 import io.legado.app.help.coroutine.IoDispatcher
 import io.legado.app.help.coroutine.runBlockingInScope
 import io.legado.app.help.deleteOrphanAtomicWriteTempFiles
-import io.legado.app.model.ActiveReadBookRegistry
-import io.legado.app.model.fileBook.FileBook
 import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.StringUtils
 import io.legado.app.utils.concurrent.newConcurrentMap
@@ -67,9 +65,6 @@ object BookHelpShared {
     fun clearBookCache(books: List<Book>) {
         val storage = BookStorageProviders.get()
         books.forEach { storage.clearCache(it) }
-        val reading = ActiveReadBookRegistry.current ?: return
-        val readingUrl = reading.book.value?.bookUrl ?: return
-        if (books.any { it.bookUrl == readingUrl }) reading.clearTextChapter()
     }
 
     /**
@@ -272,23 +267,12 @@ object BookHelpShared {
     /**
      * 读取章节正文 (对照 app 端 `BookHelp.getContent`)。
      *
-     * 优先读取非空缓存；无有效缓存且为本地书时解析原文件，epub 结果顺带写回缓存。
+     * 只读章节正文缓存；本地书导入由 Flutter 侧完成，引擎不再解析原文件。
      */
     fun getContent(book: Book, chapter: BookChapter): String? {
         val storage = BookStorageProviders.get()
         val cached = storage.readCacheFile(book, chapter.getFileName())
-        if (!cached.isNullOrEmpty()) {
-            return cached
-        }
-        if (book.isLocal) {
-            val string = FileBook.getContent(book, chapter)
-            // 错误文本是 getContent 的兜底返回而非正文, 缓存会把失败固化 (须清缓存才能恢复)
-            if (string != null && book.isEpub && !string.startsWith(FileBook.CONTENT_ERROR_PREFIX)) {
-                storage.saveText(book, chapter, string)
-            }
-            return string
-        }
-        return null
+        return cached?.takeIf { it.isNotEmpty() }
     }
 
     /**

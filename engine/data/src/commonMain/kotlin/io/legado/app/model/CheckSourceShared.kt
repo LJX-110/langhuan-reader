@@ -11,7 +11,6 @@ import io.legado.app.help.source.SourceCacheProviders
 import io.legado.app.help.source.exploreKinds
 import io.legado.app.model.script.JsEngines
 import io.legado.app.model.webBook.WebBook
-import io.legado.app.model.webBook.pluginFilterSessionOf
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -198,7 +197,6 @@ object CheckSourceShared {
                 val searchBooks = WebBook.getBookListAwait(
                     source,
                     searchWord,
-                    pluginFilters = pluginFilterSessionOf(source),
                 ).books
                 if (searchBooks.isEmpty()) {
                     source.addGroup("搜索失效")
@@ -223,7 +221,6 @@ object CheckSourceShared {
                     source,
                     url,
                     isSearch = false,
-                    pluginFilters = pluginFilterSessionOf(source),
                 ).books
                 if (exploreBooks.isEmpty()) {
                     source.addGroup("发现失效")

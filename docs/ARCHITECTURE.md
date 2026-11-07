@@ -74,7 +74,7 @@ langhuan/
 - 系统栏统一走 `SystemUiHelper.overlayStyle(context)`：透明状态栏 / 导航栏、按页面明暗切换图标色并关闭导航栏对比度遮罩；列表页与底部栏自行叠加 `viewPadding.bottom`，避免被系统导航条盖住。
 - 书源请求统一走原生引擎（`engine/`）；Dart 层只负责合并、排序、诊断与缓存，不再直接发书源 HTTP 请求。
 - 通道 `langhuan/engine` 使用 4 线程有界执行池（队列 64）：搜索 6 / 换源 12 / 体检 4 只是提交并发，**实际同时执行位为 4**；队列满返回 `engine_busy`，超时/取消回发 `cancel(requestId)`。
-- 引擎日志经 EventChannel `langhuan/engine_log` 转发到应用日志页（标签 `Engine`）；原生侧保留最近 200 行，监听后补发。引擎非文本模块（漫画/tvbox/rss/webdav/tts/词典）仍随 AAR 编译，裁剪列入 2.4.0。
+- 引擎日志经 EventChannel `langhuan/engine_log` 转发到应用日志页（标签 `Engine`）；原生侧保留最近 200 行，监听后补发。引擎只保留文本管线：漫画 / 视频 / TVBox / RSS / WebDAV / TTS / 音频 / EPUB / 词典等非文本模块已从 `engine/data` 删除（见 `engine/LOCAL_PATCHES.md` 第 10 条）。
 
 ## 数据流
 

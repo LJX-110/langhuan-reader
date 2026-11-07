@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:langhuan/data/repositories/source_repository.dart';
+import 'package:langhuan/design/components/empty_state.dart';
 import 'package:langhuan/features/sources/engine/source_engine.dart';
 
 /// 批量体检：把所有**启用**的书源跑一遍「搜索」，分类统计，并支持一键删除失败源。
@@ -46,9 +47,9 @@ class _BatchHealthSheetState extends State<_BatchHealthSheet> {
   }
 
   /// 网络/超时/规则/解析/异常——这类源基本没救。
-  List<_HealthRow> get _failed => _rows
-      .where((r) => r.issue != 'none' && r.issue != 'noResult')
-      .toList();
+  List<_HealthRow> get _failed =>
+      _rows.where((r) => r.issue != 'none' && r.issue != 'noResult').toList();
+
   /// 含"站点活着但搜不到"的更大集合。
   List<_HealthRow> get _noHit =>
       _rows.where((r) => r.issue != 'none' || r.hits == 0).toList();
@@ -192,7 +193,10 @@ class _BatchHealthSheetState extends State<_BatchHealthSheet> {
               if (_error.isNotEmpty)
                 Text(
                   _error,
-                  style: TextStyle(fontSize: 12, color: theme.colorScheme.error),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.colorScheme.error,
+                  ),
                 ),
               Text(
                 _total == 0
@@ -203,12 +207,16 @@ class _BatchHealthSheetState extends State<_BatchHealthSheet> {
               const SizedBox(height: 8),
               Expanded(
                 child: _rows.isEmpty
-                    ? const Center(child: Text('还没有结果'))
+                    ? const EmptyState(
+                        title: '还没有结果',
+                        hint: '开始检测后，每个书源的结果会显示在这里。',
+                      )
                     : ListView.builder(
                         itemCount: _rows.length,
                         itemBuilder: (context, index) {
                           final r = _rows[index];
-                          final bad = r.issue != 'none' && r.issue != 'noResult';
+                          final bad =
+                              r.issue != 'none' && r.issue != 'noResult';
                           return ListTile(
                             dense: true,
                             title: Text(

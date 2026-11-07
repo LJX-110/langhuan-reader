@@ -1,4 +1,5 @@
 import 'package:langhuan/core/utils/app_log.dart';
+import 'package:langhuan/design/components/empty_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -78,7 +79,11 @@ class _LogViewerState extends State<LogViewer> {
         ],
       ),
       body: _lines.isEmpty
-          ? const Center(child: Text('暂无日志'))
+          ? const EmptyState(
+              title: '暂无日志',
+              hint: '书源请求与引擎日志会显示在这里。',
+              alignment: EmptyStateAlignment.left,
+            )
           : ListView.builder(
               controller: _scroll,
               padding: EdgeInsets.fromLTRB(

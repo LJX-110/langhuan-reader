@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:langhuan/data/entities/book_tag.dart';
 import 'package:langhuan/data/repositories/tag_repository.dart';
+import 'package:langhuan/design/components/empty_state.dart';
 import 'package:langhuan/design/components/feedback.dart';
 import 'package:langhuan/design/components/loading_view.dart';
 import 'package:langhuan/design/components/pressable.dart';
@@ -85,10 +86,7 @@ class _TagManagePageState extends State<TagManagePage> {
     await _reload();
   }
 
-  Future<String?> _askName({
-    required String title,
-    String initial = '',
-  }) async {
+  Future<String?> _askName({required String title, String initial = ''}) async {
     final ctrl = TextEditingController(text: initial);
     final result = await showDialog<String>(
       context: context,
@@ -125,19 +123,15 @@ class _TagManagePageState extends State<TagManagePage> {
       appBar: AppBar(
         title: const Text('标签管理'),
         centerTitle: true,
-        actions: [
-          TextButton(onPressed: _create, child: const Text('新建')),
-        ],
+        actions: [TextButton(onPressed: _create, child: const Text('新建'))],
       ),
       body: _loading
           ? const LoadingView.page()
           : _tags.isEmpty
-          ? Center(
-              child: Text(
-                '还没有标签。在书籍详情底部点「标签」即可创建。',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: muted),
-              ),
+          ? const EmptyState(
+              title: '还没有标签',
+              hint: '在书籍详情底部点「标签」即可创建。',
+              alignment: EmptyStateAlignment.center,
             )
           : ListView.separated(
               itemCount: _tags.length,

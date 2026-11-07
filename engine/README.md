@@ -9,6 +9,7 @@
   - `data/`：领域与引擎核心 —— `model/analyzeRule`（规则引擎）、`model/webBook`（搜索/详情/目录/正文管线）、`model/script`（JS 桥）、`help/http`（OkHttp 管线）、Room 数据库层等
   - `modules/js-api|quickjs|quickjs-android-native|quickjs-processor|quickjs-test|rjpath`
   - `build-logic/`：约定插件（`legado.kmp.library` 等）
+- **已裁剪**：漫画 / 视频 / TVBox / RSS / WebDAV / TTS 朗读 / 音频播放 / EPUB 与本地文件书 / 词典等非文本模块，只保留文本书源管线（见 `LOCAL_PATCHES.md` 第 10 条）。
 - **构建**（独立 Gradle 构建，自带 wrapper 9.6.0）：
   - 宿主验证：`./gradlew :data:compileKotlinJvm`
   - 引擎 JVM 测试：`./gradlew :data:jvmTest`（quickjs 桌面 native 需 cmake 工具链）

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:langhuan/data/entities/replace_rule.dart';
 import 'package:langhuan/data/repositories/replace_rule_repository.dart';
+import 'package:langhuan/design/components/empty_state.dart';
 import 'package:langhuan/design/components/feedback.dart';
 import 'package:langhuan/design/components/loading_view.dart';
 import 'package:langhuan/design/components/pressable.dart';
@@ -131,16 +132,14 @@ class _ReplaceRulesPageState extends State<ReplaceRulesPage> {
       body: _loading
           ? const LoadingView.page()
           : _rules.isEmpty
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Text(
-                  '还没有替换规则。\n'
-                  '用规则去掉广告、网址、乱码等固定内容；'
-                  '规则按顺序应用到正文和章节标题。',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, height: 1.8, color: muted),
-                ),
+          ? EmptyState(
+              title: '还没有替换规则',
+              hint: '用规则去掉广告、网址、乱码等固定内容；规则按顺序应用到正文和章节标题。',
+              alignment: EmptyStateAlignment.left,
+              action: TextButton(
+                onPressed: _create,
+                style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                child: const Text('新建规则'),
               ),
             )
           : ListView.separated(

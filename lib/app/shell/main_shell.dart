@@ -10,7 +10,7 @@ import 'package:langhuan/features/profile/me_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'glass_dock.dart';
+import 'dock_bar.dart';
 import 'package:langhuan/design/components/feedback.dart';
 
 /// App root shell: 书架 / 发现 / 本地 / 我.

@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:langhuan/core/utils/redact.dart';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:langhuan/app/router/routes.dart';
 import 'package:langhuan/core/storage/local_store.dart';
@@ -11,10 +13,12 @@ import 'package:langhuan/core/storage/prefs_keys.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/data/repositories/book_repository.dart';
 import 'package:langhuan/design/components/bookshelf_3d.dart';
+import 'package:langhuan/design/components/empty_state.dart';
 import 'package:langhuan/design/components/page_header.dart';
 import 'package:langhuan/design/components/shelf_book_view.dart';
 import 'package:langhuan/design/tokens/app_colors.dart';
 import 'package:langhuan/features/local/local_import_service.dart';
+import 'package:langhuan/features/local/folder_scan_service.dart';
 import 'package:langhuan/design/components/feedback.dart';
 import 'package:langhuan/design/components/loading_view.dart';
 
@@ -30,6 +34,7 @@ class LocalPage extends StatefulWidget {
 class _LocalPageState extends State<LocalPage> {
   final _books = BookRepository.instance;
   final _imports = LocalImportService();
+  final _scanner = FolderScanService();
   List<Book> _list = const [];
   bool _loading = true;
   bool _importing = false;
@@ -92,15 +97,82 @@ class _LocalPageState extends State<LocalPage> {
       }
       if (mounted) setState(() => _importDone = i + 1);
     }
+    await _finishImport(ok, failures, last);
+  }
+
+  /// Pick an SAF folder, import every TXT found, then drop the cache copies.
+  Future<void> _scanFolder() async {
+    if (_importing) return;
+    PickedFolder? folder;
+    try {
+      folder = await _scanner.pickFolder();
+    } on MissingPluginException {
+      showError('当前平台不支持文件夹扫描');
+      return;
+    } catch (e) {
+      showError('无法打开文件夹选择器：${Redact.userMessage(e)}');
+      return;
+    }
+    if (folder == null) return;
+
+    FolderScanResult scan;
+    try {
+      scan = await _scanner.scanFolder(folder.uri);
+    } catch (e) {
+      showError('扫描「${folder.name}」失败：${Redact.userMessage(e)}');
+      return;
+    }
+    final files = scan.files;
+    if (files.isEmpty) {
+      showFeedback('「${scan.folderName}」里没有找到 TXT');
+      return;
+    }
+
+    setState(() {
+      _importing = true;
+      _importDone = 0;
+      _importTotal = files.length;
+    });
+    var ok = 0;
+    final failures = <String>[];
+    LocalImportResult? last;
+    for (var i = 0; i < files.length; i++) {
+      final file = files[i];
+      try {
+        last = await _imports.importPath(
+          file.path,
+          fileName: file.name,
+          bookUrl: file.uri,
+        );
+        ok++;
+      } catch (e) {
+        failures.add('${file.name}：$e');
+      } finally {
+        try {
+          await File(file.path).delete();
+        } catch (_) {
+          // Cache cleanup is best effort.
+        }
+      }
+      if (mounted) setState(() => _importDone = i + 1);
+    }
+    await _finishImport(ok, failures, last);
+  }
+
+  Future<void> _finishImport(
+    int ok,
+    List<String> failures,
+    LocalImportResult? last,
+  ) async {
     if (!mounted) return;
     setState(() => _importing = false);
     await _reload();
+    if (!mounted) return;
     if (failures.isEmpty) {
       final name = last?.book.name ?? '';
       showFeedback(ok == 1 ? '已导入《$name》' : '已导入 $ok 本');
       return;
     }
-    if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -269,27 +341,49 @@ class _LocalPageState extends State<LocalPage> {
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: _importing ? null : _importTxt,
-                  icon: const Icon(Icons.file_open_outlined, size: 17),
-                  label: Text(
-                    _importing
-                        ? (_importTotal > 0
-                              ? '正在导入 $_importDone/$_importTotal…'
-                              : '正在导入…')
-                        : '导入 TXT',
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.accentOf(context),
-                    side: BorderSide(
-                      color: dark ? AppColors.dividerDark : AppColors.line,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _importing ? null : _importTxt,
+                      icon: const Icon(Icons.file_open_outlined, size: 17),
+                      label: Text(
+                        _importing
+                            ? (_importTotal > 0
+                                  ? '正在导入 $_importDone/$_importTotal…'
+                                  : '正在导入…')
+                            : '导入 TXT',
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.accentOf(context),
+                        side: BorderSide(
+                          color: dark ? AppColors.dividerDark : AppColors.line,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        minimumSize: const Size(0, 36),
+                      ),
                     ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
+                    OutlinedButton.icon(
+                      onPressed: _importing ? null : _scanFolder,
+                      icon: const Icon(Icons.folder_open_outlined, size: 17),
+                      label: const Text('扫描文件夹'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.accentOf(context),
+                        side: BorderSide(
+                          color: dark ? AppColors.dividerDark : AppColors.line,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        minimumSize: const Size(0, 36),
+                      ),
                     ),
-                    minimumSize: const Size(0, 36),
-                  ),
+                  ],
                 ),
               ),
             ),
@@ -298,18 +392,46 @@ class _LocalPageState extends State<LocalPage> {
                 minHeight: 2,
                 value: _importTotal > 0 ? _importDone / _importTotal : null,
               ),
-            Expanded(child: _body(dark)),
+            Expanded(child: _body()),
           ],
         ),
       ),
     );
   }
 
-  Widget _body(bool dark) {
+  Widget _body() {
     if (_loading) {
       return const LoadingView.page();
     }
-    if (_list.isEmpty) return _empty(dark);
+    if (_list.isEmpty) {
+      return EmptyState(
+        title: '还没有本地书',
+        hint: '导入 TXT 或扫描一个文件夹后会出现在这里，不上传、不同步。长按书脊可改书名 / 作者。',
+        alignment: EmptyStateAlignment.left,
+        action: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextButton(
+              onPressed: _importing ? null : _importTxt,
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 32),
+              ),
+              child: const Text('导入 TXT'),
+            ),
+            TextButton(
+              onPressed: _importing ? null : _scanFolder,
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 32),
+              ),
+              child: const Text('扫描文件夹'),
+            ),
+          ],
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppDimens.pagePadding),
       child: Bookshelf3D(
@@ -320,40 +442,6 @@ class _LocalPageState extends State<LocalPage> {
         onDelete: (view) => _deleteById(view.id),
         onLongPress: (view) => _editInfo(view.id),
         deleteWarning: '删除后无法撤销',
-      ),
-    );
-  }
-
-  Widget _empty(bool dark) {
-    final muted = dark ? AppColors.textMutedDark : AppColors.inkMute;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 80, 24, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '还没有本地书',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: dark ? AppColors.textOnDark : AppColors.ink,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '导入 TXT 后会出现在这里，不上传、不同步。长按书脊可改书名 / 作者。',
-            style: TextStyle(fontSize: 12, color: muted),
-          ),
-          const SizedBox(height: 6),
-          TextButton(
-            onPressed: _importing ? null : _importTxt,
-            style: TextButton.styleFrom(
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(0, 32),
-            ),
-            child: const Text('导入 TXT'),
-          ),
-        ],
       ),
     );
   }

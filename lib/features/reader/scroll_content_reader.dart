@@ -272,7 +272,37 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
       'window=$_windowStart..$_windowEnd item=$target initial=$initial',
     );
     _safeSetState(() {});
+    _scheduleRestoreRefinement(cur, pageIdx);
     _schedulePrewarm();
+  }
+
+  /// A few post-layout passes re-align the restored page.
+  ///
+  /// `initialScrollOffset` can be clamped by the lazy list's first layout (or
+  /// shifted by insets that settle after the first frame). Re-checking a few
+  /// times keeps the chapter head from visibly jumping without touching the
+  /// user's scroll once they start dragging.
+  void _scheduleRestoreRefinement(int chapter, int page) {
+    _refineRestore(chapter, page, 3);
+  }
+
+  void _refineRestore(int chapter, int page, int passesLeft) {
+    if (_disposed || passesLeft <= 0) return;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (_disposed || !mounted || !_restoreDone) return;
+      final c = _controller;
+      if (c == null || !c.hasClients || _loadingNeighbor) return;
+      if (_lastChapter != chapter || _lastPage != page) return;
+      final target = _scrollOffsetForItem(_indexOf(chapter, page));
+      final max = c.position.maxScrollExtent;
+      final clamped = target.clamp(0.0, max);
+      if ((c.offset - clamped).abs() > 2) {
+        c.jumpTo(clamped);
+        _applyVisibleProgress(force: true);
+      }
+      _refineRestore(chapter, page, passesLeft - 1);
+    });
+    SchedulerBinding.instance.ensureVisualUpdate();
   }
 
   /// Create controller only for bootstrap / rebootstrap — never on neighbor load.
@@ -769,9 +799,7 @@ class _ScrollContentReaderState extends ConsumerState<ScrollContentReader> {
                 child: Material(
                   elevation: 3,
                   borderRadius: BorderRadius.circular(10),
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.surfaceContainerHighest,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
                     child: Row(

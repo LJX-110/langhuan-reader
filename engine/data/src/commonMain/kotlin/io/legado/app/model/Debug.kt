@@ -15,7 +15,6 @@ import io.legado.app.model.webBook.WebBook
 import io.legado.app.model.webBook.WebBook.getBookInfoAwait
 import io.legado.app.model.webBook.WebBook.getChapterListAwait
 import io.legado.app.model.webBook.WebBook.getContentAwait
-import io.legado.app.model.webBook.pluginFilterSessionOf
 import io.legado.app.utils.HtmlFormatter
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.isDataUrl
@@ -232,7 +231,6 @@ object Debug {
                 debugUrl,
                 1,
                 isSearch = false,
-                pluginFilters = pluginFilterSessionOf(bookSource),
             )
         }.onSuccess { page ->
             val exploreBooks = page.books
@@ -282,7 +280,6 @@ object Debug {
                 bookSource,
                 key,
                 1,
-                pluginFilters = pluginFilterSessionOf(bookSource),
             )
         }.onSuccess { page ->
             val searchBooks = page.books

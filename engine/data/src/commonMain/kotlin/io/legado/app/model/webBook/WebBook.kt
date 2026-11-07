@@ -97,16 +97,8 @@ object WebBook {
         isSearch: Boolean = true,
         onUrlResolved: ((AnalyzeUrlCore) -> Unit)? = null,
         selectedOptions: Map<String, String>? = null,
-        pluginFilters: PluginFilterSession? = null,
         nextPageUrl: String? = null,
     ): BookListPage {
-        // 插件虚拟源无规则可解析, 命中即转交委派 (搜索走 isSearch=true, 发现走 isSearch=false;
-        // 发现路径的 key 即 exploreUrl 分类的 url 段, 交委派自行分派取数面;
-        // pluginFilters 是页面会话筛选实例, 两条路径均透传)
-        PluginSourceDelegates.resolve(bookSource)?.let { delegate ->
-            return if (isSearch) delegate.getBookListAwait(bookSource, key, page ?: 1, pluginFilters)
-            else delegate.getExploreAwait(bookSource, key, page ?: 1, pluginFilters)
-        }
         var url = key
         if (isSearch) {
             if (bookSource.searchUrl.isNullOrBlank()) throw NoStackTraceException("搜索url不能为空")
@@ -151,9 +143,6 @@ object WebBook {
         book: Book,
         canReName: Boolean = true,
     ): Book {
-        PluginSourceDelegates.resolve(bookSource)?.let {
-            return it.getBookInfoAwait(bookSource, book, canReName)
-        }
         if (!book.infoHtml.isNullOrEmpty()) {
             BookInfo.analyzeBookInfo(
                 bookSource = bookSource,
@@ -262,10 +251,6 @@ object WebBook {
         book: Book,
         runPerJs: Boolean = false
     ): Result<List<BookChapter>> {
-        // 守卫在 runPreUpdateJs 之前: 虚拟插件源无 JS/规则, 目录直接由委派映射
-        PluginSourceDelegates.resolve(bookSource)?.let {
-            return it.getChapterListAwait(bookSource, book)
-        }
         return runCatching {
             if (runPerJs) {
                 runPreUpdateJs(bookSource, book).getOrThrow()
@@ -322,9 +307,6 @@ object WebBook {
         nextChapterUrl: String? = null,
         needSave: Boolean = true
     ): String {
-        PluginSourceDelegates.resolve(bookSource)?.let {
-            return it.getContentAwait(bookSource, book, bookChapter)
-        }
         if (bookSource.contentRule.content.isNullOrEmpty()) {
             SourceDebugLoggers.impl?.log(bookSource.bookSourceUrl, "⇒正文规则为空,使用章节链接:${bookChapter.url}")
             return bookChapter.url
@@ -524,7 +506,6 @@ object WebBook {
                 bookSource, name,
                 filter = { fName, fAuthor -> fName == name && fAuthor == author },
                 shouldBreak = { it > 0 },
-                pluginFilters = pluginFilterSessionOf(bookSource),
             ).books.firstOrNull()?.let { searchBook ->
                 currentCoroutineContext().ensureActive()
                 return@runCatching searchBook.toBook()

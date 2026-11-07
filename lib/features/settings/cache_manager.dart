@@ -6,6 +6,7 @@ import 'package:langhuan/data/repositories/chapter_repository.dart';
 import 'package:langhuan/data/entities/book.dart';
 import 'package:langhuan/features/sources/engine/source_engine.dart';
 import 'package:flutter/material.dart';
+import 'package:langhuan/design/components/empty_state.dart';
 import 'package:langhuan/design/components/loading_view.dart';
 
 /// Cache management against [reader.db] chapter bodies + page layouts.
@@ -294,7 +295,10 @@ class _CacheManagerState extends State<CacheManager> {
                   if (_rows.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 32),
-                      child: Center(child: Text('暂无本地书籍')),
+                      child: EmptyState(
+                        title: '书架还没有书',
+                        hint: '添加书籍后，这里会显示每本书的章节缓存占用。',
+                      ),
                     )
                   else
                     ..._rows.map((row) {

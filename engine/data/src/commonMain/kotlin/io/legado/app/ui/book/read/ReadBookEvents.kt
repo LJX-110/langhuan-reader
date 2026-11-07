@@ -79,14 +79,6 @@ object ReadBookEvents {
     private val _newProgressConfirm = eventFlow<BookProgress>(replay = 1)
     val newProgressConfirm: SharedFlow<BookProgress> get() = _newProgressConfirm
 
-    /** 朗读状态（EventBus.ALOUD_STATE 桥接，ReadAloudDialog 消费） */
-    private val _aloudState = eventFlow<Int>()
-    val aloudState: SharedFlow<Int> get() = _aloudState
-
-    /** 朗读定时（EventBus.READ_ALOUD_DS 桥接，ReadAloudDialog 消费） */
-    private val _readAloudDs = eventFlow<Int>()
-    val readAloudDs: SharedFlow<Int> get() = _readAloudDs
-
     /** 系统时间变化（EventBus.TIME_CHANGED 桥接，阅读页刷新时间显示） */
     private val _timeChanged = eventFlow<Unit>()
     val timeChanged: SharedFlow<Unit> get() = _timeChanged
@@ -98,22 +90,6 @@ object ReadBookEvents {
     /** 媒体按钮（EventBus.MEDIA_BUTTON 桥接，isDown=按下/释放） */
     private val _mediaButton = eventFlow<Boolean>()
     val mediaButton: SharedFlow<Boolean> get() = _mediaButton
-
-    /**
-     * 朗读进度推进（EventBus.TTS_PROGRESS 桥接，chapterStart=当前章朗读起始字符位置）。
-     * 原版 EventBus.TTS_PROGRESS 是 sticky，用 replay=1 实现粘性：UI 重建时立即恢复到当前朗读位置。
-     */
-    private val _ttsProgress = eventFlow<Int>(replay = 1)
-    val ttsProgress: SharedFlow<Int> get() = _ttsProgress
-
-    /**
-     * 朗读宿主输出端口：保持既有 Flow 语义，同时让 shared 状态机只依赖发布接口。
-     */
-    val readAloudPositionPublisher = object : io.legado.app.help.tts.ReadAloudPositionPublisher {
-        override fun publishPosition(chapterPosition: Int) = postTtsProgress(chapterPosition)
-        override fun publishState(state: Int) = postAloudState(state)
-        override fun publishTimer(minute: Int) = postReadAloudDs(minute)
-    }
 
     fun postConfig(vararg changes: ReadConfigChange) {
         _configChange.tryEmit(changes.asList())
@@ -168,14 +144,6 @@ object ReadBookEvents {
         _newProgressConfirm.resetReplayCache()
     }
 
-    fun postAloudState(state: Int) {
-        _aloudState.tryEmit(state)
-    }
-
-    fun postReadAloudDs(minute: Int) {
-        _readAloudDs.tryEmit(minute)
-    }
-
     fun postTimeChanged() {
         _timeChanged.tryEmit(Unit)
     }
@@ -186,9 +154,5 @@ object ReadBookEvents {
 
     fun postMediaButton(isDown: Boolean) {
         _mediaButton.tryEmit(isDown)
-    }
-
-    fun postTtsProgress(chapterStart: Int) {
-        _ttsProgress.tryEmit(chapterStart)
     }
 }
