@@ -32,7 +32,7 @@ jobs:
       - name: Runner smoke (offline rules)
         run: |
           cd engine
-          ./gradlew.bat -g "${{ runner.temp }}/gradle-home" :runner:run
+          ./gradlew.bat --info -g "${{ runner.temp }}/gradle-home" :runner:run
 
   build:
     runs-on: ubuntu-latest
@@ -54,7 +54,7 @@ jobs:
         run: |
           chmod +x engine/gradlew
           cd engine
-          ./gradlew -g "$RUNNER_TEMP/gradle-home" :runner:compileKotlin publishAllPublicationsToLocalRepo
+          ./gradlew --info -g "$RUNNER_TEMP/gradle-home" :runner:compileKotlin publishAllPublicationsToLocalRepo
 
       - name: Build Rust pagination library
         run: |
