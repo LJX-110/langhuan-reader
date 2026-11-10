@@ -1,5 +1,6 @@
 package io.legado.app.ui.association
 
+import kotlinx.atomicfu.atomic
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.exception.NoStackTraceException
@@ -7,6 +8,7 @@ import io.legado.app.help.config.ThemeConfigData
 import io.legado.app.help.config.ThemeConfigProvider
 import io.legado.app.help.config.ThemeConfigProviders
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.coroutine.IoDispatcher
 import io.legado.app.help.http.OkHttpClientProviders
 import io.legado.app.help.http.decompressed
 import io.legado.app.help.http.newCallResponseBody
@@ -23,6 +25,8 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withContext
 
 /**
  * 导入主题配置 VM 共享核心 (commonMain)。
@@ -44,8 +48,34 @@ import kotlinx.coroutines.flow.asSharedFlow
  * @param scope 协程作用域 (Android = viewModelScope / 桌面 = 应用主作用域)
  */
 class ImportThemeViewModelShared(
-    private val scope: CoroutineScope,
+    val scope: CoroutineScope,
 ) {
+    /** 提交态归 VM: 对话框重建/重组后也不能重复提交同一批。 */
+    private val submitSession = ImportSubmitSession()
+
+    /** 提交态 (Writing/Committed/Failed) 归 VM: 重建对话框仍可读。 */
+    val submitState: StateFlow<ImportSubmitState> = submitSession.state
+
+    private data class FrozenSubmit(
+        val checked: List<Boolean>,
+        val items: List<ThemeConfigData>,
+    )
+
+    private var frozenSubmit: FrozenSubmit? = null
+
+    fun beginSubmit(checked: List<Boolean>): Boolean {
+        if (!submitSession.begin()) return false
+        frozenSubmit = FrozenSubmit(checked = checked.toList(), items = allSources.map { it.copy() })
+        return true
+    }
+
+    fun endSubmit() {
+        submitSession.end()
+        frozenSubmit = null
+    }
+
+    fun recordSubmitResult(result: ImportSubmitResult) = submitSession.record(result)
+
 
     /**
      * 事件流工厂: replay=1 + DROP_OLDEST, 语义对齐 LiveData.postValue。
@@ -87,32 +117,28 @@ class ImportThemeViewModelShared(
     val defaultChecked = arrayListOf<Boolean>()
 
     /**
-     * 导入选中的主题配置, 对应 app 端 `importSelect(finally)`。
+     * 导入选中的主题配置, 写入成功返回, 失败抛异常 (确认协议的唯一写入入口, 区分成功/错误)。
      *
-     * # 实现细节保持
-     *
-     * - 遍历 [checked], 选中的项调 `ThemeConfigProviders.get().addConfig(allSources[index])`
-     *   (替代 app 端 `ThemeConfig.addConfig(allSources[index])`, app 端 ThemeConfigProviderImpl
-     *   内部把 [ThemeConfigData] 转回 `ThemeConfig.Config` 后调原 `ThemeConfig.addConfig(newConfig)`,
-     *   保留按 themeName 去重 + save 持久化行为);
-     * - `onFinally` 回调 [finally] (与 app 端 `onFinally { finally.invoke() }` 等价)。
-     *
-     * 业务在 IO 跑, 回调在 mainDispatcher 跑 (与 BaseViewModel.execute 默认值一致)。
-     *
-     * @param finally 导入完成回调 (无论成功/失败均触发, 与 app 端 onFinally 一致)
+     * 选中的项交 `ThemeConfigProviders.get().addConfigs(...)` 整批校验并一次保存
+     * (app 端 ThemeConfigProviderImpl 内部把 [ThemeConfigData] 转回 `ThemeConfig.Config` 后调
+     * `ThemeConfig.addConfigs(...)`, 保留按 themeName 去重 + 一次持久化行为)。
+     * 任一配置无效或保存失败抛异常, 不发布内存列表; 业务在 IO 上执行。
      */
-    fun importSelect(checked: List<Boolean>, finally: () -> Unit) {
-        Coroutine.async(scope = scope) {
-            checked.forEachIndexed { index, b ->
-                if (b) {
-                    ThemeConfigProviders.get().addConfig(allSources[index])
-                }
-            }
-        }.onFinally {
-            finally.invoke()
+    suspend fun importSelectAwait(checked: List<Boolean>) = withContext(IoDispatcher) {
+        val frozen = frozenSubmit
+        val checkedList = frozen?.checked ?: checked
+        val items = frozen?.items ?: allSources
+        val selected = checkedList.mapIndexedNotNull { index, b ->
+            if (b) items[index] else null
         }
+        ThemeConfigProviders.get().addConfigs(selected)
+        submitSession.committed(selected.size)
     }
 
+    /**
+     * 回调式导入入口 (与原版 `importSelect(finally)` 同形状): 成功/失败都回调 [finally],
+     * 失败仅落日志, 结果由 [importSelectAwait] 的返回/异常区分。
+     */
     /**
      * 导入主题配置, 对应 app 端 `importSource(text)`。
      *

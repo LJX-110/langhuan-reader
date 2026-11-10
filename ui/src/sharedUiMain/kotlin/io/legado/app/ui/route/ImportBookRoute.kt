@@ -5,7 +5,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
 import io.legado.app.constant.AppPattern
 import io.legado.app.help.config.AppConfigProviders
 import io.legado.app.help.coroutine.IoDispatcher
@@ -18,6 +17,7 @@ import io.legado.app.ui.book.import.local.ImportBookUiEvent
 import io.legado.app.ui.compose.platform.AppBackHandler
 import io.legado.app.ui.root.AppNavigator
 import io.legado.app.ui.root.FileFilter
+import io.legado.app.ui.root.ImportStageDialog
 import io.legado.app.ui.root.PlatformCapabilityProviders
 import io.legado.app.ui.root.PlatformServiceProviders
 import io.legado.app.ui.root.RouteEntry
@@ -70,7 +70,11 @@ fun ImportBookRoute(
     }
 
     val state by screenModel.state.collectAsState()
-    val scope = rememberCoroutineScope()
+    // 本页动作挂页面请求 scope (模型持有, 真退出才撤), 不用组合期 rememberCoroutineScope
+    val scope = screenModel.scope
+
+    // 本页用户选择阶段: 阶段归模型, 本组合只呈现
+    ImportStageDialog(screenModel.importStages)
 
     val actions = object : ImportBookUiActions<ImportFileItem> {
         override fun onBack() {
@@ -103,10 +107,14 @@ fun ImportBookRoute(
                 if (supported.isEmpty()) return@launch
                 // 条目构造要读文件属性 (含路径映射), 推到 IO; 导入本身在平台自己的作用域里跑
                 withContext(IoDispatcher) {
-                    platform.importPickedBookFiles(supported) {
-                        screenModel.dispatch(ImportBookUiEvent.SelectAll(false))
-                        screenModel.dispatch(ImportBookUiEvent.BumpRefreshTick)
-                    }
+                    platform.importPickedBookFiles(
+                        files = supported,
+                        onComplete = {
+                            screenModel.dispatch(ImportBookUiEvent.SelectAll(false))
+                            screenModel.dispatch(ImportBookUiEvent.BumpRefreshTick)
+                        },
+                        scope = scope,
+                    )
                 }
             }
         }
@@ -135,10 +143,14 @@ fun ImportBookRoute(
 
         // 对照 addSelectionToBookshelf: 上架成功后清空 selected + refreshTick++
         override fun onAddSelectionToBookshelf() {
-            platform.addImportSelectionToBookshelf(state.selected.toList()) {
-                screenModel.dispatch(ImportBookUiEvent.SelectAll(false))
-                screenModel.dispatch(ImportBookUiEvent.BumpRefreshTick)
-            }
+            platform.addImportSelectionToBookshelf(
+                items = state.selected.toList(),
+                onComplete = {
+                    screenModel.dispatch(ImportBookUiEvent.SelectAll(false))
+                    screenModel.dispatch(ImportBookUiEvent.BumpRefreshTick)
+                },
+                scope = scope,
+            )
         }
 
         // 对照 onItemClick: isUpDir→goBackDir / isDir→nextDoc /
@@ -157,14 +169,14 @@ fun ImportBookRoute(
                 }
 
                 !item.isOnBookShelf -> screenModel.dispatch(ImportBookUiEvent.Toggle(item))
-                else -> platform.openImportedBookReader(item)
+                else -> platform.openImportedBookReader(item, scope, screenModel.importStages)
             }
         }
 
         // 对照 onItemLongClick: 可勾选条目长按打开阅读页
         override fun onItemLongClick(item: ImportFileItem) {
             if (!item.isUpDir && !item.isDir && !item.isOnBookShelf) {
-                platform.openImportedBookReader(item)
+                platform.openImportedBookReader(item, scope, screenModel.importStages)
             }
         }
     }

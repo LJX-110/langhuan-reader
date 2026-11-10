@@ -5,6 +5,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Rect
+import io.legado.app.ui.book.read.page.SelectionGeometry
+import io.legado.app.ui.compose.theme.AppTextMenuAnchorSpace
 import io.legado.app.ui.compose.theme.AppTextMenuContent
 import io.legado.app.ui.compose.theme.AppTextMenuEntry
 import io.legado.app.ui.compose.theme.AppTextMenuHost
@@ -35,12 +37,32 @@ internal class ReaderTextPlatformAction(val label: String, val onClick: (String)
 @Composable
 internal expect fun rememberReaderTextPlatformActions(): List<ReaderTextPlatformAction>
 
-/** 一次请求: 选中文本 + 选区锚点矩形 (与弹层宿主父节点同坐标空间)。 */
-class ReaderTextSelectionRequest(val text: String, val anchor: Rect)
+/**
+ * 一次请求: 选中文本 + 弹菜单那一刻定格的选区几何 (阅读页正文容器坐标, 同次快照, 见
+ * [io.legado.app.ui.book.read.page.PageSelectionState.geometrySnapshot]); 菜单宿主与选区
+ * 同处一个容器, 由宿主按自身根坐标折一次到窗口。
+ * 同步调用链内直接传递, 不经任何暂存；旧调用名 ([anchor]/[textArea]) 是同一几何的
+ * 计算属性, 不重复缓存同源字段。
+ *
+ * @param geometry 菜单锚 = 文字投影并集 ∪ 两个真实手柄 ([SelectionGeometry.menuAnchor],
+ *   浮动菜单按它定位避让); 文字区域供批注气泡锚定 (不从已变化/清空的选区反算);
+ *   两个手柄矩形作为通用二维避让矩形传入定位流程 (保护两游标是同类约束, 不只看锚下沿)
+ */
+class ReaderTextSelectionRequest(
+    val text: String,
+    val geometry: SelectionGeometry,
+) {
+    /** 菜单锚矩形 = 文字投影并集 ∪ 两个真实手柄 */
+    val anchor: Rect get() = geometry.menuAnchor()
+
+    /** 文字区域快照 (纯文字投影并集, 不含手柄) */
+    val textArea: Rect get() = geometry.textArea
+}
 
 /**
- * 长按/选区锚点矩形: 取锚点周围 40px 方区 (对照原版 showReaderTextActionMenu 与
- * PopupAction contentRect 的 ±20px 留边)。文本与图片菜单、四端共用同一规则。
+ * 图片长按菜单锚点: 长按点周围 40px 方区 (对照原版 PopupAction contentRect 的 ±20px 留边)。
+ * 文本菜单不走此规则: 原版文本菜单 contentRect 下沿含终点手柄底, 方区会让菜单在下方弹出时
+ * 压住游标 (现按文字并集 ∪ 两手柄的快照锚定, 见 [ReaderTextSelectionRequest])。
  */
 fun readerMenuAnchor(x: Float, y: Float): Rect = Rect(x - 20f, y - 20f, x + 20f, y + 20f)
 
@@ -89,7 +111,9 @@ object ReaderDictWord {
  * [actions] 的旧闭包一起钉住。菜单只在显示期间参与组合。
  *
  * @param request null = 不显示
- * @param onFinally 动作执行后收尾 (对照原版 onMenuActionFinally: 关菜单 + 取消页内选择)
+ * @param onFinally 动作执行后收尾 (对照原版 onMenuActionFinally: 关菜单 + 取消页内选择)。
+ *   点卡片外不经过这里: 透明外框不接收输入, 点按落到正文/选区手柄, 由阅读页自己的
+ *   取消选区流程关菜单 (见 ReadViewComposable 的手势层)
  */
 @Composable
 fun ReaderTextActionMenu(
@@ -116,12 +140,19 @@ fun ReaderTextActionMenu(
             }
         AppTextMenuContent(
             anchor = req.anchor,
+            // 一次选区请求 = 一个显示会话: 平台每次 onTextSelected 都会新建请求, 即新会话
+            session = req,
+            // 选区几何与宿主同处页面容器: 声明为容器局部坐标, 由宿主按自身根坐标折一次
+            anchorSpace = AppTextMenuAnchorSpace.Container,
+            // 两个真实手柄作为通用二维避让矩形输入定位流程 (保护两游标是同类约束)
+            protectedRects = listOf(req.geometry.startHandle, req.geometry.endHandle),
             entries = buildList {
                 add(entry(replaceText, actions.onReplace))
                 add(entry(copyText) { PlatformCapabilityProviders.get().copyToClipboard(it) })
                 add(entry(bookmarkText, actions.onBookmark))
-                // 批注: 锚点用菜单自身锚定的选区起点方区, 创建成功后弹批注气泡进入输入态
-                add(entry(underlineText) { text -> actions.onUnderline(text, req.anchor) })
+                // 批注: 锚点 = 请求定格的文字区域快照 (纯文字投影并集, 与轻点批注路径
+                // projectHighlightAnchorRect 同口径), 创建成功后弹批注气泡进入输入态
+                add(entry(underlineText) { text -> actions.onUnderline(text, req.textArea) })
                 add(entry(readAloudText, actions.onReadAloud))
                 add(entry(dictText) { ReaderDictWord.show(it) })
                 add(entry(searchContentText, actions.onSearchContent))
@@ -132,5 +163,5 @@ fun ReaderTextActionMenu(
             },
         )
     }
-    AppTextMenuHost(content, onDismiss = onFinally)
+    AppTextMenuHost(content)
 }

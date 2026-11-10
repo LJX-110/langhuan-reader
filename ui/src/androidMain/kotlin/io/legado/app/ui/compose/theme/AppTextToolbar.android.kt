@@ -19,6 +19,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.IntRect
 import kotlinx.coroutines.channels.Channel
 
 /**
@@ -29,7 +31,7 @@ import kotlinx.coroutines.channels.Channel
  * AndroidTextContextMenuToolbarProvider, 长按选区就不会起平台 ActionMode。
  *
  * Box 只为拿一份 LayoutCoordinates: TextContextMenuDataProvider.contentBounds 要求给出目标
- * 坐标空间, 弹层挂在同一个 Box 里, Popup 的 anchorBounds 便正是该 Box 的窗口位置。
+ * 坐标空间。菜单宿主挂在同一个 Box 里, 与选区同窗口 —— 不再另开 Popup 窗口。
  * onGloballyPositioned 可能带着同一实例回调 (位置变了), 故用 neverEqualPolicy 强制通知。
  *
  * 坐标以 [State] 形式传进 [AndroidTextMenuProvider.Host] 而不是先取值: Box 的 content 是
@@ -38,6 +40,7 @@ import kotlinx.coroutines.channels.Channel
 @Composable
 internal actual fun ProvidePlatformTextMenu(
     state: AppTextMenuState,
+    area: IntRect?,
     content: @Composable () -> Unit,
 ) {
     val provider = remember { AndroidTextMenuProvider() }
@@ -50,7 +53,7 @@ internal actual fun ProvidePlatformTextMenu(
             propagateMinConstraints = true,
         ) {
             content()
-            provider.Host(state, hostCoordinates)
+            provider.Host(state, hostCoordinates, area)
         }
     }
 }
@@ -81,7 +84,11 @@ private class AndroidTextMenuProvider : TextContextMenuProvider {
     }
 
     @Composable
-    fun Host(state: AppTextMenuState, hostCoordinates: State<LayoutCoordinates?>) {
+    fun Host(
+        state: AppTextMenuState,
+        hostCoordinates: State<LayoutCoordinates?>,
+        area: IntRect?,
+    ) {
         // 不提前 return: 退场动画期间 request 已为 null, 宿主仍要参与组合。
         // 坐标只在有请求时才读: hostCoordinates 是 neverEqualPolicy, 无条件读会让本作用域
         // 跟着每一次布局 pass 重组 (全局每帧), 而菜单没弹时根本用不到它。
@@ -92,12 +99,19 @@ private class AndroidTextMenuProvider : TextContextMenuProvider {
             // data() / contentBounds() 都是快照感知的, 组合期直接读 → 选区或剪贴板一变自动重组
             hostCoordinates.value?.takeIf { it.isAttached }?.let { coordinates ->
                 current.entries(state.findReplaceAction).takeIf { it.isNotEmpty() }?.let {
-                    AppTextMenuContent(current.dataProvider.contentBounds(coordinates), it)
+                    // 框架给的锚是宿主 Box 局部坐标: 按同一节点折到根坐标 (与平台默认实现
+                    // contentBounds + positionInRoot 同式)
+                    AppTextMenuContent(
+                        anchor = current.dataProvider.contentBounds(coordinates)
+                            .translate(coordinates.positionInRoot()),
+                        entries = it,
+                        // 一次 showTextContextMenu 是一个显示会话: 选区/内容更新沿用同一份
+                        session = current,
+                    )
                 }
             }
         }
-        // 退场动画期间 request 可能已清空, 此时点击空白无需再关, 安全调用即正确语义
-        AppTextMenuHost(content) { current?.session?.close() }
+        AppTextMenuHost(content, area)
     }
 
     private inner class Request(

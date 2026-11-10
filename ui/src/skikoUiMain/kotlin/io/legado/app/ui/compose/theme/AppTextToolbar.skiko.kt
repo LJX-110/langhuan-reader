@@ -1,6 +1,7 @@
 package io.legado.app.ui.compose.theme
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.IntRect
 
 /**
  * [ProvidePlatformTextMenu] 的桌面/iOS/鸿蒙 actual: 直接透传。
@@ -12,6 +13,7 @@ import androidx.compose.runtime.Composable
 @Composable
 internal actual fun ProvidePlatformTextMenu(
     state: AppTextMenuState,
+    area: IntRect?,
     content: @Composable () -> Unit,
 ) {
     content()

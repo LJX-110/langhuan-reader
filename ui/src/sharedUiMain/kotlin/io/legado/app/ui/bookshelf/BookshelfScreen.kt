@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -121,7 +122,7 @@ fun BookshelfScreen(
     onGroupLongClick: (BookGroup) -> Unit = {},
     modifier: Modifier = Modifier,
     tier: BookshelfTier? = null,
-    coverSlot: (@Composable (Book, Modifier, Boolean, Int) -> Unit)? = null,
+    coverSlot: (@Composable (Book, Modifier, CoverSlotRatio, Int) -> Unit)? = null,
     bookshelfActionsCallbacks: BookshelfActionsCallbacks = BookshelfActionsCallbacks(),
     actions: @Composable RowScope.() -> Unit = {
         DefaultBookshelfActions(
@@ -170,9 +171,9 @@ fun BookshelfScreen(
     // 全部可见条目全量重组 (Compose 对 item 参数按 == 比较, 新 lambda 必不等)。
     // rememberUpdatedState 桥接: 透传引用恒定, 调用时读最新实现, 行为语义不变。
     val currentCoverSlot = rememberUpdatedState(coverSlot ?: LocalBookCoverSlot.current)
-    val stableCoverSlot: @Composable (Book, Modifier, Boolean, Int) -> Unit = remember {
-        { book, modifier, isVideoCover, tick ->
-            currentCoverSlot.value(book, modifier, isVideoCover, tick)
+    val stableCoverSlot: @Composable (Book, Modifier, CoverSlotRatio, Int) -> Unit = remember {
+        { book, modifier, coverRatio, tick ->
+            currentCoverSlot.value(book, modifier, coverRatio, tick)
         }
     }
     val currentOnBookClick = rememberUpdatedState(onBookClick)
@@ -206,14 +207,21 @@ fun BookshelfScreen(
     }
     val eInk = LocalEInk.current
     // 封面 slot 直接透传 (引用已稳定, 不再包新 lambda, 避免所有可见条目一起重组)
-    val bookCoverSlot: @Composable (Book, Modifier, Boolean, Int) -> Unit = stableCoverSlot
-    val groupCoverSlot: @Composable (BookGroup, Modifier, Boolean, Int) -> Unit =
+    val bookCoverSlot: @Composable (Book, Modifier, CoverSlotRatio, Int) -> Unit = stableCoverSlot
+    val groupCoverSlot: @Composable (BookGroup, Modifier, CoverSlotRatio, Int) -> Unit =
         DefaultGroupCoverSlot
     val groups by viewModel.bookGroups.collectAsState()
     val currentGroupId by viewModel.currentGroupId.collectAsState()
     // 单一数据源: 页数据/顶栏计数均读 VM 缓存切片 (未访问过的分组无条目, 顶栏显示 "..")
     val booksCache by viewModel.booksCache.collectAsState()
     val groupBookCounts = remember(booksCache) { booksCache.mapValues { it.value.size } }
+    // 封面比例收敛: 活跃集合 = 全部分组书籍 + 分组封面 (与样式2同口径), 随书架数据增删清理;
+    // 持有者由路由层下发, 书架子树重建 (导航栏方位切换) 不丢
+    val coverRatioState = LocalCoverRatioLayout.current
+    val activeCoverResources = remember(groups, booksCache) {
+        shelfActiveCoverResources(groups, booksCache)
+    }
+    SideEffect { coverRatioState?.updateActiveResources(activeCoverResources) }
     val scope = rememberCoroutineScope()
 
     // 顶栏 tab 是否显示分组数量 (对照 app 端 AppConfig.bookshelfShowGroupCount)
@@ -391,6 +399,14 @@ internal fun rememberBookshelfLayoutSpec(tier: BookshelfTier?): ShelfLayoutSpec 
 internal suspend fun ShelfScrollState.gotoTop(tier: ShelfTier, eInk: Boolean) {
     if (tier == ShelfTier.LIST) {
         if (eInk) list.scrollToItem(0) else list.animateScrollToItem(0)
+    } else if (tier == ShelfTier.VIDEO) {
+        if (eInk) {
+            grid.scrollToItem(0)
+            staggered.scrollToItem(0)
+        } else {
+            grid.animateScrollToItem(0)
+            staggered.animateScrollToItem(0)
+        }
     } else {
         if (eInk) grid.scrollToItem(0) else grid.animateScrollToItem(0)
     }
@@ -596,14 +612,14 @@ internal fun DefaultBookshelfActions(
  * 书籍封面 (加载与渲染管线见 [SharedCoverContent])。
  *
  * 书籍特有的输入: 默认封面选图 seed = 书名 (无书名回落封面路径), 与详情/搜索/发现共用
- * [DecodedBitmapCache] 的已解码封面小表, 默认封面上叠竖排书名/作者, 挂共享元素转场端点。
+ * [DecodedBitmapCache] 的已登记封面复用, 默认封面上叠竖排书名/作者, 挂共享元素转场端点。
  *
- * 尺寸按 [isVideoCover] 选 16:9 / 3:4, 由调用方给出的那一个维度反算另一个维度 (对齐原 View 版
+ * 尺寸按 [coverRatio] 选 16:9 / 3:4, 由调用方给出的那一个维度反算另一个维度 (对齐原 View 版
  * `CoverImageView.onMeasure` 按 coverRatio 自适应)。
  *
  * @param book 当前书籍
  * @param modifier 外部尺寸约束 (调用方给宽/高/内边距等); 本组件只追加比例与圆角
- * @param isVideoCover 是否视频封面 (true: 16:9, false: 3:4; 对照 CoverRatio.VIDEO/NOVEL)
+ * @param coverRatio 封面比例档位 (对照原版 `CoverImageView.coverRatio`)
  * @param reloadTick 封面重载信号 (configTick): 变化时重启加载, 不变不额外触发
  *
  * ohos 未注册 BookImageLoader, 恒走内置图 + overlay (与替换前占位语义一致)。
@@ -612,7 +628,7 @@ internal fun DefaultBookshelfActions(
 fun SharedBookCover(
     book: Book,
     modifier: Modifier = Modifier,
-    isVideoCover: Boolean = false,
+    coverRatio: CoverSlotRatio = CoverSlotRatio.NOVEL,
     reloadTick: Int = 0,
 ) {
     val cover = book.getDisplayCover()
@@ -632,7 +648,7 @@ fun SharedBookCover(
             author = book.author,
         ),
         modifier = modifier,
-        isVideoCover = isVideoCover,
+        coverRatio = coverRatio,
         reloadTick = reloadTick,
         nameAuthorOverlay = true,
     )
@@ -643,8 +659,8 @@ fun SharedBookCover(
  * 默认分组封面 slot: 与书架同源 (转 [LocalGroupCoverSlot] → [SharedGroupCover]),
  * 分组封面渲染与书架 style2 条目/编辑分组对话框一致, 不再空白占位。
  */
-private val DefaultGroupCoverSlot: @Composable (BookGroup, Modifier, Boolean, Int) -> Unit =
-    { group, m, isVideoCover, tick -> LocalGroupCoverSlot.current(group, m, isVideoCover, tick) }
+private val DefaultGroupCoverSlot: @Composable (BookGroup, Modifier, CoverSlotRatio, Int) -> Unit =
+    { group, m, coverRatio, tick -> LocalGroupCoverSlot.current(group, m, coverRatio, tick) }
 
 /**
  * 封面渲染 slot 的 CompositionLocal: 默认兜底 [SharedBookCover]。
@@ -652,13 +668,13 @@ private val DefaultGroupCoverSlot: @Composable (BookGroup, Modifier, Boolean, In
  * 宿主端可用 [CompositionLocalProvider] 覆盖注入, 替换 shared 路由
  * ([BookshelfScreen] / `BookInfoRoute`) 的封面实现; 各端默认统一走 [SharedBookCover]。
  *
- * 签名 `(Book, Modifier, Boolean) -> Unit` 对齐 [ShelfBooksContent] 的 `bookCoverSlot`
- * (book / modifier / isVideoCover), modifier 与 isVideoCover 不被丢弃。
+ * 签名 `(Book, Modifier, CoverSlotRatio, Int) -> Unit` 对齐 [ShelfBooksContent] 的 `coverSlot`
+ * (book / modifier / 比例档位 / 重载信号), modifier 与比例档位不被丢弃。
  */
 val LocalBookCoverSlot =
-    staticCompositionLocalOf<@Composable (Book, Modifier, Boolean, Int) -> Unit> {
-        @Composable { book, modifier, isVideoCover, tick ->
-            SharedBookCover(book, modifier, isVideoCover, tick)
+    staticCompositionLocalOf<@Composable (Book, Modifier, CoverSlotRatio, Int) -> Unit> {
+        @Composable { book, modifier, coverRatio, tick ->
+            SharedBookCover(book, modifier, coverRatio, tick)
         }
 }
 
@@ -669,4 +685,18 @@ val LocalBookCoverSlot =
  */
 fun SearchBook.toCoverBook(inBookshelf: Boolean = false): Book = toBook().apply {
     if (!inBookshelf) addType(BookType.notShelf)
+}
+
+/**
+ * 书架活跃封面资源集合: 全部分组书籍 + 分组封面 (样式1 pager 全页与样式2 各层级条目的并集)。
+ * 持有者清理由此收敛: 书架数据增删即清理对应资源比例, 下钻/翻页等未减结果集的变化全保留。
+ */
+internal fun shelfActiveCoverResources(
+    groups: List<BookGroup>,
+    booksCache: Map<Long, List<Book>>,
+): Set<CoverResourceKey> = buildSet {
+    groups.forEach { add(it.coverResourceKey()) }
+    booksCache.values.forEach { books ->
+        books.forEach { add(it.coverResourceKey()) }
+    }
 }

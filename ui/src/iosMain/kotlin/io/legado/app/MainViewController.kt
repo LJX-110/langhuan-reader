@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -19,6 +20,9 @@ import io.legado.app.help.AppVersionProviders
 import io.legado.app.help.versionNameToVersionCode
 import io.legado.app.help.AppWebDavShared
 import io.legado.app.ui.book.info.LocalBlurCoverBgSlot
+import io.legado.app.ui.root.ImportStageDialog
+import io.legado.app.ui.root.ImportStageOwner
+import io.legado.app.ui.root.rememberWindowVisibleState
 import io.legado.app.ui.book.info.SharedBlurCoverBg
 import io.legado.app.ui.browser.IosWebViewSlot
 import io.legado.app.ui.browser.LocalWebViewSlot
@@ -200,6 +204,21 @@ fun MainViewController(): UIViewController {
                     SourceUiEventBridgeHost()
                     // legado:// deep link 导入对话框宿主 (投递侧: iOSApp.swift onOpenURL → handleLegadoDeepLink)
                     DeepLinkImportHost()
+                    // 文件关联分发: 冷启动直投先排队, 首帧组合完成 (授权面/导航面就绪) 后按序消费;
+                    // 本 effect 在主窗口组合内 —— 分发任务随窗口存亡 (窗口操作寿命), 队列元素只交付一次
+                    // 本窗口持有的用户选择阶段: 队列任务用它等真回执 (不建全局 owner 表)
+                    val associationStages = remember { ImportStageOwner() }
+                    // 本窗口自身可见性: 取本窗口 Compose 生命周期的 STARTED 区间
+                    // (iOS didEnterBackground/viewDidDisappear 会把 STARTED 降到 CREATED)。
+                    // AppForegroundState 在 iOS 有置位点 (IosBackgroundTasks), 但那是进程前后台口径,
+                    // 不等于"本窗口当前可见", 故这里不用它。
+                    val windowVisible by rememberWindowVisibleState()
+                    ImportStageDialog(associationStages, visible = windowVisible)
+                    LaunchedEffect(associationStages) {
+                        IosPlatformCapabilities.associationFileJobs.collect { job ->
+                            job(associationStages)
+                        }
+                    }
                     // 阅读页长按文本的自绘浮动操作菜单 (四端同一份, 见 shared ReaderTextActionMenu)
                     IosReaderPlatformProvider.TextSelectionHost()
                     // 阅读页长按图片的自绘浮动操作菜单 (与文本菜单同款样式)

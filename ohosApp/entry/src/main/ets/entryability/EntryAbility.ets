@@ -34,10 +34,9 @@ import { initMediaBridge, handleMediaCommand, buildLaunchWantAgent } from '../br
 import { initTtsBridge, handleTtsCommand } from '../bridge/TtsBridgeHandler';
 import { handleCryptoRequest } from '../bridge/CryptoBridgeHandler';
 import { handleHttpRequest } from '../bridge/HttpBridgeHandler';
-import { initFilePickerBridge, handleFilePickerRequest } from '../bridge/FilePickerBridgeHandler';
+import { initFilePickerBridge, handleFilePickerRequest, drainFilePickerRequests, invalidateFilePickerSource } from '../bridge/FilePickerBridgeHandler';
 import { initPasteboardBridge, handlePasteboardRequest } from '../bridge/PasteboardBridgeHandler';
 import { handleNetworkRequest } from '../bridge/NetworkBridgeHandler';
-import { handleTextCodecRequest } from '../bridge/TextCodecBridgeHandler';
 // 后台 WebView 桥接处理器 (隐藏 Web 组件 + runJavaScript 取源码, 书源 webView 规则)
 import { handleWebViewRequest, handleForegroundWebRequest } from '../bridge/WebViewBridgeHandler';
 // Markdown 查看器桥接处理器 (composeResources 直读内联的 Web 页面 + marked/hljs 渲染, KMP MarkdownContent)
@@ -47,11 +46,14 @@ import { initSystemBridge, handleShowToast, handleOpenUrl } from '../bridge/Syst
 import { handleBatteryRequest } from '../bridge/BatteryBridgeHandler';
 import { initPlatformEvent, emitAppLifecycle, emitColorMode, emitDialogResult, emitPlatformEvent, NotificationActionEvent } from '../bridge/PlatformEventBridge';
 import { initShareBridge, handleShareRequest } from '../bridge/SystemShareBridgeHandler';
-import { handleDialogRequest } from '../bridge/SysDialogBridgeHandler';
+import { pendingDialogRequestIds, handleDialogRequest } from '../bridge/SysDialogBridgeHandler';
 import { installSystemEventSources } from '../bridge/SystemEventSources';
 import { systemShare } from '@kit.ShareKit';
+import uniformTypeDescriptor from '@ohos.data.uniformTypeDescriptor';
+import type { UIContext } from '@ohos.arkui.UIContext';
 import { handleKeyboardCommand } from '../bridge/KeyboardBridgeHandler';
-import { initPermissionBridge, handlePermissionRequest } from '../bridge/PermissionBridgeHandler';
+import { handlePdfRequest } from '../bridge/PdfBridgeHandler';
+import { initPermissionBridge, handlePermissionRequest, pendingPermissionRequestIds } from '../bridge/PermissionBridgeHandler';
 // 系统崩溃事件订阅 (hiAppEvent): 系统同时覆盖 ArkTS 崩溃 (JsError) 与原生崩溃 (NativeCrash),
 // 现场含全量线程调用栈与故障日志文件路径, 取代原先只覆盖 ArkTS 的 errorManager 观测器。
 // 崩溃事件在**下次启动**补报 (崩溃当场进程已终止), 故必须在 onCreate 尽早注册。
@@ -116,9 +118,40 @@ function routeOfNotification(id: number): string | undefined {
 const NOTIFICATION_ID_PARAM: string = 'notificationId';
 const NOTIFICATION_ACTION_PARAM: string = 'action';
 
+/**
+ * 对话框通道失效回传 (与 Kotlin OhosDialogResult 的 ok/error 字段对齐)。
+ *
+ * 仅用作 emitDialogResult(0, ...) 的载荷: Kotlin 按 requestId=0 识别通道失效并用自己的文案结束
+ * 全部等待, 这里的 error 只供日志定位。
+ */
+interface DialogChannelClosedPayload {
+  ok: boolean;
+  error: string;
+  pendingIds: number[];
+}
+
+/** showDialog 载荷内层的窗口代际标识 (与 Kotlin 侧 requestId/gen 字段对齐)。 */
+interface DialogShowRequestPayload {
+  requestId?: number;
+  gen?: number;
+}
+
+/** 文件选择通道失效回传 (与 Kotlin OhosNativeBridge 的 ok/error 字段对齐)。 */
+interface FilePickerChannelClosedPayload {
+  ok: boolean;
+  error: string;
+  pendingIds: number[];
+}
+
+/** 权限通道失效回传 (与 Kotlin OhosNativeBridge 的 ok/error 字段对齐)。 */
+interface PermissionChannelClosedPayload {
+  ok: boolean;
+  error: string;
+  pendingIds: number[];
+}
+
 /** 窗口策略命令 payload (与 OhosNativeBridge.kt WindowCommand 对齐)。 */
-interface WindowCommand {
-  action: string;  // 'setKeepScreenOn' | 'setPreferredOrientation' | 'setSystemBarEnable' | 'setSystemBarProperties' | 'exitApplication' | 'showDialog'
+interface WindowCommand {  action: string;  // 'setKeepScreenOn' | 'setPreferredOrientation' | 'setSystemBarEnable' | 'setSystemBarProperties' | 'exitApplication' | 'showDialog'
   enabled?: boolean;
   orientation?: number;
   /** 'setSystemBarEnable' 专用: 状态栏/导航栏各自的可见性 (单栏显隐)。 */
@@ -146,34 +179,120 @@ const SHARE_TEXT_PREFIX: string = 'text:';
 const SHARE_ACTION: string = 'ohos.want.action.sendData';
 
 /**
- * 按 UTD 判定为"文本类"的记录 (字面量取自 module.json5 share skill 声明的同一组 UTD,
- * 即本机 SDK @ohos.data.uniformTypeDescriptor.d.ts 的 TEXT/PLAIN_TEXT/HTML/HYPERLINK)。
+ * 文本族基类型 (SDK @ohos.data.uniformTypeDescriptor: TEXT/PLAIN_TEXT/HTML/HYPERLINK
+ * 均归属其下, 子类型经描述符层级判定, 不用精确字符串冒充完整覆盖)。
  */
-const SHARE_TEXT_UTDS: string[] = ['general.text', 'general.plain-text', 'general.html', 'general.hyperlink'];
+const SHARE_TEXT_BASE_UTD: string = 'general.text';
+
+/**
+ * 申报的可接收分享 UTD (与 module.json5 share skill 同一组字面量): 文件记录按 SDK 类型
+ * 关系核对其归属, 不在能力范围内的记录如实告知不支持。
+ */
+const SHARE_SUPPORTED_UTDS: string[] = [
+  'general.text', 'general.plain-text', 'general.html', 'general.hyperlink',
+  'general.epub', 'com.adobe.pdf',
+  'general.zip-archive', 'general.tar-archive', 'org.gnu.gnu-zip-archive', 'org.gnu.gnu-zip-tar-archive',
+  'general.mpeg-4', 'org.matroska.mkv', 'general.ts',
+];
+
+/** 单条分享记录的转投结果 (request 为空串 = 不可投, error 为用户可读原因)。 */
+interface ShareRecordDispatch {
+  request: string;
+  error: string;
+}
+
+/**
+ * 查 UTD 描述符。SDK 契约: typeId 不存在时返回 null (返回值标注非可选, 文档明写
+ * "or null if the uniform data type does not exist"); 非法参数仅限空/非 string,
+ * 传入的 utd 恒为 string。
+ */
+function typeDescriptorOf(utd: string): uniformTypeDescriptor.TypeDescriptor | null {
+  return uniformTypeDescriptor.getTypeDescriptor(utd) as uniformTypeDescriptor.TypeDescriptor | null;
+}
+
+/** 文本族判定 (SDK 层级归属, 含基类型自身; 入参为非空常量, 不涉及 401 路径)。 */
+function isTextShareUtd(utd: string): boolean {
+  if (utd === SHARE_TEXT_BASE_UTD) {
+    return true;
+  }
+  const descriptor = typeDescriptorOf(utd);
+  if (descriptor === null) {
+    return false;
+  }
+  return descriptor.belongsTo(SHARE_TEXT_BASE_UTD);
+}
+
+/** 申报能力范围核对 (含申报类型自身与其下子类型; 入参为非空常量)。 */
+function isSupportedShareUtd(utd: string): boolean {
+  if (SHARE_SUPPORTED_UTDS.includes(utd)) {
+    return true;
+  }
+  const descriptor = typeDescriptorOf(utd);
+  if (descriptor === null) {
+    return false;
+  }
+  for (const declared of SHARE_SUPPORTED_UTDS) {
+    if (descriptor.belongsTo(declared)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * UTD 的首个 MIME (mimeTypes 自 @since 12, 与模块 compatibleSdkVersion 同级)。
+ * 官方预置表确认申报类型均有 MIME; 取首项原样使用, 不做格式校验。
+ */
+function mimeOfShareUtd(utd: string): string {
+  const descriptor = typeDescriptorOf(utd);
+  if (descriptor === null) {
+    return '';
+  }
+  const mimes: Array<string> = descriptor.mimeTypes;
+  return mimes.length > 0 ? mimes[0] : '';
+}
 
 /**
  * 分享记录 → 外部启动请求串 (交 legado.handleLaunchRequest → OhosLaunchRequests.parse)。
  *
- * **只处理文本类 UTD** —— 与 module.json5 里 share skill 的声明面 (只申报 general.text /
- * plain-text / html / hyperlink) 以及原版 Android 的注册范围 (AndroidManifest 的
- * ProcessTextActivity alias 只挂 `SEND` + `text/plain`, 文件分享走的是 `ACTION_VIEW` 文件关联)
- * 严格对齐: 非文本类型 (图片/视频/压缩包…) 系统根本不会投给本 Ability 的 share skill,
- * 写一条"非文本取 uri → 导入"的分支等于给声明不到的路径留代码 (旧代码就是这样)。
+ * - 文件记录 (官方契约: uri 载荷 = 应用/用户文件 URI, 链接与文本走 content):
+ *   文件附件优先于附带文字 (对照 Android SEND 的 EXTRA_STREAM 优先), 不因
+ *   description/content 改投文本搜索; 能力范围外的 UTD 如实报不支持。类型随 uri 捎带
+ *   (既有 `mime:<type>|<uri>` 约定): 媒体库地址末段是数字 id 无扩展名, 视频直投只有
+ *   MIME 能认; 描述符查不到/未带 MIME 时投裸 uri, 由 KMP 按扩展名/内容判定。
+ * - 无文件载荷的文本族记录: content (纯文本) 或链接地址加 `text:` 前缀进既有搜索/网页分流。
+ * - title 是记录标题非文件名 (SDK 未保证), 不参与投递。
  *
- * 文本类记录里 content 为空的情况退回 uri: 那是"文本类 UTD 但载的是一个文件" (如从文件管理器
- * 分享 .txt), 对应 Android 同一条注册下的 `ACTION_SEND` + `EXTRA_STREAM` → `ImportFile` 分支。
- *
- * @returns 空串 = 该记录不可用 (调用方跳过)
+ * @param allowFile 本次投递是否允许处理文件记录 (跨记录单文件约束, 超限时调用方已提示)
  */
-function toLaunchRequestFromSharedRecord(record: systemShare.SharedRecord): string {
-  if (!SHARE_TEXT_UTDS.includes(record.utd)) {
-    return '';
+function toLaunchRequestFromSharedRecord(record: systemShare.SharedRecord, allowFile: boolean): ShareRecordDispatch {
+  const uri: string = record.uri ?? '';
+  if (uri.startsWith('file://')) {
+    if (!allowFile) {
+      return { request: '', error: '' };
+    }
+    if (!isSupportedShareUtd(record.utd)) {
+      return { request: '', error: '暂不支持该类型的文件: ' + record.utd };
+    }
+    const mime = mimeOfShareUtd(record.utd);
+    if (mime.length === 0) {
+      console.error('[Legado] shared record without MIME mapping: utd=' + record.utd + ', uri=' + uri);
+      return { request: uri, error: '' };
+    }
+    return { request: LAUNCH_MIME_PREFIX + mime + LAUNCH_MIME_SEPARATOR + uri, error: '' };
   }
   const content: string = record.content ?? '';
-  if (content.length > 0) {
-    return SHARE_TEXT_PREFIX + content;
+  if (uri.length > 0) {
+    // 非 file:// 的 uri (官方契约下不属文件载荷): 链接地址按文本分流, 网页去向不变
+    if (isTextShareUtd(record.utd)) {
+      return { request: SHARE_TEXT_PREFIX + uri, error: '' };
+    }
+    return { request: '', error: '未能取得分享的文件' };
   }
-  return record.uri ?? '';
+  if (content.length > 0 && isTextShareUtd(record.utd)) {
+    return { request: SHARE_TEXT_PREFIX + content, error: '' };
+  }
+  return { request: '', error: '未能取得分享的文件' };
 }
 
 /**
@@ -462,6 +581,13 @@ function reportHostException(kind: string, detail: string): void {
 }
 
 export default class EntryAbility extends UIAbility {
+  // 对话框源资格: 注册返回真实代次; JS 后置阶段仍须拒绝旧源 showDialog
+  private dialogMinGen: number = 0;
+  private dialogMaxGen: number = 0;
+  // 分享失败 toast 的 UIContext (loadContent 成功后注入) 与内容就绪前的待交付缓冲:
+  // 冷启动时 getSharedData 回调可先于窗口内容就绪, 失败原因缓冲待内容就绪后交付
+  private shareToastContext: UIContext | undefined = undefined;
+  private sharePendingFailures: string[] = [];
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     console.info('[Legado] EntryAbility.onCreate');
@@ -691,11 +817,15 @@ export default class EntryAbility extends UIAbility {
     registerSafely((): void => {
       // 相册保存 (saveImageToAlbum) 需 UIAbilityContext 申请权限 + 建图库资源
       initFilePickerBridge(this.context);
-      legado.registerFilePickerCallback((json: string): void => {
+      const registeredGen: number = legado.registerFilePickerCallback((json: string): void => {
         handleFilePickerRequest(json, (requestId: number, resultJson: string): void => {
           legado.filePickerCallback(requestId, resultJson);
         });
       });
+      // 只有真实 number 代次才建立新源资格; 注册抛错时 registerSafely 捕获, 保留旧源
+      if (typeof registeredGen === 'number' && registeredGen > 0) {
+        invalidateFilePickerSource(registeredGen);
+      }
     }, '[Legado] filePicker tsfn callback registered via napi', '[Legado] registerFilePickerCallback failed: ');
 
     // Pasteboard tsfn 回调注册 (KMP → ArkTS 跨线程 dispatch, 同 FilePicker 模式)
@@ -725,19 +855,6 @@ export default class EntryAbility extends UIAbility {
         });
       });
     }, '[Legado] network tsfn callback registered via napi', '[Legado] registerNetworkCallback failed: ');
-
-    // TextCodec tsfn 回调注册 (KMP → ArkTS 跨线程 dispatch, 同 Pasteboard 模式)
-    // KMP OhosNativeBridge.invokeTextCodecSync 发 decode/encode 请求 (TXT 分章 GB18030/Big5 等编解码),
-    // ArkTS 侧 TextCodecBridgeHandler 调 @ohos.util.TextDecoder/TextEncoder 完成真实转换,
-    // 完成后调 legado.textCodecCallback(requestId, resultJson) 回送结果
-    // 唤醒 KMP 侧 CompletableDeferred。未注册时 KMP 侧降级。
-    registerSafely((): void => {
-      legado.registerTextCodecCallback((json: string): void => {
-        handleTextCodecRequest(json, (requestId: number, resultJson: string): void => {
-          legado.textCodecCallback(requestId, resultJson);
-        });
-      });
-    }, '[Legado] textCodec tsfn callback registered via napi', '[Legado] registerTextCodecCallback failed: ');
 
     // KP8+: 注册 Image/Media tsfn 回调 (KMP → ArkTS 跨线程 dispatch)。
     // Image: KMP OhosNativeBridge.invokeImageSync 发图片操作请求 (decode/encode/size/crop/split/stitch),
@@ -876,6 +993,19 @@ export default class EntryAbility extends UIAbility {
       legado.registerKeyboardCallback(handleKeyboardCommand);
     }, '[Legado] keyboard tsfn callback registered via napi', '[Legado] registerKeyboardCallback failed: ');
 
+    // PDF 桥回调注册 (KMP → ArkTS, Window/FilePicker 同款源代次通道, 单 JSON 请求面)
+    // KMP OhosNativeBridge.invokePdfSync 发 PDF 操作请求 (openDocument/renderPage/closeDocument),
+    // ArkTS 侧 PdfBridgeHandler 调 @hms.officeservice.pdfservice 真实加载/渲染, 完成后经本
+    // 回调链回送 legado.pdfCallback(requestId, resultJson, jpegBytes?) 唤醒 KMP 侧等待。
+    // 未注入时 KMP 侧按打开/渲染失败降级 (见 OhosPdfRenderPort, 不伪造页图)。
+    registerSafely((): void => {
+      legado.registerPdfCallback((json: string): void => {
+        handlePdfRequest(json, (requestId: number, resultJson: string, body: ArrayBuffer | undefined): void => {
+          legado.pdfCallback(requestId, resultJson, body);
+        });
+      });
+    }, '[Legado] pdf tsfn callback registered via napi', '[Legado] registerPdfCallback failed: ');
+
     // Permission tsfn 回调注册 (KMP → ArkTS 跨线程 dispatch, 权限查询/申请)
     // KMP OhosPlatformServices.permissions.hasPermission/requestPermission
     // → OhosNativeBridge.invokePermissionSync 经 tsfn dispatch 到此回调,
@@ -910,6 +1040,9 @@ export default class EntryAbility extends UIAbility {
    * 投递外部启动请求给 KMP 侧 (onCreate 冷启动 / onNewWant 热启动共用)。
    *
    * # 分流 (与 Kotlin LegadoNativeExports.handleDeepLink / handleLaunchRequest 分工对应)
+   * - 系统分享投递 (action = ohos.want.action.sendData) → handleSharedData
+   *   (systemShare.getSharedData → 逐条记录投 OhosLaunchRequests; 按 action 判定,
+   *   不依赖分享 want 的 uri 形态, 也不与下方 uri/parameters 分支重复处理)
    * - 通知按钮点击 (want.uri 为空, notificationId + action 在 want.parameters) →
    *   emitPlatformEvent (Kotlin OhosPlatformEventChannel 的 type="notificationAction")
    * - legado:// / yuedu:// 一键导入链接 → legado.handleDeepLink
@@ -928,6 +1061,13 @@ export default class EntryAbility extends UIAbility {
    * 不带 MIME 的普通启动串依旧原样透传, 旧链路行为零变化。
    */
   private handleDeepLink(want: Want): void {
+    // 系统分享投递按 action 进入 (SDK getSharedData 的入参契约是"分享能力 Ability 收到的
+    // want", 分享数据只能从它解析, 不假定分享 want 的 uri 必空/必有): 分享 want 不到下方
+    // uri/parameters 分支 (数据只在 SharedData 记录里, 先走那两条会重复处理)。
+    if (want.action === SHARE_ACTION) {
+      this.handleSharedData(want);
+      return;
+    }
     const uri: string = want.uri ?? '';
     if (uri.length === 0) {
       // 通知按钮点击: 参数在 want.parameters (notificationId + action), 不在 want.uri ——
@@ -947,12 +1087,7 @@ export default class EntryAbility extends UIAbility {
         } catch (e) {
           console.error('[Legado] shortcut route dispatch failed: ' + JSON.stringify(e) + ', route=' + shortcutRoute);
         }
-        return;
       }
-      // 系统分享投递的数据不在 want.uri 里 (纯文本分享根本没有 uri, 文件分享的数据在
-      // systemShare 的 SharedData 中), 故此处补解析 (对照 iOS 宿主回调 handleIosLaunchRequest
-      // 的入口位置; 鸿蒙侧对应入口 = OhosLaunchRequests)。非分享 want 由 action 判定直接返回。
-      this.handleSharedData(want);
       return;
     }
     if (uri.startsWith('legado://') || uri.startsWith('yuedu://')) {
@@ -975,44 +1110,98 @@ export default class EntryAbility extends UIAbility {
   }
 
   /**
-   * 解析系统分享投递过来的数据 (文件/文本) 并交给既有外部启动请求链。
+   * 解析系统分享投递的数据 (文件/文本) 并交给既有外部启动请求链。
    *
-   * # 为什么需要单独一条路
-   * module.json5 的 share skill 只负责"声明可接分享", 而分享投递的载荷不在 want.uri 里 ——
-   * 文本分享根本无 uri, 文件分享的数据在 systemShare.getSharedData 的 SharedData 记录中。
-   * 宿主入口侧不解析就毫无反应 (之前的状态), 故在此把每条记录转成既有投递串,
-   * 交 legado.handleLaunchRequest (@CName legado_handle_launch_request →
-   * OhosLaunchRequests.parse → LaunchRequestBus), 使分享进来的文件走既有导入分发
-   * (对照 iOS 宿主调 handleIosLaunchRequest 的位置与分工)。
+   * 分享投递的载荷不在 want.uri 里, 在 systemShare.getSharedData 解出的 SharedData
+   * 记录中 (SDK 契约: 入参是"分享能力 Ability 收到的 want"); 逐条转成既有投递串交
+   * legado.handleLaunchRequest → OhosLaunchRequests.parse → LaunchRequestBus。
    *
-   * # 与 want.uri 链的分工
-   * 只在 want.uri 为空时调用 (handleDeepLink 的空 uri 分支): 带 uri 的 want (文件关联) 已由
-   * 原链路投递, 此处再解一次会对同一文件重复投递。
+   * 跨全部记录执行单文件约束: 文件记录 (uri 非空) 多于一件时告知仅支持单文件,
+   * 不做部分导入 (maxFileSupported 是面板侧入口过滤, 不是全局数量保证);
+   * 文字/网页记录与单文件组合不受影响。
    *
-   * @param want 本次启动/热启动的 Want (action 非分享时直接返回, 不调 getSharedData)
+   * 调用方契约: 仅 action 为分享投递的 want 进入 (handleDeepLink 已按 SHARE_ACTION 分流)。
+   *
+   * @param want 本次启动/热启动的分享投递 Want
    */
   private handleSharedData(want: Want): void {
-    if (want.action !== SHARE_ACTION) {
-      return;
-    }
     systemShare.getSharedData(want).then((data: systemShare.SharedData): void => {
       const records: systemShare.SharedRecord[] = data.getRecords();
+      let fileCount = 0;
       for (const record of records) {
-        const request: string = toLaunchRequestFromSharedRecord(record);
-        if (request.length === 0) {
+        if ((record.uri ?? '').startsWith('file://')) {
+          fileCount++;
+        }
+      }
+      // 文件记录多于一件: 整批文件不处理 (避免先导入一部分), 原因对用户可见
+      let failure: string = fileCount > 1 ? '一次仅支持分享一个文件' : '';
+      for (const record of records) {
+        const dispatch: ShareRecordDispatch =
+          toLaunchRequestFromSharedRecord(record, fileCount <= 1);
+        if (dispatch.error.length > 0) {
+          if (failure.length === 0) {
+            failure = dispatch.error;
+          }
+          console.error('[Legado] share record rejected: ' + dispatch.error + ', utd=' + record.utd);
+          continue;
+        }
+        if (dispatch.request.length === 0) {
           continue;
         }
         try {
-          const handled: boolean = legado.handleLaunchRequest(request);
-          console.info('[Legado] share data dispatched: handled=' + handled + ', request=' + request);
+          const handled: boolean = legado.handleLaunchRequest(dispatch.request);
+          if (!handled && failure.length === 0) {
+            failure = '分享内容投递失败';
+          }
+          console.info('[Legado] share data dispatched: handled=' + handled + ', request=' + dispatch.request);
         } catch (e) {
-          console.error('[Legado] handleLaunchRequest (share) failed: ' + JSON.stringify(e) + ', request=' + request);
+          if (failure.length === 0) {
+            failure = '分享内容投递失败';
+          }
+          console.error('[Legado] handleLaunchRequest (share) failed: ' + JSON.stringify(e) + ', request=' + dispatch.request);
         }
       }
+      if (failure.length > 0) {
+        this.showShareFailure(failure);
+      }
     }).catch((err: Error): void => {
-      // 非分享 want 或解析失败 (BusinessError 1003703001) 走到这里: 不影响其它启动路径
+      // 解析失败 (BusinessError 401 / 1003703001): 对用户可见, 不影响其它启动路径
       console.error('[Legado] getSharedData failed: ' + JSON.stringify(err));
+      this.showShareFailure('读取分享数据失败: ' + (err.message ?? JSON.stringify(err)));
     });
+  }
+
+  /**
+   * 分享接收失败的用户可见反馈 (系统 toast, 与 SystemBridgeHandler 同一 UIContext 原语)。
+   * 冷启动时 getSharedData 回调可先于窗口就绪: 此时段失败先缓冲, 窗口就绪后立即交付。
+   */
+  private showShareFailure(message: string): void {
+    const ctx = this.shareToastContext;
+    if (ctx === undefined) {
+      this.sharePendingFailures.push(message);
+      console.error('[Legado] share failure pending (window not ready): ' + message);
+      return;
+    }
+    try {
+      ctx.getPromptAction().showToast({ message: message });
+    } catch (e) {
+      console.error('[Legado] share failure toast failed: ' + JSON.stringify(e));
+    }
+  }
+
+  /** 交付窗口就绪前缓冲的分享失败提示 (合并一条 toast, 全部原因可见)。 */
+  private flushShareFailures(): void {
+    const ctx = this.shareToastContext;
+    if (ctx === undefined || this.sharePendingFailures.length === 0) {
+      return;
+    }
+    const message: string = this.sharePendingFailures.join('\n');
+    this.sharePendingFailures = [];
+    try {
+      ctx.getPromptAction().showToast({ message: message });
+    } catch (e) {
+      console.error('[Legado] share failure toast failed: ' + JSON.stringify(e));
+    }
   }
 
   onConfigurationUpdate(newConfig: Configuration): void {
@@ -1051,9 +1240,27 @@ export default class EntryAbility extends UIAbility {
     windowStage.loadContent('pages/Index', (err) => {
       if (err && err.code) {
         console.error('[Legado] loadContent failed: ' + JSON.stringify(err));
+        // 主窗口没内容层: 该窗口上的对话框不可能再回传结果, 结束等待中的对话框请求
+        this.closeDialogChannel('主窗口加载失败: ' + (err.message ?? String(err.code)));
+        this.closeFilePickerChannel('主窗口加载失败: ' + (err.message ?? String(err.code)));
+        // 内容层未建成: 分享失败的缓冲提示无处显示, 日志留痕 (不丢原因)
+        if (this.sharePendingFailures.length > 0) {
+          console.error('[Legado] share failure notices undelivered (no content): ' +
+            this.sharePendingFailures.join(' | '));
+        }
         return;
       }
       console.info('[Legado] loadContent pages/Index succeed');
+
+      // 分享失败 toast 的 UIContext (window.getMainWindowSync().getUIContext(),
+      // 官方契约 "Get the UIContext associate with the window content" —— 内容就绪后取得),
+      // 并交付冷启动窗口就绪前缓冲的失败提示
+      try {
+        this.shareToastContext = windowStage.getMainWindowSync().getUIContext();
+      } catch (e) {
+        console.error('[Legado] get UIContext for share toast failed: ' + JSON.stringify(e));
+      }
+      this.flushShareFailures();
 
       // 沉浸式布局恒开: 内容铺满整个窗口 (含状态栏与导航区域), 避让由 Compose 侧按
       // 避让区域自行 padding —— 对照 Android 15+ 强制边到边与 iOS 安全区模型, 三端统一为
@@ -1065,6 +1272,9 @@ export default class EntryAbility extends UIAbility {
         });
       }).catch((err: Error): void => {
         console.error('[Legado] getMainWindow failed: ' + JSON.stringify(err));
+        // 拿不到主窗口: 窗口类命令与对话框都无处执行, 结束等待中的对话框请求
+        this.closeDialogChannel('主窗口不可用: ' + (err.message ?? String(err)));
+        this.closeFilePickerChannel('主窗口不可用: ' + (err.message ?? String(err)));
       });
 
       // 窗口策略桥 (KMP → ArkTS @ohos.window): 注册 tsfn 回调。
@@ -1074,9 +1284,35 @@ export default class EntryAbility extends UIAbility {
       // 的 JSON 命令跨线程 dispatch 到此回调, 由 ArkTS 在窗口上执行 @ohos.window API。
       // 未注册时 KMP 侧降级 println (见 OhosNativeBridge.sendWindowCommand)。
       try {
-        legado.registerWindowCallback((json: string): void => {
+        const windowGen: number = legado.registerWindowCallback((json: string): void => {
           try {
             const cmd = JSON.parse(json) as WindowCommand;
+            if (cmd.action === 'showDialog') {
+              // 对话框走 UIContext promptAction, 不需要主窗口对象;
+              // 不能挂在 getMainWindow() 的 Promise 后, 否则窗口初始化失败时本请求永远无回执
+              let requestId = 0;
+              let requestGen = 0;
+              try {
+                const inner = JSON.parse(cmd.payload ?? '{}') as DialogShowRequestPayload;
+                requestId = inner.requestId ?? 0;
+                requestGen = inner.gen ?? 0;
+              } catch (e) {
+                console.error('[Legado] showDialog payload parse failed: ' + JSON.stringify(e));
+              }
+              if (requestGen > this.dialogMaxGen) this.dialogMaxGen = requestGen;
+              if (requestId > 0 && requestGen < this.dialogMinGen) {
+                emitDialogResult(requestId, JSON.stringify({
+                  ok: false,
+                  channelClosed: true,
+                  error: '对话框请求所属窗口已失效'
+                }));
+                return;
+              }
+              handleDialogRequest(cmd.payload ?? '', (requestId: number, resultJson: string): void => {
+                emitDialogResult(requestId, resultJson);
+              });
+              return;
+            }
             windowStage.getMainWindow().then((win: window.Window) => {
               switch (cmd.action) {
                 case 'setKeepScreenOn':
@@ -1123,15 +1359,6 @@ export default class EntryAbility extends UIAbility {
                     console.error('[Legado] window callback terminateSelf failed: ' + JSON.stringify(e));
                   }
                   break;
-                case 'showDialog':
-                  // 对话框桥 (KMP → ArkTS 跨线程 dispatch, 复用本通道避免新增独立 tsfn;
-                  // 同 exitApplication 的复用先例)。payload 是 OhosNativeBridge.DialogBridgeRequest
-                  // JSON, 交 SysDialogBridgeHandler 弹对话框 (候选列表 / 是-否确认框 / 多字段输入框),
-                  // 用户选择后经 legado.platformEvent (type='dialogResult') 回送 KMP。
-                  handleDialogRequest(cmd.payload ?? '', (requestId: number, resultJson: string): void => {
-                    emitDialogResult(requestId, resultJson);
-                  });
-                  break;
                 default:
                   console.warn('[Legado] window callback unknown action: ' + cmd.action);
               }
@@ -1142,6 +1369,8 @@ export default class EntryAbility extends UIAbility {
             console.error('[Legado] window callback failed: ' + JSON.stringify(e) + ', json=' + json);
           }
         });
+        this.dialogMinGen = windowGen;
+        this.dialogMaxGen = windowGen;
         console.info('[Legado] window tsfn callback registered via napi');
       } catch (e) {
         console.error('[Legado] registerWindowCallback failed: ' + JSON.stringify(e));
@@ -1151,6 +1380,70 @@ export default class EntryAbility extends UIAbility {
 
   onWindowStageDestroy(): void {
     console.info('[Legado] EntryAbility.onWindowStageDestroy');
+    // 窗口销毁: 立即撤销 C++ 三个当前源资格, 并让 JS 后置 showDialog 拒绝旧源
+    this.dialogMinGen = this.dialogMaxGen + 1;
+    legado.invalidateAllSources();
+    this.closeDialogChannel('主窗口已销毁');
+    this.closeFilePickerChannel('主窗口已销毁');
+    this.closePermissionChannel('主窗口已销毁');
+  }
+
+  /**
+   * 通知 Kotlin 对话框通道已失效 (requestId=0)。
+   *
+   * 对话框请求走 window tsfn, 结果由该窗口的 UIContext 回传; 窗口加载失败或销毁后结果不可能再来,
+   * Kotlin 侧 OhosNativeBridge.onDialogResult 据此用失败结果结束该通道上全部等待 (不当作取消)。
+   */
+  private closeDialogChannel(reason: string): void {
+    const payload: DialogChannelClosedPayload = {
+      ok: false,
+      error: reason,
+      pendingIds: pendingDialogRequestIds()
+    };
+    try {
+      emitDialogResult(0, JSON.stringify(payload));
+    } catch (e) {
+      console.error('[Legado] closeDialogChannel failed: ' + JSON.stringify(e));
+    }
+  }
+
+  /**
+   * 通知 Kotlin 文件选择通道已失效 (requestId=0)。
+   *
+   * 选择与读取请求走 filePicker tsfn; 窗口销毁或主窗口不可用后结果不会再来,
+   * Kotlin 侧 OhosNativeBridge.onFilePickerResult(0, ...) 据此用真实失败结束该通道上全部等待。
+   */
+  private closeFilePickerChannel(reason: string): void {
+    try {
+      // 撤 C++ 当前源资格 + ETS 已见源队列: 窗口销毁后不再启动任何旧源输入/复制
+      invalidateFilePickerSource();
+      legado.invalidateFilePickerSource();
+      const payload: FilePickerChannelClosedPayload = {
+        ok: false,
+        error: reason,
+        pendingIds: drainFilePickerRequests()
+      };
+      legado.filePickerCallback(0, JSON.stringify(payload));
+    } catch (e) {
+      console.error('[Legado] closeFilePickerChannel failed: ' + JSON.stringify(e));
+    }
+  }
+
+  /**
+   * 通知 Kotlin 权限通道已失效 (requestId=0): 正在进行中的权限等待以真实错误结束,
+   * 不再无限期挂起; 迟到的真实结果因表内无该请求而丢弃。
+   */
+  private closePermissionChannel(reason: string): void {
+    try {
+      const payload: PermissionChannelClosedPayload = {
+        ok: false,
+        error: reason,
+        pendingIds: pendingPermissionRequestIds()
+      };
+      legado.permissionCallback(0, JSON.stringify(payload));
+    } catch (e) {
+      console.error('[Legado] closePermissionChannel failed: ' + JSON.stringify(e));
+    }
   }
 
   /**

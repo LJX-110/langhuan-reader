@@ -39,12 +39,17 @@ fun ReaderSystemBarAppearanceEffect(screenModel: ReaderScreenModel) {
     }
     val dialogEvent = screenModel.dialogSlot.collectAsState().value?.event
     val bottomSheetVisible = dialogEvent != null && dialogEvent in readerBottomSheetDialogs
-    val menuLayoutVisible = screenModel.menuState.isVisible ||
+    val menuLayoutVisible = screenModel.menuStateOrNull?.isVisible == true ||
         (
             screenModel.searchMenuState.rootVisible &&
                 screenModel.searchMenuState.bottomVisibleState.currentState
             ) ||
         bottomSheetVisible
+    // 菜单布局可见状态同步给根层窗口策略（readerSystemBarsPolicy）：
+    // 菜单显示时状态栏/导航栏一律显示，退出阅读页由 onCleared 复位
+    LaunchedEffect(menuLayoutVisible) {
+        readerMenuLayoutVisible = menuLayoutVisible
+    }
     // 声明只在键变化时重算: 背景色与阅读样式是直读持久层的调用 (含颜色解析), 每次重组都读没意义
     val appearance = remember(menuLayoutVisible, bottomSheetVisible, themeStore, configTick) {
         val style = ReadBookConfigProviders.getOrNull()?.durConfig

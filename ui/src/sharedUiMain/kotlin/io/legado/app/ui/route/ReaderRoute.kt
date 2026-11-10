@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -63,6 +64,7 @@ import io.legado.app.ui.book.read.ReadBookEvents
 import io.legado.app.ui.book.read.ReadBookViewModelShared
 import io.legado.app.ui.book.read.ReadConfigChange
 import io.legado.app.ui.book.read.ReadMenuAction
+import io.legado.app.ui.book.read.ReadMenuController
 import io.legado.app.data.entities.Bookmark
 import io.legado.app.ui.book.manage.ShelfDeleteConfirmDialog
 import io.legado.app.ui.book.manage.ShelfDeleteRequest
@@ -86,6 +88,7 @@ import io.legado.app.ui.book.read.config.ChineseConverterSelectorDialog
 import io.legado.app.ui.book.read.config.ClickRegionalConfigDialogHost
 import io.legado.app.ui.book.read.config.CustomPageKeyDialogHost
 import io.legado.app.ui.book.read.config.ReadAloudDialog
+import io.legado.app.ui.book.read.page.SelectionGeometry
 import io.legado.app.ui.book.read.page.TITLE_SIZE_EXTRA_SP
 import io.legado.app.ui.book.read.page.delegate.ScrollPageDelegateCompose
 import io.legado.app.ui.book.read.page.entities.PageDirectionShared
@@ -155,27 +158,56 @@ fun ReaderRoute(
         "ReaderPlatformProvider must be registered before opening ReaderRoute"
     }
 
-    val screenModel = screenModelStore.getOrCreateTyped(entry) {
-        ReaderScreenModel(
-            menuControllerFactory = { model -> provider.createMenuController(navigator, model) },
-            getBatteryLevel = { provider.getBatteryLevel() },
-            // 搜索菜单"结果"按钮 → 打开全文搜索页 (对照原版 openSearchActivity:
-            // 携带当前书/索引/结果列表, 免重搜; 列表仅首条 query 匹配时携带)
-            onOpenSearch = { model, book, word ->
-                // 带 resultKey 接收选中结果回写 (对齐 iOS/OHOS provider, 2026-08-06 修复漏接)
-                navigator.push(
-                    AppRoute.SearchContent(
-                        index = model.searchResultIndex,
-                        word = word ?: model.searchContentQuery,
-                        initialResults = model.searchResultList?.takeIf { list ->
-                            list.firstOrNull()?.query == model.searchContentQuery
-                        },
-                        book = book.toRouteRef(),
-                    ),
-                    resultKey = RouteResults.SEARCH_CONTENT,
-                )
-            },
+    // 平台绑定 (随宿主重建更换): provider 是当前注册实例, navigator 是当前导航器
+    val menuControllerFactory: (ReaderScreenModel) -> ReadMenuController = { model ->
+        provider.createMenuController(navigator, model)
+    }
+    val getBatteryLevel: () -> Int = { provider.getBatteryLevel() }
+    // 搜索菜单"结果"按钮 → 打开全文搜索页 (对照原版 openSearchActivity:
+    // 携带当前书/索引/结果列表, 免重搜; 列表仅首条 query 匹配时携带)
+    val onOpenSearch: (ReaderScreenModel, Book, String?) -> Unit = { model, book, word ->
+        // 带 resultKey 接收选中结果回写 (对齐 iOS/OHOS provider, 2026-08-06 修复漏接)
+        navigator.push(
+            AppRoute.SearchContent(
+                index = model.searchResultIndex,
+                word = word ?: model.searchContentQuery,
+                initialResults = model.searchResultList?.takeIf { list ->
+                    list.firstOrNull()?.query == model.searchContentQuery
+                },
+                book = book.toRouteRef(),
+            ),
+            resultKey = RouteResults.SEARCH_CONTENT,
         )
+    }
+
+    val screenModel = screenModelStore.getOrCreateTyped(entry) {
+        // 电量/搜索入口由 acceptBinding 随宿主绑定注入, 模型构造期不需要 (也不再保留副本)
+        ReaderScreenModel()
+    }
+
+    // 菜单控制器: **纯构造** (工厂只建对象, 不起订阅); UI 记着它并直接渲染
+    val menuController = remember(screenModel, provider, navigator) {
+        menuControllerFactory(screenModel)
+    }
+
+    // 接纳/激活/释放都在**已提交组合**的 Effect 里, 按绑定身份成对:
+    // - 成功提交后: 模型接纳这条绑定 (provider/navigator/控制器/电量/搜索闭包),
+    //   平台据此激活本窗口的 UI 绑定/订阅 (Android 的 activeMenuState 与页面变化订阅);
+    // - 组合被放弃或换绑 (onDispose): 先让 provider 收回**这条**绑定的副作用, 再让模型放掉闭包。
+    //   旧 provider 的释放只按 controller 身份定位, 不会经模型去拿新控制器。
+    DisposableEffect(screenModel, provider, navigator, menuController) {
+        screenModel.acceptBinding(
+            provider = provider,
+            navigator = navigator,
+            controller = menuController,
+            getBatteryLevel = getBatteryLevel,
+            onOpenSearch = onOpenSearch,
+        )
+        provider.activateMenuController(screenModel, menuController)
+        onDispose {
+            provider.releaseMenuController(screenModel, menuController)
+            screenModel.releaseBinding(provider, navigator, menuController)
+        }
     }
 
     // 页面级副作用统一挂本页 Lifecycle, 不再挂组合存亡 (两者在单 Activity 架构下不是同一件事):
@@ -291,10 +323,11 @@ fun ReaderRoute(
         screenModel.openChapter(index, target.second.second)
     }
 
-    val state = remember(screenModel) {
+    // 界面状态按**当前菜单控制器实例**建立: 绑定换了就是新的一份, 不回用旧宿主的菜单状态
+    val state = remember(screenModel, menuController) {
         ReaderUiState(
             viewModel = screenModel.viewModel,
-            menuState = screenModel.menuState,
+            menuState = menuController.state,
             searchMenuState = screenModel.searchMenuState,
             selection = screenModel.selection,
             batteryLevel = screenModel.batteryLevel,
@@ -302,7 +335,8 @@ fun ReaderRoute(
         )
     }
 
-    val actions = remember(navigator, screenModel) {
+    // actions 闭包捕获本次组合的控制器: 换绑后必须重建, 不能沿用旧宿主那份
+    val actions = remember(navigator, screenModel, menuController) {
         object : ReaderUiActions {
             // 点击动作 0（默认中心区域）：显示菜单
             // 菜单显示时 ReadMenuOverlay 的 bg Box 拦截触摸调 onBgClick 收起，不经过本回调
@@ -314,8 +348,10 @@ fun ReaderRoute(
                 provider.onImageLongPress(screenModel, src, x, y)
             }
 
-            override fun onTextSelection(text: String, anchorX: Float, anchorY: Float) {
-                provider.onTextSelected(screenModel, text, anchorX, anchorY)
+            override fun onTextSelection(text: String, geometry: SelectionGeometry) {
+                // 弹菜单事件链内同帧直传几何快照, 平台侧构造菜单请求 (批注气泡锚定用
+                // 快照文字区域, 不从已变化/清空的选区反算)
+                provider.onTextSelected(screenModel, text, geometry)
             }
 
             override fun onUnderlineTap(bookmark: Bookmark, anchor: Rect) {
@@ -332,7 +368,7 @@ fun ReaderRoute(
             // 非翻页类点击动作，对照 app 端 ReadView.click 走 callBack 的分支
             // 5/6 朗读上下段，已通过 provider 接入（对照 app 端 ReadAloud.prevParagraph/nextParagraph）
             override fun onPageAction(action: Int) {
-                val menu = screenModel.menuState
+                val menu = menuController.state
                 when (action) {
                     5 -> provider.readAloudControls(navigator, screenModel)?.prevParagraph()
                     6 -> provider.readAloudControls(navigator, screenModel)?.nextParagraph()
@@ -370,11 +406,11 @@ fun ReaderRoute(
     // 一并订阅窗口焦点: 失焦期间请求的焦点可能被随后的失焦事件再清一次，回到前台时再收一次兜底。
     // 用 snapshotFlow 而非直接读 isVisible，避免整页跟着菜单动画重组
     val windowInfo = LocalWindowInfo.current
-    LaunchedEffect(screenModel) {
+    LaunchedEffect(screenModel, menuController) {
         snapshotFlow {
             Triple(
                 windowInfo.isWindowFocused,
-                screenModel.menuState.isVisible,
+                menuController.state.isVisible,
                 screenModel.underlineBubble != null,
             )
         }.collect { (_, visible, bubbleVisible) ->
@@ -443,7 +479,7 @@ fun ReaderRoute(
             return@AppBackHandler
         }
         // ④ 自动翻页停止 (原版: isAutoPage → autoPageStop)
-        if (screenModel.menuState.autoPage) {
+        if (menuController.state.autoPage) {
             provider.autoPageStop(screenModel)
             return@AppBackHandler
         }
@@ -467,7 +503,7 @@ fun ReaderRoute(
     val chapterTurnThrottle = remember { PageTurnThrottle() }
     AppShortcutHandler(
         shortcuts = readerDirectionalKeys,
-        enabled = { isTopEntry && !screenModel.menuState.isVisible },
+        enabled = { isTopEntry && !menuController.state.isVisible },
     ) { shortcut ->
         // 分发时读当前翻页方向 (scroll=上下滚动, 其余=左右翻页), 不依赖重组
         val isScroll = screenModel.viewModel.isScrollPageAnim
@@ -536,7 +572,7 @@ fun ReaderRoute(
     // 长按策略 (2026-08 用户拍板): 与漫画页一致——TRIGGER 连翻 + 200ms 节流,
     // 接线收敛在共享 VolumeKeyPageTurnHandler (单击翻页 / 长按连翻节流 / 抬起消费)
     VolumeKeyPageTurnHandler(
-        enabled = { isTopEntry && !screenModel.menuState.isVisible },
+        enabled = { isTopEntry && !menuController.state.isVisible },
         throttle = pageTurnThrottle,
     ) { volumeUp ->
         screenModel.viewModel.turnPage(
@@ -553,7 +589,7 @@ fun ReaderRoute(
     if (!customPageKeys.isEmpty()) {
         AppShortcutHandler(
             shortcuts = customPageKeys.shortcuts,
-            enabled = { isTopEntry && !screenModel.menuState.isVisible },
+            enabled = { isTopEntry && !menuController.state.isVisible },
         ) { shortcut ->
             pageTurnThrottle.tryTurn {
                 screenModel.viewModel.turnPage(
@@ -576,7 +612,8 @@ fun ReaderRoute(
     ReaderScreen(
         state = state,
         actions = actions,
-        modifier = Modifier.pointerInput(Unit) {
+        // 按控制器重启: 换绑后不能沿用旧捕获里的菜单状态 (旧宿主的控制器)
+        modifier = Modifier.pointerInput(menuController) {
             awaitPointerEventScope {
                 while (true) {
                     val event = awaitPointerEvent()
@@ -584,7 +621,7 @@ fun ReaderRoute(
                     val change = event.changes.firstOrNull() ?: continue
                     val delta = change.scrollDelta.y
                     if (delta == 0f) continue
-                    if (!latestIsTopEntry || screenModel.menuState.isVisible ||
+                    if (!latestIsTopEntry || menuController.state.isVisible ||
                         screenModel.searchMenuState.rootVisible
                     ) {
                         continue
@@ -622,18 +659,18 @@ fun ReaderRoute(
 
     // region ReadBookEvents 订阅 (对照 app 端 ReadBookActivity.observeLiveBus 的 ReadBookEvents 收集)
     val eventBus = LocalEventBusProvider.current
-    LaunchedEffect(screenModel, eventBus) {
+    LaunchedEffect(screenModel, eventBus, menuController) {
         // 主题模式切换/重建 (对照 app 端 EventBus.RECREATE): 菜单只有日/夜图标与主题相关,
         // 其余状态由 AppTheme 换色时的整树重组自然重读
-        launch { eventBus.recreateEvent.collect { screenModel.menuState.upNightTheme() } }
+        launch { eventBus.recreateEvent.collect { menuController.state.upNightTheme() } }
         // 菜单/顶栏重建 (对照 app 端 actionBarChange → readMenu.reset())
-        launch { ReadBookEvents.actionBarChange.collect { screenModel.menuState.reset() } }
+        launch { ReadBookEvents.actionBarChange.collect { menuController.state.reset() } }
         // 进度条刷新 (对照 app 端 seekBarChange → readMenu.upSeekBar())
-        launch { ReadBookEvents.seekBarChange.collect { screenModel.menuState.upSeekBar() } }
+        launch { ReadBookEvents.seekBarChange.collect { menuController.state.upSeekBar() } }
         // 屏幕超时设置变更 (对照 app 端 keepLightChange → upScreenTimeOut)
         launch { ReadBookEvents.keepLightChange.collect { provider.onKeepLightChange(screenModel) } }
         // 菜单数据刷新 (对照 app 端 menuRefresh → upMenuView())
-        launch { ReadBookEvents.menuRefresh.collect { screenModel.menuState.refresh() } }
+        launch { ReadBookEvents.menuRefresh.collect { menuController.state.refresh() } }
         // 请求重载目录 (对照 app 端 loadChapterList → viewModel.loadChapterList(book))
         launch {
             ReadBookEvents.loadChapterList.collect { book ->
@@ -750,7 +787,7 @@ fun ReaderRoute(
                             ?: return@collect
                     // 直接采用回传的已保存对象 (不再按 origin 查库)
                     screenModel.viewModel.upBookSource(source)
-                    screenModel.menuState.refresh()
+                    menuController.state.refresh()
                 }
 
                 RouteResults.REPLACE_EDIT -> screenModel.viewModel.replaceRuleChanged()
@@ -1060,6 +1097,7 @@ fun ReaderRoute(
                 provider = provider,
                 navigator = navigator,
                 screenModel = screenModel,
+                menuController = menuController,
                 onDismiss = closeDialog,
                 dismissed = panel.token != dialogSlot?.token,
             )
@@ -1070,7 +1108,7 @@ fun ReaderRoute(
         is ReaderDialogEvent.AutoRead -> {
             // 自动翻页自行结束 (如翻到全书末尾, app 端 pager.onEnd → stopAutoPage) 时收起面板
             // (对照原版 autoPageStop → dismissDialogFragment(AutoReadDialog))
-            val autoPageActive = screenModel.menuState.autoPage
+            val autoPageActive = menuController.state.autoPage
             LaunchedEffect(autoPageActive) {
                 if (!autoPageActive) closeDialog()
             }
@@ -1092,7 +1130,7 @@ fun ReaderRoute(
                     // 主菜单按钮 → 强制弹常规菜单 (对照原版 callBack.showMenuBar, 不走 autoPage 重定向;
                     // 面板收起由内容侧带动画 requestDismiss 驱动, 完成后经 onDismiss 清事件)
                     override fun showMenuBar() {
-                        screenModel.menuController.showMenu()
+                        menuController.showMenu()
                     }
 
                     // 停止自动翻页 (对照原版 callBack.autoPageStop); 面板由上方 autoPageActive
@@ -1294,7 +1332,7 @@ fun ReaderRoute(
             AppAlertDialog(
                 onDismissRequest = {
                     closeDialog()
-                    screenModel.menuState.upSeekBar()
+                    menuController.state.upSeekBar()
                 },
                 title = stringResource(Res.string.chapter_jump_confirm),
                 message = stringResource(Res.string.chapter_jump_confirm_msg),
@@ -1303,7 +1341,7 @@ fun ReaderRoute(
                 },
                 cancelButton = AlertButton(stringResource(Res.string.no)) {
                     closeDialog()
-                    screenModel.menuState.upSeekBar()
+                    menuController.state.upSeekBar()
                 },
             )
         }
@@ -1336,6 +1374,8 @@ private fun AloudPanelContent(
     provider: ReaderPlatformProvider,
     navigator: AppNavigator,
     screenModel: ReaderScreenModel,
+    /** 本组合当前渲染的菜单控制器 (宿主重绑后是新的一份; 面板按它弹主菜单, 不沿用旧捕获)。 */
+    menuController: ReadMenuController,
     onDismiss: () -> Unit,
     dismissed: Boolean,
 ) {
@@ -1374,7 +1414,8 @@ private fun AloudPanelContent(
         onOpenChapterList = { controls.openChapterList() },
         // 主菜单 → 强制弹常规菜单 (对照原版 callBack.showMenuBar, 不走朗读重定向);
         // 面板收起由内容侧带动画 requestDismiss 驱动, 完成后经 onDismiss 清事件
-        onShowMenuBar = { screenModel.menuController.showMenu() },
+        onShowMenuBar = { menuController.showMenu() },
+    // 面板自身记着的是本次组合的 controller (来自参数), 不读模型当前绑定
         onBackstage = { controls.toBackstage() },
         onOpenSettings = { controls.openSettings() },
         dismissed = dismissed,

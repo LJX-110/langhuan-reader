@@ -60,18 +60,15 @@ slf4jNop = "2.0.18"
 core = "1.18.0"
 appcompat = "1.7.1"
 activity = "1.13.0"
-fragment = "1.8.9"
 lifecycle = "2.10.0"
 media = "1.8.0"
 media3 = "1.10.1"
 webkit = "1.16.0"
 documentfile = "1.1.0"
-constraintlayout = "2.2.1"
-recyclerview = "1.4.0"
+
 sqlite = "2.7.0"
 room = "3.0.1"
 collection = "1.6.0"
-material = "1.14.0"
 libarchive = "1.1.6"
 playServicesCronet = "18.1.1"
 # Android Baseline Profile: 生成器 (benchmark 1.5.0) 与运行时安装器 (profileinstaller);
@@ -95,6 +92,9 @@ coil3 = "3.4.0"
 
 # ===== HTML / XML / SVG 解析 =====
 ksoup = "0.2.6"
+# native 端字符集编解码 (modules/charset-native; 与 ksoup 0.2.6 的依赖链同版本)
+fleeksoft-charset = "0.0.8"
+fleeksoft-io = "0.0.8"
 kxml2 = "2.3.0"
 jsvg = "2.1.0"
 androidsvg = "1.4"
@@ -107,13 +107,12 @@ pdfbox = "3.0.8"
 
 # ===== JS 引擎 / 加密 / 简繁转换 =====
 hutool = "5.8.22"
-# 桌面端 JVM 用: SunJCE 无 PKCS7Padding, 书源 java.createSymmetricCrypto('AES/CBC/PKCS7Padding')
-# 在桌面端报 "Cannot find any provider supporting AES/CBC/PKCS7Padding"; bcprov (Oracle 签名,
-# 通过 JCE provider 认证) 补齐 PKCS7Padding/SM4/RC4 等算法。版本与本地 gradle 缓存一致。
-# ⚠️ 2026-08-15 起已禁用 (desktop/build.gradle.kts 有完整教训注释): BC 类一旦进运行时
-# classpath, hutool SecureUtil 会经 GlobalBouncyCastleProvider 用 BC 的 RSA Cipher,
-# 触发分段加密 → 网易云 weapi 全部 200 空体。如需 PKCS7Padding 请走 PKCS7→PKCS5 字节级
-# 等价替换 (SymmetricCryptoAndroid.normalizePkcs7Padding), 不要再加回 bcprov。
+# 桌面端 JVM 用: SunJCE 无 PKCS7Padding/SM2/SM3/SM4, 书源在桌面端调这些算法时报
+# NoSuchAlgorithmException; bcprov (Oracle 签名, 通过 JCE provider 认证) 以**最低优先级**
+# 注册补齐缺口。⚠️ 必须配合 DesktopCryptoProvider.install(): 关 hutool
+# GlobalBouncyCastleProvider 点名行为 + BC 追加 provider 链末尾, 否则 BC 的 RSA
+# Cipher (getBlockSize=127, SunJCE=0) 会触发 hutool 分段加密, 网易云 weapi 全部 200 空体
+# (2026-08-15 教训)。版本与本地 gradle 缓存一致。
 bouncycastle = "1.79"
 quickChineseTransfer = "0.2.16"
 
@@ -165,7 +164,6 @@ compose-lifecycle-runtime-multiplatform = { module = "org.jetbrains.androidx.lif
 multiplatformMarkdown = { module = "com.mikepenz:multiplatform-markdown-renderer", version.ref = "multiplatformMarkdown" }
 multiplatformMarkdown-coil3 = { module = "com.mikepenz:multiplatform-markdown-renderer-coil3", version.ref = "multiplatformMarkdown" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
-material = { module = "com.google.android.material:material", version.ref = "material" }
 
 # ===== 桌面视频 (mediamp-mpv, KMP 自动选 desktop 变体) =====
 mediamp-mpv = { module = "org.openani.mediamp:mediamp-mpv", version.ref = "mediamp" }
@@ -183,6 +181,8 @@ mediamp-mpv-runtime-macos-arm64 = { module = "org.openani.mediamp:mediamp-mpv-ru
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "coroutines" }
+# 测试专用: TestScope 虚拟时间驱动协程调度 (仅测试源集引用)
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-atomicfu = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "atomicfu" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 # 扩展按 compileOnly 引用 kotlinx.serialization.json.okio 包, 运行时委派宿主, 官方宿主 serialization bundle 同含此工件
@@ -197,8 +197,6 @@ slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4jNop" }
 core-ktx = { module = "androidx.core:core-ktx", version.ref = "core" }
 appcompat-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
 vectordrawable-animated = { module = "androidx.vectordrawable:vectordrawable-animated", version = "1.1.0" }
-activity-ktx = { module = "androidx.activity:activity-ktx", version.ref = "activity" }
-fragment-ktx = { module = "androidx.fragment:fragment-ktx", version.ref = "fragment" }
 lifecycle-service = { module = "androidx.lifecycle:lifecycle-service", version.ref = "lifecycle" }
 media-media = { module = "androidx.media:media", version.ref = "media" }
 media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }
@@ -211,8 +209,6 @@ androidx-media3-ui = { module = "androidx.media3:media3-ui", version.ref = "medi
 media3-datasource-okhttp = { module = "androidx.media3:media3-datasource-okhttp", version.ref = "media3" }
 androidx-webkit = { module = "androidx.webkit:webkit", version.ref = "webkit" }
 androidx-documentfile = { module = "androidx.documentfile:documentfile", version.ref = "documentfile" }
-androidx-constraintlayout = { module = "androidx.constraintlayout:constraintlayout", version.ref = "constraintlayout" }
-androidx-recyclerview = { module = "androidx.recyclerview:recyclerview", version.ref = "recyclerview" }
 androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.ref = "sqlite" }
 androidx-sqlite-framework = { module = "androidx.sqlite:sqlite-framework", version.ref = "sqlite" }
 room-common = { module = "androidx.room3:room3-common", version.ref = "room" }
@@ -230,6 +226,12 @@ androidx-uiautomator = { module = "androidx.test.uiautomator:uiautomator", versi
 
 # ===== 网络栈 =====
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+# 漫画扩展按 compileOnly 引用 okhttp3.zstd.Zstd / okhttp3.brotli.Brotli(BrotliInterceptor)与
+# com.squareup.zstd.okio.OkioZstd, 运行时委派宿主; okhttp-zstd 传递 zstd-kmp-okio(0.4.0,
+# Android 变体为 AAR 含全 ABI libzstd-kmp.so, JVM 变体 jar 含 /jni/ 全平台 native),
+# okhttp-brotli 传递 org.brotli:dec(0.1.2, 纯类 jar)
+okhttp-zstd = { module = "com.squareup.okhttp3:okhttp-zstd", version.ref = "okhttp" }
+okhttp-brotli = { module = "com.squareup.okhttp3:okhttp-brotli", version.ref = "okhttp" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
 kmp-zip-okio = { module = "no.synth:kmp-zip-okio", version.ref = "kmp-zip" }
@@ -250,6 +252,8 @@ coil3-network-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.
 
 # ===== HTML / XML / SVG 解析 =====
 ksoup = { module = "com.fleeksoft.ksoup:ksoup", version.ref = "ksoup" }
+fleeksoft-charset = { module = "com.fleeksoft.charset:charset", version.ref = "fleeksoft-charset" }
+fleeksoft-io-core = { module = "com.fleeksoft.io:io-core", version.ref = "fleeksoft-io" }
 kxml2 = { module = "net.sf.kxml:kxml2", version.ref = "kxml2" }
 jsvg = { module = "com.github.weisj:jsvg", version.ref = "jsvg" }
 androidsvg = { module = "com.caverock:androidsvg-aar", version.ref = "androidsvg" }
@@ -263,7 +267,7 @@ pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
 
 # ===== JS 引擎 / 加密 / 简繁转换 =====
 hutool-crypto = { module = "cn.hutool:hutool-crypto", version.ref = "hutool" }
-# 桌面端 JCE 补丁 provider (见 bouncycastle version 注释); 已禁用, 仅 desktop jvm 曾依赖
+# 桌面端 JCE 补齐 provider (见 bouncycastle version 注释); 仅 desktop jvm 依赖
 bcprov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 quick-chinese-transfer-core = { module = "com.github.liuyueyi.quick-chinese-transfer:quick-transfer-core", version.ref = "quickChineseTransfer" }
 

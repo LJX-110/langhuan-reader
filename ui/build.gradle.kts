@@ -80,7 +80,7 @@ kotlin {
     if (enableIosTarget) {
         val configureNativeCinterops: KotlinNativeTarget.() -> Unit = {
             if (isMacHost) {
-                // native 库 (quickjs/mbedtls) 由 scripts/build-ios-native.sh 预编译,
+                // native 库 (quickjs) 由 scripts/build-ios-native.sh 预编译,
                 // 产物在 :data/build/iosNativeLibs (与 :data 的 cinterop 同一套 native 库)
                 val nativeLibDir = file("${rootProject.projectDir}/data/build/iosNativeLibs/${konanTarget.name}")
                 binaries {
@@ -90,7 +90,7 @@ kotlin {
                         binaryOption("bundleId", "shutiao.reader.shared")
                     }
                     all {
-                        linkerOpts("-L${nativeLibDir.absolutePath}", "-lquickjs", "-lmbedtls", "-lsqlite3")
+                        linkerOpts("-L${nativeLibDir.absolutePath}", "-lquickjs", "-lsqlite3")
                         optimized = false
                     }
                 }
@@ -255,6 +255,12 @@ kotlin {
                     implementation(libs.ktor.client.darwin)
                     implementation(libs.coil3.network.ktor3)
                 }
+                // 非 mac: sceneorientation cinterop (需本机 Apple SDK) 无法生成, 方向请求
+                // 由 iosWindowsCheckMain 源根的同签名 stub 顶替 (与 :data 的 KVO 观察器同款处理)。
+                if (!isMacHost) {
+                    kotlin.exclude("io/legado/app/ui/IosSceneOrientation.kt")
+                    kotlin.srcDir("src/iosWindowsCheckMain/kotlin")
+                }
             }
             // KGP 不会自动把 iosArm64Main/iosSimulatorArm64Main 连到自定义的 iosMain,
             // 必须显式 dependsOn (否则 nativeMain 的 actual 进不了 iOS 编译; 与 :data 同款连接)。
@@ -296,6 +302,8 @@ kotlin {
                 implementation(libs.kotlin.reflect)
                 // HtmlTree/JsonPathChain 测试直接构造 JsonElement/JsonObject
                 implementation(libs.kotlinx.serialization.json)
+                // 着色缓存的重算/取消/串行语义用 TestScope 虚拟时间验证
+                implementation(libs.kotlinx.coroutines.test)
             }
         }
         matching { it.name == "androidHostTest" }.configureEach {

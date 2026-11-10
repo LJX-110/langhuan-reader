@@ -23,8 +23,10 @@ import io.legado.app.ui.book.manga.extension.MangaExtensionUiState
 import io.legado.app.ui.book.manga.extension.MangaInstallState
 import io.legado.app.ui.book.manga.extension.MangaNotLoadedReason
 import io.legado.app.ui.book.manga.extension.MangaPrefItem
+import io.legado.app.ui.book.manga.extension.MangaPrefTextSession
 import io.legado.app.ui.book.manga.extension.MangaPrefValue
 import io.legado.app.ui.book.manga.extension.MangaRepoItem
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -65,13 +67,13 @@ open class SharedMangaExtensionPlatform(
 
         suspend fun buildPreferenceItems(pkgName: String): List<MangaPrefItem>
 
-        suspend fun setPreferenceValue(pkgName: String, key: String, value: MangaPrefValue)
+        suspend fun setPreferenceValue(item: MangaPrefItem, value: MangaPrefValue)
 
-        suspend fun performPreferenceClick(pkgName: String, index: Int)
+        suspend fun performPreferenceClick(item: MangaPrefItem)
 
-        suspend fun applyPreferenceChange(pkgName: String, index: Int, newValue: Boolean)
+        suspend fun applyPreferenceChange(item: MangaPrefItem, newValue: Boolean)
 
-        suspend fun bindEditTextPreference(pkgName: String, index: Int)
+        suspend fun clickTextEditor(item: MangaPrefItem): MangaPrefTextSession?
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -234,33 +236,35 @@ open class SharedMangaExtensionPlatform(
             MangaRepoItem(it.name, it.indexUrl, it.signingKeyFingerprint)
         }
 
-    override suspend fun removeRepo(indexUrl: String) {
+    override suspend fun removeRepo(indexUrl: String): Result<Unit> = runCatching {
         MangaExtensionManager.removeRepo(indexUrl)
         MangaExtensionManager.findAvailableExtensions()
-    }
+    }.map { }
+        .onFailure { if (it is CancellationException) throw it }
 
     // region 插件自带配置 (ConfigurableSource/ConfigurableAnimeSource)
 
     override fun isConfigurable(pkgName: String): Boolean =
         config?.isConfigurable(pkgName) ?: false
 
-    override suspend fun buildPreferenceItems(pkgName: String): List<MangaPrefItem> =
-        config?.buildPreferenceItems(pkgName) ?: emptyList()
-
-    override suspend fun setPreferenceValue(pkgName: String, key: String, value: MangaPrefValue) {
-        config?.setPreferenceValue(pkgName, key, value)
+    override suspend fun buildPreferenceItems(pkgName: String): List<MangaPrefItem> {
+        return config?.buildPreferenceItems(pkgName) ?: emptyList()
     }
 
-    override suspend fun performPreferenceClick(pkgName: String, index: Int) {
-        config?.performPreferenceClick(pkgName, index)
+    override suspend fun setPreferenceValue(item: MangaPrefItem, value: MangaPrefValue) {
+        config?.setPreferenceValue(item, value)
     }
 
-    override suspend fun applyPreferenceChange(pkgName: String, index: Int, newValue: Boolean) {
-        config?.applyPreferenceChange(pkgName, index, newValue)
+    override suspend fun performPreferenceClick(item: MangaPrefItem) {
+        config?.performPreferenceClick(item)
     }
 
-    override suspend fun bindEditTextPreference(pkgName: String, index: Int) {
-        config?.bindEditTextPreference(pkgName, index)
+    override suspend fun applyPreferenceChange(item: MangaPrefItem, newValue: Boolean) {
+        config?.applyPreferenceChange(item, newValue)
+    }
+
+    override suspend fun clickTextEditor(item: MangaPrefItem): MangaPrefTextSession? {
+        return config?.clickTextEditor(item)
     }
 
     // endregion
@@ -308,7 +312,11 @@ open class SharedMangaExtensionPlatform(
                     MangaExtensionSourceEntry(
                         id = source.id,
                         name = source.name,
-                        homeUrl = (source as? HttpSource)?.getHomeUrl().orEmpty(),
+                        // getHomeUrl 是插件源实例方法, 覆写体可抛任意异常; 在状态流里漏出会
+                        // 终结整条流并进入全局未捕获通道, 收敛口径与 readExtensionIcon 一致,
+                        // 取不到按无地址呈现 (websiteUrl 逐条目取首个非空)
+                        homeUrl = runCatching { (source as? HttpSource)?.getHomeUrl() }
+                            .getOrNull().orEmpty(),
                     )
                 )
             }
@@ -317,7 +325,8 @@ open class SharedMangaExtensionPlatform(
                     MangaExtensionSourceEntry(
                         id = source.id,
                         name = source.name,
-                        homeUrl = (source as? AnimeHttpSource)?.getHomeUrl().orEmpty(),
+                        homeUrl = runCatching { (source as? AnimeHttpSource)?.getHomeUrl() }
+                            .getOrNull().orEmpty(),
                     )
                 )
             }

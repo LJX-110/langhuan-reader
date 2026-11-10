@@ -1,8 +1,12 @@
 pluginManagement {
     repositories {
-        // [本地补丁 2026-11-02] 移除 fork 私有镜像（个人环境访问返回 401）:
-        // 原配置为 https://mykmp-cn-shanghai.devops.aliyuncs.com/... 带内嵌凭据；
-        // kotlin-dsl 6.6.4 等插件官方门户（gradlePluginPortal）可达且存在，无需私有镜像。
+        maven {
+            url = uri("https://mykmp-cn-shanghai.devops.aliyuncs.com/packages/api/protocol/maven/1585-release-a6wqiz")
+            credentials {
+                username = "5a59cbcd-8eca-4d13-bfef-b2524c554e8b"
+                password = "6udwdad)zZp1"
+            }
+        }
         google()
         gradlePluginPortal()
         mavenCentral()
@@ -11,7 +15,13 @@ pluginManagement {
 
 dependencyResolutionManagement {
     repositories {
-        // [本地补丁 2026-11-02] 同上: 移除 401 的 fork 私有镜像。
+        maven {
+            url = uri("https://mykmp-cn-shanghai.devops.aliyuncs.com/packages/api/protocol/maven/1585-release-a6wqiz")
+            credentials {
+                username = "5a59cbcd-8eca-4d13-bfef-b2524c554e8b"
+                password = "6udwdad)zZp1"
+            }
+        }
         google()
         mavenCentral()
         gradlePluginPortal()

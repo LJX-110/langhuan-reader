@@ -70,8 +70,14 @@ object NativeQuickJsSharedJsScopeProvider : SharedJsScopeProvider {
         val scope = NativeJsEngine.getRuntimeScope(JsBindings().apply {
             dangerousApi = enableDangerousApi
         }) as NativeJsScope
-        for (src in sourceEntry.sources) {
-            NativeJsEngine.eval(src, scope, coroutineContext)
+        try {
+            for (src in sourceEntry.sources) {
+                NativeJsEngine.eval(src, scope, coroutineContext)
+            }
+        } catch (t: Throwable) {
+            // 新 scope 尚未入 LRU, 源码失败时无其他持有者, 关闭自己并原样透传
+            scope.close()
+            throw t
         }
         perThread.put(key, CtxEntry(scope, sourceEntry.version))
         return scope
@@ -181,9 +187,10 @@ private class LruScopeCache(private val maxSize: Int) {
     }
 
     /**
-     * 栈外清扫: threadLocalScope 为空 ⇔ 所有线程均无 eval 在执行 (全局 atomic 单值),
-     * 此时本线程淘汰的 scope 必然无人使用, 统一 JS_FreeContext + JS_FreeRuntime 释放。
-     * 每次 provider 调用入口执行一次, 保证被淘汰 ctx 最终必被释放 (不再累积泄漏)。
+     * 栈外清扫: [pendingClose] 只存本线程淘汰/版本替换的 scope; 本线程无 eval 在栈上时,
+     * 这些 scope 已无人从本线程使用, 统一 JS_FreeContext + JS_FreeRuntime 释放。
+     * [threadCacheHolder] 为 K/N @ThreadLocal, 本线程的淘汰不影响其他线程在用的 scope。
+     * 每次 provider 调用入口执行一次, 保证被淘汰 ctx 最终必被释放。
      */
     fun flushPendingClose() {
         if (pendingClose.isEmpty() || NativeJsEngine.currentContext() != null) return

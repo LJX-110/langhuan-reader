@@ -23,6 +23,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      # build-logic 与 quickjs-processor 的 toolchain 固定 17, 与主 JDK 21 并存
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
       - name: Set up JDK 21
         uses: actions/setup-java@v5
         with:

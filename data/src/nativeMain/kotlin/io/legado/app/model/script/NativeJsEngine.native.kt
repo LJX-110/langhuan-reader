@@ -8,6 +8,8 @@ import com.script.jsdispatch.JsValueConverters
 import io.legado.app.data.entities.BookChapterLike
 import io.legado.app.data.entities.BookLike
 import io.legado.app.help.JsExtensionsCommon
+import io.legado.app.help.image.ImageOps
+import io.legado.app.help.image.ImageRef
 import io.legado.app.help.source.SourceCacheProvider
 import io.legado.app.help.source.SourceNetworkProvider
 import io.legado.app.napi.quickjs.JSContext
@@ -50,7 +52,6 @@ import io.legado.app.napi.quickjs.JS_NewUint8Array
 import io.legado.app.napi.quickjs.JS_SetPropertyStr
 import io.legado.app.napi.quickjs.JS_SetPropertyUint32
 import io.legado.app.napi.quickjs.JS_ToBool
-import io.legado.app.napi.quickjs.JS_ToFloat64
 import io.legado.app.napi.quickjs.JS_ToInt32
 import io.legado.app.napi.quickjs.qjs_AtomToCString
 import io.legado.app.napi.quickjs.qjs_EvalFlagCompileOnly
@@ -80,7 +81,6 @@ import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.CPointerVar
 import kotlinx.cinterop.CValue
 import kotlinx.cinterop.COpaquePointer
-import kotlinx.cinterop.DoubleVar
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.LongVar
 import kotlinx.cinterop.UByteVar
@@ -104,11 +104,11 @@ import kotlinx.cinterop.toCPointer
 import kotlinx.cinterop.toKString
 import kotlinx.cinterop.useContents
 import kotlinx.cinterop.value
-import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.cinterop.readBytes
 import kotlinx.coroutines.ensureActive
+import kotlin.native.concurrent.ThreadLocal
 import kotlin.coroutines.ContinuationInterceptor
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
@@ -133,6 +133,17 @@ internal val JS_DEPTH_ERROR_MESSAGE =
     "JS 值嵌套超过 $MAX_JS_DEPTH 层 (可能存在循环引用)"
 
 /**
+ * 读取 Number 的 Kotlin 实际类型: JS_TAG_INT -> Int, JS_TAG_FLOAT64 -> Double;
+ * 非 Number 返回 null。qjs_ValueGetFloat64 只能用于 FLOAT64, 不能用于 INT。
+ */
+internal fun readJsNumberValue(v: CValue<JSValue>): Number? =
+    when (qjs_ValueGetTag(v)) {
+        JS_TAG_INT -> qjs_ValueGetInt(v)
+        JS_TAG_FLOAT64 -> qjs_ValueGetFloat64(v)
+        else -> null
+    }
+
+/**
  * JS_Eval 的 UTF-8 安全封装 (compile / evalInternal / bridge 工厂 eval 共用)。
  *
  * input_len 必须是 UTF-8 字节数: cinterop 把 Kotlin String 按 UTF-8 编码传给
@@ -152,6 +163,16 @@ internal fun qjsEvalUtf8(
     // cinterop 绑定为 String?, 只能直接传 String, 不能传 ByteArray 的 refTo(0) 字节指针
     return JS_Eval(ctx, js, js.encodeToByteArray().size.toULong(), filename, evalFlags)
 }
+
+/**
+ * 当前线程的 JS 执行上下文 (K/N @ThreadLocal 真线程私有), 对应 quickjs 的
+ * [com.script.quickjs.QuickJsContext.threadLocalContext]。
+ *
+ * 不能用全局 atomic 单值: 跨线程共享会让线程 B 的 eval 读到/恢复线程 A 的上下文,
+ * 栈外判定也会把"其他线程仍在 eval"误判成本线程空闲。
+ */
+@ThreadLocal
+private var threadLocalScope: NativeJsScope? = null
 
 /**
  * native 端 (iOS/鸿蒙) JS 引擎: 基于 quickjs-ng C 源码 (cinterop 编译), 与 Android/Desktop
@@ -176,9 +197,6 @@ object NativeJsEngine : JsEngine {
 
     /** 引擎类型, 复用 QUICKJS ([JsEngines.type] 硬编码 QUICKJS, 切换入口已撤)。 */
     override val type: JsEngineType = JsEngineType.QUICKJS
-
-    /** 当前线程的 JS 执行上下文 (ThreadLocal), 对应 quickjs 的 QuickJsContext.threadLocalContext。 */
-    private val threadLocalScope = atomic<NativeJsScope?>(null)
 
     /** JS 递归深度上限, 对齐 QuickJsContext.MAX_RECURSION。 */
     private const val MAX_RECURSION = 10
@@ -209,6 +227,18 @@ object NativeJsEngine : JsEngine {
     // ============ scope 创建/复用 ============
 
     /**
+     * 创建 JSContext; QuickJS 的 JS_NewContext 失败时不释放传入 runtime,
+     * 因此此处在 ctx 创建失败时释放已建 rt 并原样透传异常。
+     */
+    private fun createScopeContext(rt: CPointer<JSRuntime>): CPointer<JSContext> =
+        try {
+            JS_NewContext(rt) ?: error("JS_NewContext() returned null")
+        } catch (t: Throwable) {
+            JS_FreeRuntime(rt)
+            throw t
+        }
+
+    /**
      * 创建运行时 scope: 新建 JSRuntime + JSContext + 注入 bootstrap + 注入 bindings 变量。
      *
      * 对应 QuickJsEngine.getRuntimeScope: createNativeCtx + bootstrap + injectBindings。
@@ -217,27 +247,39 @@ object NativeJsEngine : JsEngine {
      */
     override fun getRuntimeScope(bindings: JsBindings): JsScope {
         val rt = JS_NewRuntime() ?: error("JS_NewRuntime() returned null")
-        val ctx = JS_NewContext(rt) ?: error("JS_NewContext() returned null")
-        // 注入 bootstrap (bindingsStack + Java 类相关 stub + JsExtensions 桥接工厂)
-        evalInternal(ctx, BOOTSTRAP_CODE, "<bootstrap>", checkException = true)
-        // 注册 native 分派函数 __nativeDispatch 到 globalThis (供 JsExtensions 桥接 JS 层回调)
-        registerNativeDispatch(ctx)
+        val ctx = createScopeContext(rt)
         val scope = NativeJsScope(rt, ctx).apply {
             dangerousApi = bindings.dangerousApi
         }
-        // 注入 bindings 变量到 globalThis
-        injectBindings(scope, bindings)
-        return scope
+        try {
+            // 注入 bootstrap (bindingsStack + Java 类相关 stub + JsExtensions 桥接工厂)
+            evalInternal(ctx, BOOTSTRAP_CODE, "<bootstrap>", checkException = true)
+            // 注册 native 分派函数 __nativeDispatch 到 globalThis (供 JsExtensions 桥接 JS 层回调)
+            registerNativeDispatch(ctx)
+            scope.imageBridgeState = initializeNativeImageBridge(rt)
+            injectBindings(scope, bindings)
+            return scope
+        } catch (t: Throwable) {
+            scope.close()
+            throw t
+        }
     }
 
     /** 创建独立 scope, 不与 SharedJsScope 共享。 */
     override fun createStandaloneScope(): JsScope {
         val rt = JS_NewRuntime() ?: error("JS_NewRuntime() returned null")
-        val ctx = JS_NewContext(rt) ?: error("JS_NewContext() returned null")
-        evalInternal(ctx, BOOTSTRAP_CODE, "<bootstrap>", checkException = true)
-        // 独立 scope 也需注册 __nativeDispatch (可能注入 java 变量)
-        registerNativeDispatch(ctx)
-        return NativeJsScope(rt, ctx)
+        val ctx = createScopeContext(rt)
+        val scope = NativeJsScope(rt, ctx)
+        try {
+            evalInternal(ctx, BOOTSTRAP_CODE, "<bootstrap>", checkException = true)
+            // 独立 scope 也需注册 __nativeDispatch (可能注入 java 变量)
+            registerNativeDispatch(ctx)
+            scope.imageBridgeState = initializeNativeImageBridge(rt)
+            return scope
+        } catch (t: Throwable) {
+            scope.close()
+            throw t
+        }
     }
 
     /**
@@ -298,7 +340,7 @@ object NativeJsEngine : JsEngine {
     private fun getCompilerCtx(): CPointer<JSContext> {
         compilerCtx?.let { return it }
         val rt = JS_NewRuntime() ?: error("JS_NewRuntime() returned null")
-        val ctx = JS_NewContext(rt) ?: error("JS_NewContext() returned null")
+        val ctx = createScopeContext(rt)
         compilerCtx = ctx
         return ctx
     }
@@ -370,8 +412,9 @@ object NativeJsEngine : JsEngine {
         val nativeCtx = nativeScope.ctx!!
         // 同步 dangerousApi (native 上语义为 no-op, 保留字段对齐)
         nativeScope.dangerousApi = bindings.dangerousApi
-        val prevScope = threadLocalScope.value
-        threadLocalScope.value = nativeScope
+        val prevScope = threadLocalScope
+        threadLocalScope = nativeScope
+        val prevCoroutineContext = nativeScope.coroutineContext
         nativeScope.coroutineContext = coroutineContext
         nativeScope.recursiveCount++
         try {
@@ -379,26 +422,34 @@ object NativeJsEngine : JsEngine {
             // 快照 handle 数: eval 后释放本次注入新增的 handle (对齐 JVM releaseNewHandles)
             val handleSnapshot = nativeScope.handles.size
             // 构造 kvs (须在压栈后: toJsValue 的 JsExtensionsCommon/BookLike 分支依赖 threadLocalScope)
-            val kvs = buildBindingKvsValues(nativeCtx, bindings)
+            var kvs: List<Pair<String, CValue<JSValue>>> = emptyList()
+            // enterBindingsWithValues 成功返回才代表子 scope 已压栈; 未压栈时不能调 __exitBindings,
+            // 否则会弹掉外层调用者的 bindings 帧。
+            var bindingsEntered = false
             try {
+                kvs = buildBindingKvsValues(nativeCtx, bindings)
                 // 进入子 scope: JS_Call 值参数压栈 bindings (免字符串 eval)
                 enterBindingsWithValues(nativeCtx, kvs)
-                return try {
-                    callEvalUserScript(nativeCtx, jsStr)
-                } finally {
-                    // 退出子 scope: 弹栈 bindings (即使中途异常也要弹栈)
-                    evalInternal(nativeCtx, "__exitBindings()", "<exitBindings>", checkException = false)
-                    // 释放本次注入新增的 handle (防共享 topScope 长期膨胀)
-                    releaseNewHandles(nativeScope, handleSnapshot)
-                }
+                bindingsEntered = true
+                return callEvalUserScript(nativeCtx, jsStr)
             } finally {
-                // 释放 kvs 转换的 JSValue 引用 (JS_Call 不转移 argv 所有权, JS 侧已持有引用)
-                for ((_, v) in kvs) JS_FreeValue(nativeCtx, v)
+                try {
+                    // 退出子 scope: 弹栈 bindings (即使中途异常也要弹栈)
+                    if (bindingsEntered) {
+                        evalInternal(nativeCtx, "__exitBindings()", "<exitBindings>", checkException = false)
+                    }
+                } finally {
+                    // 释放本次注入新增的 handle (防共享 topScope 长期膨胀);
+                    // 即使构造/压栈/求值抛错也必须到达
+                    releaseNewHandles(nativeScope, handleSnapshot)
+                    // 释放 kvs 转换的 JSValue 引用 (JS_Call 不转移 argv 所有权, JS 侧已持有引用)
+                    for ((_, v) in kvs) JS_FreeValue(nativeCtx, v)
+                }
             }
         } finally {
             nativeScope.recursiveCount--
-            nativeScope.coroutineContext = null
-            threadLocalScope.value = prevScope
+            nativeScope.coroutineContext = prevCoroutineContext
+            threadLocalScope = prevScope
         }
     }
 
@@ -517,8 +568,8 @@ object NativeJsEngine : JsEngine {
             ?: error("NativeJsEngine.injectBindings requires NativeJsScope, got ${scope::class}")
         nativeScope.dangerousApi = bindings.dangerousApi
         val injectedKeys = mutableListOf<String>()
-        val prevScope = threadLocalScope.value
-        threadLocalScope.value = nativeScope
+        val prevScope = threadLocalScope
+        threadLocalScope = nativeScope
         val ctx = nativeScope.ctx!!
         try {
             val global = JS_GetGlobalObject(ctx)
@@ -536,7 +587,7 @@ object NativeJsEngine : JsEngine {
                 JS_FreeValue(ctx, global)
             }
         } finally {
-            threadLocalScope.value = prevScope
+            threadLocalScope = prevScope
         }
         return injectedKeys
     }
@@ -578,16 +629,16 @@ object NativeJsEngine : JsEngine {
 
     // ============ 当前线程 JS 执行上下文 ============
 
-    /** 当前线程的 JS 执行上下文 (可空), 包装为 [NativeJsScope]。 */
+    /** 当前线程的 JS 执行上下文 (可空), 借用视图 (共享 owner 资源状态, close 不释放)。 */
     override fun currentContext(): JsScope? =
-        threadLocalScope.value?.let { NativeJsScope(it.rt, it.ctx) }
+        threadLocalScope?.let { NativeJsScope.view(it.resources) }
 
     /** 当前线程的 JS 执行上下文 (非空), 无上下文时抛 [IllegalStateException]。 */
     override fun currentContextNonNull(): JsScope =
-        threadLocalScope.value ?: error("No NativeJsScope on current thread")
+        threadLocalScope ?: error("No NativeJsScope on current thread")
 
     /** 当前线程的 JS scope (可空), 供桥接层 (NativeJsPropertyBridge) 登记嵌套 handle。 */
-    internal fun currentScope(): NativeJsScope? = threadLocalScope.value
+    internal fun currentScope(): NativeJsScope? = threadLocalScope
 
     /**
      * 在当前 JS 执行上下文上设 coroutineContext 后执行 block (不创建新 scope)。
@@ -595,7 +646,7 @@ object NativeJsEngine : JsEngine {
      * 对应 quickjs 的 runScriptWithContext(context, block)。
      */
     override fun <T> runScriptWithContext(context: CoroutineContext, block: () -> T): T {
-        val scope = threadLocalScope.value
+        val scope = threadLocalScope
         val prevCtx = scope?.coroutineContext
         if (scope != null) scope.coroutineContext = context
         return try {
@@ -611,7 +662,7 @@ object NativeJsEngine : JsEngine {
      * minusKey(ContinuationInterceptor) 不把调度器存进 scope (与 JVM 端实现一致)。
      */
     override suspend fun <T> runScriptWithContext(block: () -> T): T {
-        val scope = threadLocalScope.value
+        val scope = threadLocalScope
         val prevCtx = scope?.coroutineContext
         scope?.coroutineContext = coroutineContext.minusKey(ContinuationInterceptor)
         return try {
@@ -843,14 +894,7 @@ object NativeJsEngine : JsEngine {
         if (qjs_IsUndefined(v) != 0 || qjs_IsNull(v) != 0) return null
         if (qjs_IsBool(v) != 0) return qjs_ValueGetBool(v) != 0
         if (qjs_IsNumber(v) != 0) {
-            val tag = qjs_ValueGetTag(v)
-            if (tag == JS_TAG_INT) return qjs_ValueGetInt(v)
-            if (tag == JS_TAG_FLOAT64) return qjs_ValueGetFloat64(v)
-            // 其他 number tag (如 JS_TAG_BIG_INT), fallback 用 JS_ToFloat64
-            return memScoped {
-                val pres = alloc<DoubleVar>()
-                if (JS_ToFloat64(ctx, pres.ptr, v) == 0) pres.value else null
-            }
+            return readJsNumberValue(v)
         }
         if (qjs_IsString(v) != 0) {
             val cstr = qjs_ToCString(ctx, v) ?: return ""
@@ -861,6 +905,10 @@ object NativeJsEngine : JsEngine {
             }
         }
         if (qjs_IsObject(v) != 0) {
+            // 新图片桥的 ImageRef 对象: opaque 持真实 Kotlin 图片, 直接解回
+            threadLocalScope?.imageBridgeState?.let { state ->
+                unwrapImageRef(v, state)?.let { return it }
+            }
             // Uint8Array/TypedArray (解密脚本返回值): 直接拷回 ByteArray,
             // ImageUtils.decode 的 is ByteArray 分支直接消费, 无需 List 中间态
             tryGetUint8ArrayBytes(ctx, v)?.let { return it }
@@ -894,8 +942,7 @@ object NativeJsEngine : JsEngine {
     private fun bridgeObjectHandle(ctx: CPointer<JSContext>, obj: CValue<JSValue>): Long? {
         val handleValue = JS_GetPropertyStr(ctx, obj, "__h")
         try {
-            if (qjs_IsNumber(handleValue) == 0) return null
-            return qjs_ValueGetFloat64(handleValue).toLong().takeIf { it > 0 }
+            return readJsNumberValue(handleValue)?.toLong()?.takeIf { it > 0 }
         } finally {
             JS_FreeValue(ctx, handleValue)
         }
@@ -1000,6 +1047,14 @@ object NativeJsEngine : JsEngine {
             is String -> {
                 qjs_NewString(ctx, converted)
             }
+
+            // 把 ImageOps 绑定为真实 JS 对象: 八个方法直接调用现有平台实现。
+            is ImageOps -> wrapImageOps(ctx, converted, imageBridgeState())
+
+            is ImageRef -> wrapImageRef(
+                ctx, converted, imageBridgeState().refClassId
+            )
+
             is Map<*, *> -> {
                 @Suppress("UNCHECKED_CAST")
                 mapToJsObject(ctx, converted as Map<String, Any?>)
@@ -1010,27 +1065,27 @@ object NativeJsEngine : JsEngine {
             is JsExtensionsCommon -> {
                 // JsExtensions 桥接: 通过 handle 表 + JS 工厂函数桥接为 JS 对象 (NativeJsExtensionsBridge)
                 // 需要当前 scope (threadLocalScope) 记录 handle, close 时清理
-                val currentScope = threadLocalScope.value
+                val currentScope = threadLocalScope
                     ?: return null  // 无 scope 上下文, 跳过 (非 injectBindings 调用路径)
                 NativeJsExtensionsBridge.createJsObject(ctx, converted, currentScope)
             }
             is BookLike, is BookChapterLike -> {
                 // 复杂对象 (book/chapter) 桥接: 复用 handle 表 + 属性 getter 工厂
                 // (NativeJsPropertyBridge, propertyId 1700+); 放在 JsExtensionsCommon 之后保持原通路顺序
-                val currentScope = threadLocalScope.value
+                val currentScope = threadLocalScope
                     ?: return null  // 无 scope 上下文, 跳过 (非 injectBindings 调用路径)
                 NativeJsExtensionsBridge.createJsObject(ctx, converted, currentScope)
             }
             is SourceNetworkProvider, is SourceCacheProvider -> {
                 // cookie/cache binding: 复用 createJsObject 工厂映射表 (__createCookieObj/__createCacheObj),
                 // 不重复写工厂判断; 与上方复杂对象分支同型 (handle 表 + scope 记录)
-                val currentScope = threadLocalScope.value
+                val currentScope = threadLocalScope
                     ?: return null  // 无 scope 上下文, 跳过 (非 injectBindings 调用路径)
                 NativeJsExtensionsBridge.createJsObject(ctx, converted, currentScope)
             }
             is Node -> {
                 // ksoup 节点 (src binding 逐项循环场景): 同 book/chapter 的 handle 表 + 属性工厂
-                val currentScope = threadLocalScope.value
+                val currentScope = threadLocalScope
                     ?: return null  // 无 scope 上下文, 跳过 (非 injectBindings 调用路径)
                 NativeJsExtensionsBridge.createJsObject(ctx, converted, currentScope)
             }
@@ -1041,25 +1096,37 @@ object NativeJsEngine : JsEngine {
     /** Map 递归转 JS object (供 JS_SetPropertyStr 注入)。 */
     private fun mapToJsObject(ctx: CPointer<JSContext>, map: Map<String, Any?>): CValue<JSValue> {
         val obj = JS_NewObject(ctx)
-        memScoped {
-            for ((keyStr, v) in map) {
-                val jsV = toJsValue(ctx, v) ?: continue
-                // JS_SetPropertyStr 转移 jsV 所有权, 不需要 JS_FreeValue(jsV)
-                JS_SetPropertyStr(ctx, obj, keyStr, jsV)
+        try {
+            memScoped {
+                for ((keyStr, v) in map) {
+                    val jsV = toJsValue(ctx, v) ?: continue
+                    // JS_SetPropertyStr 转移 jsV 所有权, 不需要 JS_FreeValue(jsV)
+                    JS_SetPropertyStr(ctx, obj, keyStr, jsV)
+                }
             }
+            return obj
+        } catch (t: Throwable) {
+            // 递归转换抛错时已建父对象无人持有, 在此回收后原样透传
+            JS_FreeValue(ctx, obj)
+            throw t
         }
-        return obj
     }
 
     /** List 递归转 JS array (供 JS_SetPropertyStr 注入)。 */
     private fun listToJsArray(ctx: CPointer<JSContext>, list: List<*>): CValue<JSValue> {
         val arr = JS_NewArray(ctx)
-        list.forEachIndexed { i, item ->
-            val jsItem = toJsValue(ctx, item) ?: return@forEachIndexed
-            // JS_SetPropertyUint32 转移 jsItem 所有权, 不需要 JS_FreeValue(jsItem)
-            JS_SetPropertyUint32(ctx, arr, i.toUInt(), jsItem)
+        try {
+            list.forEachIndexed { i, item ->
+                val jsItem = toJsValue(ctx, item) ?: return@forEachIndexed
+                // JS_SetPropertyUint32 转移 jsItem 所有权, 不需要 JS_FreeValue(jsItem)
+                JS_SetPropertyUint32(ctx, arr, i.toUInt(), jsItem)
+            }
+            return arr
+        } catch (t: Throwable) {
+            // 递归转换抛错时已建父数组无人持有, 在此回收后原样透传
+            JS_FreeValue(ctx, arr)
+            throw t
         }
-        return arr
     }
 
     /**
@@ -1071,18 +1138,37 @@ object NativeJsEngine : JsEngine {
      * JS 侧得到 Uint8Array: `length` 是 number、索引读写直接改内存 (TypedArray),
      * 与原版 quickjs JavaObjectBridge 的 byte[] 语义一致 (length/索引可用),
      * 脚本 `result.length==undefined` 判断走主分支, 不会进 Packages 分支。
+     *
+     * SDK 分配失败时沿用既有入口结果 (JS null); 图片 encode 直接调用
+     * [newUint8ArrayCopy], SDK exception 由 C 回调原样返回。
      */
-    private fun byteArrayToJsUint8Array(
+    internal fun byteArrayToJsUint8Array(
         ctx: CPointer<JSContext>,
         bytes: ByteArray
     ): CValue<JSValue> {
-        val size = bytes.size
+        val arr = newUint8ArrayCopy(ctx, bytes)
+        if (qjs_IsException(arr) != 0) {
+            JS_FreeValue(ctx, arr)
+            return jsNullValue()
+        }
+        return arr
+    }
+
+    /** SDK 拷贝式 Uint8Array 分配; 返回值/异常所有权归调用方。 */
+    internal fun newUint8ArrayCopy(ctx: CPointer<JSContext>, bytes: ByteArray): CValue<JSValue> {
         // 数组参数形式 (qjs_NewUint8ArrayCopy 的 src[]): cinterop 生成 CValuesRef<ByteVar>,
         // 经 refTo(0) 传 CPointer (ByteArray 不能直接传 CValuesRef); 空数组 refTo(0) 返回 null
         // (copy 版 len=0 时内部 js_mallocz(1) 安全处理)
-        val arr = qjs_NewUint8ArrayCopy(ctx, bytes.refTo(0), size.toULong())
-        return if (qjs_IsException(arr) != 0) jsNullValue() else arr
+        return qjs_NewUint8ArrayCopy(ctx, bytes.refTo(0), bytes.size.toULong())
     }
+
+    /**
+     * 当前线程图片桥的 runtime 元数据 (类 ID 按 runtime 注册一次)。
+     * ImageOps/ImageRef 出现在无 scope 的转换路径时属于集成错误, 直接报错不静默跳过。
+     */
+    private fun imageBridgeState(): NativeImageBridgeState =
+        threadLocalScope?.imageBridgeState
+            ?: throw NativeScriptException("图片桥未初始化: 当前线程无 JS 运行时")
 
     /**
      * 判定 JS 值是否为 TypedArray (Uint8Array 等) 并拷回 ByteArray:
@@ -1091,7 +1177,7 @@ object NativeJsEngine : JsEngine {
      * 再按 `byteOffset`/`byteLength` 偏移拷回 (脚本 slice/subarray 返回的视图也支持)。
      * 非 TypedArray 返回 null (交由后续分支处理)。返回的 ByteArray 由调用方持有。
      */
-    private fun tryGetUint8ArrayBytes(ctx: CPointer<JSContext>, v: CValue<JSValue>): ByteArray? {
+    internal fun tryGetUint8ArrayBytes(ctx: CPointer<JSContext>, v: CValue<JSValue>): ByteArray? {
         val buf = JS_GetPropertyStr(ctx, v, "buffer")
         if (qjs_IsException(buf) != 0) {
             JS_FreeValue(ctx, buf)
@@ -1162,10 +1248,16 @@ object NativeJsEngine : JsEngine {
         bindings: JsBindings
     ): List<Pair<String, CValue<JSValue>>> {
         val kvs = ArrayList<Pair<String, CValue<JSValue>>>(bindings.size)
-        for ((key, value) in bindings) {
-            if (!isValidVarName(key)) continue
-            val jsValue = toJsValue(ctx, value) ?: continue
-            kvs.add(key to jsValue)
+        try {
+            for ((key, value) in bindings) {
+                if (!isValidVarName(key)) continue
+                val jsValue = toJsValue(ctx, value) ?: continue
+                kvs.add(key to jsValue)
+            }
+        } catch (t: Throwable) {
+            // 中途转换失败: 已建 JSValue 的引用在此回收, 异常仍交给 caller
+            for ((_, jsValue) in kvs) JS_FreeValue(ctx, jsValue)
+            throw t
         }
         return kvs
     }
@@ -1244,7 +1336,7 @@ object NativeJsEngine : JsEngine {
 
     /**
      * 释放 scope 中快照后新增的 handle (本次注入注册的), 防共享 topScope 长期膨胀
-     * (对齐 JVM releaseNewHandles; 属性 getter 的嵌套 handle 不在 scope.handles, 不受影响)。
+     * (对齐 JVM releaseNewHandles; 属性 getter 的嵌套 handle 已登记, 同样按快照回收)。
      */
     private fun releaseNewHandles(scope: NativeJsScope, snapshotSize: Int) {
         val handles = scope.handles
@@ -1264,8 +1356,8 @@ object NativeJsEngine : JsEngine {
         coroutineContext: CoroutineContext?,
         crossinline block: () -> T
     ): T {
-        val prevScope = threadLocalScope.value
-        threadLocalScope.value = scope
+        val prevScope = threadLocalScope
+        threadLocalScope = scope
         val prevCoroutineContext = scope.coroutineContext
         val prevAllowScriptRun = scope.allowScriptRun
         if (coroutineContext != null) {
@@ -1280,7 +1372,7 @@ object NativeJsEngine : JsEngine {
             scope.coroutineContext = prevCoroutineContext
             scope.allowScriptRun = prevAllowScriptRun
             scope.recursiveCount--
-            threadLocalScope.value = prevScope
+            threadLocalScope = prevScope
         }
     }
 
@@ -1458,29 +1550,70 @@ function __wrapJavaHandle(handle) {
 }
 
 /**
+ * 一个 scope 的原生资源状态。
+ *
+ * 拥有者 scope 持有并释放 rt/ctx; 借用视图引用同一状态, 因此 owner close 后
+ * 借用视图读到 null 而不是旧指针。图片桥的 per-runtime 元数据也归在这里。
+ */
+internal class NativeJsScopeResources(
+    var rt: CPointer<JSRuntime>?,
+    var ctx: CPointer<JSContext>?,
+) {
+    var imageBridgeState: NativeImageBridgeState? = null
+    val handles = mutableListOf<Long>()
+}
+
+/**
  * native 端 (iOS/鸿蒙) JS 执行 scope, 持有 quickjs [JSRuntime] / [JSContext] 指针。
  *
  * 对应 quickjs 的 QuickJsJsScope (包装 QuickJsContext)。
  * quickjs 单线程模型, 一个 [JSRuntime] + [JSContext] 对应一个 scope, 跨 scope 互不影响。
  *
  * # 资源管理
- * - [rt] / [ctx] 由 [NativeJsEngine.getRuntimeScope] / [createStandaloneScope] 创建;
- * - [close] 时调用 JS_FreeContext + JS_FreeRuntime 显式释放 (与原 IosJsEngine JavaScriptCore /
- *   OhosJsEngine JSVM-API 不同, quickjs 需手动释放, 否则内存泄漏);
+ * - 拥有者 scope 的 [rt] / [ctx] 由 [NativeJsEngine.getRuntimeScope] / [createStandaloneScope] 创建;
+ *   [close] 在同一个 [closeLock] 内一次性摘取 rt/ctx 与全部 handle 登记, 再在锁外释放;
+ *   重复/并发 close 只释放一次;
+ * - [NativeJsEngine.currentContext] 返回借用视图: 与 owner 共享 [NativeJsScopeResources],
+ *   不拥有资源, close 不释放原生对象; owner 关闭后借用视图的 rt/ctx 读到 null;
  * - [ctx] 可能为 null (close 后), 调用方需判空 (evalInternal 等内部方法用 ctx!! 强制非空)。
  *
  * @property rt quickjs JSRuntime 指针 (cinterop CPointer<JSRuntime>), 由 JS_NewRuntime 创建
  * @property ctx quickjs JSContext 指针 (cinterop CPointer<JSContext>), 由 JS_NewContext 创建
  * @property dangerousApi 是否旁路安全名单 (native 上语义为 no-op, 保留字段对齐接口)
  */
-class NativeJsScope(
+class NativeJsScope internal constructor(
+    internal val resources: NativeJsScopeResources,
+    /** true = 本次构造拥有 rt/ctx; false = 同一 scope 的借用视图, close 不释放原生资源。 */
+    private val ownsResources: Boolean,
+) : JsScope {
+
+    /** 创建自有 scope (close 时释放 rt/ctx 与登记的 handle)。 */
+    constructor(
+        rt: CPointer<JSRuntime>?,
+        ctx: CPointer<JSContext>?,
+        dangerousApi: Boolean = false,
+    ) : this(NativeJsScopeResources(rt, ctx), ownsResources = true) {
+        this.dangerousApi = dangerousApi
+    }
+
     /** quickjs JSRuntime 指针 (CPointer<JSRuntime>), 由 JS_NewRuntime 创建。null = 已 close。 */
-    val rt: CPointer<JSRuntime>?,
+    val rt: CPointer<JSRuntime>? get() = resources.rt
+
     /** quickjs JSContext 指针 (CPointer<JSContext>), 由 JS_NewContext 创建。null = 已 close。 */
-    val ctx: CPointer<JSContext>?,
+    val ctx: CPointer<JSContext>? get() = resources.ctx
+
     /** native 上 dangerousApi 语义为 no-op (无 Java 反射可旁路), 保留字段仅为接口对齐 */
     var dangerousApi: Boolean = false
-) : JsScope {
+
+    /** 本 runtime 的图片桥类 ID 等元数据; getRuntimeScope/createStandaloneScope 注册一次, 借用视图共享。 */
+    internal var imageBridgeState: NativeImageBridgeState?
+        get() = resources.imageBridgeState
+        set(value) {
+            resources.imageBridgeState = value
+        }
+
+    /** close 幂等保护: 摘取 rt/ctx 与全部 handle 登记在同一临界区, 重复 close 只释放一次。 */
+    private val closeLock = SynchronizedObject()
 
     override var coroutineContext: CoroutineContext? = null
     override var allowScriptRun: Boolean = false
@@ -1492,7 +1625,7 @@ class NativeJsScope(
      * [NativeJsExtensionsBridge.createJsObject] 注册 handle 时同步记录到此列表,
      * [close] 时统一调 [NativeJsExtensionsBridge.unregisterObject] 清理, 防止 Kotlin 对象内存泄漏。
      */
-    val handles = mutableListOf<Long>()
+    val handles: MutableList<Long> get() = resources.handles
 
     /** 检查协程是否已取消, 在 binding handler 中由业务层调用。 */
     override fun ensureActive() {
@@ -1509,34 +1642,45 @@ class NativeJsScope(
     /**
      * 关闭 scope — 显式释放 quickjs JSContext + JSRuntime 资源。
      *
-     * 与原 IosJsEngine (JavaScriptCore JSContext 由 ARC 管理) / OhosJsEngine (JSVM-API VM/Env) 不同,
      * quickjs 需手动释放:
      * 1. JS_FreeContext(ctx) — 释放 JSContext (会触发 GC 释放所有 JS 对象)
      * 2. JS_FreeRuntime(rt) — 释放 JSRuntime (会检查内存泄漏, dump 残留对象)
      *
-     * 幂等: 多次调用安全 (rt/ctx 释放后置 null, 后续调用 no-op)。
+     * 幂等: 在 [closeLock] 内一次性摘取 rt/ctx 与 handle 登记并置空, 后续调用 no-op;
+     * 借用视图 ([ownsResources] = false) 不释放原生对象。
      * 保留 close() 实现为满足 AutoCloseable 接口 + 业务层 try-finally 模式。
      */
     override fun close() {
-        val localCtx = ctx
-        val localRt = rt
-        if (localCtx != null) {
-            JS_FreeContext(localCtx)
+        val snapshot = synchronized(closeLock) {
+            if (!ownsResources) return
+            val ctxToFree = resources.ctx
+            val rtToFree = resources.rt
+            val handlesToUnregister = resources.handles.toTypedArray()
+            resources.ctx = null
+            resources.rt = null
+            resources.handles.clear()
+            resources.imageBridgeState = null
+            Triple(ctxToFree, rtToFree, handlesToUnregister)
         }
-        if (localRt != null) {
-            JS_FreeRuntime(localRt)
+        val (ctxToFree, rtToFree, handlesToUnregister) = snapshot
+        if (ctxToFree != null) {
+            JS_FreeContext(ctxToFree)
+        }
+        if (rtToFree != null) {
+            JS_FreeRuntime(rtToFree)
         }
         // 清理 JsExtensions 桥接器 handle 表 (防止 Kotlin 对象内存泄漏)
-        for (handle in handles) {
+        for (handle in handlesToUnregister) {
             NativeJsExtensionsBridge.unregisterObject(handle)
         }
-        handles.clear()
-        // 注: rt/ctx 是 val 不能置 null, 但 close 后不应再使用;
-        // evalInternal 等方法用 ctx!! 强制非空, close 后调用会 NPE (符合预期, 调用方应避免)
     }
 
-    private companion object {
-        const val MAX_RECURSION = 10
+    companion object {
+        private const val MAX_RECURSION = 10
+
+        /** 同一 owner 资源状态的借用视图 (不拥有 rt/ctx)。 */
+        internal fun view(resources: NativeJsScopeResources): NativeJsScope =
+            NativeJsScope(resources, ownsResources = false)
     }
 }
 

@@ -4,7 +4,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -51,13 +53,19 @@ import io.legado.app.ui.reader.ReaderImageActionMenu
 import io.legado.app.ui.root.AppFontScaleScope
 import io.legado.app.ui.root.AppNavigator
 import io.legado.app.ui.root.AppRoute
+import io.legado.app.ui.root.ImportStageDialog
+import io.legado.app.ui.root.ImportStageOwner
+import io.legado.app.ui.root.rememberWindowVisibleState
 import io.legado.app.ui.root.LegadoApp
 import io.legado.app.ui.root.PlatformCapabilityProviders
 import io.legado.app.ui.root.PlatformServiceProviders
 import io.legado.app.ui.root.ScreenModelStore
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.initMainHandler
 import kotlinx.coroutines.withContext
 import platform.ArkTS.ArkTS_Napi_NativeModule.napi_env
@@ -214,6 +222,28 @@ fun MainOhos() {
                     }
                     // legado:// deep link 导入宿主
                     DeepLinkImportHost()
+                    // 文件关联分发: 冷启动直投先入队, 首帧组合完成 (授权面/导航面就绪) 后逐个取走执行;
+                    // 本 effect 在主窗口组合内 —— 分发任务随窗口存亡 (窗口操作寿命)。
+                    // 每个任务只取一次: 后来的请求不会重做前面的任务, 重组也不会重放已消费的任务。
+                    // 本窗口持有的用户选择阶段: 队列任务用它等真回执 (不建全局 owner 表)
+                    val associationStages = remember { ImportStageOwner() }
+                    // 本窗口自身可见性: 取本窗口 Compose 生命周期的 STARTED 区间。
+                    // AppForegroundState 在鸿蒙由 OhosPlatformEvents 按 ON_FOREGROUND/ON_BACKGROUND 置位,
+                    // 是应用前后台口径, 不等于本窗口可见, 故这里不用它。
+                    val windowVisible by rememberWindowVisibleState()
+                    ImportStageDialog(associationStages, visible = windowVisible)
+                    LaunchedEffect(associationStages) {
+                        for (job in OhosPlatformCapabilities.pendingAssociationFiles) {
+                            try {
+                                job(associationStages)
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                // 外部文件不可信 (权限/格式/IO): 一个文件失败不能让后续文件关联失效
+                                AppLog.put("文件关联处理失败\n${e.message}", e)
+                            }
+                        }
+                    }
                 }
                 // 书源 UI 事件桥
                 SourceUiEventBridgeHost()

@@ -1007,7 +1007,6 @@
     <string name="desktop_audio_get_book_source_failed">Failed to get book source on desktop\n%1$s</string>
     <string name="desktop_cookie_set_error">Failed to set cookie on desktop domain=%1$s cookie=%2$s</string>
     <string name="download_jslib_failed">Failed to download jsLib-%1$s</string>
-    <string name="native_book_format_not_supported">Parsing local %1$s books is not supported on this platform yet (pdf/cbz parsers not ported)</string>
     <string name="upload_url_not_configured">Upload URL not configured</string>
     <string name="download_url_rule_not_configured">Download URL rule not configured</string>
     <string name="upload_failed_with_body">Upload failed: %1$s</string>
@@ -1659,6 +1658,7 @@
     <string name="source_filter_rule_filtered_count">Filtered %1$d books</string>
     <string name="explore_style_normal">Normal</string>
     <string name="home_source_invalid">Source is invalid</string>
+    <string name="explore_option_invalidated">Options changed. Refresh or choose again.</string>
     <string name="bottom_nav_items_order">Bottom bar items order</string>
     <string name="debug_error">Debug error</string>
     <string name="select_explore_kind">Select explore kind</string>

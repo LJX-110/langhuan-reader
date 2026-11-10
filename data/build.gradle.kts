@@ -38,11 +38,9 @@ val ROOM_ENTITIES_SRC_DIR = "src/roomEntitiesMain/kotlin"
 val ENTITY_PACKAGE_PATH = "io/legado/app/data/entities"
 
 // nativeMain 里依赖 C 符号的桥文件: 从 nativeMain 排除, stage 进 leaf 源集
-// (quickjs = model/script JS 桥; mbedtls = help/crypto 加密, generateCNamesAliases 在 build-logic)。
+// (quickjs = model/script JS 桥, generateCNamesAliases 在 build-logic)。
 val nativeInteropSourcePatterns = listOf(
     "io/legado/app/model/script/*.native.kt",
-    "io/legado/app/help/crypto/MbedTls*.native.kt",
-    "io/legado/app/help/crypto/MbedTlsOps.native.kt",
 )
 val nativeInteropSourceRoot = file("src/nativeMain/kotlin")
 
@@ -297,7 +295,7 @@ val verifyOhosRoomDerived = if (enableOhosTarget) {
 // ohosArm64 只存在于 CPF 分支 KGP, 交给 build-logic 的约定插件声明。
 if (enableOhosTarget) {
     pluginManager.apply("legado.kmp.ohos")
-    // cinterop (quickjs/mbedtls) 的 def/头文件在本模块 src/cinterop, 故 cinterop 绑定
+    // cinterop (quickjs) 的 def/头文件在本模块 src/cinterop, 故 cinterop 绑定
     // 也随本模块配置 (旧版在 OhosTargetConventionPlugin 里对全部模块注入, 其它模块无 def
     // 文件导致 cinterop 任务失败)。用标准 targets.named API 配置, 不依赖 CPF DSL。
     extensions.configure<KotlinMultiplatformExtension> {
@@ -308,13 +306,6 @@ if (enableOhosTarget) {
                     // 头文件与 C 源码在 modules/quickjs/src/main/cinterop/quickjs-ng (Android CMake 也引用该目录),
                     // 本模块只编 cinterop 绑定, 链接用预编译 native 库
                     includeDirs(file("${rootProject.projectDir}/modules/quickjs/src/main/cinterop/quickjs-ng"))
-                }
-                create("mbedtls") {
-                    defFile(file("src/cinterop/mbedtls.def"))
-                    includeDirs(
-                        file("${projectDir}/src/cinterop/mbedtls/include"),
-                        file("${projectDir}/src/cinterop/mbedtls"),
-                    )
                 }
             }
         }
@@ -331,6 +322,12 @@ fun KotlinDependencyHandler.sharedJvmAndroidDeps() {
     implementation(sharedLibs.findLibrary("gson").get())
     api(project(":modules:quickjs"))
     api(sharedLibs.findLibrary("okhttp").get())
+    // 扩展 dex 按 FQCN 直调 okhttp3.zstd.Zstd / okhttp3.brotli.Brotli(BrotliInterceptor)与
+    // com.squareup.zstd.okio.OkioZstd.zstdCompress/zstdDecompress, 宿主源码零直调, 只靠依赖
+    // 传递进两端 classpath; 与 okhttp 本体同属宿主向扩展暴露的类路径契约面, 故 api
+    // (Android 变体自动选 zstd-kmp-okio-android AAR; JVM 变体选 zstd-kmp-okio-jvm jar)
+    api(sharedLibs.findLibrary("okhttp-zstd").get())
+    api(sharedLibs.findLibrary("okhttp-brotli").get())
     implementation(sharedLibs.findLibrary("coil3-network-okhttp").get())
     // catvod 壳类 (com.github.catvod.net.OkHttp) 的 ArrayMap 契约面; 原先靠 coil3 传递引入,
     // 上游 Coil 变更即编译断裂, 显式声明与 app 同版本
@@ -370,7 +367,7 @@ kotlin {
                 val nativeLibDir = file("${projectDir}/build/iosNativeLibs/${konanTarget.name}")
                 binaries {
                     all {
-                        linkerOpts("-L${nativeLibDir.absolutePath}", "-lquickjs", "-lmbedtls", "-lsqlite3")
+                        linkerOpts("-L${nativeLibDir.absolutePath}", "-lquickjs", "-lsqlite3")
                     }
                 }
                 compilations.getByName("main").cinterops {
@@ -379,13 +376,6 @@ kotlin {
                         // 头文件与 C 源码在 modules/quickjs/src/main/cinterop/quickjs-ng (Android CMake 也引用该目录),
                         // 本模块只编 cinterop 绑定, 链接用预编译 native 库
                         includeDirs(file("${rootProject.projectDir}/modules/quickjs/src/main/cinterop/quickjs-ng"))
-                    }
-                    create("mbedtls") {
-                        defFile(file("src/cinterop/mbedtls.def"))
-                        includeDirs(
-                            file("${projectDir}/src/cinterop/mbedtls/include"),
-                            file("${projectDir}/src/cinterop/mbedtls"),
-                        )
                     }
                     create("nskeyvalueobserving") {
                         defFile(file("src/cinterop/nskeyvalueobserving.def"))
@@ -461,7 +451,7 @@ kotlin {
                 sharedJvmAndroidDeps()
                 implementation(libs.kxml2)
                 implementation(libs.androidx.sqlite.bundled)
-                // EpubFilePlatform.jvm 的 Skia 图片编码 (与 desktop-core 同款 skiko-awt)
+                // EpubFilePlatform.jvm 的 Skia 图片编码 (与 :desktop 同款 skiko-awt)
                 implementation("org.jetbrains.skiko:skiko-awt:0.144.6")
                 // TVBox 配置/站点解析用 org.json (Android 走 SDK 内置, JVM 走同名构件)
                 implementation(sharedLibs.findLibrary("json").get())
@@ -508,7 +498,6 @@ kotlin {
                     kotlin.exclude(
                         *nativeInteropSourcePatterns.toTypedArray(),
                         "io/legado/app/napi/quickjs/CNamesAliases.kt",
-                        "io/legado/app/nativecrypto/mbedtls/CNamesAliases.kt",
                     )
                 }
             }
@@ -519,7 +508,6 @@ kotlin {
                     kotlin.exclude(
                         *nativeInteropSourcePatterns.toTypedArray(),
                         "io/legado/app/napi/quickjs/CNamesAliases.kt",
-                        "io/legado/app/nativecrypto/mbedtls/CNamesAliases.kt",
                     )
                 }
             }

@@ -1,11 +1,13 @@
 package io.legado.app.ui.association
 
+import kotlinx.atomicfu.atomic
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.data.AppDbProviders
 import io.legado.app.data.entities.SourceFilterRule
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.coroutine.IoDispatcher
 import io.legado.app.help.http.OkHttpClientProviders
 import io.legado.app.help.http.decompressed
 import io.legado.app.help.http.newCallResponseBody
@@ -23,6 +25,8 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withContext
 
 /**
  * 导入书源过滤规则 VM 共享核心 (commonMain)。
@@ -45,8 +49,34 @@ import kotlinx.coroutines.flow.asSharedFlow
  * @param scope 协程作用域 (Android = viewModelScope / 桌面 = 应用主作用域)
  */
 class ImportSourceFilterRuleViewModelShared(
-    private val scope: CoroutineScope,
+    val scope: CoroutineScope,
 ) {
+    /** 提交态归 VM: 对话框重建/重组后也不能重复提交同一批。 */
+    private val submitSession = ImportSubmitSession()
+
+    /** 提交态 (Writing/Committed/Failed) 归 VM: 重建对话框仍可读。 */
+    val submitState: StateFlow<ImportSubmitState> = submitSession.state
+
+    private data class FrozenSubmit(
+        val checked: List<Boolean>,
+        val items: List<SourceFilterRule>,
+    )
+
+    private var frozenSubmit: FrozenSubmit? = null
+
+    fun beginSubmit(checked: List<Boolean>): Boolean {
+        if (!submitSession.begin()) return false
+        frozenSubmit = FrozenSubmit(checked = checked.toList(), items = allRules.map { it.copy() })
+        return true
+    }
+
+    fun endSubmit() {
+        submitSession.end()
+        frozenSubmit = null
+    }
+
+    fun recordSubmitResult(result: ImportSubmitResult) = submitSession.record(result)
+
 
     /** DAO 容器 (宿主启动时由 app 端注册 AppDbAccessorImpl)。 */
     private val appDb get() = AppDbProviders.get()
@@ -91,32 +121,35 @@ class ImportSourceFilterRuleViewModelShared(
     val defaultChecked = arrayListOf<Boolean>()
 
     /**
-     * 导入选中的过滤规则, 对应 app 端 `importSelect(finally)`。
-     *
-     * # 实现细节保持
+     * 导入选中的过滤规则, 写入成功返回, 失败抛异常 (确认协议的唯一写入入口, 区分成功/错误)。
      *
      * - 遍历 [checked], 选中的项加入 selected 列表;
      * - `appDb.sourceFilterRuleDao.insert(*selected.toTypedArray())` 批量写入;
-     * - `SearchBookFilter.reload()` 刷新内存缓存 (与 app 端原调用一致, 已下沉 commonMain);
-     * - `onFinally` 回调 [finally] (与 app 端 `onFinally { finally.invoke() }` 等价)。
+     * - `SearchBookFilter.reload()` 刷新内存缓存 (与原版原调用一致, 已下沉 commonMain)。
      *
-     * 业务在 IO 跑, 回调在 mainDispatcher 跑 (与 BaseViewModel.execute 默认值一致)。
-     *
-     * @param finally 导入完成回调 (无论成功/失败均触发, 与 app 端 onFinally 一致)
+     * 业务在 IO 上执行。
      */
-    fun importSelect(checked: List<Boolean>, finally: () -> Unit) {
-        Coroutine.async(scope = scope) {
-            val selected = arrayListOf<SourceFilterRule>()
-            checked.forEachIndexed { index, b ->
-                if (b) selected.add(allRules[index])
-            }
-            appDb.sourceFilterRuleDao.insert(*selected.toTypedArray())
-            SearchBookFilter.reload()
-        }.onFinally {
-            finally.invoke()
+    suspend fun importSelectAwait(checked: List<Boolean>) = withContext(IoDispatcher) {
+        val frozen = frozenSubmit
+        val checkedList = frozen?.checked ?: checked
+        val items = frozen?.items ?: allRules
+        val selected = arrayListOf<SourceFilterRule>()
+        checkedList.forEachIndexed { index, b ->
+            if (b) selected.add(items[index])
         }
+        appDb.runInTransactionSuspending(
+            onCommitted = { submitSession.committed(selected.size) },
+        ) {
+            appDb.sourceFilterRuleDao.insert(*selected.toTypedArray())
+        }
+        // reload 只是本进程内存快照置空, 无真实失败源; 不制造缓存告警
+        SearchBookFilter.reload()
     }
 
+    /**
+     * 回调式导入入口 (与原版 `importSelect(finally)` 同形状): 成功/失败都回调 [finally],
+     * 失败仅落日志, 结果由 [importSelectAwait] 的返回/异常区分。
+     */
     /**
      * 导入过滤规则, 对应 app 端 `import(text)`。
      *
@@ -137,11 +170,10 @@ class ImportSourceFilterRuleViewModelShared(
     fun import(text: String) {
         Coroutine.async(scope = scope) {
             importAwait(readImportPayload(text).trim())
+            comparisonSource()
         }.onError {
             _errorState.tryEmit("ImportError:${it.message}")
             AppLog.put("ImportError:${it.message}", it)
-        }.onSuccess {
-            comparisonSource()
         }
     }
 
@@ -212,22 +244,17 @@ class ImportSourceFilterRuleViewModelShared(
      *
      * - 遍历 [allRules], 调 `appDb.sourceFilterRuleDao.findById(it.id)` 查本地;
      * - defaultChecked: 本地不存在, 或本地已有但 [sourceFilterRuleChanged] 判为有变化 (新增与更新都默认选);
-     * - `onSuccess` 推送 `_successState.tryEmit(allRules.size)` (与 app 端
-     *   `onSuccess { successLiveData.postValue(allRules.size) }` 一致, 注意原版
-     *   comparisonSource 是 onSuccess 才推送 successState, 与其他 VM 直接推送不同,
-     *   本类保留原版 onSuccess 嵌套结构)。
+     * - 比对与解析在同一挂起链内, 查询失败经外层错误出口投递, 不会留下无结果的加载态;
+     * - 比对完成后推送 `_successState.tryEmit(allRules.size)`。
      *
      * 业务在 IO 跑 (DAO 查询必须 IO), 与 BaseViewModel.execute 默认值一致。
      */
-    private fun comparisonSource() {
-        Coroutine.async(scope = scope) {
-            allRules.forEach {
-                val rule = appDb.sourceFilterRuleDao.findById(it.id)
-                checkRules.add(rule)
-                defaultChecked.add(rule == null || sourceFilterRuleChanged(it, rule))
-            }
-        }.onSuccess {
-            _successState.tryEmit(allRules.size)
+    private suspend fun comparisonSource() {
+        allRules.forEach {
+            val rule = appDb.sourceFilterRuleDao.findById(it.id)
+            checkRules.add(rule)
+            defaultChecked.add(rule == null || sourceFilterRuleChanged(it, rule))
         }
+        _successState.tryEmit(allRules.size)
     }
 }

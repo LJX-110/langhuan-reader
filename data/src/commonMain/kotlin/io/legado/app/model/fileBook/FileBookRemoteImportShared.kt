@@ -12,6 +12,8 @@ import io.legado.app.help.book.isArchive
 import io.legado.app.lib.webdav.WebDav
 import io.legado.app.model.analyzeRule.CustomUrl
 import io.legado.app.model.fileBook.FileBook.isBookFile
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 
 /**
  * 远程书籍导入编排 (四端共用的唯一一份):
@@ -41,6 +43,8 @@ object FileBookRemoteImportShared {
     ): Book {
         val accessor = FileBookProviders.get()
         val bookDao = AppDbProviders.get().bookDao
+        // 本请求: 解包/落库/导入都挂在发起这次远程导入的协程上 (取消原样终结)
+        val requestJob = currentCoroutineContext()[Job]
         val origin = BookType.webDavTag + CustomUrl(path).putAttribute(
             "serverID", serverID
         ).toString()
@@ -102,8 +106,11 @@ object FileBookRemoteImportShared {
                     try {
                         val entry = remoteZip.entries().asSequence()
                             .first { !it.isDirectory && isBookFile(it.name) }
-                        val uriStr = accessor.saveBookFile(remoteZip.getInputStream(entry), entry.name)
-                        accessor.importLocalFile(uriStr).apply {
+                        val uriStr = accessor.saveBookFile(
+                            remoteZip.getInputStream(entry), entry.name,
+                            requestJob,
+                        )
+                        accessor.importLocalFile(uriStr, requestJob).apply {
                             this.origin = origin
                             addType(BookType.archive)
                             save()
@@ -114,7 +121,7 @@ object FileBookRemoteImportShared {
                 } else throw NoStackTraceException("不支持的压缩包格式")
             }
 
-            else -> accessor.importLocalFile(accessor.saveBookFile(origin, name)).apply {
+            else -> accessor.importLocalFile(accessor.saveBookFile(origin, name), requestJob).apply {
                 this.origin = origin
                 save()
             }
@@ -176,9 +183,13 @@ object FileBookRemoteImportShared {
         val fileName = if (book.isArchive) book.archiveName else book.originName
         val fileUriStr = accessor.saveBookFile(webDavUrl, fileName)
         if (book.isArchive) {
-            val newBook = accessor.importFromArchive(fileUriStr, book.originName) { name ->
-                name.contains(book.originName)
-            }.firstOrNull() ?: throw NoStackTraceException("Archive contains no matching book file")
+            // 解包导入挂本请求: 取消即停 (原不带父, 与调用方的取消无关)
+            val newBook = accessor.importFromArchive(
+                archiveFileUri = fileUriStr,
+                saveFileName = book.originName,
+                parent = currentCoroutineContext()[Job],
+                filter = { name -> name.contains(book.originName) },
+            ).firstOrNull() ?: throw NoStackTraceException("Archive contains no matching book file")
             book.origin = newBook.origin
             book.bookUrl = newBook.bookUrl
         } else {

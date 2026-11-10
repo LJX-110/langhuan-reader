@@ -27,6 +27,7 @@ import io.legado.app.help.toast.Toasters
 import io.legado.app.help.tts.IosReadAloudHost
 import io.legado.app.ui.book.read.ReadBookEvents
 import io.legado.app.ui.book.read.page.AutoPagerCompose
+import io.legado.app.ui.book.read.page.SelectionGeometry
 import io.legado.app.ui.compose.platform.SharedThemeStoreProvider
 import io.legado.app.ui.root.AppNavigatorProviders
 import io.legado.app.ui.root.AppOverlay
@@ -84,9 +85,35 @@ object IosReaderPlatformProvider : ReaderPlatformProvider {
         screenModel: ReaderScreenModel,
     ): ReadMenuController = IosReadMenuController(navigator, screenModel)
 
+    /**
+     * 本窗口已接纳的绑定身份 = (页面模型, 控制器)。
+     *
+     * 只记 controller 不够: 同一个 provider 可能先后服务两个阅读页, 旧页 `onExit` 会把新页的
+     * 控制器当成"自己的"释放掉。带上 model 后, 释放/退出只作用于自己这条绑定。
+     */
+    private var activeMenuBinding: Pair<ReaderScreenModel, ReadMenuController>? = null
+
+    override fun activateMenuController(
+        screenModel: ReaderScreenModel,
+        controller: ReadMenuController,
+    ) {
+        activeMenuBinding = screenModel to controller
+    }
+
+    override fun releaseMenuController(
+        screenModel: ReaderScreenModel,
+        controller: ReadMenuController,
+    ) {
+        (controller.state as? IosReadMenuState)?.dispose()
+        if (activeMenuBinding?.first === screenModel && activeMenuBinding?.second === controller) {
+            activeMenuBinding = null
+        }
+    }
+
     // 自动翻页面板停止按钮 (对照 app/desktop 端 autoPageStop → stopAutoPage: 停控制器 + 复位开关)
     override fun autoPageStop(screenModel: ReaderScreenModel) {
-        (screenModel.menuController.state as? IosReadMenuState)?.stopAutoPage()
+        (activeMenuBinding?.takeIf { it.first === screenModel }?.second?.state as? IosReadMenuState)
+            ?.stopAutoPage()
     }
 
     // 自动翻页滑条抬手 → 重新应用当前 TTS 语速 (对照 app 端 upTtsSpeechRate: 重读配置 +
@@ -118,8 +145,7 @@ object IosReaderPlatformProvider : ReaderPlatformProvider {
     override fun onTextSelected(
         screenModel: ReaderScreenModel,
         text: String,
-        anchorX: Float,
-        anchorY: Float,
+        geometry: SelectionGeometry,
     ) {
         if (text.isBlank()) return
         textActions = ReaderTextActions(
@@ -129,7 +155,7 @@ object IosReaderPlatformProvider : ReaderPlatformProvider {
             onReadAloud = screenModel.readAloudTextCallback(),
             onSearchContent = screenModel.searchContentTextCallback(),
         )
-        textSelection = ReaderTextSelectionRequest(text, readerMenuAnchor(anchorX, anchorY))
+        textSelection = ReaderTextSelectionRequest(text = text, geometry = geometry)
     }
 
     /**
@@ -156,7 +182,11 @@ object IosReaderPlatformProvider : ReaderPlatformProvider {
      *  播放期间的锁屏/控制中心播控卡片 (SystemMediaControl) 随 stop 一并撤下。 */
     override fun onExit(screenModel: ReaderScreenModel) {
         autoPageStop(screenModel)
-        (screenModel.menuController.state as? IosReadMenuState)?.dispose()
+        // 只放自己这条绑定 (不经模型取新控制器)
+        activeMenuBinding
+            ?.takeIf { it.first === screenModel }
+            ?.second
+            ?.let { releaseMenuController(screenModel, it) }
         readerAutoPageActive = false
         dismissActionMenus()
         textActions = null

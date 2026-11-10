@@ -148,6 +148,15 @@
 -keep class okhttp3.*{*;}
 -keepclassmembers class okhttp3.** {    *** protocol(...);}
 -dontwarn okhttp3.internal.**
+# okhttp3 子包: 上方只有单星 okhttp3.*, 不含 okhttp3.internal 等子包;
+# 覆盖 okhttp3.zstd.Zstd / okhttp3.brotli.Brotli(BrotliInterceptor) (官方 okhttp-zstd/okhttp-brotli
+# 工件): 扩展 dex 按名引用, 宿主源码零直调, 不 keep 即被整包裁光; 与 app 端规则同构
+-keep,allowoptimization class okhttp3.** { public protected *; }
+# com.squareup.zstd (zstd-kmp/zstd-kmp-okio): 扩展 dex 直调 OkioZstd.zstdCompress/zstdDecompress,
+# 规则面与 Mihon 官方 proguard-rules.pro 扩展依赖保留段逐字同构;
+# JniZstdKt/JniZstdCompressor/JniZstdDecompressor 的 private native 方法经上方
+# -keepclasseswithmembers native 规则保留, 资源 /jni/<arch>/ 原样复制 (ProGuard 不改资源)
+-keep,allowoptimization class com.squareup.zstd.** { public protected *; }
 
 ############################
 # Jsoup (书源 JS 解析 HTML, 反射调用)
@@ -209,6 +218,12 @@
 -dontwarn com.github.weisj.**
 # kotlinx.coroutines.debug AgentPremain 引用 android 注解
 -dontwarn android.annotation.**
+# bouncycastle 的 JCA 算法实现由运行期字符串注册决定 (provider.addAlgorithm("Cipher.SM4",
+# PREFIX + "$ECB") → ClassUtil.loadClass 反射加载), 静态分析看不到引用; 只 -dontwarn 时
+# 这些实现类被当死代码删除, 算法在产物里静默消失 (实测: 瘦身后 SM4/ECB/PKCS7Padding 抛
+# NoSuchAlgorithmException, 只剩被直接引用的 SM4Engine)。书源 JS 可调用任意 JCA 算法,
+# 所以保留整个 provider 层, 不列举当前用到的 SM2/SM3/SM4/PKCS7Padding。
+-keep class org.bouncycastle.jcajce.provider.** { *; }
 # apk-parser 证书 CMS 校验引用可选 bouncycastle, dex2jar (d2j-jasmin/d2j-smali)
 # 传递的 antlr-runtime DOTTreeGenerator 引用可选 stringtemplate; 桌面端均未引入,
 # 引用点功能不可达, 缺类会被 shrink 裁除

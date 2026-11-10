@@ -75,12 +75,15 @@ include(":data")
 include(":core")
 include(":ui")
 include(":desktop")
-// 桌面端无 UI 核心库 (从 :desktop 机械抽取, 供 :desktop 与 :headless 共用)
-include(":desktop-core")
-// 桌面端无头模式入口 (后台进程, 只依赖 :desktop-core, 无窗口/AV/UI 初始化)
-include(":headless")
 if (enableOhosTarget) {
     include(":modules:ksoup-ohos")
     include(":modules:epub4kmp-ohos")
     include(":modules:reorderable-ohos")
+}
+
+// native 端字符集编解码承载模块: iOS/鸿蒙任一目标启用即参与构建 (foundation 仅 nativeMain 依赖)
+val enableIosTarget = providers.gradleProperty("enableIosTarget").orNull?.toBoolean()
+    ?: System.getProperty("os.name").startsWith("Mac", ignoreCase = true)
+if (enableIosTarget || enableOhosTarget) {
+    include(":modules:charset-native")
 }

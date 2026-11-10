@@ -30,7 +30,7 @@ data/            数据层
 core/            核心工具
 foundation/      基础能力
 modules/         子模块（js-api / quickjs / treeview / rjpath 等）
-desktop*、iosApp、ohosApp、headless   其它平台入口
+desktop*、iosApp、ohosApp        其它平台入口
 build-logic/     Gradle 约定插件
 ```
 
@@ -42,7 +42,7 @@ build-logic/     Gradle 约定插件
 # 调试包
 ./gradlew -g <Gradle 用户目录> :app:assembleDebug
 
-# 正式包（R8 + 资源压缩，仅 arm64-v8a / armeabi-v7a）
+# 正式包（R8 + 资源压缩，仅 arm64-v8a）
 ./gradlew -g <Gradle 用户目录> :app:assembleAppRelease
 ```
 
@@ -52,7 +52,7 @@ Windows 下把 `./gradlew` 换成 `.\gradlew.bat`。工程路径必须是纯 ASC
 
 ## 版本
 
-`versionName` 形如 `3.yy.MMddHH`，`versionCode = 10000 + 提交数`。
+`versionName` 由 `-PappVersion` 注入，本地构建默认 `1.0.0`；`versionCode = 10000 + 提交数`。
 
 ## 许可
 

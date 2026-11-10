@@ -16,6 +16,8 @@ import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.MimeTypes
 import io.legado.app.App
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
@@ -74,7 +76,10 @@ import io.legado.app.utils.setNavigationBarColorAuto
 import io.legado.app.utils.share
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.writeDocumentBytesAtomically
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -85,7 +90,8 @@ import java.io.FileOutputStream
  * 经 PlatformServiceProviders.register 注册后供 shared LegadoApp 使用。
  *
  * 构造时持有 MainActivity 引用，用于 SAF launcher / 权限请求 / 窗口控制等需 Activity 上下文的能力。
- * SAF launcher 由 MainActivity 在 STARTED 前注册后传入, files 经 runBlocking 阻塞等待回调。
+ * SAF launcher 由 MainActivity 在 STARTED 前注册后传入, files 的选择等待体挂宿主 Job
+ * (宿主销毁取消等待并按空结果收口, 不留孤儿阻塞线程)。
  */
 class AndroidPlatformServices(
     private val activity: MainActivity,
@@ -124,7 +130,8 @@ class AndroidPlatformServices(
 }
 
 // SAF 文件选择/保存桥接: launcher 由 MainActivity 在 STARTED 前注册传入,
-// 调用方均在 IoDispatcher 协程内, runBlocking 阻塞 IO 线程等待主线程 Activity Result 回调
+// 调用方均在 IoDispatcher 协程内阻塞等待主线程 Activity Result 回调; 等待体挂宿主 Job,
+// 宿主销毁取消等待并按空结果收口 (调用方不再继续导入), 不把 IO 改到主线程
 private class AndroidFilePickerService(
     // 选图裁剪 (processWelcomeImage) 需读窗口尺寸与 toast, 与其余能力共用 MainActivity 引用
     private val activity: MainActivity,
@@ -134,30 +141,41 @@ private class AndroidFilePickerService(
     private val openDocumentTreePicker: ActivityResultLauncherAwait<Uri?, Uri?>,
 ) : FilePickerService {
 
-    override fun pickFile(filter: FileFilter): String? = runBlocking {
-        withContext(Dispatchers.Main) { openDocumentPicker.launch(filter.toMimeTypes()) }
-            ?.toString()
-            ?.takeIf { filter.matchesUri(it) }
-            ?.let(::materializeUri)
+    // 选择/保存等待直接挂在调用方协程上: 页面退出即取消等待与后续处理;
+    // 系统选择器在途时由 launcher 自身排空结果, 不提前释放通道占用。
+    override suspend fun pickFile(filter: FileFilter): String? {
+        val uri = withContext(Dispatchers.Main) {
+            openDocumentPicker.launch(filter.toMimeTypes())
+        } ?: return null
+        // 提供方查询与物化复制都在 IO: 慢文件不阻塞主线程
+        return withContext(Dispatchers.IO) {
+            uri.toString()
+                .takeIf { filter.matchesUri(it) }
+                ?.let(::materializeUri)
+        }
     }
 
     /**
      * 多选文件 (书籍/字体导入): 回传 SAF 文档地址与文件名, 不物化副本 ——
      * 书文件直接以文档地址入库 (常驻读权限在此显式落下), 字体由调用方读字节落内置目录。
      */
-    override fun pickFiles(filter: FileFilter): List<PickedFile> = runBlocking {
-        val uris = withContext(Dispatchers.Main) { openDocumentsPicker.launch(filter.toMimeTypes()) }
-        uris.mapNotNull { uri ->
-            // ACTION_OPEN_DOCUMENT 默认只给到进程结束的读权限, 不落常驻权限时重启后书文件读不开;
-            // 提供方拒绝时记日志 (该文件当次仍可导入, 只是重启后需重选)
-            runCatching {
-                App.instance.contentResolver.takePersistableUriPermission(
-                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                )
-            }.onFailure {
-                AppLog.put("文件选择器未取得常驻读权限: $uri\n${it.localizedMessage}", it)
+    override suspend fun pickFiles(filter: FileFilter): List<PickedFile> {
+        val uris = withContext(Dispatchers.Main) {
+            openDocumentsPicker.launch(filter.toMimeTypes())
+        }
+        return withContext(Dispatchers.IO) {
+            uris.mapNotNull { uri ->
+                // ACTION_OPEN_DOCUMENT 默认只给到进程结束的读权限, 不落常驻权限时重启后书文件读不开;
+                // 提供方拒绝时记日志 (该文件当次仍可导入, 只是重启后需重选)
+                runCatching {
+                    App.instance.contentResolver.takePersistableUriPermission(
+                        uri, Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                    )
+                }.onFailure {
+                    AppLog.put("文件选择器未取得常驻读权限: $uri\n${it.localizedMessage}", it)
+                }
+                PickedFile(uri.toString(), fileNameOf(uri) ?: uri.toString())
             }
-            PickedFile(uri.toString(), fileNameOf(uri) ?: uri.toString())
         }
     }
 
@@ -165,32 +183,35 @@ private class AndroidFilePickerService(
      * 弹 SAF 单文件另存为并写入文本。引用是 `content://` 文档地址 —— 只能经文档写入通道写,
      * 拿它当文件路径写会失败。
      */
-    override fun saveText(suggestedName: String, text: String): SavedRef? =
-        runBlocking {
-            // CreateDocument 由系统决定保存位置, defaultDir 不支持指定
-            val uri = withContext(Dispatchers.Main) { createDocumentPicker.launch(suggestedName) }
-                ?: return@runBlocking null
-            // 目标所在目录允许整份就位时先写临时文档再改名, 否则直写
+    override suspend fun saveText(suggestedName: String, text: String): SavedRef? {
+        // CreateDocument 由系统决定保存位置, defaultDir 不支持指定
+        val uri = withContext(Dispatchers.Main) { createDocumentPicker.launch(suggestedName) }
+            ?: return null
+        // 目标所在目录允许整份就位时先写临时文档再改名, 否则直写
+        withContext(Dispatchers.IO) {
             check(
                 writeDocumentBytesAtomically(
                     App.instance, uri, suggestedName, text.encodeToByteArray()
                 )
             ) { "写入文件失败: $suggestedName" }
-            SavedRef(uri.toString())
         }
+        return SavedRef(uri.toString())
+    }
 
     /** 同上, 内容按流复制 (大体积内容不整份读入内存)。 */
-    override fun saveFromFile(
+    override suspend fun saveFromFile(
         srcPath: String,
         suggestedName: String
-    ): SavedRef? = runBlocking {
+    ): SavedRef? {
         val uri = withContext(Dispatchers.Main) { createDocumentPicker.launch(suggestedName) }
-            ?: return@runBlocking null
-        val written = File(srcPath).inputStream().use {
-            copyToDocumentAtomically(App.instance, uri, suggestedName, it)
+            ?: return null
+        withContext(Dispatchers.IO) {
+            val written = File(srcPath).inputStream().use {
+                copyToDocumentAtomically(App.instance, uri, suggestedName, it)
+            }
+            check(written) { "写入文件失败: $suggestedName" }
         }
-        check(written) { "写入文件失败: $suggestedName" }
-        SavedRef(uri.toString())
+        return SavedRef(uri.toString())
     }
 
     // 图集导入 + 按真实屏幕尺寸烘焙清晰产物 (启动图与主题背景图共用)。
@@ -254,15 +275,17 @@ private class AndroidFilePickerService(
         }
     }
 
-    override fun saveImageBytes(suggestedName: String, bytes: ByteArray): Boolean? = runBlocking {
+    override suspend fun saveImageBytes(suggestedName: String, bytes: ByteArray): Boolean? {
         // CreateDocument 选位置 → 写入 (对照 master PhotoDialog 的 SAF 保存): 目标所在目录允许整份就位
         // 时先写临时文档再改名, 否则直写 (见 writeDocumentBytesAtomically; 单文档授权通常只能直写)
         // 用户取消选择位置返回 null, 调用方静默; 仅写入失败返回 false
         val uri = withContext(Dispatchers.Main) { createDocumentPicker.launch(suggestedName) }
-            ?: return@runBlocking null
-        runCatching {
-            writeDocumentBytesAtomically(App.instance, uri, suggestedName, bytes)
-        }.getOrDefault(false)
+            ?: return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                writeDocumentBytesAtomically(App.instance, uri, suggestedName, bytes)
+            }.getOrDefault(false)
+        }
     }
 
     /**
@@ -295,8 +318,10 @@ private class AndroidFilePickerService(
             writeDocumentBytesAtomically(App.instance, dir.toUri(), fileName, bytes)
         }.getOrDefault(false)
 
-    override fun pickDirectory(usage: DirUsage): String? = runBlocking {
-        withContext(Dispatchers.Main) { openDocumentTreePicker.launch(null) }?.let { uri ->
+    override suspend fun pickDirectory(usage: DirUsage): String? {
+        val uri = withContext(Dispatchers.Main) { openDocumentTreePicker.launch(null) }
+            ?: return null
+        withContext(Dispatchers.IO) {
             val modeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             runCatching {
@@ -305,8 +330,8 @@ private class AndroidFilePickerService(
                 AppLog.put("AndroidFilePickerService.pickDirectory takePersistableUriPermission 失败: ${it.localizedMessage}")
             }
             AndroidDirAuthorizations.remember(uri.toString(), usage)
-            uri.toString()
         }
+        return uri.toString()
     }
 
     /** 提供方给的显示名 (查不到返回 null)。 */
@@ -700,7 +725,7 @@ internal const val EXPLORE_SHOW_ALIAS = "io.legado.app.ui.book.explore.ExploreSh
 /**
  * 搜索 alias 是否按"直达搜索页"语义处置。
  *
- * manifest 把 SEND 的两条 filter (text/plain 与通配 MIME) 也挂在这个 alias 上, 所以**组件名命中不等于
+ * manifest 把 SEND 的两条 filter (text/plain 与能力 MIME 枚举) 也挂在这个 alias 上, 所以**组件名命中不等于
  * 直达搜索页**: 分享载荷要先过 视频直投 / 文件导入 两道判定, 剩下的文本才轮到搜索分流
  * (分流判据只有一份, 见 shared 的 shareTextTarget)。
  *
@@ -801,19 +826,19 @@ fun Intent.toLaunchRequest(): LaunchRequest? {
 fun Intent.videoDirectTarget(): VideoPlayTarget.Direct? {
     val mimeIsVideo = VideoDirect.isVideoMime(type)
     return when (action) {
-        Intent.ACTION_VIEW -> data?.let { videoTargetOfUri(it, mimeIsVideo) }
+        Intent.ACTION_VIEW -> data?.let { videoTargetOfUri(it, mimeIsVideo, type) }
 
         Intent.ACTION_SEND -> {
             @Suppress("DEPRECATION")
             val stream = getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
             if (stream != null) {
-                videoTargetOfUri(stream, mimeIsVideo)
+                videoTargetOfUri(stream, mimeIsVideo, type)
             } else {
                 // 分享的是纯文本: 只有整条就是一个可播地址 (结尾 .m3u8/.mp4 等) 才截给播放页,
                 // 否则保持原语义 (交 ProcessText 分流), 不得把书名/普通文案当链接去播
                 getStringExtra(Intent.EXTRA_TEXT)?.trim()
                     ?.takeIf { it.hasPlayableScheme() }
-                    ?.let { VideoDirect.targetFor(it, mimeIsVideo) }
+                    ?.let { VideoDirect.targetFor(it, mimeIsVideo, mime = hlsFormatMimeOf(type, null)) }
             }
         }
 
@@ -821,8 +846,23 @@ fun Intent.videoDirectTarget(): VideoPlayTarget.Direct? {
     }
 }
 
-/** URI → 直投载荷: 只负责补显示名 (标题 + 扩展名判据), 其余判定全在 [VideoDirect]。 */
-private fun videoTargetOfUri(uri: Uri, mimeIsVideo: Boolean): VideoPlayTarget.Direct? {
+/**
+ * 意图携带的 HLS 格式线索: 投递类型被 [VideoDirect.isHlsMime] 分类命中, 或真实显示名以
+ * .m3u8 结尾 (大小写不敏感)。octet-stream 等泛类型不产生线索, 也不覆盖显示名后缀;
+ * 泛显示标题不臆测。归一为 media3 的 HLS 媒体源常量 (Direct.mime 是资源格式线索, 非原始串)。
+ */
+private fun hlsFormatMimeOf(type: String?, displayName: String?): String? = when {
+    VideoDirect.isHlsMime(type) -> MimeTypes.APPLICATION_M3U8
+    displayName?.endsWith(".m3u8", ignoreCase = true) == true -> MimeTypes.APPLICATION_M3U8
+    else -> null
+}
+
+/** URI → 直投载荷: 补显示名 (标题 + 扩展名判据) 与格式线索, 其余判定全在 [VideoDirect]。 */
+private fun videoTargetOfUri(
+    uri: Uri,
+    mimeIsVideo: Boolean,
+    declaredType: String?,
+): VideoPlayTarget.Direct? {
     val address = uri.toString()
     if (!address.hasPlayableScheme()) return null
     val displayName = uri.displayName(App.instance)
@@ -831,6 +871,7 @@ private fun videoTargetOfUri(uri: Uri, mimeIsVideo: Boolean): VideoPlayTarget.Di
         // DISPLAY_NAME 命中视频后缀 等同于 MIME 命中 (content URI 的末段常不是文件名)
         mimeIsVideo = mimeIsVideo || displayName?.matches(AppPattern.videoFileRegex) == true,
         title = displayName,
+        mime = hlsFormatMimeOf(declaredType, displayName),
     ) ?: return null
     // content:// 地址在此刻打开并持有句柄
     if (address.startsWith("content://", ignoreCase = true)) {

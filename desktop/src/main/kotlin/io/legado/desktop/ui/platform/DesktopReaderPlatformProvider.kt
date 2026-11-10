@@ -35,6 +35,7 @@ import io.legado.app.ui.book.read.ReaderScreenModel
 import io.legado.app.ui.book.read.createReadMenuColors
 import io.legado.app.ui.book.read.hasBgImageByPath
 import io.legado.app.ui.book.read.page.AutoPagerCompose
+import io.legado.app.ui.book.read.page.SelectionGeometry
 import io.legado.app.ui.book.read.readerAutoPageActive
 import io.legado.app.ui.book.read.refreshReaderImage
 import io.legado.app.ui.compose.platform.DesktopThemeStoreProvider
@@ -55,6 +56,7 @@ import io.legado.desktop.help.tts.DesktopReadAloudHost
 import io.legado.desktop.ui.DesktopDialogRequest
 import io.legado.desktop.ui.DesktopDialogs
 import io.legado.desktop.ui.DesktopPlatformCapabilities
+import io.legado.desktop.ui.withDialogCancel
 import io.legado.desktop.ui.component.FileDialogs
 import io.legado.desktop.ui.readerWindowTint
 import kotlinx.coroutines.CoroutineScope
@@ -120,18 +122,47 @@ class DesktopReaderPlatformProvider : ReaderPlatformProvider {
         screenModel: ReaderScreenModel,
     ): ReadMenuController = DesktopReadMenuController(navigator, screenModel)
 
+    /**
+     * 本窗口已接纳的绑定身份 = (页面模型, 控制器): 自动翻页/退出只作用于自己这条绑定,
+     * 旧阅读页的 onExit 不会释放新页的控制器。
+     */
+    private var activeMenuBinding: Pair<ReaderScreenModel, ReadMenuController>? = null
+
+    override fun activateMenuController(
+        screenModel: ReaderScreenModel,
+        controller: ReadMenuController,
+    ) {
+        activeMenuBinding = screenModel to controller
+        (controller.state as? DesktopReadMenuState)?.startAloudPageWatch()
+    }
+
+    override fun releaseMenuController(
+        screenModel: ReaderScreenModel,
+        controller: ReadMenuController,
+    ) {
+        val state = controller.state as? DesktopReadMenuState ?: return
+        state.stopAloudPageWatch()
+        state.dispose()
+        if (activeMenuBinding?.first === screenModel && activeMenuBinding?.second === controller) {
+            activeMenuBinding = null
+        }
+    }
+
     // 自动翻页面板停止按钮 (对照 app 端 autoPageStop → stopAutoPage: 停控制器 + 复位开关)
     override fun autoPageStop(screenModel: ReaderScreenModel) {
-        (screenModel.menuController.state as? DesktopReadMenuState)?.stopAutoPage()
+        (activeMenuBinding?.takeIf { it.first === screenModel }?.second?.state as? DesktopReadMenuState)
+            ?.stopAutoPage()
     }
 
     // 退到后台 / 被别的页面盖住 → 挂起自动翻页 (开关保持, 只停推进), 回到可见期自动接着翻
     override fun autoPagePause(screenModel: ReaderScreenModel) {
-        (screenModel.menuController.state as? DesktopReadMenuState)?.pauseAutoPage()
+        (activeMenuBinding?.takeIf { it.first === screenModel }?.second?.state as? DesktopReadMenuState)
+            ?.pauseAutoPage()
     }
 
     override fun autoPageResume(screenModel: ReaderScreenModel) {
-        (screenModel.menuController.state as? DesktopReadMenuState)?.resumeAutoPage()
+        (activeMenuBinding?.takeIf { it.first === screenModel }?.second?.state as? DesktopReadMenuState)
+            ?.resumeAutoPage()
     }
 
     // 自动翻页滑条抬手 → 重新应用当前 TTS 语速 (对照 app 端 upTtsSpeechRate: 重读配置 +
@@ -173,7 +204,11 @@ class DesktopReaderPlatformProvider : ReaderPlatformProvider {
      */
     override fun onExit(screenModel: ReaderScreenModel) {
         autoPageStop(screenModel)
-        (screenModel.menuController.state as? DesktopReadMenuState)?.dispose()
+        // 只放自己这条绑定 (不经模型取新控制器)
+        activeMenuBinding
+            ?.takeIf { it.first === screenModel }
+            ?.second
+            ?.let { releaseMenuController(screenModel, it) }
         readerAutoPageActive = false
         titleBarTintJob?.cancel()
         titleBarTintJob = null
@@ -191,8 +226,7 @@ class DesktopReaderPlatformProvider : ReaderPlatformProvider {
     override fun onTextSelected(
         screenModel: ReaderScreenModel,
         text: String,
-        anchorX: Float,
-        anchorY: Float,
+        geometry: SelectionGeometry,
     ) {
         if (text.isBlank()) return
         textActions = ReaderTextActions(
@@ -202,7 +236,7 @@ class DesktopReaderPlatformProvider : ReaderPlatformProvider {
             onReadAloud = screenModel.readAloudTextCallback(),
             onSearchContent = screenModel.searchContentTextCallback(),
         )
-        rawSelection = RawTextSelection(text, anchorX, anchorY)
+        rawSelection = RawTextSelection(text, geometry)
     }
 
     /**
@@ -275,13 +309,17 @@ class DesktopReaderPlatformProvider : ReaderPlatformProvider {
     private fun saveImage(screenModel: ReaderScreenModel, src: String) {
         val book = screenModel.currentBook
         imageActionScope.launch {
+            // 受控选择能力 (withDialogCancel): 面板被撤后不写盘、不提示成功。
             // 阻塞式选择器必须切 IO (对照漫画阅读页 onSaveImage 的 withContext(IoDispatcher))
-            val destPath = withContext(Dispatchers.IO) {
-                FileDialogs.pickSaveFile(
-                    title = "保存图片",
-                    defaultName = "legado-${System.currentTimeMillis()}.jpg",
-                    initialDir = defaultImageSaveDir(),
-                )?.absolutePath
+            val destPath = withDialogCancel { handle ->
+                withContext(Dispatchers.IO) {
+                    FileDialogs.pickSaveFile(
+                        title = "保存图片",
+                        defaultName = "legado-${System.currentTimeMillis()}.jpg",
+                        initialDir = defaultImageSaveDir(),
+                        handle = handle,
+                    )?.absolutePath
+                }
             } ?: return@launch
             Toasters.get().toast("正在保存")
             val savedPath = withContext(Dispatchers.IO) {
@@ -300,8 +338,11 @@ class DesktopReaderPlatformProvider : ReaderPlatformProvider {
     private fun saveImageToSelectedDir(screenModel: ReaderScreenModel, src: String) {
         val book = screenModel.currentBook
         imageActionScope.launch {
-            val dir = withContext(Dispatchers.IO) {
-                FileDialogs.pickDirectory(title = "选择保存目录")
+            // 受控选择能力 (withDialogCancel): 面板被撤后不写盘、不提示成功、不交结果
+            val dir = withDialogCancel { handle ->
+                withContext(Dispatchers.IO) {
+                    FileDialogs.pickDirectory(title = "选择保存目录", handle = handle)
+                }
             } ?: return@launch
             Toasters.get().toast("正在保存")
             val savedPath = withContext(Dispatchers.IO) {
@@ -361,10 +402,7 @@ class DesktopReaderPlatformProvider : ReaderPlatformProvider {
         val selection = rawSelection
         val request = remember(selection) {
             selection?.let {
-                ReaderTextSelectionRequest(
-                    text = it.text,
-                    anchor = readerMenuAnchor(it.anchorX, it.anchorY),
-                )
+                ReaderTextSelectionRequest(text = it.text, geometry = it.geometry)
             }
         }
         if (actions != null) {
@@ -385,11 +423,10 @@ class DesktopReaderPlatformProvider : ReaderPlatformProvider {
     ): ReadAloudControls = DesktopReadAloudControls(navigator, screenModel)
 }
 
-/** 页内文字选择原始位置快照 (由 [DesktopReaderPlatformProvider.TextSelectionHost] 换算标题栏偏移后传递)。 */
+/** 页内文字选择快照 (选区几何与页面坐标系一致, 见 [TextSelectionHost])。 */
 private data class RawTextSelection(
     val text: String,
-    val anchorX: Float,
-    val anchorY: Float,
+    val geometry: SelectionGeometry,
 )
 
 /**
@@ -511,12 +548,22 @@ private class DesktopReadMenuState(
     // 滚动模式朗读重定位: 暂停期间页面是否变化 (对照 app 端 AndroidReaderMenuState.aloudPageChanged)
     private var aloudPageChanged = false
 
-    init {
-        // 页面变化 → aloudPageChanged (对照 app 端 AndroidReaderMenuState.init:
-        // 经 ReadBookEvents.seekBarChange 桥接: onPageChanged/onChapterChanged 均触发)
-        autoPageScope.launch {
+    /**
+     * 页面变化订阅: 构造时**不**起 (构造可能发生在被放弃的组合里), 由 provider.activateMenuController
+     * 在组合提交后成对启停 (对照 app 端 AndroidReaderMenuState.init → startPageChangedWatch)。
+     */
+    private var aloudPageWatchJob: Job? = null
+
+    fun startAloudPageWatch() {
+        aloudPageWatchJob?.cancel()
+        aloudPageWatchJob = autoPageScope.launch {
             ReadBookEvents.seekBarChange.collect { aloudPageChanged = true }
         }
+    }
+
+    fun stopAloudPageWatch() {
+        aloudPageWatchJob?.cancel()
+        aloudPageWatchJob = null
     }
 
     override fun onChapterViewClick() {

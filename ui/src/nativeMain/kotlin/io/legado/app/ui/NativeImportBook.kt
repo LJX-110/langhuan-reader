@@ -20,6 +20,8 @@ import kotlin.concurrent.Volatile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
 /**
@@ -32,11 +34,12 @@ class NativeImportFile(
     override var isOnBookShelf: Boolean = false,
 ) : ImportFileItem {
     // 目录属性/大小/时间都是文件系统调用: 外部目录需在 security-scoped 授权内取
-    // (一次租约取齐三项, 不逐字段起停)
+    // (一次租约取齐三项, 不逐字段起停; 以授权层/协调器给出的路径为准)
     private val meta: LocalFileMeta = if (isUpDir) LocalFileMeta(true, 0L, 0L) else
-        withLocalDirAccess(file.path) {
-            val dir = file.isDirectory
-            LocalFileMeta(dir, if (dir) 0L else file.length(), file.lastModified())
+        withLocalDirAccess(file.path) { scopedPath ->
+            val scoped = File(scopedPath)
+            val dir = scoped.isDirectory
+            LocalFileMeta(dir, if (dir) 0L else scoped.length(), scoped.lastModified())
         }
 
     override val name: String = if (isUpDir) ".." else file.name
@@ -104,8 +107,9 @@ object NativeImportBook {
         override val displayName: String get() = dir.name
         override val pathKey: String get() = dir.path
 
-        override suspend fun listChildren(): List<ImportDirRef>? = withLocalDirAccess(dir.path) {
-            dir.listFiles()?.map { NativeImportDirRef(it, it.isDirectory, shelfNamesProvider) }
+        override suspend fun listChildren(): List<ImportDirRef>? = withLocalDirAccess(dir.path) { scopedPath ->
+            File(scopedPath).listFiles()
+                ?.map { NativeImportDirRef(it, it.isDirectory, shelfNamesProvider) }
         }
 
         override suspend fun toItem(isUpDir: Boolean): ImportFileItem? = try {
@@ -160,7 +164,7 @@ object NativeImportBook {
     }
 
     private fun canReadDirectory(file: File): Boolean = try {
-        withLocalDirAccess(file.path) { file.isDirectory }
+        withLocalDirAccess(file.path) { File(it).isDirectory }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -199,6 +203,7 @@ object NativeImportBook {
         selection: List<ImportFileItem>,
         onComplete: () -> Unit,
         onNeedBooksDir: (suspend () -> Boolean)? = null,
+        scope: CoroutineScope,
     ) {
         scope.launch {
             importItems(selection.filterIsInstance<NativeImportFile>(), onNeedBooksDir)
@@ -217,18 +222,35 @@ object NativeImportBook {
         paths: List<String>,
         onComplete: () -> Unit,
         onNeedBooksDir: (suspend () -> Boolean)? = null,
+        scope: CoroutineScope,
+        // 已交付物化副本的释放回调: 成功/取消/失败/从未启动都恰好一次; onComplete 只做 UI 成功刷新
+        onRelease: () -> Unit = {},
     ) {
-        scope.launch {
-            val items = paths.mapNotNull { path ->
-                runCatching { NativeImportFile(sandboxCopy(File(path))) }
-                    .onFailure {
-                        AppLog.put("导入 ${File(path).name} 出错\n${it.message}", it)
-                        Toasters.get().toast("导入 ${File(path).name} 出错\n${it.message}")
+        val released = kotlinx.atomicfu.atomic(false)
+        val job = scope.launch {
+            try {
+                val items = paths.mapNotNull { path ->
+                    // 每份新副本开始前确认本次真实请求仍有效; 已开始的同步 copy 结束后由下一轮退出
+                    currentCoroutineContext().ensureActive()
+                    try {
+                        NativeImportFile(sandboxCopy(File(path)))
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Throwable) {
+                        AppLog.put("导入 ${File(path).name} 出错: ${e.message}", e)
+                        Toasters.get().toast("导入 ${File(path).name} 出错: ${e.message}")
+                        null
                     }
-                    .getOrNull()
+                }
+                importItems(items, onNeedBooksDir)
+                onComplete()
+            } finally {
+                if (released.compareAndSet(false, true)) onRelease()
             }
-            importItems(items, onNeedBooksDir)
-            onComplete()
+        }
+        // 协程从未启动就被取消: finally 不会执行, 由 Job 终态补一次释放
+        job.invokeOnCompletion { cause ->
+            if (cause is CancellationException && released.compareAndSet(false, true)) onRelease()
         }
     }
 
@@ -237,13 +259,20 @@ object NativeImportBook {
         items: List<NativeImportFile>,
         onNeedBooksDir: (suspend () -> Boolean)?,
     ) {
-        items.forEach { item ->
-            runCatching { importOne(item, onNeedBooksDir) }
-                .onSuccess { item.isOnBookShelf = true }
-                .onFailure { e ->
-                    AppLog.put("导入 ${item.name} 出错\n${e.message}", e)
-                    Toasters.get().toast("导入 ${item.name} 出错\n${e.message}")
-                }
+        for (item in items) {
+            // 每个新条目提交前检查请求是否已取消; 取消不再继续后面的条目
+            currentCoroutineContext().ensureActive()
+            try {
+                importOne(item, onNeedBooksDir)
+                item.isOnBookShelf = true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                AppLog.put("导入 ${item.name} 出错\n${e.message}", e)
+                Toasters.get().toast("导入 ${item.name} 出错\n${e.message}")
+                // 当前批次按原合同: 失败即停批; 已提交项保留, 后续独立请求不受影响
+                break
+            }
         }
         refreshShelfNames()
         ImportBookShared.refresh()
@@ -254,15 +283,16 @@ object NativeImportBook {
         item: NativeImportFile,
         onNeedBooksDir: (suspend () -> Boolean)?,
     ) {
+        val parent = currentCoroutineContext()[kotlinx.coroutines.Job]
         val doImport: () -> Unit = {
             val file = item.file
             if (file.name.matches(AppPattern.archiveFileRegex)) {
                 // 压缩包 (zip 内含书籍文件可解压导入; rar/7z native 端无解析器,
                 // importLocalFile 抛明确异常, 不静默跳过) —— 解压产物落"书籍保存位置"
-                FileBook.importLocalFile(file.path)
+                FileBook.importLocalFile(file.path, parent)
             } else {
                 // 普通书文件: 先复制进沙盒再导入 (见类注释"沙盒语义")
-                FileBook.importLocalFile(sandboxCopy(file).path)
+                FileBook.importLocalFile(sandboxCopy(file).path, parent)
             }
         }
         try {
@@ -281,15 +311,23 @@ object NativeImportBook {
      * - 普通书: 按文件名查库, 未入库直接返回 (与 Android `getBookByFileName?.let` 行为一致);
      *   入库后确保书文件在沙盒内 (旧数据引用外部目录时复制修正 bookUrl), 再推阅读路由。
      */
-    fun openReader(item: ImportFileItem) {
+    fun openReader(
+        item: ImportFileItem,
+        onUnknownFile: suspend (String) -> Boolean,
+        scope: CoroutineScope,
+    ) {
         val file = (item as? NativeImportFile)?.file ?: return
         val fileName = file.name
         if (fileName.matches(AppPattern.archiveFileRegex)) {
             // 外部压缩包的解压/导入全程包在授权租约内 (deCompress 直接读原文件;
-            // 解出后的书籍文件已落沙盒, 由后续链路自行处理)
-            scope.launch {
+            // 解出后的书籍文件已落沙盒, 由后续链路自行处理); 分发挂发起页面的请求作用域,
+            // 调用方真退即随撤销
+            scope.launch(IoDispatcher) {
                 try {
-                    withLocalDirAccess(file.path) { FileAssociationDispatch.dispatch(file.path) }
+                    withLocalDirAccessAsync(file.path) { scopedPath ->
+                        // 授权与协调直接覆盖整段挂起分发; 请求取消原样上抛
+                        FileAssociationDispatch.dispatch(scopedPath, onUnknownFile)
+                    }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -326,6 +364,6 @@ object NativeImportBook {
         dir.mkdirs()
         val dest = File(dir, src.name)
         if (dest.absolutePath == src.absolutePath) return dest
-        return withLocalDirAccess(src.path) { copyFileAtomically(src, dest) }
+        return withLocalDirAccess(src.path) { scopedPath -> copyFileAtomically(File(scopedPath), dest) }
     }
 }

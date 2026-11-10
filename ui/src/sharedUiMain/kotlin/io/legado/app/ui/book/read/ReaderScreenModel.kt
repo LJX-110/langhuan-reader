@@ -41,9 +41,11 @@ import io.legado.app.ui.book.read.ReaderPlatformProviders.getOrNull
 import io.legado.app.ui.book.read.ReaderPlatformProviders.register
 import io.legado.app.ui.book.read.page.PageSelPos
 import io.legado.app.ui.book.read.page.PageSelectionState
+import io.legado.app.ui.book.read.page.SelectionGeometry
 import io.legado.app.ui.book.read.page.detectClickArea
 import io.legado.app.ui.book.read.page.overlay.SearchHighlightOverlay
 import io.legado.app.ui.book.searchContent.SearchResult
+import io.legado.app.ui.root.AppNavigator
 import io.legado.app.ui.root.AppNavigatorProviders
 import io.legado.app.ui.root.AppRoute
 import io.legado.app.ui.root.PlatformCapabilityProviders
@@ -85,6 +87,13 @@ import kotlin.concurrent.Volatile
 var readerAutoPageActive: Boolean by mutableStateOf(false)
 
 /**
+ * 阅读页菜单布局可见状态（阅读菜单 || 搜索底部菜单 || 底部弹层；对照原版 menuLayoutIsVisible），
+ * 由阅读页系统栏外观效果写入，根层窗口策略统一消费（readerSystemBarsPolicy 的 menuVisible 入参），
+ * 菜单显示时状态栏/导航栏一律显示（对照原版 upSystemUiVisibility）。
+ */
+var readerMenuLayoutVisible: Boolean by mutableStateOf(false)
+
+/**
  * 阅读页平台能力注入接口。
  *
  * [ReadMenuState] 实现深度依赖平台宿主（app 端 [ReadMenu] 依赖 Activity/lifecycleScope/
@@ -110,23 +119,37 @@ interface ReaderPlatformProvider {
     fun onExit(screenModel: ReaderScreenModel) {}
 
     /**
+     * 激活本端为 [controller] 建的 UI 绑定/订阅 (菜单显隐入口、自动翻页、页面变化订阅等)。
+     *
+     * 由组合在**成功提交后**的 Effect 调用, 与 [releaseMenuController] 成对: 构造控制器本身
+     * 不再启动任何订阅 (否则为被放弃的组合也会起订阅)。默认空实现。
+     */
+    fun activateMenuController(screenModel: ReaderScreenModel, controller: ReadMenuController) {}
+
+    /**
+     * 宿主重绑/页面退出时成对释放本端为 [controller] 建的 UI 绑定/订阅 (菜单显隐、自动翻页、
+     * 页面变化订阅等宿主对象)。业务状态不在这里复位。默认空实现。
+     */
+    fun releaseMenuController(screenModel: ReaderScreenModel, controller: ReadMenuController) {}
+
+    /**
      * 屏幕超时设置变更 (对照 app 端 keepLightChange → upScreenTimeOut)。
      * ReaderRoute 订阅 [ReadBookEvents.keepLightChange] 后桥接, 平台 actual 重算常亮计时。
      */
     fun onKeepLightChange(screenModel: ReaderScreenModel) {}
 
     /**
-     * 页内文字选择完成（长按选中文字后抬起）：携带选中文本与选区起点锚点（窗口坐标，
-     * 已折算滚动 + 页眉 + 状态栏），平台弹浮动文本操作菜单并跟随选区（对照旧
-     * ReadView.CallBack.showTextActionMenu → TextActionMenu 浮动菜单；四端统一走共享自绘弹层
-     * [io.legado.app.ui.reader.ReaderTextActionMenu]）。
+     * 页内文字选择完成（长按选中文字后抬起）：携带选中文本与选区几何快照（全窗坐标，
+     * 文字投影并集 + 两个手柄矩形同次定格，见 [SelectionGeometry]；几何失效时
+     * ReadViewComposable 不触发本回调），平台弹浮动文本操作菜单并跟随选区
+     * （对照旧 ReadView.CallBack.showTextActionMenu → TextActionMenu 浮动菜单；
+     * 四端统一走共享自绘弹层 [io.legado.app.ui.reader.ReaderTextActionMenu]）。
      * 默认空实现。
      */
     fun onTextSelected(
         screenModel: ReaderScreenModel,
         text: String,
-        anchorX: Float,
-        anchorY: Float
+        geometry: SelectionGeometry
     ) {
     }
 
@@ -304,24 +327,82 @@ object ReaderPlatformProviders {
  * 生命周期：[ScreenModelStore.retain] 移除本条目时调 [onCleared]，
  * 触发 [ReadBookViewModelShared.onCleared] 落库 + 上传进度（对照 app onPause）。
  *
- * @param menuController 平台注入的菜单控制器
- * @param getBatteryLevel 电池电量获取函数（平台定时调 [refreshBattery] 推送新值）
+ * 电量来源与全文搜索入口不在这里构造: 它们随宿主绑定 ([acceptBinding]) 注入, 解绑即不再引用,
+ * 模型内没有与绑定并列的第二份副本。
+ *
  * @param layoutConfig 排版配置，默认 [ReadBookViewModelShared.LayoutConfig.DEFAULT]
- * @param onOpenSearch 打开全文搜索页回调（对照原版 ReadBookActivity.openSearchActivity：
- *   携带当前书/索引/结果列表，供 SearchMenuState "结果"按钮使用）
  */
 class ReaderScreenModel(
-    menuControllerFactory: (ReaderScreenModel) -> ReadMenuController,
-    private val getBatteryLevel: () -> Int,
     layoutConfig: ReadBookViewModelShared.LayoutConfig = ReadBookViewModelShared.LayoutConfig.DEFAULT,
-    private val onOpenSearch: (ReaderScreenModel, Book, String?) -> Unit = { _, _, _ -> },
 ) : ScreenModel {
 
     // 自管 scope（与 TocScreenModel 一致，异常兜底见 screenModelScope）
     private val scope = screenModelScope("阅读")
 
     private val readBook = ReadBookShared()
-    val menuController: ReadMenuController by lazy { menuControllerFactory(this) }
+
+    /** 一次宿主绑定: 平台入口 + 菜单控制器工厂 + 电量来源 + 全文搜索入口。 */
+    private class HostBinding(
+        val provider: ReaderPlatformProvider,
+        val navigator: AppNavigator,
+        val battery: () -> Int,
+        val openSearch: (ReaderScreenModel, Book, String?) -> Unit,
+    )
+
+    /** 已接纳的绑定 (只在组合提交后的 Effect 里设置/释放; null = 当前没有已接纳的宿主)。 */
+    private var binding: HostBinding? = null
+
+    /**
+     * 已接纳绑定对应的菜单控制器 (UI 记着它并直接渲染)。
+     *
+     * 模型**不**按需构造控制器: 构造会启动平台菜单状态 (Android 的页面变化订阅、provider 的
+     * activeMenuState), 在组合期按需构造就会为被放弃的组合起订阅。这里只引用 UI 已交给本模型的
+     * 那一个; 后台入口读不到就跳过, 不隐式构造。
+     */
+    var acceptedController by mutableStateOf<ReadMenuController?>(null)
+        private set
+
+    /** 当前菜单状态 (未接纳绑定时 null; 调用方自行决定跳过)。 */
+    val menuStateOrNull: ReadMenuState? get() = acceptedController?.state
+
+    /**
+     * 接纳一次宿主绑定 (由组合在**成功提交后**的 Effect 调用): 记下 provider/navigator/控制器
+     * 与电量、搜索入口闭包。此后模型只通过它取用, 不再持有旧宿主的闭包。
+     */
+    fun acceptBinding(
+        provider: ReaderPlatformProvider,
+        navigator: AppNavigator,
+        controller: ReadMenuController,
+        getBatteryLevel: () -> Int,
+        onOpenSearch: (ReaderScreenModel, Book, String?) -> Unit,
+    ) {
+        binding = HostBinding(provider, navigator, getBatteryLevel, onOpenSearch)
+        acceptedController = controller
+        // 绑定刚建立 (已在组合提交后的主线程): 按本宿主真实读数刷一次电量
+        _batteryLevel.value = getBatteryLevel()
+    }
+
+    /**
+     * 放掉这次绑定 (由同一 Effect 的 onDispose 调用, 只释放**这条**绑定):
+     * provider/navigator/电量/搜索闭包都不再被本模型引用; 阅读业务状态 (ReadBookShared/进度/在途请求)
+     * 一概不动。
+     */
+    fun releaseBinding(
+        provider: ReaderPlatformProvider,
+        navigator: AppNavigator,
+        controller: ReadMenuController,
+    ) {
+        val current = binding ?: return
+        // 身份 = provider + navigator + **实际 controller**: 换绑后同 provider 的新控制器
+        // 不会被旧组合的 onDispose 误放; 旧代次的释放也不会串到新绑定上
+        if (current.provider !== provider || current.navigator !== navigator) return
+        if (acceptedController !== controller) return
+        binding = null
+        acceptedController = null
+        // 不伪造状态: 电量保留最后一次真实读数, 搜索出口置空 (调用方按"无宿主"跳过,
+        // 而不是调一个假 no-op 装作已处理)
+        // 不写假回调: 电量保留最后一次真实读数 (无绑定时不再读), 搜索入口因 binding 为空自然跳过
+    }
 
     /** 进行中的 [initBook] 任务: 后到的初始化取消先到的, 只有当前任务有权提交结果。 */
     private var initBookJob: Job? = null
@@ -373,12 +454,18 @@ class ReaderScreenModel(
         // 媒体按钮: 按菜单可见性分流, 可见时弹朗读面板否则直切 (对照 app 端 MEDIA_BUTTON 观察者)
         scope.launch {
             ReadBookEvents.mediaButton.collect { _ ->
-                if (menuState.isVisible) {
-                    postDialogEvent(ReaderDialogEvent.ReadAloud)
-                } else {
-                    // 停自动翻页 (对照 app 端 onClickReadAloud 首步 autoPageStop), 再切换朗读
-                    if (menuState.autoPage) menuState.clickAutoPage()
-                    viewModel.toggleReadAloud()
+                // 菜单状态/控制器只在主线程读: 本收集器跑在自管 scope (Default), 直接读会触发
+                // 控制器构造 (Android 菜单状态构造即起订阅并改 provider 活状态) 与 UI 状态跨线程写
+                withContext(mainDispatcher) {
+                    // 先切主线程再读菜单状态 (不在后台线程隐式构造/读写)
+                    val menu = menuStateOrNull
+                    if (menu != null && menu.isVisible) {
+                        postDialogEvent(ReaderDialogEvent.ReadAloud)
+                    } else {
+                        // 无 UI 绑定 (组合间隙/已释放) 也照常切换朗读: 业务不因读不到菜单被吞
+                        if (menu?.autoPage == true) menu.clickAutoPage()
+                        viewModel.toggleReadAloud()
+                    }
                 }
             }
         }
@@ -402,8 +489,11 @@ class ReaderScreenModel(
             delay(60_000L - systemCurrentTimeMillis() % 60_000L)
             while (isActive) {
                 _clockText.value = formatTimeOfDay(systemCurrentTimeMillis())
-                // 桌面端无 BATTERY_CHANGED 广播, 电池随同一整分轮询读取 (对照原版 BATTERY_CHANGED 事件语义)
-                _batteryLevel.value = getBatteryLevel()
+                // 桌面端无 BATTERY_CHANGED 广播, 电池随同一整分轮询读取 (对照原版 BATTERY_CHANGED 事件语义);
+                // 没有已接纳宿主时不轮询 (不在无绑定时报电量)
+                withContext(mainDispatcher) {
+                    binding?.let { bound -> _batteryLevel.value = bound.battery() }
+                }
                 delay(60_000L)
             }
         }
@@ -419,7 +509,6 @@ class ReaderScreenModel(
         detectClickArea()
     }
 
-    val menuState: ReadMenuState get() = menuController.state
 
     /**
      * 页内文字选择状态（搜索跳转的程序化选区与手势选择共用）。
@@ -497,7 +586,8 @@ class ReaderScreenModel(
      * 段评入口仅在书源配置了 reviewUrl 时显示。
      */
     fun updateSourceMenu() {
-        menuState.topMenu.reviewVisible =
+        val menu = menuStateOrNull ?: return
+        menu.topMenu.reviewVisible =
             viewModel.bookSource.value?.reviewRule?.reviewUrl.isNullOrBlank() == false
     }
 
@@ -536,7 +626,8 @@ class ReaderScreenModel(
         }
     }
 
-    private val _batteryLevel = MutableStateFlow(getBatteryLevel())
+    // 电量: 只由已接纳绑定读取; 构造期没有宿主, 故初值是"未读到"(-1), 不伪造满电
+    private val _batteryLevel = MutableStateFlow(-1)
     val batteryLevel: StateFlow<Int> = _batteryLevel.asStateFlow()
 
     private val _clockText = MutableStateFlow(formatTimeOfDay(systemCurrentTimeMillis()))
@@ -657,7 +748,8 @@ class ReaderScreenModel(
      */
     fun openSearchActivity(searchWord: String?) {
         val book = currentBook ?: return
-        onOpenSearch(this, book, searchWord)
+        // 搜索入口归已接纳宿主: 无绑定 (组合间隙/已释放) 时不调假 no-op, 如实跳过
+        binding?.openSearch?.invoke(this, book, searchWord)
     }
 
     // endregion
@@ -826,8 +918,11 @@ class ReaderScreenModel(
     }
 
     /** 刷新电池电量（平台收到电量变化广播时调用） */
-    fun refreshBattery() {
-        _batteryLevel.value = getBatteryLevel()
+    suspend fun refreshBattery() {
+        // 广播可能来自平台线程: 先切主线程拿**当前**绑定再读, 不把某个旧 binding 跨线程使用
+        withContext(mainDispatcher) {
+            binding?.let { bound -> _batteryLevel.value = bound.battery() }
+        }
     }
 
     /**
@@ -923,13 +1018,14 @@ class ReaderScreenModel(
     /** 显示阅读菜单（对照 app 端 ReadBookActivity.showActionMenu:749-755 的四段顺序：
      *  朗读运行中 → 朗读面板；自动翻页 → AutoRead 面板；搜索态 → 搜索菜单；否则常规菜单） */
     fun showMenu() {
+        val controller = acceptedController ?: return
         when {
             ReadBookPlatforms.get().isReadAloudRun ->
                 postDialogEvent(ReaderDialogEvent.ReadAloud)
 
-            menuState.autoPage -> postDialogEvent(ReaderDialogEvent.AutoRead)
+            controller.state.autoPage -> postDialogEvent(ReaderDialogEvent.AutoRead)
             isShowingSearchResult -> searchMenuState.runMenuIn()
-            else -> menuController.showMenu()
+            else -> controller.showMenu()
         }
     }
 
@@ -955,9 +1051,19 @@ class ReaderScreenModel(
     }
 
     override fun onCleared() {
+        // 本页最后一份 UI 绑定随模型一起收: 成对交回 provider (停订阅/自动翻页),
+        // 业务状态随模型一同消失, 不在这里复位别的页面
+        val controller = acceptedController
+        val hostBinding = binding
+        binding = null
+        acceptedController = null
+        if (controller != null && hostBinding != null) {
+            hostBinding.provider.releaseMenuController(this, controller)
+        }
         // 对照原版 ReadBookActivity.onDestroy: 立即结束阅读计时 (不等待 end 的延迟结算)。
         // 阅读计时与朗读计时独立 (朗读期由朗读侧另记 READ_ALOUD), 朗读豁免期同样立即结束,
         // 避免页面退出后阅读时长虚增
+        readerMenuLayoutVisible = false
         ReadTimeRecorder.endImmediately(ReadTimeRecorder.Source.READ_BOOK)
         viewModel.onCleared(pageCleanup = {
             ActiveReadBookRegistry.detach(readBook)
@@ -1048,8 +1154,12 @@ class ReaderScreenModel(
     }
 
     /**
-     * 批注回调：以选区折算的章内区间存 Bookmark(type = 1)，成功后即弹批注气泡
-     * (锚点用浮动菜单自身的选区起点方区，全窗坐标)。
+     * 批注回调：以选区折算的章内区间存 Bookmark(type = 1)，成功后即弹批注气泡。
+     *
+     * 气泡锚点 = 菜单请求定格的文字区域快照 (全窗坐标，选区文字的完整投影并集，不含手柄)，
+     * 与轻点批注路径 (锚定批注投影并集，下沿即文字行底) 同口径同源；不从已变化/清空的
+     * 选区反算，也不退回含游标的菜单矩形 —— 几何失效的选区弹不出菜单，本回调拿到的
+     * 恒是弹菜单那一刻的文字几何。
      *
      * 偏移与原文同源 ([PageSelectionState.selectedChapterRange] 同一账本遍历), 口径同
      * TextLine.chapterPosition (净化/替换/简繁后的排版输入文本); 章号取区间自身所属章
@@ -1059,14 +1169,14 @@ class ReaderScreenModel(
      *
      * 跨章选区无单章区间可存, 折算返回 null, 此处提示用户后放弃本次批注。
      */
-    fun underlineTextCallback(): (text: String, anchor: Rect) -> Unit = onUnderline@{ _, anchor ->
+    fun underlineTextCallback(): (text: String, anchor: Rect) -> Unit = onUnderline@{ _, textArea ->
         val book = viewModel.book.value ?: return@onUnderline
         val range = selection.selectedChapterRange()
         if (range == null) {
             Toasters.get().toast(appString(AppStringKey.underline_cross_chapter_unsupported))
             return@onUnderline
         }
-        val bubbleAnchor = underlineBubbleAnchor(anchor)
+        val bubbleAnchor = textArea
         scope.launch {
             val bookmark = Bookmark(bookName = book.name, bookAuthor = book.author).apply {
                 chapterIndex = range.chapterIndex
@@ -1082,24 +1192,6 @@ class ReaderScreenModel(
                 }
                 .onFailure { AppLog.put("保存批注失败\n${it.message}", it) }
         }
-    }
-
-    /**
-     * 气泡锚点: 菜单锚点方区 (按 readerMenuAnchor 取的选区起点 ±20px 方区, 中心即起点行顶)
-     * 下沿补到选区末行行底 —— 只给 40px 方区时气泡会落在本行中间, 压住被选中的字。
-     * 选区几何是正文区坐标, 与窗口坐标同尺度只差一个平移 (方区中心即起点行顶的窗口 y),
-     * 故直接加高度差; 跨页选区 (末行不在起点页) 退化为起点行行底。
-     */
-    private fun underlineBubbleAnchor(menuAnchor: Rect): Rect {
-        val startLineTop = selection.selectionAnchor()?.y ?: return menuAnchor
-        val startLineBottom = selection.startHandleOffset()?.y ?: return menuAnchor
-        val bottom = if (selection.start.pagePos == selection.end.pagePos) {
-            selection.endHandleOffset()?.y ?: startLineBottom
-        } else {
-            startLineBottom
-        }
-        val offsetY = menuAnchor.center.y - startLineTop
-        return menuAnchor.copy(bottom = (offsetY + bottom).coerceAtLeast(menuAnchor.bottom))
     }
 
     /** 章号对应的目录标题 (目录未装载或越界时为空串, 与批注书签的章名落库口径一致) */
@@ -1176,7 +1268,7 @@ class ReaderScreenModel(
      */
     fun searchContentTextCallback(): (String) -> Unit = { text ->
         searchContentQuery = text
-        menuState.clickSearch()
+        menuStateOrNull?.clickSearch()
     }
 
     /**

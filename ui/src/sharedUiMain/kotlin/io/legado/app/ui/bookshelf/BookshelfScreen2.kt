@@ -8,6 +8,7 @@ import androidx.compose.material.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,7 +56,7 @@ internal fun BookshelfScreen2(
     actions: @Composable RowScope.() -> Unit,
     modifier: Modifier = Modifier,
     tier: BookshelfTier? = null,
-    coverSlot: (@Composable (Book, Modifier, Boolean, Int) -> Unit)? = null,
+    coverSlot: (@Composable (Book, Modifier, CoverSlotRatio, Int) -> Unit)? = null,
     scrollState: ShelfScrollState = remember { ShelfScrollState() },
     gotoTopTick: Int = 0,
     configTick: Int = 0,
@@ -68,9 +69,9 @@ internal fun BookshelfScreen2(
     val bookCoverSlot = coverSlot ?: LocalBookCoverSlot.current
     // LocalGroupCoverSlot 组合期读取值随宿主重组变化, 稳定化引用避免条目层全量重组合
     val currentGroupCoverSlot = rememberUpdatedState(LocalGroupCoverSlot.current)
-    val groupCoverSlot: @Composable (BookGroup, Modifier, Boolean, Int) -> Unit = remember {
-        { group, m, isVideoCover, tick ->
-            currentGroupCoverSlot.value(group, m, isVideoCover, tick)
+    val groupCoverSlot: @Composable (BookGroup, Modifier, CoverSlotRatio, Int) -> Unit = remember {
+        { group, m, coverRatio, tick ->
+            currentGroupCoverSlot.value(group, m, coverRatio, tick)
         }
     }
     val layoutSpec = rememberBookshelfLayoutSpec(tier)
@@ -83,6 +84,13 @@ internal fun BookshelfScreen2(
     val capabilities = LocalPlatformCapabilities.current
     // 单一数据源: 根级=IdRoot 未分组书, 分组内=该组书 (读 VM 缓存切片, 无独立 Room 流)
     val booksCache by viewModel.booksCache.collectAsState()
+    // 封面比例收敛: 活跃集合与样式1同口径 (全量分组书籍+分组封面), 下钻/返回层级不清理
+    // 仍保留的资源比例; 持有者由路由层下发
+    val coverRatioState = LocalCoverRatioLayout.current
+    val activeCoverResources = remember(groups, booksCache) {
+        shelfActiveCoverResources(groups, booksCache)
+    }
+    SideEffect { coverRatioState?.updateActiveResources(activeCoverResources) }
 
     // 当前层级: IdRoot=根级, 其他=已进入的分组 (对照 BookshelfFragment2.groupId)
     // rememberSaveable: 页面脱离组合 (进入详情页) 与重建出栈时保留已进入的分组
@@ -190,7 +198,7 @@ internal fun BookshelfScreen2(
 fun SharedGroupCover(
     group: BookGroup,
     modifier: Modifier = Modifier,
-    isVideoCover: Boolean = false,
+    coverRatio: CoverSlotRatio = CoverSlotRatio.NOVEL,
     reloadTick: Int = 0,
 ) {
     SharedCoverContent(
@@ -208,7 +216,7 @@ fun SharedGroupCover(
             author = null,
         ),
         modifier = modifier,
-        isVideoCover = isVideoCover,
+        coverRatio = coverRatio,
         reloadTick = reloadTick,
         nameAuthorOverlay = false,
     )
@@ -221,8 +229,8 @@ fun SharedGroupCover(
  * (默认 [SharedGroupCover], 各端统一)。
  */
 val LocalGroupCoverSlot =
-    staticCompositionLocalOf<@Composable (BookGroup, Modifier, Boolean, Int) -> Unit> {
-        @Composable { group, modifier, isVideoCover, tick ->
-            SharedGroupCover(group, modifier, isVideoCover, tick)
+    staticCompositionLocalOf<@Composable (BookGroup, Modifier, CoverSlotRatio, Int) -> Unit> {
+        @Composable { group, modifier, coverRatio, tick ->
+            SharedGroupCover(group, modifier, coverRatio, tick)
         }
     }

@@ -1,5 +1,6 @@
 package io.legado.app.ui.association
 
+import kotlinx.atomicfu.atomic
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
@@ -8,6 +9,7 @@ import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.ReplaceAnalyzer
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.coroutine.IoDispatcher
 import io.legado.app.help.http.OkHttpClientProviders
 import io.legado.app.help.http.decompressed
 import io.legado.app.help.http.newCallResponseBody
@@ -22,6 +24,8 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withContext
 
 /**
  * 导入替换规则 VM 共享核心 (commonMain)。
@@ -45,8 +49,41 @@ import kotlinx.coroutines.flow.asSharedFlow
  * @param scope 协程作用域 (Android = viewModelScope / 桌面 = 应用主作用域)
  */
 class ImportReplaceRuleViewModelShared(
-    private val scope: CoroutineScope,
+    val scope: CoroutineScope,
 ) {
+    /** 提交态归 VM: 对话框重建/重组后也不能重复提交同一批。 */
+    private val submitSession = ImportSubmitSession()
+
+    /** 提交态 (Writing/Committed/Failed) 归 VM: 重建对话框仍可读。 */
+    val submitState: StateFlow<ImportSubmitState> = submitSession.state
+
+    private data class FrozenSubmit(
+        val checked: List<Boolean>,
+        val rules: List<ReplaceRule>,
+        val groupName: String?,
+        val isAddGroup: Boolean,
+    )
+
+    private var frozenSubmit: FrozenSubmit? = null
+
+    fun beginSubmit(checked: List<Boolean>): Boolean {
+        if (!submitSession.begin()) return false
+        frozenSubmit = FrozenSubmit(
+            checked = checked.toList(),
+            rules = allRules.map { it.copy() },
+            groupName = groupName,
+            isAddGroup = isAddGroup,
+        )
+        return true
+    }
+
+    fun endSubmit() {
+        submitSession.end()
+        frozenSubmit = null
+    }
+
+    fun recordSubmitResult(result: ImportSubmitResult) = submitSession.record(result)
+
 
     /** DAO 容器 (宿主启动时由 app 端注册 AppDbAccessorImpl)。 */
     private val appDb get() = AppDbProviders.get()
@@ -97,50 +134,54 @@ class ImportReplaceRuleViewModelShared(
     val defaultChecked = arrayListOf<Boolean>()
 
     /**
-     * 导入选中的替换规则, 对应 app 端 `importSelect(finally)`。
+     * 导入选中的替换规则, 写入成功返回, 失败抛异常 (确认协议的唯一写入入口, 区分成功/错误)。
      *
      * # 实现细节保持
      *
      * - 取 [groupName] trim, 遍历 [checked], 选中的项走分组覆盖/追加逻辑;
      * - 若 [groupName] 非空:
      *   - isAddGroup=true 时追加到原分组 (linkedSetOf 去重 + splitNotBlank 拆原分组),
-     *     与 [ImportBookSourceViewModelShared.importSelect] 中 bookSourceGroup 处理逻辑同构;
+     *     与 [ImportBookSourceViewModelShared.importSelectAwait] 中 bookSourceGroup 处理逻辑同构;
      *   - isAddGroup=false 时直接覆盖 `rule.group = group`;
-     * - `appDb.replaceRuleDao.insert(*selectRules.toTypedArray())` 批量写入;
-     * - `onFinally` 回调 [finally] (与 app 端 `onFinally { finally.invoke() }` 等价)。
+     * - `appDb.replaceRuleDao.insert(*selectRules.toTypedArray())` 批量写入。
      *
-     * 业务在 IO 跑, 回调在 mainDispatcher 跑 (与 BaseViewModel.execute 默认值一致)。
-     *
-     * @param finally 导入完成回调 (无论成功/失败均触发, 与 app 端 onFinally 一致)
+     * 业务在 IO 上执行。
      */
-    fun importSelect(checked: List<Boolean>, finally: () -> Unit) {
-        Coroutine.async(scope = scope) {
-            val group = groupName?.trim()
-            val selectRules = arrayListOf<ReplaceRule>()
-            checked.forEachIndexed { index, b ->
-                if (b) {
-                    val rule = allRules[index]
-                    if (!group.isNullOrEmpty()) {
-                        if (isAddGroup) {
-                            val groups = linkedSetOf<String>()
-                            rule.group?.splitNotBlank(AppPattern.splitGroupRegex)?.let {
-                                groups.addAll(it)
-                            }
-                            groups.add(group)
-                            rule.group = groups.joinToString(",")
-                        } else {
-                            rule.group = group
+    suspend fun importSelectAwait(checked: List<Boolean>) = withContext(IoDispatcher) {
+        val frozen = frozenSubmit
+        val checkedList = frozen?.checked ?: checked
+        val rules = frozen?.rules ?: allRules
+        val group = (if (frozen != null) frozen.groupName else groupName)?.trim()
+        val selectRules = arrayListOf<ReplaceRule>()
+        checkedList.forEachIndexed { index, b ->
+            if (b) {
+                val rule = rules[index]
+                if (!group.isNullOrEmpty()) {
+                    if (frozen?.let { it.isAddGroup } ?: isAddGroup) {
+                        val groups = linkedSetOf<String>()
+                        rule.group?.splitNotBlank(AppPattern.splitGroupRegex)?.let {
+                            groups.addAll(it)
                         }
+                        groups.add(group)
+                        rule.group = groups.joinToString(",")
+                    } else {
+                        rule.group = group
                     }
-                    selectRules.add(rule)
                 }
+                selectRules.add(rule)
             }
+        }
+        appDb.runInTransactionSuspending(
+            onCommitted = { submitSession.committed(selectRules.size) },
+        ) {
             appDb.replaceRuleDao.insert(*selectRules.toTypedArray())
-        }.onFinally {
-            finally.invoke()
         }
     }
 
+    /**
+     * 回调式导入入口 (与原版 `importSelect(finally)` 同形状): 成功/失败都回调 [finally],
+     * 失败仅落日志, 结果由 [importSelectAwait] 的返回/异常区分。
+     */
     /**
      * 导入替换规则, 对应 app 端 `import(text)`。
      *

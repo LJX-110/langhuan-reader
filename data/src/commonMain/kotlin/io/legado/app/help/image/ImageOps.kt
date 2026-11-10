@@ -49,20 +49,19 @@ interface ImageOps {
     fun size(img: ImageRef): Map<String, Int>
 
     /**
-     * 一次图片脚本作用域：[block] 执行期间本实现产出的 [ImageRef] 在返回后立即释放。
+     * 一次图片脚本作用域。默认实现直接执行 [block]，不提前释放其中产出的 [ImageRef]。
      *
-     * 默认直接执行（平台原生图由各自 GC/ARC 记账回收）。只有原生像素不进 GC 记账的实现
-     * （desktop/Skia：像素是原生 malloc，JVM 只在 GC 掉包装对象后才由 Cleaner 释放）才需要覆写。
-     *
-     * 前提：作用域内产出的 [ImageRef] 不得逃逸出 [block] —— 唯一调用点
-     * [io.legado.app.utils.ImageUtils.decode] 进出都是 ByteArray，句柄不外传。
+     * 覆写实现可以选择在 [block] 返回前提前释放本次产出的原生图；是否提前释放由覆写者
+     * 按自身原生资源所有权决定。提前释放的前提由调用者保证：这些 [ImageRef] 在返回后
+     * 不再被任何持有者使用。
      */
     fun <T> withScope(block: () -> T): T = block()
 }
 
 /**
  * 不透明图片句柄，内持平台原生图（android=Bitmap）。
- * split/stitch/crop 直接操作原生图不走中间编解码，encode 才输出字节；由 GC 回收
- * （desktop 额外经 [ImageOps.withScope] 在脚本作用域结束时提前释放，见其注释）。
+ * split/stitch/crop 直接操作原生图不走中间编解码，encode 才输出字节。
+ * 原生图回收由各平台实现按自身所有权模型负责；[ImageOps.withScope] 是否提前释放取决于
+ * 该实现的回收能力，见其注释。
  */
 interface ImageRef

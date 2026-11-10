@@ -34,14 +34,14 @@
 
 ```bash
 # 只验编译
-.\gradlew.bat -g E:\WorkSpace\Novel\.gradle-home :app:compileAppDebugKotlin --console=plain
+.\gradlew.bat -g E:\WorkSpace\Novel\.gradle-home "-Dorg.gradle.java.installations.paths=D:\Minecraft\Java\jdk-17,D:\Minecraft\Java\jdk-21" :app:compileAppDebugKotlin --console=plain
 
 # 调试包 / 正式包
-.\gradlew.bat -g E:\WorkSpace\Novel\.gradle-home :app:assembleDebug --console=plain
-.\gradlew.bat -g E:\WorkSpace\Novel\.gradle-home :app:assembleAppRelease --console=plain
+.\gradlew.bat -g E:\WorkSpace\Novel\.gradle-home "-Dorg.gradle.java.installations.paths=D:\Minecraft\Java\jdk-17,D:\Minecraft\Java\jdk-21" :app:assembleDebug --console=plain
+.\gradlew.bat -g E:\WorkSpace\Novel\.gradle-home "-Dorg.gradle.java.installations.paths=D:\Minecraft\Java\jdk-17,D:\Minecraft\Java\jdk-21" :app:assembleAppRelease --console=plain
 ```
 
-- JDK 21 路径已写入 `gradle.properties` 的 `org.gradle.java.installations.paths`。
+- 主构建用 JDK 21；`build-logic` 与 `modules/quickjs-processor` 的 toolchain 固定 17，所以必须用上面的 `-D` 同时登记两个 JDK。写进 `gradle.properties` 的 `org.gradle.java.installations.paths` 在 Gradle 9 下不生效，别再往里加。
 - 工程路径必须是纯 ASCII；`versionCode` 由 `git rev-list HEAD --count` 推导，仓库至少要有一个提交。
 - 验收标准：编译通过即可，不做真机验收、不做视觉验收；没跑过的检查要在汇报里写明「未验证」。
 - Kotlin daemon 在部分机器上会因临时目录权限回退到进程内编译，日志里出现 `AccessDeniedException` 不是失败。

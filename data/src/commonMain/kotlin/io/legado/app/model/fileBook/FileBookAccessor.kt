@@ -1,5 +1,7 @@
 package io.legado.app.model.fileBook
 
+import kotlinx.coroutines.Job
+
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.Book
 import io.legado.app.lib.webdav.WebDav
@@ -38,8 +40,13 @@ interface FileBookAccessor {
      *
      * 内部走 Uri.inputStream(appCtx) + 失败回退 importFromArchive / downloadRemoteBook,
      * 重 Android 依赖 (appCtx / Uri.inputStream) 留 app 端。
+     *
+     * 本方法是**同步叶子** (返回 InputStream, 没有挂起上下文), 但失败回退里的"重新下载远端文件"
+     * 和"重新解包"都是真请求: [parent] 让调用方把本页真实请求 Job 交进来, 取消即可停下这次回退。
+     * 传 null = 调用方是纯解析入口 (如 TextFileCore 的 getChapterList/getContent), 本叶自己就是根,
+     * 实现**不得**改成挂到任何页面外的 Job/全局作用域上。
      */
-    fun getBookInputStream(book: Book): InputStream
+    fun getBookInputStream(book: Book, parent: Job? = null): InputStream
 
     /**
      * 获取书籍文件最后修改时间 (对应 BaseFileBook.getLastModified 默认实现)。
@@ -65,8 +72,18 @@ interface FileBookAccessor {
         filter: ((String) -> Boolean)? = null
     ): List<Book>
 
+    fun importFromArchive(
+        archiveFileUri: String,
+        saveFileName: String?,
+        parent: Job?,
+        filter: ((String) -> Boolean)?,
+    ): List<Book> = importFromArchive(archiveFileUri, saveFileName, filter)
+
     /** 导入本地文件 (对应 `FileBook.importLocalFile`)。Uri 传 String 形式。 */
     fun importLocalFile(uriStr: String): Book
+
+    /** 带真实调用方 Job 的导入入口; 各端覆盖后把 parent 接到内部 runBlocking/批次。 */
+    fun importLocalFile(uriStr: String, parent: Job?): Book = importLocalFile(uriStr)
 
     /** 删除书籍 (对应 `FileBook.deleteBook`)。 */
     fun deleteBook(book: Book, deleteOriginal: Boolean)
@@ -84,8 +101,17 @@ interface FileBookAccessor {
     /**
      * 保存输入流到文件 (对应 `FileBook.saveBookFile(inputStream, fileName)`)。
      * 原 Uri 返回值改为 String (uri.toString())。
+     *
+     * [parent] 是发起这次保存的请求 Job: 实现必须在**进入正式提交前**核它的资格
+     * (取消即抛 [kotlinx.coroutines.CancellationException]), 已开始的原语级短提交按平台实际能力
+     * 保终态 (不改 SAF documentId、不夺调用方流所有权)。传 null = 调用方没有可归属的请求
+     * (如 web API 的单次上传通道)。
      */
-    fun saveBookFile(inputStream: InputStream, fileName: String): String
+    fun saveBookFile(
+        inputStream: InputStream,
+        fileName: String,
+        parent: kotlinx.coroutines.Job? = null,
+    ): String
 
     /**
      * 保存引用 → 书籍存储引用 (book.bookUrl) 的归一化。

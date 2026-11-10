@@ -8,7 +8,7 @@ import com.script.quickjs.JavaObjectBridge.appendToBuilder
 import com.script.quickjs.JavaObjectBridge.callArrayMethod
 import com.script.quickjs.JavaObjectBridge.callInstanceMethod
 import com.script.quickjs.JavaObjectBridge.callStringBuilderMethod
-import com.script.quickjs.JavaObjectBridge.classIdentityCache
+import com.script.quickjs.JavaObjectBridge.classCaches
 import com.script.quickjs.JavaObjectBridge.classMap
 import com.script.quickjs.JavaObjectBridge.coerceToArray
 import com.script.quickjs.JavaObjectBridge.coerceValue
@@ -42,8 +42,9 @@ import java.util.concurrent.atomic.AtomicLong
  * 5. 反射实例化对象
  * 6. 创建 JavaAdapter(java.lang.reflect.Proxy)
  *
- * 资源管理: 句柄按 [QuickJsContext.scopeId] 分组, [releaseScope] 释放某 scope 全部句柄,
- * 由 [QuickJsContext.close] 触发。避免长期运行累积内存泄漏。
+ * 资源管理: 句柄与对象/Class 身份去重索引都按 [QuickJsContext.scopeId] 分组, [releaseScope]
+ * 释放某 scope 全部句柄并同步移除其身份登记, [releaseNewHandles] 只移除该次新增者;
+ * 均由 [QuickJsContext.close] / [QuickJsEngine.evalInSubScope] 触发。避免长期运行累积内存泄漏。
  *
  * 安全名单:所有类访问/方法调用都经过 [JsSecurityPolicy] 检查,
  * dangerousApi = true 时旁路。
@@ -58,18 +59,36 @@ object JavaObjectBridge {
     private val adapterMap = LongSparseArrayCompat<Any>()  // handle -> JavaAdapter 代理对象
 
     /**
-     * Class 身份去重缓存: Class -> 已注册的句柄。
+     * Class 身份去重缓存 (按 scopeId 隔离): Class -> 本 scope 已注册的句柄。
      *
-     * 同一个 Class 被 JS 多次访问 (如 `java.lang.String` 在每张漫画图片的 JS 中反复出现),
-     * 没有 classIdentityCache 时每次都 registerClass 创建新句柄, classMap 持续膨胀。
-     * 对于 sharedScope (永不被 close), 这些句柄永远不释放, 导致内存泄漏。
-     *
-     * Class 是 JVM 全局单例 (ClassLoader 维护唯一性), 用 ConcurrentHashMap 全局缓存跨 scope 复用。
+     * 同一个 Class 在同一 scope 内反复访问时复用句柄, 避免 classMap 持续膨胀。
+     * 句柄所有权属于注册它的 scope; 其他 scope 不返回该句柄 (否则持有方关闭时会
+     * 让仍在使用的 proxy 指向已释放句柄)。
      */
-    private val classIdentityCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Long>()
+    private val classCaches = LongSparseArrayCompat<MutableMap<Class<*>, Long>>()
 
     /** scopeId -> 该 scope 注册的句柄集合,close 时批量释放 */
     private val scopeHandles = LongSparseArrayCompat<MutableSet<Long>>()
+
+    /** handle -> 注册它的 scopeId (纯数字), 释放句柄时据此定位身份缓存逆索引 */
+    private val handleScopes = LongSparseArrayCompat<Long>()
+
+    /**
+     * Java 对象身份去重缓存 (按 scopeId 隔离)。
+     *
+     * 同一 Java 对象在同一 scope 内多次返回 JS 时复用同一句柄, 避免 objectMap 膨胀
+     * 与 JS 侧拿到多个 Proxy (身份不一致)。按引用相等 (IdentityHashMap) 去重,
+     * 不把"内容相等但身份不同"的对象 (两个 "abc" 字符串) 合并。
+     *
+     * [objects] 是正查 (对象 -> 句柄); 与 objectMap 同一把 [lock] 内增删,
+     * 句柄释放后不再保留失效登记。只按 [QuickJsContext.scopeId] (数字) 分组, 不持有 ctx 引用。
+     */
+    private class IdentityScopeCache {
+        val objects = java.util.IdentityHashMap<Any, Long>()
+    }
+
+    /** scopeId -> 该 scope 的对象身份缓存, [releaseScope] / 句柄释放时同步清理 */
+    private val identityCaches = LongSparseArrayCompat<IdentityScopeCache>()
     private val lock = Any()
 
     /**
@@ -167,6 +186,11 @@ object JavaObjectBridge {
      */
     private fun trackHandle(handle: Long) {
         val scopeId = QuickJsContext.threadLocalContext.get()?.scopeId ?: return
+        trackHandle(handle, scopeId)
+    }
+
+    /** 登记到已知 scope (注册路径已取得 scopeId 时避免重复读取 threadLocal)。 */
+    private fun trackHandle(handle: Long, scopeId: Long) {
         synchronized(lock) {
             // LongSparseArray 无 getOrPut 扩展,手动实现
             var set = scopeHandles.get(scopeId)
@@ -175,6 +199,7 @@ object JavaObjectBridge {
                 scopeHandles.put(scopeId, set)
             }
             set.add(handle)
+            handleScopes.put(handle, scopeId)
         }
     }
 
@@ -193,31 +218,28 @@ object JavaObjectBridge {
     /**
      * 注册 Class 对象,返回句柄。
      *
-     * Class 身份去重: 同一个 [Class] 对象 (JVM 全局单例) 只注册一次,
-     * 后续调用直接返回已有句柄。避免 sharedScope 中反复 `java.xxx` 访问
-     * 导致 classMap 无限膨胀。
-     *
-     * 去重缓存 [classIdentityCache] 与 [classMap] 同步:
-     * [releaseScope] 清理 classMap 时同步移除对应条目, 确保缓存不会返回已释放的句柄。
+     * Class 身份去重按 scope 隔离: 同一 [Class] 在同一 scope 内只注册一次。
+     * [releaseScope] / 句柄释放同步移除本 scope 缓存, 不会返回已释放句柄。
      */
     fun registerClass(clazz: Class<*>): Long {
-        // 先查 classIdentityCache, 命中则验证句柄仍有效 (可能已被 releaseScope 清理)
-        classIdentityCache[clazz]?.let { handle ->
-            synchronized(lock) {
-                if (classMap.get(handle) != null) return handle
-            }
-            // 句柄已失效 (被 releaseScope 清理), 移除缓存, 重新注册
-            classIdentityCache.remove(clazz, handle)
+        val scopeId = QuickJsContext.threadLocalContext.get()?.scopeId
+        if (scopeId == null) {
+            val handle = handleCounter.getAndIncrement()
+            synchronized(lock) { classMap.put(handle, clazz) }
+            return handle
         }
-        // 未命中: 正常注册 (putIfAbsent 防并发重复注册)
-        val handle = handleCounter.getAndIncrement()
         synchronized(lock) {
+            val cache = classCaches.get(scopeId)
+            cache?.get(clazz)?.let { return it }
+            val handle = handleCounter.getAndIncrement()
             classMap.put(handle, clazz)
+            trackHandle(handle, scopeId)
+            val scopeCache = cache ?: mutableMapOf<Class<*>, Long>().also {
+                classCaches.put(scopeId, it)
+            }
+            scopeCache[clazz] = handle
+            return handle
         }
-        trackHandle(handle)
-        val existing = classIdentityCache.putIfAbsent(clazz, handle)
-        if (existing != null) return existing
-        return handle
     }
 
     /**
@@ -1737,18 +1759,50 @@ object JavaObjectBridge {
     }
 
     /**
+     * 从所有句柄表 (对象/Class/adapter + 身份缓存 + 所属 scope 登记) 移除一个句柄。
+     *
+     * 调用方必须持有 [lock]。释放前从 objectMap 读取对象用于身份缓存反查, 并同步从
+     * scopeHandles/handleScopes 删除所属登记, 不留下失效 Long。
+     */
+    private fun releaseHandleLocked(handle: Long) {
+        val scopeId = handleScopes.get(handle)
+        val obj = objectMap.get(handle)
+        val clazz = classMap.get(handle)
+
+        objectMap.remove(handle)
+        if (clazz != null) {
+            classMap.remove(handle)
+            if (scopeId != null) {
+                classCaches.get(scopeId)?.let { cache ->
+                    if (cache[clazz] == handle) {
+                        cache.remove(clazz)
+                        if (cache.isEmpty()) classCaches.remove(scopeId)
+                    }
+                }
+            }
+        }
+        adapterMap.remove(handle)
+
+        if (scopeId == null) return
+        scopeHandles.get(scopeId)?.let { set ->
+            set.remove(handle)
+            if (set.isEmpty()) scopeHandles.remove(scopeId)
+        }
+        if (obj != null) {
+            identityCaches.get(scopeId)?.let { cache ->
+                if (cache.objects[obj] == handle) cache.objects.remove(obj)
+                if (cache.objects.isEmpty()) identityCaches.remove(scopeId)
+            }
+        }
+        handleScopes.remove(handle)
+    }
+
+    /**
      * 释放单个句柄。
      */
     fun releaseHandle(handle: Long) {
         synchronized(lock) {
-            objectMap.remove(handle)
-            // 同步清理 classIdentityCache: 避免 cache 返回已释放的句柄
-            val clazz = classMap.get(handle)
-            if (clazz != null) {
-                classMap.remove(handle)
-                classIdentityCache.remove(clazz, handle)
-            }
-            adapterMap.remove(handle)
+            releaseHandleLocked(handle)
         }
     }
 
@@ -1759,18 +1813,10 @@ object JavaObjectBridge {
      */
     fun releaseScope(scopeId: Long) {
         synchronized(lock) {
-            val handles = scopeHandles.get(scopeId) ?: return
-            handles.forEach { h ->
-                objectMap.remove(h)
-                // 同步清理 classIdentityCache: 避免 cache 返回已释放的句柄
-                val clazz = classMap.get(h)
-                if (clazz != null) {
-                    classMap.remove(h)
-                    classIdentityCache.remove(clazz, h)
-                }
-                adapterMap.remove(h)
-            }
+            scopeHandles.get(scopeId)?.toList()?.forEach { h -> releaseHandleLocked(h) }
             scopeHandles.remove(scopeId)
+            identityCaches.remove(scopeId)
+            classCaches.remove(scopeId)
         }
     }
 
@@ -1793,20 +1839,8 @@ object JavaObjectBridge {
     fun releaseNewHandles(scopeId: Long, snapshot: Set<Long>) {
         synchronized(lock) {
             val handles = scopeHandles.get(scopeId) ?: return
-            val iterator = handles.iterator()
-            while (iterator.hasNext()) {
-                val h = iterator.next()
-                if (h !in snapshot) {
-                    objectMap.remove(h)
-                    val clazz = classMap[h]
-                    if (clazz != null) {
-                        classMap.remove(h)
-                        classIdentityCache.remove(clazz, h)
-                    }
-                    adapterMap.remove(h)
-                    iterator.remove()
-                }
-            }
+            // 先取标准集合列表再统一注销: 注销会修改 scopeHandles, 不能边迭代边删
+            handles.filter { it !in snapshot }.forEach { h -> releaseHandleLocked(h) }
         }
     }
 
@@ -1819,9 +1853,10 @@ object JavaObjectBridge {
             classMap.clear()
             adapterMap.clear()
             scopeHandles.clear()
+            handleScopes.clear()
+            identityCaches.clear()
+            classCaches.clear()
         }
-        // 同步清空 Class 身份缓存
-        classIdentityCache.clear()
         // 方法缓存与 ClassLoader 强相关,测试场景需重置避免跨用例污染
         methodCache.clear()
         collectMethodsCache.clear()
@@ -2433,8 +2468,9 @@ object JavaObjectBridge {
      * Java 对象包装为句柄对象 { __java_handle__: handle },由 JS bootstrap 解包。
      * 数组转 JS 数组(List)。
      *
-     * 句柄复用 (优化 3.2): 同一 Java 对象多次返回时, 通过 [QuickJsContext.identityHandles]
-     * 复用已注册的句柄, 避免 objectMap 膨胀 + JS 侧拿到多个 Proxy(身份不一致)。
+     * 句柄复用 (优化 3.2): 同一 Java 对象在同一 scope 内多次返回时, 通过
+     * [getOrRegisterIdentityHandle] 复用已注册的句柄, 避免 objectMap 膨胀 + JS 侧拿到多个
+     * Proxy(身份不一致)。
      */
     private fun javaToJsResult(result: Any?, dangerousApi: Boolean): Any? {
         if (result == null) return null
@@ -2476,23 +2512,23 @@ object JavaObjectBridge {
     /**
      * 按对象身份复用句柄, 同一 Java 对象在同一 scope 内只注册一次。
      *
-     * 命中 [QuickJsContext.identityHandles] 直接返回旧 handle, 未命中则 registerObject + 写入映射。
+     * 命中当前 scope 的身份缓存直接返回旧 handle, 未命中则注册 objectMap 并写入身份索引;
+     * 索引增删与 objectMap 在同一把 [lock] 内完成, 释放路径同锁移除,
+     * 因此命中即代表句柄仍有效。
      * 没有 ctx (如 JavaAdapter 回调线程无 threadLocalContext) 时退化为直接 registerObject。
-     *
-     * 注意: [QuickJsEngine.evalInSubScope] 的 [releaseNewHandles] 会释放子 scope 期间新增的
-     * objectMap 条目, 但 identityHandles 是 per-ctx 的不随之清理。
-     * 因此命中缓存后必须验证 handle 在 objectMap 中仍有效, 否则返回已释放的 handle 会导致
-     * unwrapResult → getObject 返回 null, 静态字段访问偶现返回 null (如 Bitmap.Config.ARGB_8888
-     * 变成 method callable, 传给 createBitmap 时类型不匹配)。
      */
     internal fun getOrRegisterIdentityHandle(obj: Any): Long {
-        val ctx = QuickJsContext.threadLocalContext.get()
+        val scopeId = QuickJsContext.threadLocalContext.get()?.scopeId
             ?: return registerObject(obj)
-        val existing = ctx.identityHandles[obj]
-        // 验证缓存的 handle 仍有效: releaseNewHandles 可能已从 objectMap 移除该 handle
-        if (existing != null && getObject(existing) != null) return existing
-        val handle = registerObject(obj)
-        ctx.identityHandles[obj] = handle
-        return handle
+        synchronized(lock) {
+            val cache = identityCaches.get(scopeId)
+            val existing = cache?.objects?.get(obj)
+            if (existing != null) return existing
+            // registerObject 与 trackHandle 复用同一把锁 (可重入), 整个登记在同一临界区内完成
+            val handle = registerObject(obj)
+            val scopeCache = cache ?: IdentityScopeCache().also { identityCaches.put(scopeId, it) }
+            scopeCache.objects[obj] = handle
+            return handle
+        }
     }
 }

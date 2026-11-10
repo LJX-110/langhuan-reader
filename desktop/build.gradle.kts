@@ -1,6 +1,6 @@
-import io.legado.buildlogic.NativeJarStripper
 import io.legado.buildlogic.NativePlatformOs
 import io.legado.buildlogic.NativeToolchainValueSource
+import io.legado.buildlogic.ReleaseJarRewriter
 import org.gradle.internal.os.OperatingSystem
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import java.time.LocalDate
@@ -15,7 +15,7 @@ plugins {
     id("legado.compose")
 }
 
-// QuickJS native 目录架构契约（生产者/desktop/headless/runtime 必须一致）：
+// QuickJS native 目录架构契约（生产者/desktop/runtime 必须一致）：
 // amd64|x86_64|x64 -> x86_64；arm64|aarch64 -> aarch64；其余仅做路径安全化。
 fun normalizeJvmNativeArch(rawArch: String): String = when (val arch = rawArch.lowercase()) {
     "amd64", "x86_64", "x64" -> "x86_64"
@@ -179,9 +179,6 @@ val mediaRuntimeOnly = configurations.create("mediaRuntimeOnly")
 dependencies {
     // 引入 shared 模块 jvm target (传递 commonMain + jvmMain 全部 API)
     implementation(project(":ui"))
-    // 无 UI 核心 (从本模块机械抽取, 见 desktop-core/build.gradle.kts 头注释):
-    // Main.kt 的阶段1/阶段3 provider 注册核心子集与运行时环境初始化改调 DesktopCore
-    implementation(project(":desktop-core"))
     // shared 模块 commonMain 已声明 kotlinx-serialization-json api, 但 jvm target 传递依赖可能不完整, 显式补
     implementation(libs.kotlinx.coroutines.core)
     // JVM 的 Dispatchers.Main 由本 artifact 经 ServiceLoader 注册到 EDT, 缺失则 withContext(Main) 抛异常
@@ -241,22 +238,26 @@ dependencies {
     // 视频/本地音频时按需下载 (见 desktop/media/DesktopMediaRuntime)。它同时服务视频与音频
     // (同一套 mpv natives), 所以文案与门禁都是"媒体播放组件"而不是"视频组件"。
     // 开发期 :desktop:run 仍挂上它 (mediaRuntimeOnly + 下方 run 任务 classpath), 本地跑代码不必每次先下一遍。
-    mediaRuntimeOnly(mpvRuntime)
+    // 非传递: mpvRuntime 的元数据会把 mediamp-mpv-desktop 及其声明的整套旧版 CMP (1.10.1 时代)
+    // 拉进来, 而它经独立 configuration 解析不与主树冲突合并 —— run 的 classpath 就出现两代
+    // Compose 并存, 同名类靠 jar 顺序遮蔽、其余靠子树补齐, 事件/拖放等运行时点炸链接错误。
+    // 该配置只需 native jar 本体, API 层由主树 mediamp 依赖提供。
+    mediaRuntimeOnly(mpvRuntime) { isTransitive = false }
     // jna 保留: WindowsFileDialogs (jna-platform) / DesktopAppConfigAccessor / DesktopBattery /
     // DesktopWebViewEngines 直调 Win32; 视频侧 JNA 绑定已随自研渲染器删除。
     implementation(libs.jna)
     // jna-platform 提供 Win32 COM 基础设施 (Ole32/Guid/HRESULT), 供 WindowsFileDialogs 直调
     // IFileDialog 取现代文件对话框 (AWT FileDialog 在 Windows 上是 comdlg32 旧版样式)。
     implementation(libs.jna.platform)
-    // 2026-08-15 教训: 不要重新启用 bcprov! 一旦 BC 类进入运行时 classpath, hutool
-    // SecureUtil.createCipher 会经 GlobalBouncyCastleProvider 用 BC 的 RSA Cipher:
-    // BC 的 RSA getBlockSize()=127 (SunJCE=0), 触发 AsymmetricCrypto.encrypt 的分段加密
-    // (128 字节输入被切成 127+1 两段分别 RSA 再拼接), 产出错误的 encSecKey →
-    // 网易 weapi 全部 200 空体, 网易云发现/目录/歌单无法加载 (07c2a5e5 引入, 根因排查见
-    // shared AsymmetricCryptoAndroid.initCipher 注释)。如需 PKCS7Padding, 请恢复
-    // SymmetricCryptoAndroid 的 normalizePkcs7Padding (PKCS7→PKCS5 字节级等价, 无需 BC),
-    // 不要再加回 bcprov。
-    // implementation(libs.bcprov)
+    // 2026-10 重新启用: BC 仅作 SunJCE 缺口补齐 (SM2/SM3/SM4/PKCS7Padding)。必须配合
+    // DesktopCryptoProvider.install(): 关 hutool GlobalBouncyCastleProvider 的点名行为 +
+    // BC 追加到 provider 链末尾 (最低优先级)。否则 hutool SecureUtil 会强制把 BC 用作
+    // Cipher provider, BC 的 RSA getBlockSize()=127 (SunJCE=0) 触发分段加密, 网易云
+    // weapi 128 字节 encSecKey 被切 127+1 两段全部 200 空体 (07c2a5e5 教训, 根因见
+    // shared AsymmetricCryptoAndroid.initCipher 注释)。install() 必须早于任何 hutool 加解密调用。
+    implementation(libs.bcprov)
+    // DesktopCryptoProvider 直接使用 hutool 的 provider 开关 (关点名行为), 需显式声明加解密库
+    implementation(libs.hutool.crypto)
     // 本地书格式: PDF 渲染 (对照 app 端 PdfRenderer 语义)
     implementation(libs.pdfbox)
     // 压缩包: 7z/tar/gz/bz2/xz (xz 库是 7z LZMA2 默认压缩方法的必需依赖, 非只为 .xz)
@@ -276,9 +277,12 @@ dependencies {
     // ===== 桌面扩展加载 (extension loader 依赖, 坐标经 Suwayomi-Server 实证) =====
     // APK 安装包解析链: manifest 二进制 XML (apk-parser) + v1/v2/v3 签名校验 (apksig,
     // 8.x/9.x 只发布在 Google Maven, settings 已配 google(); Central 停在 2.3.0)。
-    // dex→jar 转换 (dex2jar/asm) 归 DexJarConverter 所在的 :desktop-core 声明。
     implementation(libs.apk.parser)
     implementation(libs.apksig)
+    // dex→jar 转换 (DexJarConverter / CtorSiteFixer): dex2jar + ASM
+    implementation(libs.dex.translator)
+    implementation(libs.dex.tools)
+    implementation(libs.asm)
 
     // 测试: WebView2 消息泵/环境/窗口创建闭环验证 (修复"startBrowser 首次调用打不开")
     testImplementation(libs.junit)
@@ -757,22 +761,25 @@ tasks.matching { it.name.startsWith("proguard") && it.name.endsWith("Jars") }.co
 }
 
 // ============================================================
-// 打包期剔除 jar 内非构建平台的 native
+// 打包期重写 release jar: 剔非构建平台的 native + 剥离签名文件
 // ============================================================
-// 实现 (判定口径/已知平台名单/失败策略) 见 build-logic 的 NativeJarStripper: 配置缓存下任务动作
-// 不得引用脚本级对象, 故逻辑不在本文件内。做法是在官方 ProGuard 输出目录上就地重写 jar, 只留
-// 构建平台自己的 native 目录; 下游 createReleaseDistributable / packageRelease* 全部从该目录取件,
-// 一个钩子同时覆盖 MSI / deb / rpm / dmg / 便携 zip 五条链 (CI 矩阵下构建平台即目标平台)。
+// 实现 (判定口径/已知平台名单/体积策略/失败策略) 见 build-logic 的 ReleaseJarRewriter:
+// 配置缓存下任务动作不得引用脚本级对象, 故逻辑不在本文件内。做法是在官方 ProGuard 输出目录上
+// 就地重写 jar, 只留构建平台自己的 native 目录, 并丢掉 META-INF 直接子层的 .SF/.DSA/.RSA/.EC
+// (ProGuard 只重写 class 字节、资源原样复制, 带签名的依赖出来就是「签名文件 + 上游摘要 +
+// 被改写的 class」, JVM 加载即抛 SHA-256 digest error, 桌面三端启动必崩);
+// 下游 createReleaseDistributable / packageRelease* 全部从该目录取件, 一个钩子同时覆盖
+// MSI / deb / rpm / dmg / 便携 zip 五条链 (CI 矩阵下构建平台即目标平台)。
 
 tasks.matching { it.name == "proguardReleaseJars" }.configureEach {
     val proguardOutDir = layout.buildDirectory.dir("compose/tmp/main-release/proguard").get().asFile
-    val keepTokens = NativeJarStripper.tokensToKeep(
+    val keepTokens = ReleaseJarRewriter.tokensToKeep(
         currentNativePlatformOs(),
         System.getProperty("os.arch").orEmpty()
             .let { it.contains("aarch64") || it.contains("arm64") },
     )
     doLast {
-        NativeJarStripper.strip(proguardOutDir, keepTokens) { logger.lifecycle(it) }
+        ReleaseJarRewriter.rewrite(proguardOutDir, keepTokens) { logger.lifecycle(it) }
     }
 }
 
@@ -826,9 +833,10 @@ compose.desktop {
         // legado.quickjs.lib 系统属性 + Platform.kt 候选1 System.load 加载。
         // 开发期 :desktop:run 通过 legado.quickjs.lib 指向按 os-arch 分层的 native 输出。
         jvmArgs += listOf(
-            "-Xmx768m",                          // 提升堆上限避免大书架 OOM (原 512m 偏小)
-            "-Xms384m",                          // 启动期堆底提到 384m: 实测 -Xms128m 下启动头 1.1s 内跳 4 次
-                                                // young GC 且堆反复顶在 128M 上限扩张 (G1 扩容+迁移是白送成本)
+            // 堆上限护栏: Xmx 只是上限不预占, 零常驻代价, 作用是防止长时运行堆无界膨胀
+            "-Xmx768m",
+            // 不设 -Xms: 初始堆走 JVM 默认 (物理内存 1/64)。写死固定初始堆会在启动时把整份堆
+            // 提交为常驻内存, 实测多占约 400MB 工作集, 而 young GC 次数与总停顿无可见收益
             "-XX:+UseG1GC",                      // JDK 17 默认即 G1, 显式声明更稳定
             "-XX:MaxGCPauseMillis=200",          // G1 目标停顿
             // -XX:TieredStopAtLevel=1 / -XX:CompileThreshold 已删除 (2026-09 复盘):

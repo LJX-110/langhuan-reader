@@ -18,6 +18,7 @@ import io.legado.app.R
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.Theme
 import io.legado.app.help.config.AppConfig
+import io.legado.app.ui.file.HandleFileSession
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.theme.backgroundColor
@@ -56,6 +57,9 @@ abstract class BaseComposeActivity(
     private val imageBg: Boolean = true
 ) : AppCompatActivity() {
 
+    /** 本宿主的文件选择会话: onCreate 内随宿主建立, 随宿主存亡; 动态入口只发起请求。 */
+    val handleFileSession by lazy { HandleFileSession(this) }
+
     private var needRecreate = false
 
     override fun attachBaseContext(newBase: Context) {
@@ -66,6 +70,13 @@ abstract class BaseComposeActivity(
         initTheme()
         window.decorView.disableAutoFill()
         super.onCreate(savedInstanceState)
+        // 文件选择会话须在 STARTED 前随宿主建立: 系统选择器通道在此时登记到
+        // activityResultRegistry (带 lifecycleOwner 的重载禁止 STARTED 后登记),
+        // 之后的动态入口 (含重建后) 只发起请求, 不再登记
+        handleFileSession
+        // 重建后接回在途请求 (宿主 ViewModel 记录) 并登记各系统通道的进程死亡占用:
+        // 无主旧结果只排空, 不交给新请求
+        handleFileSession.restoreFrom(savedInstanceState)
         setupSystemBar()
         upBackgroundImage()
         setContent {
@@ -98,6 +109,12 @@ abstract class BaseComposeActivity(
 
     /** 内容已挂载后的初始化钩子(如订阅数据流)，默认空实现。 */
     open fun onActivityCreated(savedInstanceState: Bundle?) {}
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // 记录各系统通道的在途占用, 供重建后的宿主排空旧结果
+        handleFileSession.saveTo(outState)
+    }
 
     override fun onStart() {
         super.onStart()

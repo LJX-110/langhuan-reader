@@ -56,7 +56,7 @@ import kotlinx.cinterop.cValue
  * - 语义对齐 JVM 端 JsApiDispatcher.getProperty(target, name): miss 返回 null
  *   (调用方转 undefined, 等价 NO_MATCH); 写 miss 静默 (与 JVM 端 setter 反射找不到时一致)。
  * - 嵌套对象 (AnalyzeRuleCore.chapter/ruleData): getter 返回 handle, JS 侧工厂函数包装
- *   (与 getSource/queryTTF 同模式; handle 不入 scope.handles, 泄漏量每次访问一个, 同已知取舍)。
+ *   (与 getSource/queryTTF 同模式; handle 登记到当前 scope.handles, 由 releaseNewHandles/scope close 回收)。
  *
  * # hot path
  * 一次属性读取: 1 次 handle 表 HashMap get + 1 次 when(propId) 整数跳转 +
@@ -1132,13 +1132,10 @@ function __createElementObj(handle) {
      *
      * 属性 getter 与 3200 段节点方法都在脚本执行期调用, 不登记到 scope.handles 则
      * handle 永不回收 (releaseNewHandles 按快照回收, scope.close 也只清理登记过的),
-     * 会在逐项循环/多次请求里持续膨胀; 登记后由 releaseNewHandles / scope close 统一回收。
+     * 会在逐项循环/多次请求里持续膨胀; 无当前 owner scope 时直接报错, 不留无人负责的 handle。
      */
-    fun registerScopedHandle(value: Any): Long {
-        val handle = NativeJsExtensionsBridge.registerObject(value)
-        NativeJsEngine.currentScope()?.handles?.add(handle)
-        return handle
-    }
+    fun registerScopedHandle(value: Any): Long =
+        NativeJsExtensionsBridge.registerScopedObject(value)
 
     /** 节点列表 → JS 数组 (handle 数字), JS 侧 __createElementObj 逐个包装。 */
     fun nodeListToJsHandleArray(ctx: CPointer<JSContext>, nodes: List<Node>): CValue<JSValue> {

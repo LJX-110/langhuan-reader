@@ -1,8 +1,12 @@
 package io.legado.app.ui.book.manga.extension
 
+import io.legado.app.constant.AppLog
 import io.legado.app.ui.root.ScreenModel
 import io.legado.app.ui.root.screenModelScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -74,74 +78,167 @@ class MangaExtensionScreenModel : ScreenModel {
     /** 当前打开的配置对话框 (null=未打开)。 */
     val prefDialog: StateFlow<MangaPrefDialogState?> = _prefDialog.asStateFlow()
 
-    /** 打开插件自带配置: 平台侧读 shim PreferenceScreen 并转数据类, 失败按空表呈现。 */
+    /** 配置加载/刷新的请求身份: 每次打开一个新身份, 关闭或重开作废旧请求的发布资格。 */
+    private var prefRequestId: Long = 0
+
+    /** 当前这次打开的未完成加载与动作所属作用域 (挂在 ScreenModel scope 下)。 */
+    private var prefOpenScope: CoroutineScope? = null
+
+    private var prefOpenJob: Job? = null
+
+    /** 打开插件自带配置: 平台侧读 shim PreferenceScreen 并转数据类, 读取失败呈 failed 态。 */
     fun openPrefDialog(pkgName: String) {
         val svc = service ?: return
-        _prefDialog.value = MangaPrefDialogState(pkgName = pkgName)
-        scope.launch {
-            runCatching { svc.buildPreferenceItems(pkgName) }
-                .onSuccess { items ->
-                    _prefDialog.update { current ->
-                        if (current?.pkgName == pkgName) current.copy(loading = false, items = items) else current
-                    }
-                }
-                .onFailure {
-                    // 日志由平台层记录, 这里只把失败态带给 UI
-                    _prefDialog.update { current ->
-                        if (current?.pkgName == pkgName) current.copy(loading = false, failed = true) else current
-                    }
-                }
+        prefOpenJob?.cancel()
+        val requestId = ++prefRequestId
+        val openJob = Job(scope.coroutineContext[Job])
+        val openScope = CoroutineScope(scope.coroutineContext + openJob)
+        prefOpenJob = openJob
+        prefOpenScope = openScope
+        _prefDialog.value = MangaPrefDialogState(pkgName = pkgName, requestId = requestId)
+        openScope.launch {
+            val items = try {
+                svc.buildPreferenceItems(pkgName)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                // 平台侧已记日志; 只把失败态带给本次请求
+                publishPrefFailure(requestId, pkgName)
+                return@launch
+            }
+            publishPrefItems(requestId, pkgName, items)
         }
     }
 
     /** 写入单个配置项 (经平台侧 shim setter 落扩展偏好), 成功后重读配置刷新弹窗当前值。 */
-    fun setPreference(key: String, value: MangaPrefValue) {
+    fun setPreference(item: MangaPrefItem, value: MangaPrefValue) {
         val svc = service ?: return
-        val pkgName = _prefDialog.value?.pkgName ?: return
-        scope.launch {
-            svc.setPreferenceValue(pkgName, key, value)
-            reloadPreferenceItems(pkgName)
+        val request = currentPrefRequest() ?: return
+        launchPrefAction {
+            svc.setPreferenceValue(item, value)
+            reloadPreferenceItems(request.requestId, request.pkgName)
         }
     }
 
     /** 点击配置项 (平台侧 `Preference.performClick()`), 完成后重读配置刷新弹窗。 */
     fun performPreferenceClick(item: MangaPrefItem) {
         val svc = service ?: return
-        val pkgName = _prefDialog.value?.pkgName ?: return
-        scope.launch {
-            svc.performPreferenceClick(pkgName, item.index)
-            reloadPreferenceItems(pkgName)
+        val request = currentPrefRequest() ?: return
+        launchPrefAction {
+            svc.performPreferenceClick(item)
+            reloadPreferenceItems(request.requestId, request.pkgName)
         }
     }
 
     /** 开关类配置项切到 [newValue] (平台侧 `callChangeListener` + `setChecked`)。 */
     fun applyPreferenceChange(item: MangaPrefItem, newValue: Boolean) {
         val svc = service ?: return
-        val pkgName = _prefDialog.value?.pkgName ?: return
-        scope.launch {
-            svc.applyPreferenceChange(pkgName, item.index, newValue)
-            reloadPreferenceItems(pkgName)
+        val request = currentPrefRequest() ?: return
+        launchPrefAction {
+            svc.applyPreferenceChange(item, newValue)
+            reloadPreferenceItems(request.requestId, request.pkgName)
         }
     }
 
-    /** 输入框对话框绑定 (对应 androidx `OnBindEditTextListener` 的触发时机), 不改值不需重读。 */
-    fun bindEditTextPreference(item: MangaPrefItem) {
-        val svc = service ?: return
-        val pkgName = _prefDialog.value?.pkgName ?: return
-        scope.launch { svc.bindEditTextPreference(pkgName, item.index) }
+    /**
+     * 配置项动作统一收口: 动作归属本次打开的作用域, 关闭/重开随作用域取消; 插件异常 (含 ABI
+     * 缺类) 记日志并结束本次动作, 维持既有列表交互, 取消照常向上传播。
+     */
+    private fun launchPrefAction(action: suspend () -> Unit) {
+        val openScope = prefOpenScope ?: return
+        openScope.launch {
+            try {
+                action()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                AppLog.put("插件配置操作失败", e)
+            }
+        }
     }
 
-    /** 交互可能联动改值 (回调返回 true), 重读配置刷新弹窗当前值。 */
-    private suspend fun reloadPreferenceItems(pkgName: String) {
+    /** 活编辑会话落值后重读配置刷新弹窗当前值 (活会话写入不经本类, 弹窗关闭回调触发)。 */
+    fun reloadPreferences() {
+        val request = currentPrefRequest() ?: return
+        launchPrefAction { reloadPreferenceItems(request.requestId, request.pkgName) }
+    }
+
+    /**
+     * 真实文本项点击: 平台完成点击并返回活编辑会话; 插件监听抛错与取消区分 (取消重抛, 故障含
+     * ABI 缺类记录日志并保持无会话); 点击可能联动改值, 会话仅在本次打开仍有效时返回。
+     */
+    suspend fun textItemClick(item: MangaPrefItem): MangaPrefTextSession? {
+        val svc = service ?: return null
+        val request = currentPrefRequest() ?: return null
+        val session = try {
+            svc.clickTextEditor(item)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            AppLog.put("插件配置点击失败", e)
+            null
+        }
+        if (!isCurrentPrefRequest(request.requestId, request.pkgName)) return null
+        reloadPreferenceItems(request.requestId, request.pkgName)
+        return session.takeIf { isCurrentPrefRequest(request.requestId, request.pkgName) }
+    }
+
+    /** 交互可能联动改值 (回调返回 true), 按发起时的同一请求身份重读配置。 */
+    private suspend fun reloadPreferenceItems(requestId: Long, pkgName: String) {
+        if (!isCurrentPrefRequest(requestId, pkgName)) return
         val svc = service ?: return
-        val items = svc.buildPreferenceItems(pkgName)
+        val items = try {
+            svc.buildPreferenceItems(pkgName)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            // 平台读取边界已记日志; 本次刷新结束, 维持既有列表
+            return
+        }
+        publishPrefItems(requestId, pkgName, items)
+    }
+
+    /** 发起动作时归属的请求身份 (打开那一刻的 id 与包名)。 */
+    private fun currentPrefRequest(): PrefRequest? {
+        val current = _prefDialog.value ?: return null
+        return PrefRequest(current.requestId, current.pkgName)
+    }
+
+    private fun isCurrentPrefRequest(requestId: Long, pkgName: String): Boolean =
+        requestId == prefRequestId && _prefDialog.value?.pkgName == pkgName
+
+    private class PrefRequest(val requestId: Long, val pkgName: String)
+
+    /** 发布结果既要核请求身份, 也要核当前打开的对话框 (旧请求不得更新新弹窗)。 */
+    private fun publishPrefItems(requestId: Long, pkgName: String, items: List<MangaPrefItem>) {
+        if (!isCurrentPrefRequest(requestId, pkgName)) return
         _prefDialog.update { current ->
-            if (current?.pkgName == pkgName) current.copy(items = items) else current
+            if (current?.requestId == requestId && current.pkgName == pkgName) {
+                current.copy(loading = false, failed = false, items = items)
+            } else {
+                current
+            }
+        }
+    }
+
+    private fun publishPrefFailure(requestId: Long, pkgName: String) {
+        if (!isCurrentPrefRequest(requestId, pkgName)) return
+        _prefDialog.update { current ->
+            if (current?.requestId == requestId && current.pkgName == pkgName) {
+                current.copy(loading = false, failed = true)
+            } else {
+                current
+            }
         }
     }
 
     fun dismissPrefDialog() {
         _prefDialog.value = null
+        // 入口关闭: 作废本次打开的发布资格并收尾全部未完成请求
+        prefRequestId++
+        prefOpenJob?.cancel()
+        prefOpenJob = null
+        prefOpenScope = null
     }
 
     // endregion

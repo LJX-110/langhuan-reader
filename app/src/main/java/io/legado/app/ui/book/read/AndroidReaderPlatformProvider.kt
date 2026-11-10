@@ -40,6 +40,7 @@ import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.model.ReadAloud
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.book.read.page.AutoPagerCompose
+import io.legado.app.ui.book.read.page.SelectionGeometry
 import io.legado.app.ui.compose.component.AppAutoCompleteField
 import io.legado.app.ui.compose.dialogs.alert
 import io.legado.app.ui.compose.dialogs.selector
@@ -49,11 +50,9 @@ import io.legado.app.ui.main.MainActivity
 import io.legado.app.ui.reader.ReaderTextActionMenu
 import io.legado.app.ui.reader.ReaderTextActions
 import io.legado.app.ui.reader.ReaderTextSelectionRequest
-import io.legado.app.ui.reader.readerMenuAnchor
 import io.legado.app.ui.root.AppNavigator
 import io.legado.app.ui.root.AppRoute
 import io.legado.app.utils.openUrl
-import io.legado.app.utils.showHelp
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
@@ -113,16 +112,13 @@ class AndroidReaderPlatformProvider(
      * 原本桥接 MainActivity 的 TextActionMenu（ActionMode.TYPE_FLOATING，系统样式），
      * 已换成与详情页/输入框同一套自绘弹层，app 端那份连同 CallBack 桥接一并删除。
      *
-     * 锚点：ReadViewComposable 上报的是窗口坐标（页内坐标已折算滚动 + 页眉 + 状态栏，
-     * 与同树内的 SelectionHandleOverlay 同源）；阅读页铺满窗口、宿主也在同一 Compose 根，
-     * 故 Popup 的 anchorBounds 即窗口原点，直接用不会重复叠加系统栏。
-     * 取锚点周围 40px 方块当选区矩形（对照原版 showReaderTextActionMenu 的 ±20px）。
+     * 选区几何（文字区域 + 两个手柄，全窗坐标）由弹菜单事件链同帧直传；
+     * 宿主与阅读页同在根组合，Popup 的 anchorBounds 即窗口原点，不重复叠加系统栏。
      */
     override fun onTextSelected(
         screenModel: ReaderScreenModel,
         text: String,
-        anchorX: Float,
-        anchorY: Float,
+        geometry: SelectionGeometry,
     ) {
         if (text.isBlank()) return
         textActions = ReaderTextActions(
@@ -132,10 +128,7 @@ class AndroidReaderPlatformProvider(
             onReadAloud = screenModel.readAloudTextCallback(),
             onSearchContent = screenModel.searchContentTextCallback(),
         )
-        textSelection = ReaderTextSelectionRequest(
-            text = text,
-            anchor = readerMenuAnchor(anchorX, anchorY),
-        )
+        textSelection = ReaderTextSelectionRequest(text = text, geometry = geometry)
     }
 
     /**
@@ -240,6 +233,37 @@ class AndroidReaderPlatformProvider(
         }
         activity.lifecycle.addObserver(observer)
         lifecycleObserver = observer
+    }
+
+    /**
+     * 宿主重绑 (当前 Activity 被重建、模型仍保留) 时成对收回旧绑定: 停自动翻页与页面变化订阅,
+     * 并清掉 activeMenuState 里的旧状态 —— 否则旧状态在 `init` 里起的订阅不停,
+     * 同一 screenModel 会有两份回调 (不只多一个对象), 且旧状态仍指向已销毁的 Activity。
+     */
+    override fun activateMenuController(
+        screenModel: ReaderScreenModel,
+        controller: ReadMenuController,
+    ) {
+        val state = (controller as? AndroidReaderMenuController)?.state as? AndroidReaderMenuState
+            ?: return
+        // 本窗口的当前菜单: 平台动作 (自动翻页停止/朗读速率/电量) 按它定位
+        activeMenuState = screenModel to state
+        // 页面变化订阅: 与 releaseMenuController 成对启停
+        state.startPageChangedWatch()
+    }
+
+    override fun releaseMenuController(
+        screenModel: ReaderScreenModel,
+        controller: ReadMenuController,
+    ) {
+        val state = (controller as? AndroidReaderMenuController)?.state as? AndroidReaderMenuState
+            ?: return
+        state.stopAutoPage()
+        state.stopPageChangedWatch()
+        if (activeMenuState?.first === screenModel && activeMenuState?.second === state) {
+            activeMenuState = null
+            readerAutoPageActive = false
+        }
     }
 
     override fun onExit(screenModel: ReaderScreenModel) {
@@ -403,13 +427,12 @@ private class AndroidReaderMenuState(
     // 滚动模式朗读重定位: 暂停期间页面是否变化 (对照原版 ReadBookActivity.pageChanged)
     private var aloudPageChanged = false
 
-    // 页面变化订阅句柄: 屏幕级生命周期, 由 onExit 取消、onEnter/init 重建。
+    // 页面变化订阅句柄: 屏幕级生命周期, 由 onExit/宿主重绑释放、onEnter/init 重建。
     // 只挂 activity.lifecycleScope 时同一 Activity 内反复进出阅读页会累积常驻订阅者
     private var pageChangedJob: Job? = null
 
-    init {
-        startPageChangedWatch()
-    }
+    // 页面变化订阅不在这里起: 控制器构造可能发生在组合期 (甚至被放弃的组合),
+    // 订阅改由 provider.activateMenuController 在组合提交后成对启停 (见 ReaderRoute)
 
     /**
      * 起/重起页面变化订阅 → aloudPageChanged (对照原版 ReadBook.CallBack.pageChanged;

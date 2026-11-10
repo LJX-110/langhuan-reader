@@ -12,6 +12,18 @@ import kotlin.concurrent.Volatile
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.runBlocking
 import kotlinx.cinterop.BooleanVarOf
 import kotlinx.cinterop.ObjCObjectVar
 import kotlinx.cinterop.alloc
@@ -123,6 +135,47 @@ object IosSecurityScopedStorage {
             if (started) url.stopAccessingSecurityScopedResource()
         } ?: return null
         val target = canonicalPath(path)
+        registerAuthorized(usage, target, bookmark)
+        return path
+    }
+
+    /**
+     * 登记系统投递来的 security-scoped 外部文件 (文档打开/其他应用投递): 在系统授予的
+     * 有效授权窗口内对**同一 NSURL** 起 scope → 建 minimal bookmark 并入授权表 → 停 scope
+     * (配对释放, 不挂进程寿命)。后续对该文件的全部访问 (导入读取/书籍复制/视频播放) 走
+     * 既有租约机制 ([acquireLease] 解析 bookmark 配对起停), 长期引用不再需要另行持表。
+     *
+     * 登记 [DirUsage.BookTree]: 外部文件的消费方 (文件关联分发/本地书导入) 均按该用途取租约。
+     * 容器内文件 (沙盒 / bundle) 无需 security scope, 直接回传路径、不登记 —— 系统对这类路径
+     * 本就不授予 scope, 也不该把一次投递变成持久授权。
+     *
+     * 授权拿不到时如实留痕 (系统未授予 / bookmark 建不出来), 调用方据此按未授权处理。
+     *
+     * @return 文件的 POSIX 路径 (可直接用于后续访问); 授权无法建立时返回 null
+     */
+    fun ingestExternalFile(url: NSURL): String? {
+        val path = url.path ?: return null
+        val target = canonicalPath(path)
+        if (isSandboxPath(target)) return path
+        if (!url.startAccessingSecurityScopedResource()) {
+            AppLog.put("系统投递的文件没有访问授权: $path")
+            return null
+        }
+        val bookmark = try {
+            bookmarkString(url)
+        } finally {
+            url.stopAccessingSecurityScopedResource()
+        }
+        if (bookmark == null) {
+            AppLog.put("系统投递的文件无法建立可延续的访问授权: $path")
+            return null
+        }
+        registerAuthorized(DirUsage.BookTree, target, bookmark)
+        return path
+    }
+
+    /** 并入授权集合: 同 (用途, 规范化路径) 去重替换, 其余条目一律保留; 登记后失效解析缓存。 */
+    private fun registerAuthorized(usage: DirUsage, target: String, bookmark: String) {
         synchronized(lock) {
             val stored = storedDirs().toMutableMap()
             val kept = stored[usage].orEmpty().filterNot { existing ->
@@ -132,7 +185,6 @@ object IosSecurityScopedStorage {
             storeDirs(stored)
             roots = emptyList()
         }
-        return path
     }
 
     /** 已登记授权 (用途 → bookmark 列表); 存储损坏时按空集合处理并留痕。 */
@@ -301,16 +353,57 @@ object IosSecurityScopedStorage {
      * 协调器报错或协调块未执行时抛 [IOException]；授权失败由 [acquireLease] 抛出。
      *
      * @param usage 本次访问的用途, 见 [acquireLease]
-     * @param write true 走 `coordinateWritingItemAtURL` (删除等写操作)
+     * @param write true 走 `coordinateWritingItemAtURL`; [writeOptions] 按真实意图选
+     *   (新增/一般写入 0, 替换用 forReplacing, 只有真删除才用 forDeleting)
      */
-    fun <T> withAccess(path: String, usage: DirUsage, write: Boolean = false, block: (String) -> T): T {
+    fun <T> withAccess(
+        path: String,
+        usage: DirUsage,
+        write: Boolean = false,
+        writeOptions: ULong = 0uL,
+        block: (String) -> T,
+    ): T = withAccessCaller(path, usage, write, writeOptions, null, block)
+
+    /** [withAccess] 的可绑定 caller 版本: 取消时对尚未起跑的协调块调用 NSFileCoordinator.cancel()。 */
+    fun <T> withAccessCaller(
+        path: String,
+        usage: DirUsage,
+        write: Boolean = false,
+        writeOptions: ULong = 0uL,
+        caller: Job?,
+        block: (String) -> T,
+    ): T {
         val lease = acquireLease(path, usage)
         try {
             val target = canonicalPath(path)
             if (!lease.holdsScope) return block(target)
-            return coordinate(target, write, block)
+            return coordinate(target, write, writeOptions, caller, block)
         } finally {
             lease.close()
+        }
+    }
+
+    /**
+     * [withAccess] 的挂起形态, 用于整段访问里含挂起等待的读操作 (如待用户确认的文件分发)。
+     *
+     * 协调块是同步回调 (Apple: 该方法同步阻塞当前线程直到 reader 块返回), 挂起 [block] 经
+     * [runBlocking] 在调用线程上执行; 调用方须在非主线程调用 (IO 调度器)。
+     *
+     * 取消随调用方传播: [block] 的等待在调用方被取消时结束, 协调块返回后租约释放。
+     */
+    suspend fun <T> withAccessAsync(
+        path: String,
+        usage: DirUsage,
+        write: Boolean = false,
+        writeOptions: ULong = 0uL,
+        block: suspend (String) -> T,
+    ): T {
+        val context = currentCoroutineContext()
+        context.ensureActive()
+        val callerJob = context[Job]
+        val callerContext = callerJob ?: EmptyCoroutineContext
+        return withAccessCaller(path, usage, write, writeOptions, callerJob) { coordinatedPath ->
+            runBlocking(callerContext) { block(coordinatedPath) }
         }
     }
 
@@ -337,6 +430,8 @@ object IosSecurityScopedStorage {
     private fun <T> coordinate(
         target: String,
         write: Boolean,
+        writeOptions: ULong,
+        caller: Job?,
         block: (String) -> T,
     ): T {
         val url = NSURL.fileURLWithPath(target)
@@ -352,16 +447,37 @@ object IosSecurityScopedStorage {
             }
         }
         val coordinator = NSFileCoordinator()
+        // 协调块尚未开始时 cancel(): Apple 停止等待、不执行 accessor 并返 NSUserCancelledError;
+        // 已开始时 cancel() 只标记, 仍等真实块结束 (不冒充物理停止)。
+        // 子协程进入 Cancelling 的 finally 即触发, 不等 body/父 Job 完全 completed。
+        var cancelWatch: Job? = null
+        if (caller != null) {
+            cancelWatch = CoroutineScope(caller + Dispatchers.Unconfined).launch(
+                start = CoroutineStart.UNDISPATCHED,
+            ) {
+                try {
+                    awaitCancellation()
+                } finally {
+                    coordinator.cancel()
+                }
+            }
+        }
         val error = memScoped {
             val err = alloc<ObjCObjectVar<NSError?>>()
             if (write) {
                 coordinator.coordinateWritingItemAtURL(
-                    url, NSFileCoordinatorWritingForDeleting, err.ptr, accessor,
+                    url, writeOptions, err.ptr, accessor,
                 )
             } else {
                 coordinator.coordinateReadingItemAtURL(url, 0uL, err.ptr, accessor)
             }
             err.value
+        }
+        cancelWatch?.cancel()
+        // caller 已取消: 优先按取消传播, 不把 NSUserCancelledError 包装成普通 IO 失败
+        if (caller != null && !caller.isActive) {
+            failure?.let { throw it }
+            throw CancellationException("文件协调已取消: $target")
         }
         failure?.let { throw it }
         if (error != null) {
@@ -414,7 +530,7 @@ class IosSecurityScopeLease internal constructor(
 ) : AutoCloseable {
 
     /** 租约是否实际持有 security scope (空租约为 false)。 */
-    internal val holdsScope: Boolean get() = started
+    val holdsScope: Boolean get() = started
 
     private val closed = atomic(false)
 
@@ -428,3 +544,16 @@ class IosSecurityScopeLease internal constructor(
         fun none(): IosSecurityScopeLease = IosSecurityScopeLease(null, started = false)
     }
 }
+
+
+/**
+ * Swift 侧入口 (本仓 Swift 只调顶层函数): 外部投递的 security-scoped 文件 URL 在有效授权
+ * 窗口内建 bookmark 并入既有授权表, 随即对同一 NSURL 配对停 scope; 之后该文件的导入读取、
+ * 书籍复制与播放访问一律走既有租约机制 (IosSecurityScopedStorage.acquireLease) 配对起停,
+ * 不再持有进程寿命的 URL 表。
+ *
+ * @return 已归一的文件 POSIX 路径 (容器内文件同样回传, 无需授权); 授权无法建立时返回 null
+ */
+fun ingestIosSecurityScopedFile(url: NSURL): String? =
+    IosSecurityScopedStorage.ingestExternalFile(url)
+

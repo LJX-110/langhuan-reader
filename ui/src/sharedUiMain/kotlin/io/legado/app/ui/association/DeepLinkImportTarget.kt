@@ -12,8 +12,7 @@ import org.jetbrains.compose.resources.stringResource
 
 /**
  * legado:// deep link 导入目标: 按 [DeepLinkImportType] 归一化各 Import*ViewModelShared 的差异,
- * 供 iOS/鸿蒙/desktop 的 deep link 宿主与规则订阅 (RuleSubRoute) / 通用导入 Overlay
- * (ImportSourceOverlayContent) 用同一段代码分发。
+ * 供各端 deep link 宿主与规则订阅 (RuleSubRoute) 用同一段代码分发。
  *
  * 抹平三处差异:
  * - 入口方法名: 书源/目录规则/字典/语音/主题是 `importSource(text)`, 替换规则是 `import(text)`;
@@ -46,6 +45,7 @@ class DeepLinkImportTarget private constructor(
     val replaceRuleVm: ImportReplaceRuleViewModelShared? = null,
 ) {
 
+
     /**
      * 触发下载 → 解析 → 与本地库比对 (与手动网络导入同一条链)。
      *
@@ -56,8 +56,8 @@ class DeepLinkImportTarget private constructor(
 
     companion object {
 
-        /** 按类型创建目标, 不支持的类型返回 null。每条 deep link 请求新建, 避免 state 残留。 */
-        fun of(type: DeepLinkImportType, scope: CoroutineScope): DeepLinkImportTarget? = when (type) {
+        /** 按类型创建目标。四型直通类型由宿主提前分流, 不会走到这里。 */
+        fun of(type: DeepLinkImportType, scope: CoroutineScope): DeepLinkImportTarget = when (type) {
             DeepLinkImportType.BOOK_SOURCE -> ImportBookSourceViewModelShared(scope).let { vm ->
                 DeepLinkImportTarget(
                     ImportBookSourceItemsVm(vm), "import_book_source",
@@ -71,6 +71,14 @@ class DeepLinkImportTarget private constructor(
                     vm.errorState, vm.successState, vm::import, replaceRuleVm = vm,
                 )
             }
+
+            DeepLinkImportType.SOURCE_FILTER_RULE ->
+                ImportSourceFilterRuleViewModelShared(scope).let { vm ->
+                    DeepLinkImportTarget(
+                        ImportSourceFilterRuleItemsVm(vm), "source_filter_rule",
+                        vm.errorState, vm.successState, vm::import,
+                    )
+                }
 
             DeepLinkImportType.TXT_TOC_RULE -> ImportTxtTocRuleViewModelShared(scope).let { vm ->
                 DeepLinkImportTarget(
@@ -104,14 +112,14 @@ class DeepLinkImportTarget private constructor(
             DeepLinkImportType.READ_CONFIG,
             DeepLinkImportType.READ_BOOK,
             DeepLinkImportType.UNKNOWN,
-            -> null
+            -> error("直通类型不走勾选导入: $type")
         }
     }
 }
 
 /**
- * 勾选导入对话框统一渲染 (deep link 宿主 / 规则订阅 RuleSubRoute / 通用导入 Overlay
- * ImportSourceOverlayContent 共用; 原三处各自 collect success/error 的重复实现收敛于此)。
+ * 勾选导入对话框统一渲染 (deep link 宿主 / 规则订阅 RuleSubRoute 共用;
+ * 原两处各自 collect success/error 的重复实现收敛于此)。
  *
  * - 解析进行中 (success/error 均未到达) → 对话框内 loading;
  * - 解析失败 → 对话框内显示 VM 投递的原串 (含 `ImportError:` 前缀, 对照原版 tv_msg 直接赋值);
@@ -124,6 +132,8 @@ internal fun ImportTargetDialog(
     target: DeepLinkImportTarget,
     onDismiss: () -> Unit,
     onImported: (selectCount: Int) -> Unit = {},
+    checkedState: MutableList<Boolean>? = null,
+    onCheckedState: ((MutableList<Boolean>) -> Unit)? = null,
 ) {
     // SharedFlow 无初始值, null = "还没收到解析结果"(加载中)
     val errorRaw by target.errorState.collectAsState(initial = null)
@@ -142,6 +152,8 @@ internal fun ImportTargetDialog(
             onImported = onImported,
             loading = loading,
             errorText = errorText,
+            checkedState = checkedState,
+            onCheckedState = onCheckedState,
         )
         return
     }
@@ -153,6 +165,8 @@ internal fun ImportTargetDialog(
             onImported = onImported,
             loading = loading,
             errorText = errorText,
+            checkedState = checkedState,
+            onCheckedState = onCheckedState,
         )
         return
     }
@@ -163,5 +177,7 @@ internal fun ImportTargetDialog(
         onImported = onImported,
         loading = loading,
         errorText = errorText,
+        checkedState = checkedState,
+        onCheckedState = onCheckedState,
     )
 }

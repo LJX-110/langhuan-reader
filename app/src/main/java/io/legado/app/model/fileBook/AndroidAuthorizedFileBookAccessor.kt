@@ -3,6 +3,7 @@ package io.legado.app.model.fileBook
 import io.legado.app.data.entities.Book
 import io.legado.app.help.file.AndroidDirAuthorizations
 import io.legado.app.utils.InputStream
+import kotlinx.coroutines.Job
 
 /**
  * [FileBookAccessor] 用途校验装饰器: 本地书的文件访问入口先经 [AndroidDirAuthorizations.ensureBookFileUsage]
@@ -17,9 +18,9 @@ class AndroidAuthorizedFileBookAccessor(
     private val delegate: FileBookAccessor = FileBookAccessorImpl,
 ) : FileBookAccessor by delegate {
 
-    override fun getBookInputStream(book: Book): InputStream {
+    override fun getBookInputStream(book: Book, parent: Job?): InputStream {
         AndroidDirAuthorizations.ensureBookFileUsage(book)
-        return delegate.getBookInputStream(book)
+        return delegate.getBookInputStream(book, parent)
     }
 
     override fun getLastModified(book: Book): Result<Long> = runCatching {
@@ -50,6 +51,21 @@ class AndroidAuthorizedFileBookAccessor(
     ): List<Book> {
         AndroidDirAuthorizations.ensureBookFileUsage(archiveFileUri)
         return delegate.importFromArchive(archiveFileUri, saveFileName, filter)
+    }
+
+    override fun importLocalFile(uriStr: String, parent: kotlinx.coroutines.Job?): Book {
+        AndroidDirAuthorizations.ensureBookFileUsage(uriStr)
+        return delegate.importLocalFile(uriStr, parent)
+    }
+
+    override fun importFromArchive(
+        archiveFileUri: String,
+        saveFileName: String?,
+        parent: kotlinx.coroutines.Job?,
+        filter: ((String) -> Boolean)?,
+    ): List<Book> {
+        AndroidDirAuthorizations.ensureBookFileUsage(archiveFileUri)
+        return delegate.importFromArchive(archiveFileUri, saveFileName, parent, filter)
     }
 }
 

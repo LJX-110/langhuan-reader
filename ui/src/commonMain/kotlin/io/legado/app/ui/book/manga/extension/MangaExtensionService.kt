@@ -67,8 +67,8 @@ interface MangaExtensionService {
     /** 添加插件仓库 (名称与指纹由仓库索引元数据带回)。 */
     suspend fun addRepo(url: String): Result<MangaRepoItem>
 
-    /** 删除插件仓库 (按仓库索引地址 indexUrl)。 */
-    suspend fun removeRepo(indexUrl: String)
+    /** 删除插件仓库 (按仓库索引地址 indexUrl); 删除后重拉剩余仓库索引, 失败经结果报给调用方。 */
+    suspend fun removeRepo(indexUrl: String): Result<Unit>
 
     /**
      * 该插件是否提供自带配置界面 (源实例实现 `eu.kanade.tachiyomi.source.ConfigurableSource`
@@ -81,7 +81,7 @@ interface MangaExtensionService {
      * 读取插件自带配置项快照: 平台侧构造 shim `PreferenceScreen`、调
      * `setupPreferenceScreen(screen)`、再按插件自身 SharedPreferences 回填当前值,
      * 最终转成跨层数据类 [MangaPrefItem] (UI 层不引用 androidx.preference shim)。
-     * 未实现配置契约返回空表。
+     * 插件构造/绑定与快照读取在主线程, 偏好磁盘预读单独在后台域。未实现配置契约返回空表。
      */
     suspend fun buildPreferenceItems(pkgName: String): List<MangaPrefItem> = emptyList()
 
@@ -90,26 +90,27 @@ interface MangaExtensionService {
      * 落插件自身 SharedPreferences (`source_<sourceId>`, 与扩展侧 `keiyoushi.utils.getPreferencesLazy`
      * 同契约), 扩展下次读取即生效。
      */
-    suspend fun setPreferenceValue(pkgName: String, key: String, value: MangaPrefValue) {}
+    suspend fun setPreferenceValue(item: MangaPrefItem, value: MangaPrefValue) {}
 
     /**
      * 点击配置项 (对齐 androidx `Preference.performClick()`): 扩展挂的 `OnPreferenceClickListener`
-     * 返回 true 即消费, 否则走默认 `onClick()` (开关类即切换)。按 [MangaPrefItem.index] 定位 shim 实例。
-     * 未实现配置契约时静默无操作。
+     * 返回 true 即消费, 否则走默认 `onClick()` (开关类即切换)。按 [MangaPrefItem.ref] 定位
+     * shim 实例。未实现配置契约时静默无操作。
      */
-    suspend fun performPreferenceClick(pkgName: String, index: Int) {}
+    suspend fun performPreferenceClick(item: MangaPrefItem) {}
 
     /**
      * 开关类配置项切到 [newValue] (对齐 androidx `TwoStatePreference`): `callChangeListener(newValue)`
      * 通过才 `setChecked` (含持久化), 未挂监听视为通过。
      */
-    suspend fun applyPreferenceChange(pkgName: String, index: Int, newValue: Boolean) {}
+    suspend fun applyPreferenceChange(item: MangaPrefItem, newValue: Boolean) {}
 
     /**
-     * 输入框绑定 (对齐 androidx `EditTextPreference.OnBindEditTextListener` 的触发时机:
-     * 打开输入对话框时回调一次), 让扩展侧的输入框配置照常执行。
+     * 文本项点击路径: 对真实 `EditTextPreference` 先 `performClick()` 一次 (插件点击监听照常
+     * 得到调用), 随后按同一个实际对象返回活编辑会话 ([MangaPrefTextSession] 持实际配置对象,
+     * 绑定/校验/提交全程针对同一对象)。非文本项或句柄不是真实文本项时返回 null。
      */
-    suspend fun bindEditTextPreference(pkgName: String, index: Int) {}
+    suspend fun clickTextEditor(item: MangaPrefItem): MangaPrefTextSession? = null
 
     /**
      * 插件源虚拟行的行首图标: 归属插件包启动图标在应用私有缓存区的文件路径。

@@ -7,7 +7,7 @@ import kotlinx.serialization.json.JsonObject
 /**
  * JSON 导入类型 (KMP 共享)。
  *
- * 对应 app 端 `BaseAssociationViewModel.importJson` 中按 key 判断的导入分支,
+ * 对应原版 app 端 `BaseAssociationViewModel.importJson` 中按 key 判断的导入分支,
  * 每个枚举值映射一种导入源类型。原 app 端用字符串字面量 ("bookSource" / "rssSource" / ...)
  * 推送给 LiveData, 下沉后改为枚举, 由 app 端再映射回字符串做平台专属操作。
  */
@@ -17,6 +17,9 @@ enum class JsonType {
 
     /** RSS 源 (key: sourceUrl) → "rssSource" */
     RSS_SOURCE,
+
+    /** 筛选规则 (key: pattern + fields) → 专用筛选规则导入链 */
+    SOURCE_FILTER_RULE,
 
     /** 替换规则 (key: pattern) → "replaceRule" */
     REPLACE_RULE,
@@ -37,7 +40,7 @@ enum class JsonType {
 /**
  * 从 JSON 文本检测导入类型 (KMP 共享)。
  *
- * 原 app 端 `BaseAssociationViewModel.importJson` 中的纯数据解析逻辑下沉:
+ * 原版 app 端 `BaseAssociationViewModel.importJson` 中的纯数据解析逻辑下沉:
  * 解析 JSON → 取首个数组元素或对象 → 按 key 判断类型。零 Android 依赖
  * (不含 Uri / LiveData / context), app 端调用本函数后再做平台专属的
  * Uri 读取与 LiveData 推送。
@@ -46,8 +49,8 @@ enum class JsonType {
  * 1. `parseJsonElement(json)` 解析文本, 失败返回 null;
  * 2. 数组格式取首个元素 (模拟旧版 jayway SUPPRESS_EXCEPTIONS 行为),
  *    失败则当对象处理; 既非数组首元素对象也非对象则返回 null;
- * 3. 按 key 顺序判断: bookSourceUrl / sourceUrl / pattern / themeName / showRule /
- *    (name + rule) / (name + url), 命中即返回对应 [JsonType];
+ * 3. 按 key 顺序判断: bookSourceUrl / sourceUrl / (pattern + fields) / pattern /
+ *    themeName / showRule / (name + rule) / (name + url), 命中即返回对应 [JsonType];
  * 4. 其余返回 null (调用方按"格式不对"处理)。
  *
  * @param json JSON 文本
@@ -70,6 +73,9 @@ fun detectJsonType(json: String): JsonType? {
         map.containsKey("bookSourceUrl") -> JsonType.BOOK_SOURCE
 
         map.containsKey("sourceUrl") -> JsonType.RSS_SOURCE
+
+        // 筛选规则与替换规则都含 pattern; fields 是筛选规则必有的业务字段
+        map.containsKey("pattern") && map.containsKey("fields") -> JsonType.SOURCE_FILTER_RULE
 
         map.containsKey("pattern") -> JsonType.REPLACE_RULE
 
