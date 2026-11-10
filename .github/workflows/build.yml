@@ -3,6 +3,7 @@ name: Build
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   pull_request:
   workflow_dispatch:
 
@@ -10,8 +11,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# 打 tag 要创建 Release, 需要写 contents 权限
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   android:
@@ -30,15 +32,17 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
 
-      - name: Build debug and release
+      # 只出 release 包: 已开 R8 + 资源裁剪, 单 ABI 约 5MB
+      - name: Build release APKs
         run: |
           chmod +x gradlew
-          ./gradlew assembleAppDebug assembleAppRelease \
-            --parallel --build-cache --warning-mode all
+          ./gradlew assembleAppRelease --parallel --build-cache --warning-mode all
 
-      - name: Upload APKs
-        uses: actions/upload-artifact@v6
+      # 推 v* 标签才发版, 平时 build 只做校验
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
         with:
-          name: langhuan-apk
-          path: app/build/outputs/apk/app/**/*.apk
-          if-no-files-found: error
+          files: app/build/outputs/apk/app/release/*.apk
+          fail_on_unmatched_files: true
+          generate_release_notes: true
