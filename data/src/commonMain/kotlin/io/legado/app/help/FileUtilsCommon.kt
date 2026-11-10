@@ -1,0 +1,148 @@
+package io.legado.app.help
+
+import io.legado.app.utils.InputStream
+
+/**
+ * 跨平台 file IO 门面 (expect object)。
+ *
+ * # 背景
+ * 原 app 端 JsExtensions 的 8 个 file IO 方法 (readFile/readTxtFile/deleteFile/
+ * getTxtInFolder/downloadFile/cacheFile/importScript) 依赖 [io.legado.app.utils.FileUtilsBase]
+ * (jvmAndAndroidMain 专属, 委托 java.io.File)。下沉 commonMain 后, 这些方法需跨端可用,
+ * 故抽出本 expect object, 各端 actual 委托本平台 File 实现:
+ * - jvmAndAndroidMain: java.io.File (与原 FileUtilsBase 行为一致)
+ * - iOS/鸿蒙 nativeMain: kotlin.io.File (POSIX fs, Kotlin/Native 标准库支持)
+ *
+ * # 设计
+ * - 入参统一 String 路径 (避免 commonMain 引入 JDK File 类型, 模式参考 [JsExtensionsPlatform])
+ * - 缓存目录走 [io.legado.app.help.file.AppFilesDirs] (commonMain 已下沉)
+ * - 使用方: [JsExtensionsCommon] 文件方法 + [io.legado.app.help.book.BookHelpShared]
+ *   缓存管理编排 (clearInvalidBookFolders/evictMangaCache, 三端 BookStorage 统一委托),
+ *   标记 internal 避免污染公开 API
+ *
+ * 模式参考 [JsExtensionsPlatform] / [io.legado.app.utils.FileUtilsBase]。
+ */
+expect object FileUtilsCommon {
+
+    /**
+     * 缓存目录绝对路径。
+     *
+     * - Android: externalCacheDir (与原 `appCtx.externalCache.absolutePath` 一致)
+     * - 桌面 JVM / iOS / 鸿蒙: cacheDir (无 externalCache 概念, 走 AppFilesDirs.cacheDir)
+     */
+    fun getCachePath(): String
+
+    /**
+     * 解析缓存相对路径为绝对路径, 含安全检查 (防路径穿越)。
+     *
+     * - path 以分隔符开头: cachePath + path
+     * - 否则: cachePath + separator + path
+     * - 校验解析后的 canonicalPath 必须以 cachePath 的父目录为前缀, 否则抛 SecurityException
+     *   (与原 app 端 JsExtensions.getFile 安全检查一致)
+     */
+    fun resolveCachePath(relativePath: String): String
+
+    /** 判断文件/目录是否存在。 */
+    fun exist(path: String): Boolean
+
+    /** 读取文件全部字节, 失败返回 null (与原 FileUtilsBase.readBytes 行为一致)。 */
+    fun readBytes(path: String): ByteArray?
+
+    /** 写入字节到文件 (覆盖), 自动创建父目录, 成功返回 true。 */
+    fun writeBytes(path: String, data: ByteArray): Boolean
+
+    /**
+     * 从流写入文件 (流式分块, 不整块缓冲), 自动创建父目录, 成功返回 true。
+     *
+     * 对齐原 app 端 JsExtensions.downloadFile 的 `getInputStream().copyTo` 语义
+     * (大文件避免全量字节数组内存峰值)。
+     *
+     * IO 失败**直接抛出**, 不收成返回值 —— 原版流式失败即失败, 书源 JS 侧要能看到异常;
+     * 收成 Boolean 会让调用方只能造一个丢掉原始类型与堆栈的替代异常。
+     */
+    fun copyToFile(path: String, input: InputStream)
+
+    /**
+     * 删除文件或目录。
+     * - 文件: 直接删除
+     * - 目录: 递归删除子项, deleteRootDir 控制是否删除目录本身
+     *
+     * 成功返回 true (与原 FileUtilsBase.delete 行为一致)。
+     */
+    fun delete(path: String, deleteRootDir: Boolean = true): Boolean
+
+    /**
+     * 文件大小 (字节); 不存在或不是普通文件返回 0。
+     *
+     * 供"缓存文件是否有效"类判据使用 (图片缓存的存在性判据即"存在且非空"): 整份写入
+     * 后目标名上不会出现写一半的半截内容, 剩下的退化情况只有零字节文件, 判非空即可把它与可用缓存分开。
+     */
+    fun length(path: String): Long
+
+    /**
+     * 列出目录下所有文件 (不含子目录) 的绝对路径。
+     * 非目录或不存在返回空列表 (与原 folder.listFiles 行为对齐)。
+     */
+    fun listFiles(path: String): List<String>
+
+    /** 拼接路径, 用平台分隔符 (与原 FileUtilsBase.getPath(root, vararg) 行为一致)。 */
+    fun getPath(rootPath: String, vararg subDirFiles: String): String
+
+    /** 创建文件夹 (含父目录), 已存在则不报错, 成功返回 true。 */
+    fun createFolderIfNotExist(path: String): Boolean
+
+    /**
+     * 创建文件 (含父目录), 已存在则先删除再创建 (与原 File.createFileReplace 扩展行为一致)。
+     * 成功返回 true。
+     */
+    fun createFileReplace(path: String): Boolean
+
+    /**
+     * 列出目录下所有一级子目录的绝对路径 (不含文件)。
+     * 非目录或不存在返回空列表。
+     */
+    fun listSubDirs(path: String): List<String>
+
+    /**
+     * 单层目录是否"不存在或为空" (只列一层, 不递归)。
+     *
+     * 与 [listFiles] / [listSubDirs] 的关键差别是**不吞 IO 错误**: 那两个方法把 `list` 返回 null
+     * 一律当空列表, 对"是目录但读目录出错"会误报空目录; 本方法把那种情况当"非空"(返回 false)。
+     *
+     * 语义与下沉前桌面端 `DesktopCore.dirAbsentOrEmpty` 逐字一致 (启动期清理的早退判据专用):
+     * "File.list() 在'是目录但读目录出错'时也返回 null, 这种情况按非空处理让清理照原样跑,
+     * 不用空判掩盖 IO 错误造成漏清"。
+     */
+    fun isDirAbsentOrEmpty(path: String): Boolean
+
+    /**
+     * 递归统计目录下所有普通文件的大小总和 (字节); 文件返回自身大小, 不存在返回 0。
+     *
+     * 整份写入的临时件不计入 ([io.legado.app.utils.isAtomicWriteTempName]): 消费方是缓存条目
+     * 占用统计 (漫画缓存 512MB 预算 / 单本书缓存大小展示), 临时件不是条目。
+     */
+    fun getDirSize(path: String): Long
+
+    /** 文件/目录的最后修改时间戳 (毫秒, epoch), 不存在返回 0。 */
+    fun lastModified(path: String): Long
+
+    /**
+     * 取路径最后一段名称 (跨平台: 兼容 '/' 与 '\\' 分隔符, 纯字符串操作)。
+     * 尾部带分隔符的路径返回空串。
+     */
+    fun getName(path: String): String
+
+    /**
+     * 用 [srcPath] 整份替换 [dstPath] (同卷原子改名), 成功返回 true。
+     *
+     * 供"先把字节写同目录临时件, 再改名就位"的写入方使用: 调用期间 [dstPath] 要么是完整的
+     * 旧内容、要么是完整的新内容, 并发读方不会读到已截断或写一半的文件。
+     *
+     * [srcPath] 与 [dstPath] 必须同卷 (临时件要落在目标同目录); 改名不复制字节, [srcPath]
+     * 成功后就位为 [dstPath]。失败保持 [dstPath] 原内容可用并返回 false, [srcPath] 由调用方清理。
+     *
+     * 平台实现: jvmAndAndroidMain 委托 [io.legado.app.utils.FileUtilsBase.replaceFileAtomically],
+     * nativeMain 委托 [io.legado.app.utils.replaceFileAtomically] (两端同一语义)。
+     */
+    fun replaceFileAtomically(srcPath: String, dstPath: String): Boolean
+}

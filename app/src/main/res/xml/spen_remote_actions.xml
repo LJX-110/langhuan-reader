@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<remote-actions
+    actionset_label="Legado"
+    version="1.2">
+    <action
+        id="next_page"
+        label="下一页"
+        priority="1"
+        repeatable="true"
+        repeatable_interval="short"
+        trigger_key="PAGE_DOWN">
+        <preference name="gesture" value="click" />
+    </action>
+    <action
+        id="prev_page"
+        label="上一页"
+        priority="2"
+        repeatable="true"
+        repeatable_interval="short"
+        trigger_key="PAGE_UP">
+        <preference name="gesture" value="double_click" />
+    </action>
+</remote-actions>

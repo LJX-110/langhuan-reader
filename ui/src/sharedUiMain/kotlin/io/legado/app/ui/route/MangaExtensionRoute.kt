@@ -1,0 +1,55 @@
+package io.legado.app.ui.route
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import io.legado.app.ui.book.manga.extension.MangaExtensionScreen
+import io.legado.app.ui.book.manga.extension.MangaExtensionScreenModel
+import io.legado.app.ui.root.AppNavigator
+import io.legado.app.ui.root.AppRoute
+import io.legado.app.ui.root.RouteEntry
+import io.legado.app.ui.root.ScreenModelStore
+
+/**
+ * 漫画插件管理页路由: 绑定 [MangaExtensionScreenModel] (首入口 init, 幂等) 并渲染
+ * [MangaExtensionScreen]; 仓库管理子页 push [AppRoute.MangaExtensionRepos]。
+ */
+@Composable
+fun MangaExtensionRoute(
+    entry: RouteEntry,
+    navigator: AppNavigator,
+    screenModelStore: ScreenModelStore,
+) {
+    val screenModel = screenModelStore.getOrCreateTyped(entry) {
+        MangaExtensionScreenModel()
+    }
+    val state by screenModel.state.collectAsState()
+    val prefDialog by screenModel.prefDialog.collectAsState()
+    val searchQuery by screenModel.searchQuery.collectAsState()
+    val searchFilterQuery by screenModel.searchFilterQuery.collectAsState()
+
+    MangaExtensionScreen(
+        state = state,
+        onBack = { navigator.pop() },
+        onManageRepos = { navigator.push(AppRoute.MangaExtensionRepos) },
+        onInstall = screenModel::install,
+        onUpdate = screenModel::update,
+        onCancelInstall = screenModel::cancelInstall,
+        onUninstall = screenModel::uninstall,
+        onTrust = screenModel::trust,
+        onRefresh = screenModel::refresh,
+        onSelectLanguage = screenModel::selectLanguage,
+        onSelectKind = screenModel::selectKind,
+        onSelectContent = screenModel::selectContent,
+        searchQuery = searchQuery,
+        searchFilterQuery = searchFilterQuery,
+        onSearchQueryChange = screenModel::setSearchQuery,
+        prefDialog = prefDialog,
+        onOpenPrefDialog = screenModel::openPrefDialog,
+        onSetPreference = screenModel::setPreference,
+        onPreferenceClick = screenModel::performPreferenceClick,
+        onPreferenceChange = screenModel::applyPreferenceChange,
+        onBindEditText = screenModel::bindEditTextPreference,
+        onDismissPrefDialog = screenModel::dismissPrefDialog,
+    )
+}

@@ -1,0 +1,422 @@
+# XcodeGen 配置文件 - 生成 iosApp.xcodeproj
+#
+# 用法 (macOS):
+#   brew install xcodegen
+#   cd iosApp
+#   xcodegen generate
+#
+# XcodeGen 优势:
+# - project.yml 是纯文本, 可 git 跟踪, 避免二进制 .xcodeproj 冲突
+# - 团队协作时每人本地生成 .xcodeproj, 无需 merge 冲突
+# - 配置变更后重新 generate 即可, 无需手动 Xcode 操作
+#
+# 工程配置:
+# - iOS 14.0+ (SwiftUI App 生命周期 @main 要求)
+# - Swift 5.9
+# - 依赖 shared framework (Kotlin Multiplatform 产出)
+
+name: iosApp
+options:
+  bundleIdPrefix: shutiao.reader
+  deploymentTarget:
+    iOS: "14.0"
+  developmentLanguage: zh-Hans
+  # iOS 显示名的本地化在 InfoPlist.strings 里 (CFBundleDisplayName), 不在 Info.plist:
+  # 每个 <lang>.lproj/InfoPlist.strings 一份, 系统按当前语言挑。本工程已备
+  # en / zh-Hans / zh-Hant / zh-Hant-HK 四份 (对照 app 端 res/values* 的 app_name)。
+  # useBaseInternationalization=false: 本工程无 Base.lproj 资源, 关掉避免在
+  # knownRegions 里多出一个用不上的 Base。
+  useBaseInternationalization: false
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    DEVELOPMENT_TEAM: ""  # 团队 ID (Apple Developer 账号, 留空用 Personal Team)
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_BITCODE: NO
+
+targets:
+  iosApp:
+    type: application
+    platform: iOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: .
+        excludes:
+          - "project.yml"
+          - "README.md"
+          - "*.xcodeproj"
+          - "build"
+          # Share Extension 是独立 target, 它的源码不能编进主 App (否则两份入口类)
+          - "ShareExtension"
+          # entitlements 只由 CODE_SIGN_ENTITLEMENTS 引用, 不进构建产物
+          # (扩展那份在 ShareExtension/ 内, 随上面那条已整个目录排除)
+          - "iosApp.entitlements"
+    info:
+      path: Info.plist
+      properties:
+        # 显示名的真值在各 <lang>.lproj/InfoPlist.strings (CFBundleDisplayName)。
+        # 这里的字面量是缺本地化资源时的兜底, 对照 app 端 res/values/strings.xml 的
+        # app_name (英文态)。改显示名要同时改那四份 InfoPlist.strings。
+        CFBundleDisplayName: Legado
+        # 版本号与安卓端对齐 (app/build.gradle.kts versionName/versionCode):
+        # 真值由根工程 syncIosVersion 任务按 git 提交数 + GMT+8 构建时刻写入。
+        # 下面两个值是缺任务写入时的占位 (xcodegen 会用它重写 Info.plist),
+        # 不删的理由: 删掉后 xcodegen 退回它自己的默认值 1.0/1, 更难识别。
+        # 看到这个占位值就说明 syncIosVersion 没跑成功。
+        CFBundleShortVersionString: "3.26.081614"
+        CFBundleVersion: "17376"
+        # 状态栏 (Compose Multiplatform 自管理)
+        UIStatusBarStyle: UIStatusBarStyleDefault
+        UIStatusBarHidden: false
+        UIViewControllerBasedStatusBarAppearance: true
+        # Compose Multiplatform 1.11+ 启动时强制校验；缺失或为 false 会直接抛异常终止进程。
+        CADisableMinimumFrameDurationOnPhone: true
+        # 屏幕方向: 阅读类 App, 竖屏 + 横屏
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # 启动屏: 官方 CMP 模板用 UILaunchScreen 空字典 (系统默认启动屏)。
+        # 不用 UILaunchStoryboardName —— 空字符串会被系统当成"去找一个叫空名字的 storyboard"。
+        # ⚠️ 本段与 Info.plist 双写 (xcodegen generate 用本段重写 Info.plist)
+        UILaunchScreen: {}
+        # 只允许 iPhone/iPad 设备 (官方模板同项; 缺省时 iOS 仍会接受, 显式申报消除差异)
+        LSRequiresIPhoneOS: true
+        # 场景声明: SwiftUI App 生命周期需要它显式声明不支持多场景
+        # (官方模板同项; 缺省时系统按隐式单场景处理)
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        # Compose 自处理 safeArea, 窗口铺满
+        UIRequiresFullScreen: false
+        # 书源 URL 常为 http://, ATS 默认强制 https 会阻塞抓取与封面加载
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        # audio: TTS 朗读后台继续; processing: 缓存书籍的 BGProcessingTask
+        UIBackgroundModes:
+          - audio
+          - processing
+        # BGTaskScheduler 任务标识, 必须与 shared IosBackgroundTasks.kt 的
+        # CACHE_BOOK_TASK_ID 编译期常量逐字一致 (对不上 register 直接崩), 故写死不用变量
+        BGTaskSchedulerPermittedIdentifiers:
+          - shutiao.reader.cachebook
+        # 沙盒 Documents 在"文件"App 与 Finder 可见 (导出/另存为落地点)
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        # iCloud Documents 容器元数据 (对照 core iosMain help/sync/IosICloud.kt 的"启用四步"第 3 步)。
+        # 容器标识必须与该文件的 CONTAINER_ID 及 entitlements 里的
+        # com.apple.developer.icloud-container-identifiers 逐字一致; 对不上
+        # URLForUbiquityContainerIdentifier 恒返回 null。
+        # ⚠️ 只加本键打不开 iCloud: 还缺三样 —— 付费账号给 App ID 勾 iCloud capability
+        # (Key-value storage + iCloud Documents)、给 iosApp.entitlements 加上
+        # com.apple.developer.icloud-container-identifiers 等 iCloud 键 (该文件已建,
+        # 现只含 Share Extension 那条 App Group 键, 而 CODE_SIGN_ENTITLEMENTS 已在
+        # settings.base 指向它)、以及 Kotlin 侧 IosICloud.enable() 那一行注册调用。
+        # 缺任一样时本键是死数据 (容器 URL 仍 null, 代码已按 null 兜底)。
+        # ⚠️ 本段与 Info.plist 双写 (xcodegen generate 用本段重写 Info.plist)
+        NSUbiquitousContainers:
+          iCloud.io.legado.app.ios:
+            NSUbiquitousContainerIsDocumentScopePublic: true
+            NSUbiquitousContainerSupportedFolderLevels: "Any"
+            NSUbiquitousContainerName: legado
+        # 保存图片到相册权限说明 (图片长按菜单"保存到相册"; iOS 14+ 缺此 key 调用会直接崩)
+        NSPhotoLibraryAddUsageDescription: 保存阅读页图片到系统相册需要访问你的照片库
+        # 本地网络权限说明 (iOS 14+)。内置 Web 服务在 0.0.0.0 起 HTTP 监听
+        # (core commonMain WebServerManager), 局域网设备连上来后我方回包属于
+        # "向本地网络地址发出流量", 系统会要求本地网络访问授权; 缺此键时该授权弹窗
+        # 没有说明文案 (Apple: "Any app that uses the local network, directly or
+        # indirectly, should include this description")。
+        NSLocalNetworkUsageDescription: 局域网内的设备访问本机的 legado Web 服务需要本地网络权限
+        # legado:// / yuedu:// deep link (一键导入书源/替换规则/主题等),
+        # 对照 app 端 AndroidManifest AssociationActivity intent-filter (scheme legado/yuedu)。
+        # 回调链: SwiftUI onOpenURL (iOSApp.swift) → shared framework
+        # LegadoDeepLinkIosKt.handleLegadoDeepLink → commonMain LegadoDeepLinkHandler
+        CFBundleURLTypes:
+          - CFBundleURLName: io.legado.app.deeplink
+            CFBundleTypeRole: Viewer
+            CFBundleURLSchemes:
+              - legado
+              - yuedu
+        # 文档类型投递入口 (对照 Android AssociationActivity 的 VIEW intent-filter):
+        # 让 legado 出现在"用其他应用打开 / 分享到"候选里, 打开后由 iOSApp.swift onOpenURL →
+        # shared handleIosLaunchRequest → LaunchRequest.ImportFile → FileAssociationDispatch
+        # 按扩展名分流 (书籍/压缩包/JSON 导入; 可播视频改推播放页直投态)。
+        #
+        # 条目 1 视频: 只声明可确证的公开 UTI —— public.movie 总类 + 四个具体电影类;
+        # mkv/webm/flv/m3u8 在 iOS 公开 UTI 表里查不到可确证的标识符 (本机无 macOS 可核,
+        # 且 UTI 注册表在系统 LaunchServices 里, 不随 Kotlin platform klib 提供),
+        # 按"不凭空造 UTI"的约定改用 CFBundleTypeExtensions 兜底。
+        # 条目 2 文档: 与条目 1 同理 —— txt/json/pdf/zip/epub 的公开 UTI 已逐条核实
+        # (public.plain-text / public.json / com.adobe.pdf / public.zip-archive /
+        # org.idpf.epub-container, 见 Apple System-Declared Uniform Type Identifiers 与
+        # UTType 文档的 "The identifier for this type is ..."; epub 的 UTI 与同仓
+        # ui/src/iosMain IosPlatformServices.toUtis 已用的 org.idpf.epub-container 同值),
+        # cbz 查不到可确证的公开标识符, 一并走扩展名。
+        # 扩展名集合与 commonMain AppPattern.videoFileRegex 及 Android 端
+        # AssociationActivity 的 pathPattern 清单逐一对齐, 少一个就是"系统交给我们、
+        # 自己不认"。
+        # ⚠️ 本段与 Info.plist 双写 (xcodegen generate 会用本段重写 Info.plist)
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Movie
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.movie
+              - public.mpeg-4
+              - public.mpeg-2-transport-stream
+              - public.quicktime-movie
+              - public.avi
+          - CFBundleTypeName: Video File
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            CFBundleTypeExtensions:
+              - mp4
+              - mkv
+              - mov
+              - webm
+              - flv
+              - avi
+              - ts
+              - m3u8
+          - CFBundleTypeName: Text Document
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.plain-text
+              - public.json
+          - CFBundleTypeName: Ebook
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - org.idpf.epub-container
+            CFBundleTypeExtensions:
+              - txt
+              - json
+              - epub
+              - cbz
+          - CFBundleTypeName: PDF Document
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - com.adobe.pdf
+          - CFBundleTypeName: Archive
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.zip-archive
+            CFBundleTypeExtensions:
+              - zip
+              - rar
+              - 7z
+        # 主屏快捷项 (长按图标), 对照 app 端动态快捷方式 ShortCuts.buildShortCuts 的三项
+        # (bookshelf / lastRead / readAloud)。
+        # 标题只是缺本地化资源时的兜底: 真值在各 <lang>.lproj/InfoPlist.strings
+        # (Apple: "You can, optionally, internationalize a quick action title by employing
+        # your app's InfoPlist.strings file", 键名 = 这里写的占位串)。
+        # 三项的 route 均对应 shared 已有的 NavigateTo 分支 (LegadoApp.handleLaunchRequest:
+        # "last_read" 开最近阅读, "read_aloud" 直接朗读; 书架项不带 route, 开 App 即完成——
+        # 对照 app 端 ShortCuts.buildBookShelfShortCutInfo 的 intent 不带任何 extra)。
+        # 只能静态声明: iOS 端无 Android 那样的"带 extra 的快捷方式 intent", 故 readAloud 的
+        # action=readAloud 语义用 route 表达 (与 app 端 intent 的 route extra 同一形制),
+        # 由共享 HeadlessReadAloud.startFromShortcut() 承接。
+        # ⚠️ 本段与 Info.plist 双写 (xcodegen generate 用本段重写 Info.plist)
+        UIApplicationShortcutItems:
+          - UIApplicationShortcutItemType: bookshelf
+            UIApplicationShortcutItemIconType: UIApplicationShortcutIconTypeBookmark
+            UIApplicationShortcutItemTitle: legado.shortcut.bookshelf
+          - UIApplicationShortcutItemType: lastRead
+            UIApplicationShortcutItemIconType: UIApplicationShortcutIconTypeTime
+            UIApplicationShortcutItemTitle: legado.shortcut.last_read
+            UIApplicationShortcutItemUserInfo:
+              route: last_read
+          - UIApplicationShortcutItemType: readAloud
+            UIApplicationShortcutItemIconType: UIApplicationShortcutIconTypeAudio
+            UIApplicationShortcutItemTitle: legado.shortcut.read_aloud
+            UIApplicationShortcutItemUserInfo:
+              route: read_aloud
+        # 应用图标与交替图标 (换桌面图标, 对照 Android Launcher1/4/5):
+        # 主图标 AppIcon.png (默认), 交替图标 Icon1/Icon4/Icon5.png, 经
+        # UIApplication.setAlternateIconName 切换 (见 shared IosPlatformCapabilities.changeLauncherIcon)。
+        # ⚠️ 本段与 Info.plist 双写 (xcodegen generate 用本段重写 Info.plist)
+        CFBundleIcons:
+          CFBundlePrimaryIcon:
+            CFBundleIconFiles:
+              - AppIcon
+          CFBundleAlternateIcons:
+            Icon1:
+              CFBundleIconFiles:
+                - Icon1
+            Icon4:
+              CFBundleIconFiles:
+                - Icon4
+            Icon5:
+              CFBundleIconFiles:
+                - Icon5
+        CFBundleIcons~ipad:
+          CFBundlePrimaryIcon:
+            CFBundleIconFiles:
+              - AppIcon
+          CFBundleAlternateIcons:
+            Icon1:
+              CFBundleIconFiles:
+                - Icon1
+            Icon4:
+              CFBundleIconFiles:
+                - Icon4
+            Icon5:
+              CFBundleIconFiles:
+                - Icon5
+    settings:
+      base:
+        PRODUCT_NAME: legado
+        # Kotlin 官方 direct integration 将当前 SDK/架构/构建类型对应的 framework
+        # 复制到 TARGET_BUILD_DIR 并签名，不再硬编码 ui/build/bin 下的变体路径。
+        FRAMEWORK_SEARCH_PATHS:
+          - "$(inherited)"
+          - "$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)"
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/Frameworks"
+        OTHER_LDFLAGS:
+          - "-framework"
+          - "shared"
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        # App Group: 主 App 侧声明 (与 ShareExtension target 同一组); 值须与
+        # iosApp.entitlements / ShareExtension.entitlements / ShareViewController.swift 的
+        # legadoAppGroupId / Kotlin IosShareInbox.APP_GROUP_ID 逐字一致
+        CODE_SIGN_ENTITLEMENTS: iosApp.entitlements
+      # 包名与安卓端对齐 (applicationId 基包 shutiao.reader):
+      # Debug 构建 → shutiao.reader.debug, Release 构建 → shutiao.reader.release
+      configs:
+        debug:
+          PRODUCT_BUNDLE_IDENTIFIER: shutiao.reader.debug
+        release:
+          PRODUCT_BUNDLE_IDENTIFIER: shutiao.reader.release
+    # Share Extension 随主 App 一起打进 Payload/*.app/PlugIns/ (embed 走 Xcode 的
+    # "Embed App Extensions" 复制阶段)。Apple 只给 Today / iMessage 两类扩展点开
+    # NSExtensionContext.open 这条路, 因此**保证送达**的通道只能走 App Group 容器;
+    # 扩展在写完文本后会尽力沿 responder chain 调 UIApplication.open 把宿主带到前台 (失败不丢件), 见下段。
+    dependencies:
+      - target: ShareExtension
+        embed: true
+    preBuildScripts:
+      # 每次构建前自动把 iOS 版本号与安卓对齐 (git 提交数 + GMT+8 构建时刻),
+      # 写入 iosApp/project.yml 与 Info.plist, 供后续 Info.plist 处理与签名使用。
+      # 独立于下方 Kotlin framework 构建 (IDE 直编 framework 时也会执行)。
+      - script: |
+          #!/bin/bash
+          set -e
+          cd "$SRCROOT/.."
+          # LEGADO_APP_VERSION 由 CI 的 xcodebuild 以用户定义构建设置传入 (与 ipa 文件名同源);
+          # IDE 直编没有它, 回退到任务自己按构建时刻生成。
+          ./gradlew syncIosVersion ${LEGADO_APP_VERSION:+-PappVersion=$LEGADO_APP_VERSION} --quiet
+        name: Sync iOS version with Android
+        basedOnDependencyAnalysis: false
+      - script: |
+          #!/bin/bash
+          set -e
+          if [ "YES" = "$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED" ]; then
+            echo "Skipping Gradle framework build because the IDE already built it."
+            exit 0
+          fi
+          cd "$SRCROOT/.."
+          ./gradlew :ui:embedAndSignAppleFrameworkForXcode --stacktrace
+        name: Embed and sign shared framework
+        basedOnDependencyAnalysis: false
+    scheme:
+      testTargets: []
+      gatherCoverageData: false
+
+  # ===== Share Extension (已接线: 分享面板 → App Group 容器 → 宿主启动取件) =====
+  #
+  # 目标: 让 legado 出现在其它 App「分享」面板的接收候选里 (对照 Android
+  # AssociationActivity 的 SEND intent-filter / 鸿蒙 module.json5 的分享声明)。
+  #
+  # 链路三处都已就位:
+  #
+  #   1. 本 target 已加进 iosApp 的 dependencies 并 embed: true (见 iosApp 段的
+  #      dependencies) —— 扩展随 App 打进 Payload/*.app/PlugIns/。
+  #
+  #   2. 两个 target 声明同一个 App Group (com.apple.security.application-groups,
+  #      值 group.shutiao.reader), 经 CODE_SIGN_ENTITLEMENTS 指向
+  #      iosApp/iosApp.entitlements 与 iosApp/ShareExtension/ShareExtension.entitlements。
+  #      这是**硬前提**: 分享扩展**不能拉起宿主 App** (扩展进程里没有通往宿主的 openURL
+  #      通道, Apple 限制), 业界唯一交付通道是把文件写进 App Group 共享容器、
+  #      宿主下次启动扫该容器取件。
+  #
+  #   3. 宿主侧取件扫描在 Kotlin: ui/src/iosMain/.../IosShareInbox.kt, 由
+  #      IosProviderRegistry.registerIosProviders (didFinishLaunching) 拉起 —— 扫容器收件目录,
+  #      把文件收进应用私有的接收目录 (不写用户可配置、在「文件」里可见的书籍保存位置:
+  #      此时用户还没确认导入, 写进去会覆盖用户同名文件、不导入又会留下副本),
+  #      再交既有的 handleIosLaunchRequest → LaunchRequest.ImportFile → 既有导入分发,
+  #      并清掉容器里的原件 (下次启动不会再收一遍) 与接收目录里没被导入的副本。
+  #      扩展侧写件见 ShareExtension/ShareViewController.swift 的 deliver。
+  #
+  # ⚠️ 生效前提: App Group 靠 entitlement 落地 (与 iCloud 容器同样原因, 见上面
+  # NSUbiquitousContainers 段), 而本仓发布产物是**未签名 ipa** —— CI 用
+  # CODE_SIGNING_ALLOWED=NO 归档, 拿不到任何 entitlement, 于是容器取不到:
+  # 分享面板那一步由扩展当场给用户说明原因与替代导入路径, 宿主也在应用进入活动态后
+  # 说明一次 (两端都不崩, 也不影响既有的 CFBundleDocumentTypes 打开通道)。
+  # 签名侧载 (AltStore/SideStore 重签) 或正式签名
+  # 且 App ID 勾上 App Groups 之后, 本链路才真正生效。
+  #
+  # 补充: "接收外部文件"并非只有分享面板一条路。主 App 的 Info.plist 已有
+  # CFBundleDocumentTypes + LSSupportsOpeningDocumentsInPlace + UIFileSharingEnabled,
+  # 那条「用其他 App 打开 / 存储到文件」通道**不需要任何 entitlement**, 现在就是通的
+  # (投递点见 iOSApp.swift 的 ExternalUriIngress)。
+  ShareExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: ShareExtension
+        excludes:
+          # entitlements 只由 CODE_SIGN_ENTITLEMENTS 引用, 不进构建产物
+          - "ShareExtension.entitlements"
+    info:
+      path: ShareExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Legado
+        # 版本号与主 App 保持一致 (App Store 校验要求扩展与宿主同版本);
+        # 根工程 syncIosVersion 按正则重写 project.yml 里**所有**的
+        # CFBundleShortVersionString/CFBundleVersion (含本段), 随后 xcodegen generate
+        # 用本段重写 ShareExtension/Info.plist —— 按 sync → generate 的顺序执行即与主 App 同版本。
+        CFBundleShortVersionString: "3.26.081614"
+        CFBundleVersion: "17376"
+        # 分享扩展点 + 入口类 (类名 = PRODUCT_MODULE_NAME.ShareViewController)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          # 激活规则 (Apple《Keys for App Extensions》Table 3 / NSExtensionActivationDictionaryVersion):
+          # 不设 Version (=1) 时要求扩展能处理投递方提供的**全部**类型, 只声明收文件的本扩展在
+          # "Safari 分享一条链接" (给的是 public.url / public.plain-text) 时根本不出现,
+          # 故取 Version 2 = "至少能处理其中一类"。三类并存: 文件 (epub/txt/视频)、文本
+          # (选段/描述)、web 链接 (浏览器分享的 URL, 按文本取 absoluteString)。
+          NSExtensionActivationRule:
+            NSExtensionActivationDictionaryVersion: 2
+            NSExtensionActivationSupportsFileWithMaxCount: 1
+            NSExtensionActivationSupportsText: true
+            NSExtensionActivationSupportsWebURLWithMaxCount: 1
+    settings:
+      base:
+        PRODUCT_NAME: ShareExtension
+        # 扩展的 bundle id 必须以上一级 App 的 bundle id 为**前缀** (Apple: "Embedded
+        # binary's bundle identifier is not prefixed with the parent app's bundle identifier"),
+        # 而主 App 的 id 按 Debug/Release 分叉, 故本 target 也按 config 分叉;
+        # base 值保留不带 config 后缀的形态 (两个 config 都会覆盖它)。
+        PRODUCT_BUNDLE_IDENTIFIER: shutiao.reader.ShareExtension
+        # App Group: 扩展侧声明 (与主 App 同一组; 值与上面几个位置逐字一致)
+        CODE_SIGN_ENTITLEMENTS: ShareExtension/ShareExtension.entitlements
+        SWIFT_VERSION: "5.9"
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_BITCODE: NO
+      configs:
+        debug:
+          PRODUCT_BUNDLE_IDENTIFIER: shutiao.reader.debug.ShareExtension
+        release:
+          PRODUCT_BUNDLE_IDENTIFIER: shutiao.reader.release.ShareExtension

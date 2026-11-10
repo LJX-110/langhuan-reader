@@ -1,0 +1,43 @@
+{
+  "shortcuts": [
+    {
+      "shortcutId": "lastRead",
+      "label": "$string:shortcut_last_read",
+      "icon": "$media:app_icon_foreground",
+      "wants": [
+        {
+          "moduleName": "entry",
+          "abilityName": "EntryAbility",
+          "parameters": {
+            "route": "last_read"
+          }
+        }
+      ]
+    },
+    {
+      "shortcutId": "readAloud",
+      "label": "$string:shortcut_read_aloud",
+      "icon": "$media:app_icon_foreground",
+      "wants": [
+        {
+          "moduleName": "entry",
+          "abilityName": "EntryAbility",
+          "parameters": {
+            "route": "read_aloud"
+          }
+        }
+      ]
+    },
+    {
+      "shortcutId": "bookshelf",
+      "label": "$string:shortcut_bookshelf",
+      "icon": "$media:app_icon_foreground",
+      "wants": [
+        {
+          "moduleName": "entry",
+          "abilityName": "EntryAbility"
+        }
+      ]
+    }
+  ]
+}

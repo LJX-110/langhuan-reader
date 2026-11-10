@@ -1,0 +1,40 @@
+{
+  "string": [
+    { "name": "module_desc", "value": "Legado 阅读器 entry 模块" },
+    { "name": "EntryAbility_desc", "value": "Legado" },
+    { "name": "EntryAbility_label", "value": "Legado" },
+    { "name": "bookshelf_title", "value": "书架" },
+    { "name": "reader_title", "value": "阅读" },
+    { "name": "kmp_interop_title", "value": "KMP 互操作测试" },
+    { "name": "bookshelf_empty", "value": "书架暂无书籍" },
+    { "name": "reader_prev", "value": "上一页" },
+    { "name": "reader_next", "value": "下一页" },
+    { "name": "reader_back", "value": "返回书架" },
+    { "name": "reader_toc", "value": "目录" },
+    { "name": "reader_settings", "value": "设置" },
+    { "name": "reader_read_aloud", "value": "朗读" },
+    { "name": "reader_chapter_list_title", "value": "章节目录" },
+    { "name": "reader_chapter_empty", "value": "暂无章节" },
+    { "name": "discover_title", "value": "发现" },
+    { "name": "discover_empty", "value": "暂无发现源" },
+    { "name": "manga_loading_images", "value": "加载中..." },
+    {
+      "name": "manga_chapter_images_empty",
+      "value": "本章无图片"
+    },
+    {
+      "name": "permission_write_imagevideo_reason",
+      "value": "用于将阅读页长按图片保存到系统相册"
+    },
+    {
+      "name": "permission_read_pasteboard_reason",
+      "value": "用于书源与替换规则编辑页从剪贴板粘贴内容"
+    },
+    {
+      "name": "shortcut_bookshelf",
+      "value": "书架"
+    },
+    { "name": "shortcut_last_read", "value": "最近阅读" },
+    { "name": "shortcut_read_aloud", "value": "朗读" }
+  ]
+}

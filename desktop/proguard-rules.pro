@@ -1,0 +1,216 @@
+# 桌面端 ProGuard 规则 (移植自 app/proguard-rules.pro 的 R8 配置, 按桌面端类路径裁剪)。
+#
+# 策略与 app 端一致:
+# - 混淆关闭 (-dontobfuscate): 书源脚本经 QuickJS 桥按类名字符串反射加载 (Class.forName),
+#   混淆改名会直接打断 JS 桥; 且混淆对体积收益很小 (真正的大头是死代码)。
+# - 只做"死代码删除 + 轻度优化": 危险区 (Compose/serialization/Room/JNI/JS 桥/分派表)
+#   全部 keep, 只裁掉确定无引用的类与成员。
+# - 报表: build/proguard/{seeds,usage,mapping}.txt, 跑完先看 usage.txt 再决定接线打包。
+#
+# 注意 Kotlin 块注释可嵌套: 规则文件内不要出现裸 /* 序列 (用中文说明代替)。
+
+############################
+# 全局配置
+############################
+# 书源按类名反射加载, 混淆破坏 JS 桥; 且混淆省不了多少体积 (与 app 端同结论)
+-dontobfuscate
+# 只裁死代码, 不做字节码优化: 2026-08-18 随官方 DSL 开启 optimize=true 实测复现 ProGuard 优化器
+# 崩溃 (Stack.generalize: Stacks have different current sizes [0] and [1], 即旧 error[1011]
+# StackGeneralizationException), Kotlin/Compose 高阶函数/协程字节码触发 PartialEvaluator bug,
+# ProGuard 7.9.1 未修复。安卓端 R8 是重写优化器对 Kotlin 安全才敢 -optimizationpasses 5。
+-dontoptimize
+# 优化关闭后 allowaccessmodification 无意义 (它属于优化阶段), 不再声明
+# -allowaccessmodification
+
+# 保留行号、源文件信息以便排查崩溃堆栈
+-keepattributes SourceFile,LineNumberTable
+# 保留注解、内部类、签名（含 Kotlin 类型/泛型）、抛出声明
+-keepattributes *Annotation*,InnerClasses,Signature,EnclosingMethod,Exceptions
+
+############################
+# Kotlin Intrinsics 空检查去除 (通用做法; 注: 需 -optimizationpasses 才生效,
+# 当前 -dontoptimize 下为 no-op, 保留以便将来重开优化)
+############################
+-assumenosideeffects class kotlin.jvm.internal.Intrinsics {
+    static void checkParameterIsNotNull(java.lang.Object, java.lang.String);
+    static void checkNotNullParameter(java.lang.Object, java.lang.String);
+    static void checkExpressionValueIsNotNull(java.lang.Object, java.lang.String);
+    static void checkNotNullExpressionValue(java.lang.Object, java.lang.String);
+    static void checkReturnedValueIsNotNull(java.lang.Object, java.lang.String);
+    static void checkFieldIsNotNull(java.lang.Object, java.lang.String);
+    static void throwUninitializedPropertyAccessException(java.lang.String);
+}
+
+############################
+# 项目反射 keep (危险区, 随业务层下沉的规则照搬)
+############################
+-include ../core/consumer-rules.pro
+-include ../data/consumer-rules.pro
+-include ../foundation/consumer-rules.pro
+-include ../modules/quickjs/consumer-rules.pro
+
+# AnalyzeRuleCore 下沉 commonMain 后无法用 androidx @Keep (无 common 变体), 按类名 keep (JS 反射调用其方法)
+-keep,allowoptimization class io.legado.app.model.analyzeRule.AnalyzeRuleCore { *; }
+
+# 书源 JS 面实现类 (BookSource/HttpTTS/AnalyzeRuleCore/AnalyzeUrlCore/RssJsExtensionsJvm 等):
+# JS 桥经 JavaObjectBridge 按方法名反射调用, 不 keep 时未被 Kotlin 直接调用的成员会被当死代码删除。
+-keep class * implements io.legado.app.help.JsExtensionsCommon { *; }
+
+# 数据实体 (Gson 反射 + Room + JS 访问; data/consumer-rules.pro 已覆盖
+# io.legado.app.data.entities.**, 此处兜底其它包的实体)
+-keep class **.data.entities.** { *; }
+-keep class io.legado.app.model.fileBook.ZipEntry { *; }
+-keep class io.legado.app.model.fileBook.ZipImageCache { *; }
+
+# 应用入口 (无其它类引用, 不 keep 会被当死代码删除 → 整个 UI 图连带裁掉)
+-keep class io.legado.desktop.MainKt {
+    public static void main(java.lang.String[]);
+}
+
+# 异常类型: 保留类名以便堆栈和反射查找
+-keepnames class * extends java.lang.Throwable
+-keepclassmembernames,allowobfuscation class * extends java.lang.Throwable { *; }
+
+# JS 分派表: KSP 生成的 com.script.jsdispatch.generated.JsDispatchTables 由
+# JsDispatchRegistry 按固定 FQN 字符串 Class.forName 引导注册, 不 keep 会被当死代码删除
+# (删除后 JS 调用降级为纯反射, 功能仍可用但丢静态分派性能)
+-keep class com.script.jsdispatch.generated.JsDispatchTables { *; }
+-keep class com.script.jsdispatch.** { *; }
+
+############################
+# kotlinx.serialization (官方通用规则; 类名/序列化器不能被删, 含 $$serializer 生成类)
+############################
+-keepattributes *Annotation*, InnerClasses
+-dontnote kotlinx.serialization.**
+-keepclassmembers class kotlinx.serialization.json.** {
+    *** Companion;
+}
+-keepclasseswithmembers class kotlinx.serialization.json.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-keep,includedescriptorclasses class **$$serializer { *; }
+-keepclassmembers class ** {
+    *** Companion;
+}
+-keepclasseswithmembers class ** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
+############################
+# Room KMP: AppDatabase_Impl 等由 Room.getGeneratedImplementation 按
+# "<database类名>_Impl" 字符串反射构造, 必须保留 (桌面端 room-runtime 是 JVM jar,
+# 不带 Android AAR 的 consumer rules, 需手动补)
+# 注: 本 fork 用 Room3 分支, 包名是 androidx.room3 (不是 androidx.room)
+############################
+-keep class * extends androidx.room3.RoomDatabase { *; }
+-keep class **.*_Impl { *; }
+
+############################
+# JNI native 方法 (quickjs 桥 / androidx sqlite-bundled 的 sqliteJni.dll 等:
+# 这些 native 库在 JNI_OnLoad 里用 RegisterNatives 按「类名+方法名+签名」批量绑定方法表)
+############################
+# 指令选型必须看清语义: -keepclasseswithmembernames 等价 keepclasseswithmembers,allowshrinking,
+# 只保证「名字不被改」, 仍然允许把方法整个删掉。3.26.09121949 正式版实测踩坑:
+# 旧写法下 ProGuard 把 sqlite-bundled 里 Java 侧没有直接调用点的 nativeThreadSafeMode /
+# nativeBindBlob / nativeBindDouble / nativeGetBlob / nativeGetDouble 当死代码删除,
+# 而 jar 内 sqliteJni.dll 仍按 21 个方法注册 → System.load 抛
+# NoSuchMethodError → BundledSQLiteDriver$NativeLibraryObject 静态初始化失败 →
+# 桌面端数据库整体不可用 → 书架 LaunchedEffect 未捕获异常打停 Recomposer → 界面定格、键鼠失灵。
+# 本项目本就 -dontobfuscate (改名风险为零), 所以旧写法连它唯一的好处都不提供, 只有副作用。
+# 必须用 -keepclasseswithmembers (不带 names 后缀) 才是「不许删」。
+# 对照实验 (2026-09-14, 用构建同版本 ProGuard 7.9.1 + 原始 sqlite-bundled jar + 一个只调
+# BundledSQLiteDriver.open() 的合成种子作入口, 模拟 Room 的真实可达面):
+#   本条旧写法 → BundledSQLiteDriverKt 的 native 从 2 个被删到 1 个, 产物跑 System.load
+#     报 NoSuchMethodError: ...nativeThreadSafeMode()I not found (与正式崩溃日志一致)
+#   改成下方写法 → 2 个全在, System.load 通过
+# 被删的根因链: 未使用的 public BundledSQLiteDriver.getThreadingMode() → 唯一调用
+# access$nativeThreadSafeMode() 的地方 → 连带它下面的 external fun 一起被当死代码删除。
+-keepclasseswithmembers class * { native <methods>; }
+
+############################
+# Hutool (书源 JS 直调 cn.hutool.crypto.SecureUtil/AES/SymmetricCrypto 等, 按名反射;
+# 仅排除反射重灾区工具类, 与 app 端 R8 配置一致)
+############################
+-keep class
+    !cn.hutool.core.util.RuntimeUtil,
+    !cn.hutool.core.util.ClassLoaderUtil,
+    !cn.hutool.core.util.ReflectUtil,
+    !cn.hutool.core.util.SerializeUtil,
+    !cn.hutool.core.util.ClassUtil,
+    cn.hutool.core.codec.**,
+    cn.hutool.core.util.** { *; }
+-keep class cn.hutool.crypto.** { *; }
+-dontwarn cn.hutool.**
+
+############################
+# OkHttp (保留给 js 调用)
+############################
+-keep class okhttp3.*{*;}
+-keepclassmembers class okhttp3.** {    *** protocol(...);}
+-dontwarn okhttp3.internal.**
+
+############################
+# Jsoup (书源 JS 解析 HTML, 反射调用)
+############################
+-keep class org.jsoup.** { *; }
+-dontwarn org.jspecify.annotations.NullMarked
+
+############################
+# JNA (Structure/反射重)
+############################
+-keep class com.sun.jna.** { *; }
+-dontwarn com.sun.jna.**
+# 桌面端 JNA Library 接口与 Callback 实现类: Native.load 通过反射创建接口代理,
+# Callback 实现类由 JNA 内部反射注册。ProGuard 静态分析看不到这些反射引用,
+# 会把 JNA Library 接口和 Callback 类当死代码删除 → native 桥加载失败
+# (窗口控制条/SMTC/任务栏缩略图/DWM/Win32 消息窗口/WebView2 COM 等全部失效)。
+# 保留 desktop 包下所有 extends com.sun.jna.Library 的接口与 extends Callback 的类。
+-keep @com.sun.jna.Library interface *
+-keep interface * extends com.sun.jna.Library { *; }
+-keep class * implements com.sun.jna.Callback { *; }
+
+############################
+# ServiceLoader 注册的依赖 (按 META-INF/services 名字符串实例化, 不 keep 会被删)
+############################
+# mediamp-mpv 播放器引擎 (ServiceLoader 发现)
+-keep class org.openani.mediamp.** { *; }
+# slf4j-nop 的 NOPServiceProvider 经 ServiceLoader (META-INF/services) 按名实例化,
+# 不 keep 会被删 → 启动期 SLF4J 警告 (功能仍回退 NOP, 但消除噪音)
+-keep class org.slf4j.nop.** { *; }
+
+############################
+# 静默无关警告
+############################
+-dontwarn javax.annotation.**
+-dontwarn org.codehaus.**
+-dontwarn java.lang.invoke.StringConcatFactory
+
+############################
+# 可选/缺失的传递依赖与已知无害引用 (ProGuard 首次运行实测警告, 逐个排除)
+############################
+# commons-compress 的 pack200 与 truth 引用可选 asm (桌面端未引入)
+-dontwarn org.objectweb.asm.**
+# 测试库 truth 透传到运行时类路径 (引用 asm; 依赖清理另议)
+-dontwarn com.google.common.truth.**
+# commons-compress 可选压缩 codec
+-dontwarn org.brotli.**
+-dontwarn com.github.luben.zstd.**
+# commons-compress 的 pack200 模块: 基于旧版 asm 编译, 字段解析必然告警;
+# 应用不使用 Pack200 (只走 7z/tar/gz/bz2/xz), 该类会被 shrink 掉, 告警纯属噪音
+-dontwarn org.apache.commons.compress.harmony.pack200.**
+# commons-logging 与 log4j2 适配的方法签名差异 (仅日志兜底路径)
+-dontwarn org.apache.commons.logging.**
+# commons-logging 的 LogFactory 按类名字符串反射加载 LogFactoryImpl (pdfbox 等依赖),
+# 不 keep 会被当死代码删除 → PDDocument 静态初始化抛 ClassNotFoundException
+-keep class org.apache.commons.logging.** { *; }
+# pdfbox 公钥加密 PDF 的可选 bcpkix (CMS/cert 未引入, 该功能不可用但类引用存在)
+-dontwarn org.apache.pdfbox.**
+# MethodHandle.invokeExact 多态签名: ProGuard 对 JDK 库类的已知限制 (jsvg/pdfbox IOUtils)
+-dontwarn com.github.weisj.**
+# kotlinx.coroutines.debug AgentPremain 引用 android 注解
+-dontwarn android.annotation.**
+# apk-parser 证书 CMS 校验引用可选 bouncycastle, dex2jar (d2j-jasmin/d2j-smali)
+# 传递的 antlr-runtime DOTTreeGenerator 引用可选 stringtemplate; 桌面端均未引入,
+# 引用点功能不可达, 缺类会被 shrink 裁除
+-dontwarn org.bouncycastle.**
+-dontwarn org.antlr.stringtemplate.**

@@ -1,0 +1,7 @@
+@import './kbd.css';
+@import './code.css';
+
+body {
+  padding: 0;
+  margin: 0;
+}

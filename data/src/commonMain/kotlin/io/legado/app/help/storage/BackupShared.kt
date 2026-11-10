@@ -1,0 +1,552 @@
+package io.legado.app.help.storage
+
+import io.legado.app.constant.AppLog
+import io.legado.app.constant.BOOK_BACKUP_DIR_NAME
+import io.legado.app.constant.PreferKey
+import io.legado.app.constant.ThreadSafeDateFormat
+import io.legado.app.data.AppDbProviders
+import io.legado.app.data.dao.sortedByLocalizedOrder
+import io.legado.app.data.entities.ReadRecord
+import io.legado.app.exception.InvalidBooksDirException
+import io.legado.app.exception.NoStackTraceException
+import io.legado.app.help.AppWebDavShared
+import io.legado.app.help.DirectLinkUploadStoreProviders
+import io.legado.app.help.HomeTabHelpShared
+import io.legado.app.help.PinnedExploreHelp
+import io.legado.app.help.config.AppConfigProviders
+import io.legado.app.help.config.PreferenceProviders
+import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.config.ReadBookConfigProviders
+import io.legado.app.help.config.ReadBookConfigShared
+import io.legado.app.help.config.ThemeConfigProviders
+import io.legado.app.help.file.AppFilesDirs
+import io.legado.app.help.book.bookSaveSubDir
+import io.legado.app.help.book.effectiveBookSaveDir
+import io.legado.app.help.i18n.AppStringKey
+import io.legado.app.help.i18n.appString
+import io.legado.app.help.ruleFileName
+import io.legado.app.help.storage.BackupShared.backupLocked
+import io.legado.app.help.storage.BackupShared.backupPath
+import io.legado.app.help.storage.BackupShared.mutex
+import io.legado.app.utils.GSON
+import io.legado.app.utils.isNetworkAvailable
+import io.legado.app.utils.normalizeFileName
+import io.legado.app.utils.randomUUIDString
+import io.legado.app.utils.systemCurrentTimeMillis
+import io.legado.app.utils.toJson
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
+/**
+ * 备份流程 (KMP 共享版, 全平台唯一实现)。
+ *
+ * # 职责
+ * 条目收集 / JSON 序列化 / zip 打包 / 本地复制 / WebDav 上传全部在这里,
+ * app 端 [io.legado.app.help.storage.Backup] 只剩 autoBack 调度与 Android 钩子
+ * (SAF content:// 复制、LocalConfig.lastBackup、背景图上传), 经
+ * [BackupRestoreHooks] 注入, 保证各端走同一条核心路径。
+ *
+ * # 与原 app 端实现的对应
+ * - 路径: [AppFilesDirs] 替代 appCtx.filesDir / externalFiles (同值)
+ * - 配置 dump: [PreferenceProviders.getAll] 替代 defaultSharedPreferences.all (Android 同源)
+ * - 文件 IO / zip: [BackupFileOps] 替代 FileUtils / ZipUtils (jvm actual 即原实现)
+ * - 备份文件名/内容/顺序与原版逐项一致, 老备份文件可直接恢复
+ */
+object BackupShared {
+
+    private const val TAG = "Backup"
+
+    /** 主题配置文件名 (与 app 端 `ThemeConfig.configFileName` 一致)。 */
+    const val THEME_CONFIG_FILE_NAME = "themeConfig.json"
+
+    /** 主题配置落盘路径 (与 app 端 `ThemeConfig.configFilePath` 同值)。 */
+    val themeConfigFilePath: String
+        get() = AppFilesDirs.get().filesDir + BackupFileOps.separator + THEME_CONFIG_FILE_NAME
+
+    /** 备份工作目录名 (相对于 [AppFilesDirs.filesDir])。 */
+    private const val BACKUP_DIR_NAME = "backup"
+
+    /** zip 内 oldCovers 独立命名空间，对应 [AppFilesDirs.get].coversDir。 */
+    private const val OLD_COVERS_DIR_NAME = "oldCovers"
+
+    /** 备份 zip 临时文件名。 */
+    private const val ZIP_FILE_NAME = "tmp_backup.zip"
+
+    /** 备份文件名时间戳格式 (yyyy-MM-dd)。 */
+    private val datePattern by lazy { ThreadSafeDateFormat("yyyy-MM-dd") }
+
+    /** 互斥锁, 防止并发备份 (与 app 端 [io.legado.app.help.storage.Backup.mutex] 同语义)。 */
+    private val mutex = Mutex()
+
+    /**
+     * 备份工作目录绝对路径 (filesDir + "backup")。
+     *
+     * 与 app 端 [io.legado.app.help.storage.Backup.backupPath] 同语义,
+     * 目录不存在时由 [BackupFileOps.createFolderIfNotExist] 创建。
+     */
+    val backupPath: String
+        get() {
+            val base = AppFilesDirs.get().filesDir
+            return base + BackupFileOps.separator + BACKUP_DIR_NAME
+        }
+
+    /**
+     * 备份 zip 临时文件绝对路径。
+     *
+     * - 优先用 [AppFilesDirs.externalFilesDir] (与 app 端 externalFiles 一致)
+     * - 桌面端 externalFilesDir 为 null, 回退到 [AppFilesDirs.filesDir]
+     */
+    val zipFilePath: String
+        get() {
+            val base = AppFilesDirs.get().externalFilesDir ?: AppFilesDirs.get().filesDir
+            return base + BackupFileOps.separator + ZIP_FILE_NAME
+        }
+
+    /** 备份时需要导出的所有文件名 (与原版 backupFileNames 逐项一致 + KMP 期新增的 keywordHighlight.json, 共 20 个)。 */
+    private val backupFileNames: Array<String> = arrayOf(
+        "bookshelf.json",
+        "bookmark.json",
+        "keywordHighlight.json",
+        "bookGroup.json",
+        "bookSource.json",
+        "replaceRule.json",
+        "readRecord.json",
+        "searchHistory.json",
+        "sourceSub.json",
+        "txtTocRule.json",
+        "httpTTS.json",
+        "keyboardAssists.json",
+        "dictRule.json",
+        "sourceFilterRule.json",
+        "servers.json",
+        ruleFileName,
+        ReadBookConfigShared.configFileName,
+        ReadBookConfigShared.shareConfigFileName,
+        THEME_CONFIG_FILE_NAME,
+        "config.json"
+    )
+
+    /** autoBack 自身的互斥, 避免多入口并发触发自动备份。 */
+    private val autoBackMutex = Mutex()
+
+    /** 检查是否满足每日自动备份条件 (距上次备份超过 1 天)。 */
+    fun shouldAutoBackup(): Boolean {
+        val lastBackup = BackupRestoreHooks.get().getLastBackup()
+        return lastBackup + 86_400_000L < systemCurrentTimeMillis()
+    }
+
+    /**
+     * 自动备份 (距上次备份超过一天时触发, 云端已有当日备份则只更新时间戳)。
+     * 跨平台统一调度 (对照原版 Backup.autoBack)。
+     *
+     * 发起即返回 (启动路径用); 需要等它落完盘的收尾路径用 [autoBackAwait]。
+     */
+    fun autoBack(
+        destinationPath: String? = effectiveBookSaveDir(),
+    ) {
+        Coroutine.async {
+            autoBackAwait(destinationPath)
+        }.onError {
+            AppLog.put("自动备份失败\n${it.message}", it, tag = TAG)
+        }
+    }
+
+    /**
+     * 自动备份的可等待入口 (退出前收尾用)。
+     *
+     * 收尾路径必须等它跑完: [autoBack] 发起即返回, 调用方进程紧接着结束会把写到一半的
+     * 备份截断 (文件名带时间戳, 不覆盖旧备份, 但会留下一个不可用的半成品)。
+     */
+    suspend fun autoBackAwait(
+        destinationPath: String? = effectiveBookSaveDir(),
+    ) {
+        // 规则订阅的每日更新挂在自动备份这批时机上 (退出阅读页 / 退出程序 / 退到后台), 节流各算各的:
+        // 订阅读自己的 RuleSub.update, 备份读 lastBackup, 互不推迟。
+        // 发起即返回不在这里等: 订阅地址失效时等网络超时会把每次退出都拖住;
+        // 挑选时已把该条订阅的下次尝试时间推到次日, 失败或中断都等次日时机再试, 不写半份数据。
+        RuleSubAutoUpdate.run()
+        if (!shouldAutoBackup()) return
+        // 认证信息只由 upConfig 置上, 未置上则网盘这条出口等于不存在: 这里补一次
+        // (没存账号密码时 upConfig 直接返回, 不产生网络往返; 失败不影响本地出口)。
+        if (!AppWebDavShared.isOk) {
+            runCatching { AppWebDavShared.upConfig() }
+                .onFailure { AppLog.put("自动备份前刷新 WebDav 配置失败\n${it.message}", it, tag = TAG) }
+        }
+        // 本地目录与网盘至少一个可用才值得跑: 两个都没有 (或网盘是唯一出口但当前断网) 时
+        // 不会产出备份包, 跳过且不推进上次备份时间, 下次退出再试; 未设保存位置时设置页
+        // 有常驻警告, 自动备份无其他提示入口
+        val localDirectory = destinationPath?.takeIf { it.isNotBlank() }
+        if (localDirectory == null && (!AppWebDavShared.isOk || !isNetworkAvailable())) return
+        autoBackMutex.withLock {
+            if (!shouldAutoBackup()) return
+            val backupZipFileName = nowZipFileName()
+            val hasRemote = runCatching { AppWebDavShared.hasBackUp(backupZipFileName) }.getOrDefault(false)
+            if (!hasRemote) {
+                backupLocked(localDirectory)
+            } else {
+                BackupRestoreHooks.get().setLastBackup(systemCurrentTimeMillis())
+            }
+        }
+    }
+
+    /**
+     * 备份执行入口 (互斥锁保护)。
+     *
+     * @param destinationPath 本地备份目录 (书籍保存位置); 未设置时不落本地, 本次备份只以
+     *                        网盘上传成功为成功, 备份 zip 落其下的 [BOOK_BACKUP_DIR_NAME] 子目录
+     *                        (书籍直接放保存位置根)。
+     *                        Android 的 content:// 目录由 [BackupRestoreHook.copyBackupTo] 处理。
+     * @param uploadToWebDav 是否上传到 WebDav
+     * @return 已保留在本地的备份 zip 绝对路径; 未落本地 (未设置保存位置) 时返回 null
+     * @throws InvalidBooksDirException 未设置保存位置且网盘未配置或未认证时
+     * @throws NoStackTraceException 未设置保存位置且当前无网络时
+     */
+    suspend fun backupLocked(
+        destinationPath: String? = effectiveBookSaveDir(),
+        uploadToWebDav: Boolean = true,
+    ): String? {
+        return mutex.withLock {
+            backup(destinationPath, uploadToWebDav)
+        }
+    }
+
+    /**
+     * 为一次 Web 下载生成独占的临时备份文件。
+     *
+     * 文件名包含 UUID，且在 [mutex] 内从共享打包临时文件复制完成；锁释放后后续备份只会
+     * 写入自己的目标，不会覆盖已返回给响应流的文件。调用方必须在响应关闭时删除返回文件。
+     */
+    suspend fun backupForDownload(): String {
+        return mutex.withLock {
+            val directory = AppFilesDirs.get().cacheDir
+            val fileName = "backup-download-${randomUUIDString()}.zip"
+            val filePath = directory.trimEnd('/', '\\') + BackupFileOps.separator + fileName
+            var delivered = false
+            var failure: Throwable? = null
+            try {
+                // 落地目录非空 ⇒ 备份包必定落在该目录下, 返回值非空
+                val result = backup(
+                    destinationPath = directory,
+                    uploadToWebDav = false,
+                    localFileNameOverride = fileName,
+                )!!
+                delivered = true
+                result
+            } catch (t: Throwable) {
+                failure = t
+                throw t
+            } finally {
+                if (!delivered) {
+                    cleanupArtifacts(listOf(filePath), failure)
+                }
+            }
+        }
+    }
+
+    /**
+     * 实际备份逻辑 (不加锁, 由 [backupLocked] 包装)。
+     *
+     * 步骤与原版逐项对应:
+     * 1. 清空 backupPath 残留
+     * 2. 逐个 DAO 导出为 JSON 写入 backupPath
+     * 3. servers.json 加密 / 阅读配置 / 主题配置 / 直链上传规则
+     * 4. dump 全量配置 → config.json
+     * 5. zip 打包到临时文件 → 落在本地目录 (未设置保存位置时跳过) → 上传 WebDav
+     * 6. 清理临时文件, 再走宿主收尾钩子 (背景图上传)
+     *
+     * 已有本地副本时上传失败只记日志 (本地副本可找回); 未设置保存位置时本地没有副本,
+     * 上传是唯一去向, 上传失败按备份失败上报。临时包在收尾时统一删除, 落本地即保留副本。
+     */
+    private suspend fun backup(
+        destinationPath: String?,
+        uploadToWebDav: Boolean,
+        localFileNameOverride: String? = null,
+    ): String? {
+        val workDirPath = backupPath
+        val tempZipPath = zipFilePath
+        var failure: Throwable? = null
+        try {
+            val localDirectory = destinationPath?.takeIf { it.isNotBlank() }
+            // 未设置保存位置时本地不产出副本, 网盘是唯一去向: 关掉上传、未配置/未认证、
+            // 无网络三种情形都会让本次备份零产物, 在导出数据前就按失败上报
+            if (localDirectory == null) {
+                when {
+                    !uploadToWebDav ->
+                        throw InvalidBooksDirException(appString(AppStringKey.no_books_dir))
+                    !AppWebDavShared.isOk ->
+                        throw InvalidBooksDirException(appString(AppStringKey.backup_no_destination))
+                    !isNetworkAvailable() -> throw NoStackTraceException(
+                        appString(AppStringKey.network_connection_unavailable)
+                    )
+                }
+            }
+            val hooks = BackupRestoreHooks.get()
+            AppLog.putDebug("开始备份 path:$destinationPath", tag = TAG)
+            hooks.onBackupStart()
+            val aes = BackupAES()
+            cleanupArtifacts(listOf(workDirPath, tempZipPath), primaryFailure = null)
+            BackupFileOps.createFolderIfNotExist(workDirPath)
+            val appDb = AppDbProviders.get()
+
+            // 1. DAO 数据导出 (与原版顺序一致)
+            writeListToJson(appDb.bookDao.all(), "bookshelf.json")
+            writeListToJson(appDb.bookmarkDao.all().sortedByLocalizedOrder(), "bookmark.json")
+            writeListToJson(appDb.keywordHighlightDao.all(), "keywordHighlight.json")
+            writeListToJson(appDb.bookGroupDao.all(), "bookGroup.json")
+            writeListToJson(appDb.bookSourceDao.all(), "bookSource.json")
+            writeListToJson(appDb.replaceRuleDao.all(), "replaceRule.json")
+            writeReadRecords(appDb.readRecordDao.all(), "readRecord.json")
+            writeListToJson(appDb.searchKeywordDao.all(), "searchHistory.json")
+            writeListToJson(appDb.ruleSubDao.all(), "sourceSub.json")
+            writeListToJson(appDb.txtTocRuleDao.all(), "txtTocRule.json")
+            writeListToJson(appDb.httpTTSDao.all(), "httpTTS.json")
+            writeListToJson(appDb.keyboardAssistsDao.all(), "keyboardAssists.json")
+            writeListToJson(appDb.dictRuleDao.all(), "dictRule.json")
+            writeListToJson(appDb.sourceFilterRuleDao.all(), "sourceFilterRule.json")
+
+            // 2. servers.json 加密 (与原版一致)
+            GSON.toJson(appDb.serverDao.all()).let { json ->
+                val encrypted = aes.runCatching { encryptBase64(json) }.getOrDefault(json)
+                BackupFileOps.writeText(
+                    workDirPath + BackupFileOps.separator + "servers.json",
+                    encrypted
+                )
+            }
+
+            currentCoroutineContext().ensureActive()
+
+            // 3. 阅读界面配置 / 主题配置 / 直链上传规则 (与原版 ReadBookConfig + ThemeConfig + DirectLinkUpload 段一致)
+            // runCatching 只兜 provider 取值 (某平台未注册时跳过该项); 写盘失败不吞,
+            // 与原版一致直接中止整个备份, 避免"备份成功但缺文件"
+            val readBookConfig = runCatching { ReadBookConfigProviders.get() }
+                .onFailure { AppLog.put("备份 readConfig 出错\n${it.message}", it) }
+                .getOrNull()
+            if (readBookConfig != null) {
+                BackupFileOps.writeText(
+                    workDirPath + BackupFileOps.separator + ReadBookConfigShared.configFileName,
+                    GSON.toJson(readBookConfig.configList)
+                )
+                BackupFileOps.writeText(
+                    workDirPath + BackupFileOps.separator + ReadBookConfigShared.shareConfigFileName,
+                    GSON.toJson(readBookConfig.shareConfig)
+                )
+            }
+            val themeConfig = runCatching { ThemeConfigProviders.get() }
+                .onFailure { AppLog.put("备份 themeConfig 出错\n${it.message}", it) }
+                .getOrNull()
+            if (themeConfig != null) {
+                BackupFileOps.writeText(
+                    workDirPath + BackupFileOps.separator + THEME_CONFIG_FILE_NAME,
+                    GSON.toJson(themeConfig.getConfigList())
+                )
+            }
+            // get() 未注册即返回 null (等价原版 getConfig() 为 null 时跳过), 无需 runCatching
+            DirectLinkUploadStoreProviders.get()?.getConfig()?.let { rule ->
+                BackupFileOps.writeText(
+                    workDirPath + BackupFileOps.separator + ruleFileName,
+                    GSON.toJson(rule)
+                )
+            }
+
+            currentCoroutineContext().ensureActive()
+
+            // 4. config.json dump 全量配置 (过滤忽略项, 显式忽略废弃的 useZhLayout, webDavPassword 加密, 与原版一致)
+            val configMap = mutableMapOf<String, Any>()
+            PreferenceProviders.get().getAll().forEach { (key, value) ->
+                if (key != "useZhLayout" && BackupConfigShared.keyIsNotIgnore(key)) {
+                    when (key) {
+                        PreferKey.webDavPassword -> {
+                            configMap[key] = aes.runCatching {
+                                encryptBase64(value.toString())
+                            }.getOrDefault(value.toString())
+                        }
+
+                        // Set<String> (SharedPreferences 合法值类型) 转 List 再序列化,
+                        // 否则 toJsonElement 走 toString() 分支写成字符串, 与原版 Gson 的数组不兼容
+                        else -> value?.let {
+                            configMap[key] = if (it is Set<*>) it.toList() else it
+                        }
+                    }
+                }
+            }
+            // homeTabs/exploreFavorites 真身在 filesDir JSON 文件, 内容塞回 config.json
+            // 保持原有备份通道 (文件不存在说明从未使用, 跳过)
+            listOf(
+                HomeTabHelpShared.FILE_NAME to HomeTabHelpShared.PREF_KEY,
+                PinnedExploreHelp.FILE_NAME to PinnedExploreHelp.PREF_KEY,
+            ).forEach { (fileName, prefKey) ->
+                if (BackupConfigShared.keyIsNotIgnore(prefKey)) {
+                    FilesJsonStore.readText(fileName)?.let { configMap[prefKey] = it }
+                }
+            }
+            BackupFileOps.writeText(
+                workDirPath + BackupFileOps.separator + "config.json",
+                GSON.toJson(configMap)
+            )
+
+            currentCoroutineContext().ensureActive()
+
+            // 5. zip 打包 (不存在的文件先过滤, jvm 端 ZipUtils 本就跳过, 打包结果一致)
+            val zipFileName = nowZipFileName()
+            val paths = backupFileNames.mapNotNull { name ->
+                val p = workDirPath + BackupFileOps.separator + name
+                if (BackupFileOps.exists(p)) p else null
+            }
+            // 图集目录随备份打包 (zip 内条目保留相对文件根结构): customImg/ (封面图集+
+            // 主题背景图+启动图+阅读背景 novelBg 子目录) 与旧版兼容目录 bg/; 恢复时解回文件根。
+            // coversDir 是持久引用的物理目录，映射为独立 zip 命名空间 oldCovers/，
+            // 避免与 customImg/covers 混用。复制进工作目录以固定 zip 条目名。
+            val filesBase = AppFilesDirs.get().externalFilesDir ?: AppFilesDirs.get().filesDir
+            val imageDirs = listOf("customImg", "bg").mapNotNull { dirName ->
+                val dir = filesBase + BackupFileOps.separator + dirName
+                if (BackupFileOps.exists(dir)) dir else null
+            }
+            val oldCoversBackupDir = AppFilesDirs.get().coversDir
+                ?.takeIf { BackupFileOps.exists(it) }
+                ?.let { coversDir ->
+                    val stagedDir = workDirPath + BackupFileOps.separator + OLD_COVERS_DIR_NAME
+                    copyDir(coversDir, stagedDir)
+                    stagedDir
+                }
+            val pathsWithImages = paths + imageDirs + listOfNotNull(oldCoversBackupDir)
+            // WebDav 始终使用带日期的文件名; onlyLatestBackup 仅控制本地副本名称
+            val localFileName = localFileNameOverride ?: if (
+                PreferenceProviders.get().getBoolean(PreferKey.onlyLatestBackup, true)
+            ) {
+                "backup.zip"
+            } else {
+                zipFileName
+            }
+            // 备份 zip 落保存位置下的 backup 子目录 (书籍直接放根): 普通路径端在这里拼路径,
+            // SAF 树引用端由 hook 在树内建同名子目录
+            val backupDir = localDirectory?.let { bookSaveSubDir(it, BOOK_BACKUP_DIR_NAME) }
+            val localZipPath = backupDir?.let { bookSaveSubDir(it, localFileName) }
+
+            if (!BackupFileOps.zipFiles(pathsWithImages, tempZipPath)) {
+                error("备份 zip 打包失败")
+            }
+            // 先落本地 (未设置保存位置时没有本地副本, 临时包由收尾清理): 落不了即按失败上报
+            if (localDirectory != null && localZipPath != null) {
+                if (!hooks.copyBackupTo(tempZipPath, localDirectory, localFileName, BOOK_BACKUP_DIR_NAME)) {
+                    BackupFileOps.copyFile(tempZipPath, localZipPath)
+                }
+            }
+            // 再上网盘: 已有本地副本时上传失败只记日志, 没有本地副本时上传失败即备份失败
+            if (uploadToWebDav) {
+                try {
+                    AppWebDavShared.backUpWebDav(zipFileName)
+                } catch (e: Exception) {
+                    currentCoroutineContext().ensureActive()
+                    if (localDirectory == null) throw e
+                    AppLog.put("上传备份至webdav失败\n$e", e)
+                }
+            }
+            currentCoroutineContext().ensureActive()
+            // 6. 宿主收尾 (app 端: 上传阅读背景图到 WebDav)
+            hooks.onBackupFinished(uploadToWebDav)
+            currentCoroutineContext().ensureActive()
+            return localZipPath
+        } catch (t: Throwable) {
+            failure = t
+            throw t
+        } finally {
+            cleanupArtifacts(listOf(workDirPath, tempZipPath), failure)
+        }
+    }
+
+    /**
+     * 删除本轮持有的中间产物，并保证清理异常不覆盖主流程异常。
+     *
+     * 每个路径都会独立尝试，避免一个删除失败阻断其余清理；若主流程已失败，清理异常作为
+     * suppressed 附着到原异常。主流程成功时清理失败直接抛出，不能把残留伪装成成功。
+     */
+    private fun cleanupArtifacts(paths: List<String>, primaryFailure: Throwable?) {
+        var firstCleanupFailure: Throwable? = null
+        paths.distinct().forEach { path ->
+            try {
+                BackupFileOps.delete(path)
+                check(!BackupFileOps.exists(path)) { "备份临时文件清理失败: $path" }
+            } catch (cleanupFailure: Throwable) {
+                val preservedFailure = primaryFailure ?: firstCleanupFailure
+                if (preservedFailure == null) {
+                    firstCleanupFailure = cleanupFailure
+                } else if (cleanupFailure !== preservedFailure) {
+                    preservedFailure.addSuppressed(cleanupFailure)
+                }
+            }
+        }
+        if (primaryFailure == null) {
+            firstCleanupFailure?.let { throw it }
+        }
+    }
+
+    /** 写入 List<Any> 为 JSON 到 [backupPath]/[fileName]。空列表跳过 (与原版一致)。 */
+    private suspend fun writeListToJson(list: List<Any>, fileName: String) {
+        currentCoroutineContext().ensureActive()
+        if (list.isEmpty()) {
+            AppLog.putDebug("阅读备份 $fileName 列表为空", tag = TAG)
+            return
+        }
+        AppLog.putDebug("阅读备份 $fileName 列表大小 ${list.size}", tag = TAG)
+        BackupFileOps.writeText(
+            backupPath + BackupFileOps.separator + fileName,
+            GSON.toJson(list)
+        )
+    }
+
+    /** 写入阅读记录为 1A+1C 紧凑 Map 结构 (区间融合 + 按书名归组)。空列表跳过。 */
+    private suspend fun writeReadRecords(records: List<ReadRecord>, fileName: String) {
+        currentCoroutineContext().ensureActive()
+        if (records.isEmpty()) {
+            AppLog.putDebug("阅读备份 $fileName 列表为空", tag = TAG)
+            return
+        }
+        val merged = ReadRecord.mergeIntervals(records)
+        val recordMap = merged.groupBy { it.bookName }.mapValues { (_, list) ->
+            list.map { listOf(it.startSec, it.endSec) }
+        }
+        AppLog.putDebug("阅读备份 $fileName 原始 ${records.size} 条, 合并后 ${merged.size} 条", tag = TAG)
+        BackupFileOps.writeText(
+            backupPath + BackupFileOps.separator + fileName,
+            GSON.toJson(recordMap)
+        )
+    }
+
+    /** 递归复制目录，用于把平台 coversDir 映射到 zip 的 oldCovers/ 命名空间。 */
+    private fun copyDir(srcDir: String, dstDir: String) {
+        BackupFileOps.listFiles(srcDir)?.forEach { entry ->
+            val dst =
+                dstDir + BackupFileOps.separator + entry.substringAfterLast(BackupFileOps.separator)
+            if (BackupFileOps.listFiles(entry) != null) {
+                copyDir(entry, dst)
+            } else {
+                BackupFileOps.createFolderIfNotExist(dstDir)
+                BackupFileOps.copyFile(entry, dst)
+            }
+        }
+    }
+
+    /**
+     * 生成当前备份 zip 文件名 (与原版 getNowZipFileName 一致)。
+     *
+     * 始终为带日期的文件名: `backup{yyyy-MM-dd}.zip` / `backup{yyyy-MM-dd}-{deviceName}.zip`;
+     * onlyLatestBackup 只影响本地副本命名, 不影响 WebDav 上传名 (云端保留历史备份)。
+     */
+    fun nowZipFileName(): String {
+        val backupDate = datePattern.format(systemCurrentTimeMillis())
+        val deviceName = AppConfigProviders.get().webDavDeviceName
+        return if (deviceName.isNotBlank()) {
+            "backup${backupDate}-${deviceName}.zip"
+        } else {
+            "backup${backupDate}.zip"
+        }.normalizeFileName()
+    }
+
+    /** 清理备份工作目录与 zip 临时文件 (与原版 clearCache 同语义)。 */
+    fun clearCache() {
+        BackupFileOps.delete(backupPath)
+        BackupFileOps.delete(zipFilePath)
+    }
+}

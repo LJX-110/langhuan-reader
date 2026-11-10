@@ -1,0 +1,35 @@
+package io.legado.app.help.storage
+
+import android.os.Environment
+import io.legado.app.App
+import io.legado.app.help.book.BookHelp
+import io.legado.app.utils.FileUtils
+import io.legado.app.utils.externalFiles
+import java.io.File
+
+/**
+ * [DataStorage] 安卓实现: 委托 app 端各目录原定义 (BookHelp.cachePath /
+ * Backup.backupPath), 不另算路径, 保证与下沉前完全同值。
+ *
+ * 注册: [io.legado.app.model.webBook.registerAndroidWebBookProviders] 首行。
+ */
+object AndroidDataStorage : DataStorage {
+
+    override val chapterCacheDir: String get() = BookHelp.cachePath
+
+    override val backgroundsDir: String get() = FileUtils.getPath(App.instance.externalFiles, "bg")
+
+    override val fontsDir: String get() = FileUtils.getPath(App.instance.externalFiles, "font")
+
+    override val backupDir: String get() = Backup.backupPath
+
+    /** 公共文档目录下的 legado (无存储权限时回退应用外部目录, 调用方不必再判权限)。 */
+    override val userExportDir: String
+        get() = runCatching {
+            @Suppress("DEPRECATION")
+            val documents = Environment
+                .getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+            val dir = File(documents, "legado")
+            if (dir.isDirectory || dir.mkdirs()) dir.absolutePath else null
+        }.getOrNull() ?: FileUtils.getPath(App.instance.externalFiles, "export")
+}

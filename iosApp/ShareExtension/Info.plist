@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Share Extension 的 Info.plist (已接线: 扩展写 App Group 容器 → 宿主启动取件)。
+
+  ⚠️ 本文件与 iosApp/project.yml 里 `ShareExtension.info.properties` 双写:
+      `xcodegen generate` 会用 project.yml 那段重写本文件, 手改这里会被覆盖。
+      两边必须同步, 说明先在 project.yml 那段。
+
+  决定"扩展会不会出现在分享面板"的是 NSExtension 字典; 决定"收什么内容"的是
+  NSExtensionActivationRule。当前规则 = Version 2 (至少处理一类) + 收 1 个文件 / 文本 / web 链接,
+  每条的适用条件见 project.yml 同段注释。
+  交付与生效前提 (未签名 ipa 拿不到 App Group entitlement, 链路不生效) 见
+  project.yml 的 ShareExtension 段与 ShareViewController.swift 头部注释。
+  文本落到与文件不同的槽 (ShareText/), 原因见 ShareViewController.swift 的 legadoTextDirName。
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>zh-Hans</string>
+	<key>CFBundleDisplayName</key>
+	<string>Legado</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>XPC!</string>
+	<!-- 版本号须与主 App 一致 (App Store 校验要求); 同步方式的缺口见 project.yml 该段注释 -->
+	<key>CFBundleShortVersionString</key>
+	<string>3.26.081614</string>
+	<key>CFBundleVersion</key>
+	<string>17376</string>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.share-services</string>
+		<key>NSExtensionPrincipalClass</key>
+		<string>$(PRODUCT_MODULE_NAME).ShareViewController</string>
+		<key>NSExtensionActivationRule</key>
+		<dict>
+			<key>NSExtensionActivationDictionaryVersion</key>
+			<integer>2</integer>
+			<key>NSExtensionActivationSupportsFileWithMaxCount</key>
+			<integer>1</integer>
+			<key>NSExtensionActivationSupportsText</key>
+			<true/>
+			<key>NSExtensionActivationSupportsWebURLWithMaxCount</key>
+			<integer>1</integer>
+		</dict>
+	</dict>
+</dict>
+</plist>

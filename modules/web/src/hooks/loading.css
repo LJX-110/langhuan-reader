@@ -1,0 +1,11 @@
+.circular {
+  width: 42px;
+  height: 42px;
+  color: #b5b5b5;
+  animation: web-rotate 2s linear infinite;
+  transform-origin: center;
+}
+@keyframes web-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

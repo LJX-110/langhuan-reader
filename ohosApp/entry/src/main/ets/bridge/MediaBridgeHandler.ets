@@ -1,0 +1,1210 @@
+import media from '@ohos.multimedia.media';
+import audio from '@ohos.multimedia.audio';
+import PiPWindow from '@ohos.PiPWindow';
+import fs from '@ohos.file.fs';
+import avSession from '@ohos.multimedia.avsession';
+import wantAgent, { WantAgent } from '@ohos.app.ability.wantAgent';
+import common from '@ohos.app.ability.common';
+import type Want from '@ohos.app.ability.Want';
+import { BridgeCommand, parseBridgeCommand } from './BridgeDispatch';
+import { acquireAudioTask, releaseAudioTask } from './ContinuousTaskArbiter';
+import {
+  emitPlatformEvent,
+  AudioDeviceChangeEvent,
+  AudioFocusChangeEvent,
+} from './PlatformEventBridge';
+
+/**
+ * ArkTS 侧媒体播放与播控中心处理器 (KP8+)。
+ *
+ * 1. 接收 Kotlin OhosNativeBridge.sendMediaCommand 通过 tsfn dispatch 过来的播放器命令,
+ *    调用 @ohos.multimedia.media AVPlayer 执行真实音频播放;
+ * 2. 接入 @ohos.multimedia.avsession 媒体会话, 实现系统播控中心、锁屏媒体卡片元数据/进度同步与远程控制响应;
+ * 3. 接入长时任务 (AUDIO_PLAYBACK) 保障后台播放不被冻结 —— 申请/释放统一走 [ContinuousTaskArbiter]
+ *    (音频优先级最高: 会抢占占槽的后台作业; 目前会申请长时任务的只有音频与缓存下载/Web 服务,
+ *    导出/校验书源/更新书籍三种业务按官方场景表无可用模式, 不申请保活);
+ * 4. AVPlayer 事件与系统播控指令通过 legado.mediaEvent(eventJson) 回送给 Kotlin。
+ *
+ * # 多实例 (playerId)
+ * 音频书 (audioBook)、HttpTTS 朗读 (httpTts) 与视频书 (videoBook) 需同时各持一个 AVPlayer,
+ * 故按 playerId 维护 Map<playerId, PlayerSlot>。命令与事件均带 playerId; 缺省时按 DEFAULT_PLAYER_ID
+ * 处理 (向后兼容旧协议 / ArkTS UI 页面直驱)。
+ * 命令按 action 分发, 不按 playerId 白名单: setSource(fd) 与 setSourceUrl(网络) 两条装源通道
+ * 对任何 playerId 一视同仁 (音频书用 fd 通道播缓存, 视频书用 fd 通道播外部投来的授权体 URI)。
+ *
+ * # JSON 协议 (与 HttpTtsPlayer.ohos.kt / OhosAudioPlayCommander.ohos.kt / OhosNativeBridge.kt /
+ *   OhosMediaNotificationController.kt 对齐)
+ *
+ * ## 命令 (Kotlin → ArkTS, fire-and-forget)
+ * {
+ *   "playerId": "<string?>",   // 缺省 = "default"; syncNowPlaying/clearNowPlaying 不带
+ *   "action": "setSource" | "setSourceUrl" | "play" | "pause" | "stop" | "seekTo" |
+ *             "setSpeed" | "setVolume" | "release" | "syncNowPlaying" | "clearNowPlaying",
+ *   "path": "<string?>",       // setSource 时交 fs.openSync 的本地地址 (沙箱绝对路径或 file URI)
+ *   "url": "<string?>",        // setSourceUrl 时为网络流地址
+ *   "headers": <Record?>,      // setSourceUrl 时为请求头
+ *   "position": <number?>,     // seekTo / syncNowPlaying 的位置 (毫秒)
+ *   "speed": <number?>,        // setSpeed / syncNowPlaying 的浮点倍速
+ *   // 以下仅 syncNowPlaying: 播控卡片元数据与状态
+ *   "title": "<string?>",      // 章节名
+ *   "artist": "<string?>",     // 书名
+ *   "album": "<string?>",      // 作者
+ *   "duration": <number?>,     // 总时长 (毫秒)
+ *   "isPlaying": <boolean?>,
+ *   "isPaused": <boolean?>,
+ *   "coverUrl": "<string?>"    // 封面 URL / 本地路径, 无封面时不带
+ * }
+ *
+ * ## 事件 (ArkTS → Kotlin, via legado.mediaEvent)
+ * {
+ *   "playerId": "<string>",    // 必带, 与命令的 playerId 对应; 播控指令固定 "session"
+ *   "event": "onReady" | "onEndOfMedia" | "onError" | "onBufferingUpdate" |
+ *            "onDuration" | "onPosition" | "onPlaying" | "onPaused" | "onCommand",
+ *   "message": "<string?>",    // onError 时含错误信息
+ *   "percent": <number?>,      // onBufferingUpdate 时为缓冲百分比 (0-100)
+ *   "duration": <number?>,     // onDuration 时为总时长 (毫秒)
+ *   "position": <number?>,     // onPosition / seek 指令的位置 (毫秒)
+ *   "command": "<string?>"     // onCommand: play|pause|stop|next|previous|seek
+ * }
+ *
+ * ## 平台事件 (ArkTS → Kotlin, via legado.platformEvent, 非本模块的 mediaEvent)
+ * 音频设备变化与音频打断不经 mediaEvent, 而是 PlatformEventBridge 的统一通道:
+ * `{ type: 'audioDeviceChange', disconnected: true }` /
+ * `{ type: 'audioFocusChange', change: 'gain'|'loss'|'lossTransient'|'lossTransientCanDuck' }`
+ *
+ * # AVPlayer 状态机
+ * idle → (设源) → initialized → (prepare) → prepared → (play) → playing ↔ paused
+ *   → (stop) → stopped → (reset) → idle → ... → (release) → released
+ *
+ * 完整事件链:
+ * - setSource/setSourceUrl 命令 → 设源 → prepare() → stateChange('prepared') → 发 onReady
+ * - play 命令 → avPlayer.play() → stateChange('playing') → 发 onPlaying
+ * - pause 命令 → avPlayer.pause() → stateChange('paused') → 发 onPaused
+ * - 播放结束 → stateChange('completed') → 发 onEndOfMedia
+ * - 错误 → error 事件 / stateChange('error') → 发 onError
+ * - 时长更新 → durationUpdate 事件 → 发 onDuration
+ * - 位置更新 → timeUpdate 事件 → 发 onPosition
+ */
+
+// Media 事件回调类型 (由 EntryAbility 注入, 内部调 legado.mediaEvent)
+export type MediaEventCallback = (eventJson: string) => void;
+
+/** 缺省 playerId: 无 playerId 字段的旧协议消息落到这里。 */
+export const DEFAULT_PLAYER_ID: string = 'default';
+
+/** 音频书播放实例 (Kotlin OhosAudioPlayCommander + ArkTS AudioPlay 页共用)。 */
+export const PLAYER_ID_AUDIO_BOOK: string = 'audioBook';
+
+/** HttpTTS 朗读播放实例 (Kotlin OhosHttpTtsPlayer 专用)。 */
+export const PLAYER_ID_HTTP_TTS: string = 'httpTts';
+
+/** 视频播放实例 (Kotlin OhosVideoPlayerController 专用)。 */
+export const PLAYER_ID_VIDEO: string = 'videoBook';
+
+/** 系统播控会话交互 id (AVSession 远程播控指令派发)。 */
+export const PLAYER_ID_SESSION: string = 'session';
+
+/** 单个播放实例的状态 (AVPlayer + 其打开的本地文件 fd)。 */
+class PlayerSlot {
+  player: media.AVPlayer | null = null;
+  fd: number | null = null;
+}
+
+// playerId → 播放实例
+let players: Map<string, PlayerSlot> = new Map<string, PlayerSlot>();
+
+// Media 事件回调 (由 EntryAbility 注入)
+let eventCallback: MediaEventCallback | null = null;
+
+// UIAbilityContext (由 EntryAbility 注入, 供 AVSession 与 BackgroundTaskManager 使用)
+let abilityContext: common.UIAbilityContext | undefined;
+
+// AVSession 单例 + 创建中的 Promise (命令是 fire-and-forget, 连发两条会并发创建, 同应用只允许一个会话)
+let currentAvSession: avSession.AVSession | undefined;
+let avSessionPending: Promise<avSession.AVSession | undefined> | undefined;
+
+// 长时后台任务状态 + 启停中的 Promise (同上, 避免并发重复启停)
+let isContinuousTaskRunning: boolean = false;
+let continuousTaskPending: Promise<void> | undefined;
+
+// 音频设备变化监听是否已安装 (拔耳机/蓝牙断开 → 暂停播放)
+let routingMonitorInstalled: boolean = false;
+
+/**
+ * 音频播控卡片点击后的目标路由 (与 app 端音频通知的 route extra 逐字一致)。
+ *
+ * 只在播控卡片用: 长时任务的保活拉起不带它 (保活不应改变用户当前页面)。
+ */
+const AUDIO_PLAY_ROUTE: string = 'route:audio_play';
+
+// 已下发的卡片元数据指纹 (相同就跳过 setAVMetadata, 对照 app 端 loadCover 的 lastCoverUrl 短路)
+let lastMetadataKey: string = '';
+
+// 视频画面 surfaceId (由 Index.ets 经 registerComposeInteropBuilder 的 XComponent.onLoad 注入;
+// 先于 AVPlayer 创建时暂存, 创建 videoBook 播放器时再绑定)
+let videoSurfaceId: string | null = null;
+
+// ===== 视频画中画 (PiPWindow, 仅 videoBook 播放器使用) =====
+// PiP 窗口复用页面 XComponent 的 surface: componentController 传 Index.ets 的
+// videoSurfaceController (模块级单例, onLoad 时经 setVideoPipSurfaceController 注入),
+// 系统把该 XComponent 的 surface 转移进小窗, AVPlayer 继续写同一 surfaceId 无需重绑。
+let videoPipSurfaceController: XComponentController | undefined = undefined;
+let videoPipController: PiPWindow.PiPController | undefined = undefined;
+
+/**
+ * 注入视频画面 XComponent 的 controller (Index.ets XComponent.onLoad 时调用),
+ * 画中画拉起时作为 PiPConfiguration.componentController 交给系统。
+ */
+export function setVideoPipSurfaceController(controller: XComponentController): void {
+  videoPipSurfaceController = controller;
+}
+
+/** 本地事件监听项: listener + 关注的 playerId (null = 全收)。 */
+class LocalListenerEntry {
+  listener: (eventJson: string) => void;
+  playerId: string | null;
+
+  constructor(listener: (eventJson: string) => void, playerId: string | null) {
+    this.listener = listener;
+    this.playerId = playerId;
+  }
+}
+
+// 本地 media 事件监听器 (ArkTS UI 页面订阅 AVPlayer 事件用于状态更新, 与 KMP 回调并行)
+let localListeners: Array<LocalListenerEntry> = [];
+
+/**
+ * 注册本地 media 事件监听 (UI 页面 aboutToAppear 调用)。
+ * 与 eventCallback (→ KMP) 并行触发, 互不影响。
+ *
+ * @param playerId 只接收该 playerId 的事件; 省略则接收全部 (旧行为)
+ */
+export function addMediaEventListener(listener: (eventJson: string) => void, playerId?: string): void {
+  localListeners.push(new LocalListenerEntry(listener, playerId ?? null));
+}
+
+/** 注销本地 media 事件监听 (UI 页面 aboutToDisappear 调用)。 */
+export function removeMediaEventListener(listener: (eventJson: string) => void): void {
+  for (let i = localListeners.length - 1; i >= 0; i--) {
+    if (localListeners[i].listener === listener) {
+      localListeners.splice(i, 1);
+    }
+  }
+}
+
+// ===== 命令接口定义 (与 Kotlin 侧 JSON 协议对齐) =====
+
+interface MediaCommand extends BridgeCommand {
+  playerId?: string;
+  path?: string;
+  url?: string;
+  headers?: Record<string, string>;
+  position?: number;
+  speed?: number;
+  volume?: number;
+  // 视频画面缩放 (与 Kotlin VideoZoom 同口径: scale 倍数, pan 为本轴可平移范围的比例 -1..1)
+  scale?: number;
+  panX?: number;
+  panY?: number;
+  // AVSession 元数据与播放状态同步字段
+  title?: string;
+  artist?: string;
+  album?: string;
+  duration?: number;
+  isPlaying?: boolean;
+  isPaused?: boolean;
+  coverUrl?: string;
+}
+
+interface MediaEventPayload {
+  playerId?: string;
+  event: string;
+  message?: string;
+  percent?: number;
+  duration?: number;
+  /** 已缓存时长 ms (BUFFERING_PERCENT 之外的 CACHED_DURATION 档, 供进度条缓冲层用) */
+  cachedDuration?: number;
+  position?: number;
+  command?: string; // 播控指令: play / pause / stop / next / previous / seek
+  /** 仅 onPipStateChanged: true/false = 当前是否在画中画窗口; 非空 message = 失败提示 */
+  isPip?: boolean;
+  /** 仅 onVideoSizeChange: 视频解码分辨率 (px), 供画面缩放算平移边界 */
+  width?: number;
+  height?: number;
+  /** 仅 onAmplitude: AVPlayer 上报的各声道最大电平值 (供歌词辉光呼吸) */
+  amplitude?: Array<number>;
+}
+
+/** 尺寸 (px)。 */
+export interface Size2D {
+  width: number;
+  height: number;
+}
+
+/**
+ * 初始化 Media 桥接 (由 EntryAbility.onCreate 调用, 注入事件回送函数与 Ability 上下文)。
+ *
+ * @param callback 事件回送函数 (EntryAbility 注入 legado.mediaEvent)
+ * @param context UIAbilityContext
+ */
+export function initMediaBridge(callback: MediaEventCallback, context: common.UIAbilityContext): void {
+  eventCallback = callback;
+  abilityContext = context;
+  installAudioRoutingMonitor().catch((err: Error) => {
+    console.error('[MediaBridge] installAudioRoutingMonitor failed: ' + (err.message ?? String(err)));
+  });
+}
+
+/**
+ * 绑定视频画面 surface (Index.ets 的 XComponent.onLoad 回调调用)。
+ *
+ * XComponent(type:'surface') 加载完成时把 surfaceId 交给 AVPlayer (player.surfaceId =
+ * surfaceId) 才能显示画面 (否则视频只能出声)。surfaceId 可能先于 videoBook AVPlayer 创建
+ * (Compose 先渲染 surface、后发 setSourceUrl / setSource), 故先暂存, 播放器创建时再绑定。
+ * 两条装源通道 (网络流播 / 本地 fd) 都在 createAVPlayer 后调 bindVideoSurfaceIfNeeded。
+ *
+ * @param surfaceId XComponent.onLoad 的 surfaceId (目标平台 surface)
+ */
+export function setVideoSurfaceId(surfaceId: string): void {
+  videoSurfaceId = surfaceId;
+  // 若 videoBook 播放器已存在则立即绑定
+  const slot = players.get(PLAYER_ID_VIDEO);
+  if (slot != null && slot.player != null) {
+    try {
+      slot.player.surfaceId = surfaceId;
+      console.info('[MediaBridge] video surface bound: id=' + surfaceId);
+    } catch (e) {
+      console.error('[MediaBridge] bind video surface failed: ' + (e as Error).message);
+    }
+  } else {
+    console.info('[MediaBridge] video surfaceId stored (player not ready yet): ' + surfaceId);
+  }
+}
+
+/**
+ * 处理来自 Kotlin 的 media 命令 (由 EntryAbility 注册的 tsfn 回调调用)。
+ *
+ * @param commandJson 命令 JSON 字符串 (含 playerId/action/path/url/position)
+ */
+export function handleMediaCommand(commandJson: string): void {
+  const parsed = parseBridgeCommand(commandJson, 'MediaBridge', 'command');
+  if (parsed == null) {
+    return;
+  }
+  const cmd = parsed as MediaCommand;
+
+  const id: string = cmd.playerId ?? DEFAULT_PLAYER_ID;
+
+  switch (cmd.action) {
+    case 'setSource':
+      handleSetSource(id, cmd.path ?? '').catch((err: Error) => {
+        emitEvent(id, { event: 'onError', message: 'setSource failed: ' + (err.message ?? String(err)) });
+      });
+      break;
+    case 'setSourceUrl':
+      handleSetSourceUrl(id, cmd.url ?? '', cmd.headers).catch((err: Error) => {
+        emitEvent(id, { event: 'onError', message: 'setSourceUrl failed: ' + (err.message ?? String(err)) });
+      });
+      break;
+    case 'play':
+      handlePlay(id);
+      break;
+    case 'pause':
+      handlePause(id);
+      break;
+    case 'stop':
+      handleStop(id);
+      break;
+    case 'seekTo':
+      handleSeekTo(id, cmd.position ?? 0);
+      break;
+    case 'setSpeed':
+      handleSetSpeed(id, cmd.speed ?? 1);
+      break;
+    case 'setVolume':
+      handleSetVolume(id, cmd.volume ?? 1);
+      break;
+    case 'syncNowPlaying':
+      handleSyncNowPlaying(cmd).catch((err: Error) => {
+        console.error('[MediaBridge] syncNowPlaying failed: ' + (err.message ?? String(err)));
+      });
+      break;
+    case 'clearNowPlaying':
+      handleClearNowPlaying().catch((err: Error) => {
+        console.error('[MediaBridge] clearNowPlaying failed: ' + (err.message ?? String(err)));
+      });
+      break;
+    case 'enterPictureInPicture':
+      startVideoPip().catch((err: Error) => {
+        console.error('[MediaBridge] enterPictureInPicture failed: ' + (err.message ?? String(err)));
+      });
+      break;
+    case 'setVideoZoom':
+      handleSetVideoZoom(cmd);
+      break;
+    case 'release':
+      handleRelease(id);
+      break;
+    default:
+      console.warn('[MediaBridge] unknown action: ' + cmd.action);
+  }
+}
+
+// ===== setSource: 打开文件 → 创建 AVPlayer → 设源 → prepare =====
+
+/**
+ * 本地 (fd) 通道装源。
+ *
+ * path 的两种形态同一条 `fs.openSync` 都收 (@ohos.file.fs.d.ts openSync: "Application sandbox
+ * path or file URI of the file to open", @since 12), 故不按形态分流:
+ * - 音频书/HttpTTS 的缓存文件绝对路径 (`/data/storage/el2/base/...`, 见
+ *   OhosAudioPlayCommander.ohos.kt 的 `setSource(file.path, ...)`);
+ * - 外部投来的授权体 URI (`file://media/Video/<id>` 媒体库 / `file://docs/...` 文档) ——
+ *   这类地址走 MediaSource 通道播不了 (createMediaSourceWithUrl 只覆盖 HLS / HTTP-FLV /
+ *   DASH / HTTPS), 只能开成 fd; 能不能开得起来取决于系统随投递给的 URI 授权
+ *   (@ohos.app.ability.Want.d.ts: "ability.params.stream: File URIs to be authorized to the
+ *   target ability"), 开不出来就走下面的错误通道。
+ *
+ * 开不出来 (权限失效 / 文件已删) 就抛, 由 handleMediaCommand 的 catch 回 onError;
+ * 抛之前必须把已占的槽位与已开的 fd 收干净 (失败态下 fd 泄漏比音频严重: 视频 URI 更常被打回)。
+ */
+async function handleSetSource(id: string, path: string): Promise<void> {
+  if (path.length === 0) {
+    emitEvent(id, { event: 'onError', message: 'setSource: path is empty' });
+    return;
+  }
+
+  // 释放旧 player + 关闭旧 fd
+  await releasePlayer(id);
+
+  const slot = new PlayerSlot();
+  players.set(id, slot);
+  try {
+    // 打开本地文件 (先占槽再开 fd: 中途抛错时 fd 已记在 slot 上, 能一起回收)
+    const file = openLocalFile(path);
+    slot.fd = file.fd;
+
+    // 创建 AVPlayer 并注册事件监听
+    const player = await media.createAVPlayer();
+    slot.player = player;
+    registerPlayerEvents(id, player);
+    bindVideoSurfaceIfNeeded(id, player);
+
+    // 设源: 用 fd:// 协议指向本地文件
+    player.url = 'fd://' + file.fd;
+    console.info('[MediaBridge] setSource: id=' + id + ' path=' + path + ' fd=' + file.fd);
+
+    // 异步 prepare, 就绪后 stateChange('prepared') 触发 onReady 事件
+    await player.prepare();
+  } catch (err) {
+    // 装载中途失败 (开不出 fd / 建实例 / prepare 被拒): 释放实例并关掉已开的 fd 后原样抛出,
+    // 由 handleMediaCommand 的 catch 统一回 onError
+    await releasePlayer(id);
+    throw err as Error;
+  }
+}
+
+/**
+ * 只读打开本地地址, 失败时按沙盒路径形态重试一次。
+ *
+ * 首选形态就是入参本身 (fs.openSync 同时吃绝对路径与 file URI); 重试只为首选报错而触发,
+ * 成功路径上行为零变化。需要重试的只有一种情况: KMP 侧 VideoDirect 把裸绝对路径补成
+ * `file:///...` 时会对空格 / '#' / '?' / '%' 做百分号编码, URI 里的编码形式未必能被
+ * 文件系统直接解析 (它不是 picker 交出的那种原样 URI)。
+ */
+function openLocalFile(path: string): fs.File {
+  try {
+    return fs.openSync(path, fs.OpenMode.READ_ONLY);
+  } catch (e) {
+    const alt = sandboxPathFromFileUri(path);
+    if (alt === null || alt.length === 0 || alt === path) {
+      throw e as Error;
+    }
+    try {
+      const file: fs.File = fs.openSync(alt, fs.OpenMode.READ_ONLY);
+      console.info('[MediaBridge] setSource: URI 直开失败, 改按沙盒路径打开: ' + alt);
+      return file;
+    } catch (e2) {
+      // 两种形态都开不出来: 报首选形态 (调用方给的那个串) 的错, 与用户看到的地址对得上;
+      // 兜底形态的错只进日志
+      console.warn('[MediaBridge] setSource: fallback path also failed: ' + (e2 as Error).message);
+      throw e as Error;
+    }
+  }
+}
+
+/**
+ * file URI → 可直开的 POSIX 路径; 兼容不了的形式返回 null (不兜底)。
+ *
+ * 只处理两种"authority 段不是真实挂载点"的形态:
+ * - `file:///data/...` (空 authority, VideoDirect 把裸绝对路径补成这个形式);
+ * - `file://docs/storage/...` (docs 授权体去前缀即挂载点真实路径 —— 与 Kotlin 侧
+ *   OhosPlatformServices.toSandboxPath 同一口径)。
+ * 媒体库 `file://media/...` 没有对应的裸路径形态 (去前缀得到的不是挂载点), 故不兜底。
+ */
+function sandboxPathFromFileUri(uri: string): string | null {
+  let rest: string;
+  if (uri.startsWith('file:///')) {
+    rest = uri.substring('file://'.length);
+  } else if (uri.startsWith('file://docs/')) {
+    rest = uri.substring('file://docs'.length);
+  } else {
+    return null;
+  }
+  try {
+    return decodeURIComponent(rest);
+  } catch (e) {
+    // 残缺的 % 序列: 原样交回, 让调用方抛首选错误
+    return rest;
+  }
+}
+
+// ===== setSourceUrl: 网络流播 (免预下载), 带请求头 (API 12+) =====
+async function handleSetSourceUrl(id: string, url: string, headers?: Record<string, string>): Promise<void> {
+  if (url.length === 0) {
+    emitEvent(id, { event: 'onError', message: 'setSourceUrl: url is empty' });
+    return;
+  }
+
+  await releasePlayer(id);
+
+  const slot = new PlayerSlot();
+  players.set(id, slot);
+
+  try {
+    const player = await media.createAVPlayer();
+    slot.player = player;
+    registerPlayerEvents(id, player);
+    bindVideoSurfaceIfNeeded(id, player);
+
+    // MediaSource 支持自定义请求头 (Referer/User-Agent/Cookie), 直接设 url 属性做不到
+    const source: media.MediaSource = media.createMediaSourceWithUrl(url, headers);
+    await player.setMediaSource(source);
+    // 只记条数不记内容: headers 里常是 Cookie/Token, 不得进日志
+    console.info('[MediaBridge] setSourceUrl: id=' + id + ' url=' + url
+      + ' headerCount=' + (headers === undefined ? 0 : Object.keys(headers).length));
+
+    // setMediaSource 完成即进入 initialized, 仍需 prepare 才 ready
+    await player.prepare();
+  } catch (e) {
+    const err = e as BusinessError;
+    console.error('[MediaBridge] setSourceUrl failed: ' + (err.message ?? String(e)));
+    emitEvent(id, { event: 'onError', message: 'setSourceUrl failed: ' + (err.message ?? String(e)) });
+  }
+}
+
+// ===== play =====
+function handlePlay(id: string): void {
+  const player = playerOf(id);
+  if (player != null) {
+    player.play().catch((err: Error) => {
+      emitEvent(id, { event: 'onError', message: 'play failed: ' + (err.message ?? String(err)) });
+    });
+  } else {
+    console.warn('[MediaBridge] play: avPlayer is null, id=' + id);
+  }
+}
+
+// ===== pause =====
+function handlePause(id: string): void {
+  const player = playerOf(id);
+  if (player != null) {
+    player.pause().catch((err: Error) => {
+      emitEvent(id, { event: 'onError', message: 'pause failed: ' + (err.message ?? String(err)) });
+    });
+  } else {
+    console.warn('[MediaBridge] pause: avPlayer is null, id=' + id);
+  }
+}
+
+// ===== stop =====
+function handleStop(id: string): void {
+  const player = playerOf(id);
+  if (player == null) {
+    console.warn('[MediaBridge] stop: avPlayer is null, id=' + id);
+    return;
+  }
+  // stop 只在 prepared/playing/paused/completed 合法 (官方接口约束), 其余状态调用会以
+  // 5400102 被当播放错误上报; 已停止/未装载时停止本就是幂等空操作, 直接跳过
+  const state = player.state;
+  if (state !== 'prepared' && state !== 'playing' && state !== 'paused' && state !== 'completed') {
+    return;
+  }
+  player.stop().catch((err: Error) => {
+    emitEvent(id, { event: 'onError', message: 'stop failed: ' + (err.message ?? String(err)) });
+  });
+}
+
+// ===== seekTo =====
+function handleSeekTo(id: string, position: number): void {
+  const player = playerOf(id);
+  if (player != null) {
+    player.seek(position);
+  } else {
+    console.warn('[MediaBridge] seekTo: avPlayer is null, id=' + id);
+  }
+}
+
+// ===== setSpeed (倍速, 浮点 → PlaybackSpeed 枚举档位) =====
+function handleSetSpeed(id: string, speed: number): void {
+  const player = playerOf(id);
+  if (player != null) {
+    player.setSpeed(mapSpeed(speed));
+  } else {
+    console.warn('[MediaBridge] setSpeed: avPlayer is null, id=' + id);
+  }
+}
+
+function handleSetVolume(id: string, volume: number): void {
+  const player = playerOf(id);
+  if (player != null) {
+    // 0..1 归一后夹住: Kotlin 侧手势给的就是 0..1, 越界会被 AVPlayer 拒报错
+    const v = Math.min(Math.max(volume, 0), 1);
+    try {
+      player.setVolume(v);
+    } catch (err) {
+      console.warn('[MediaBridge] setVolume failed: ' + String(err));
+    }
+  } else {
+    console.warn('[MediaBridge] setVolume: avPlayer is null, id=' + id);
+  }
+}
+
+// 浮点倍速 → 最近支持档位
+function mapSpeed(rate: number): media.PlaybackSpeed {
+  if (rate <= 0.875) return media.PlaybackSpeed.SPEED_FORWARD_0_75_X;
+  if (rate <= 1.125) return media.PlaybackSpeed.SPEED_FORWARD_1_00_X;
+  if (rate <= 1.5) return media.PlaybackSpeed.SPEED_FORWARD_1_25_X;
+  if (rate <= 1.875) return media.PlaybackSpeed.SPEED_FORWARD_1_75_X;
+  return media.PlaybackSpeed.SPEED_FORWARD_2_00_X;
+}
+
+// ===== release =====
+function handleRelease(id: string): void {
+  if (id === PLAYER_ID_VIDEO) {
+    // 页面销毁/播放器释放: PiP 小窗必须先收 (否则小窗挂着即将销毁的 surface)
+    stopVideoPip();
+    // 画面缩放的三个全局键无其它复位时机 (小窗里手势被禁, 退页不再有状态变化):
+    // 不在这里清就会带出页面的残留缩放
+    handleSetVideoZoom({ action: 'setVideoZoom' });
+  }
+  releasePlayer(id).catch((err: Error) => {
+    console.error('[MediaBridge] release failed: ' + (err.message ?? String(err)));
+  });
+}
+
+// ===== 视频画中画 =====
+
+/**
+ * 拉起 videoBook 的画中画小窗 (PiPWindow, 模板 VIDEO_PLAY)。
+ *
+ * 前置: 页面 XComponent 已 onLoad (controller 已注入) 且媒体会话 context 已就绪;
+ * 失败 (设备不支持 / 系统拒绝) 经 onPipStateChanged 事件带回 message, Kotlin 侧 toast。
+ * 小窗系统控制条的 play/pause 请求经 controlPanelActionEvent 直接驱动 videoBook 播放器。
+ */
+async function startVideoPip(): Promise<void> {
+  if (abilityContext == undefined || videoPipSurfaceController == undefined) {
+    emitEvent(PLAYER_ID_VIDEO, {
+      event: 'onPipStateChanged', isPip: false,
+      message: '画中画不可用: 视频画面未就绪'
+    });
+    return;
+  }
+  try {
+    if (videoPipController == undefined) {
+      videoPipController = await PiPWindow.create({
+        context: abilityContext,
+        componentController: videoPipSurfaceController,
+        templateType: PiPWindow.PiPTemplateType.VIDEO_PLAY,
+      });
+      videoPipController.on('stateChange', (state: PiPWindow.PiPState, reason: string) => {
+        console.info('[MediaBridge] videoPip stateChange: ' + state + ' reason=' + reason);
+        // ABOUT_TO_START/STARTED = 在小窗; ABOUT_TO_STOP/STOPPED/ABOUT_TO_RESTORE = 已退出
+        // (ABOUT_TO_RESTORE 时小窗即将消失, 页面提前恢复全量渲染)
+        const isPip = state === PiPWindow.PiPState.ABOUT_TO_START || state === PiPWindow.PiPState.STARTED;
+        emitEvent(PLAYER_ID_VIDEO, { event: 'onPipStateChanged', isPip: isPip });
+      });
+      videoPipController.on('controlPanelActionEvent', (event: PiPWindow.PiPActionEventType, status?: number) => {
+        if (event === 'playbackStateChanged') {
+          if (status === 0) {
+            handlePause(PLAYER_ID_VIDEO);
+          } else {
+            handlePlay(PLAYER_ID_VIDEO);
+          }
+        }
+      });
+    }
+    await videoPipController.startPiP();
+    // startPiP 兑现 = 系统已把小窗拉起 (声明文件: 拉不起来按 1300012/1300013/1300014/1300015 拒),
+    // 据此回传一次进入结果 —— stateChange 事件不送达时请求期也得有人结算
+    emitEvent(PLAYER_ID_VIDEO, { event: 'onPipStateChanged', isPip: true });
+  } catch (e) {
+    const err = e as Error;
+    videoPipController = undefined;
+    emitEvent(PLAYER_ID_VIDEO, {
+      event: 'onPipStateChanged', isPip: false,
+      message: '画中画启动失败: ' + (err.message ?? String(e))
+    });
+  }
+}
+
+/** 收起画中画小窗 (页面销毁/播放器释放时调用; 未拉起过是 no-op)。 */
+function stopVideoPip(): void {
+  const pip = videoPipController;
+  if (pip == undefined) {
+    return;
+  }
+  pip.stopPiP().catch((err: Error) => {
+    console.error('[MediaBridge] videoPip stop failed: ' + (err.message ?? String(err)));
+  });
+}
+
+// ===== 音频设备变化与音频焦点事件源 =====
+
+/**
+ * `audio.InterruptHint` → Kotlin 侧四档焦点事件串 (与 Android AUDIOFOCUS_* 对应表同上)。
+ *
+ * 对应关系取自 OpenHarmony 官方《音频焦点》文档对每个 hint 的语义措辞 (逐档对 Android
+ * `AudioManager.OnAudioFocusChangeListener` 的档位):
+ * - RESUME/UNDUCK: "音频流可恢复播放…恢复正常音量" → AUDIOFOCUS_GAIN (`gain`);
+ * - PAUSE: "音频暂停, **暂时**失去音频焦点。后续待焦点可用时, 会再收到 INTERRUPT_HINT_RESUME"
+ *   → AUDIOFOCUS_LOSS_TRANSIENT (`lossTransient`);
+ * - STOP: "音频停止, **彻底**失去音频焦点" → AUDIOFOCUS_LOSS (`loss`) ——
+ *   即 "暂停并放弃焦点" (AudioFocusHandler 的 Loss 分支: onPause(abandonFocus = true));
+ *   这一档早先被当成"Android 侧无对应档"漏掉, 结果是"另一个应用永久抢走焦点"在鸿蒙上
+ *   只被当成临时暂停 (之后还会 auto-resume);
+ * - DUCK: "降低音量播放" → AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK (`lossTransientCanDuck`)。
+ *
+ * 返回 null = 该档在 Android 侧无对应语义, 不派发 (不得硬安到某个档上):
+ * NONE (无提示) 与 MUTE/UNMUTE (API 20 的"静音/取消静音该流", Android 的音频焦点没有这一档)。
+ */
+function mapInterruptHint(hint: audio.InterruptHint): string | null {
+  switch (hint) {
+    // 系统让出焦点: 对应 AUDIOFOCUS_GAIN (短暂丢失后的恢复)
+    case audio.InterruptHint.INTERRUPT_HINT_RESUME:
+    case audio.InterruptHint.INTERRUPT_HINT_UNDUCK:
+      return 'gain';
+    // 停止: 彻底失去焦点 → AUDIOFOCUS_LOSS (永久丢失, 暂停并放弃焦点)
+    case audio.InterruptHint.INTERRUPT_HINT_STOP:
+      return 'loss';
+    // 暂停但不丢焦点: 对应 AUDIOFOCUS_LOSS_TRANSIENT
+    case audio.InterruptHint.INTERRUPT_HINT_PAUSE:
+      return 'lossTransient';
+    // 仅压低音量: 对应 AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK
+    case audio.InterruptHint.INTERRUPT_HINT_DUCK:
+      return 'lossTransientCanDuck';
+    default:
+      // NONE / MUTE / UNMUTE: Android 音频焦点无对应档, 不派发
+      return null;
+  }
+}
+
+/**
+ * 安装音频设备变化监听 (拔耳机 / 蓝牙音频设备断开 → 暂停当前出声的一方)。
+ *
+ * 对照 Android `ACTION_AUDIO_BECOMING_NOISY` 与 iOS
+ * `AVAudioSessionRouteChangeReasonOldDeviceUnavailable`。
+ *
+ * # 为何只看"输出设备减少"
+ * `DeviceChangeAction` 只给 `type` (CONNECT/DISCONNECT) 与当前设备列表, 没有"哪个设备刚掉"。
+ * 而拔耳机与插耳机都走 DISCONNECT (切换输出设备时旧设备也是 DISCONNECT), 故不能只看
+ * type —— 那会把"插上耳机"也当成断开。判据用"断开后输出侧还剩什么":
+ * 只剩听筒/扬声器这类内置扬声器即视为音频离开了外接设备 (蓝牙断开后系统会回扬声器),
+ * 还有其它外接输出 (如音箱) 则不动。
+ *
+ * # 已知覆盖缺口 (如实报告)
+ * 系统 TTS (`@kit.CoreSpeechKit` textToSpeech) 不走 AVPlayer, 不经本文件的播放器事件;
+ * 但设备断开是全局音频路由事件, 与播放器无关, 所以本监听对系统 TTS 也生效。
+ * 反之 `audioInterrupt` 挂在 AVPlayer 上, 只覆盖有声书/HttpTTS/视频书。
+ */
+async function installAudioRoutingMonitor(): Promise<void> {
+  if (routingMonitorInstalled) {
+    return;
+  }
+  routingMonitorInstalled = true;
+  try {
+    const manager = audio.getAudioManager().getRoutingManager();
+    // 带 DeviceFlag 的重载 (仅监听输入/输出设备变化): 不带 flag 的旧重载 d.ts 标 deprecated
+    manager.on('deviceChange', audio.DeviceFlag.OUTPUT_DEVICES_FLAG,
+      (action: audio.DeviceChangeAction) => {
+      if (action.type !== audio.DeviceChangeType.DISCONNECT) {
+        return;
+      }
+      const hasExternalOutput: boolean = action.deviceDescriptors
+        .some((d: Readonly<audio.AudioDeviceDescriptor>) =>
+          d.deviceRole === audio.DeviceRole.OUTPUT_DEVICE &&
+          d.deviceType !== audio.DeviceType.EARPIECE &&
+          d.deviceType !== audio.DeviceType.SPEAKER);
+      if (hasExternalOutput) {
+        return;
+      }
+      const payload: AudioDeviceChangeEvent = { type: 'audioDeviceChange', disconnected: true };
+      emitPlatformEvent(payload);
+    });
+    console.info('[MediaBridge] audio deviceChange listener installed');
+  } catch (e) {
+    console.error('[MediaBridge] install audio deviceChange failed: ' + JSON.stringify(e));
+  }
+}
+
+/** 释放设备变化监听 (应用退出; 幂等)。 */
+function removeAudioRoutingMonitor(): void {
+  if (!routingMonitorInstalled) {
+    return;
+  }
+  routingMonitorInstalled = false;
+  try {
+    audio.getAudioManager().getRoutingManager()
+      // off 只有 (type, callback?) 一个重载 (SDK: off(type: 'deviceChange', callback?: ...)),
+      // 不接受 on 那个 deviceFlag 参数。
+      .off('deviceChange');
+  } catch (e) {
+    console.error('[MediaBridge] remove audio deviceChange failed: ' + JSON.stringify(e));
+  }
+}
+
+// ===== AVPlayer 事件注册 =====
+function registerPlayerEvents(id: string, player: media.AVPlayer): void {
+  // 音频打断 (系统/其它应用抢焦点) → 统一平台事件通道, Kotlin 侧落在 SystemMediaControl
+  // 的四档状态机上。只对有声书与 HttpTTS 两个音频实例有意义; 语义映射逐档对齐 Android
+  // AudioManager.AUDIOFOCUS_* (RESUME→gain / STOP→loss / PAUSE→lossTransient / DUCK→canDuck /
+  // UNDUCK→gain), 四档齐; NONE/MUTE/UNMUTE 无 Android 对应档, 不派发 (不静默降级成别的档)。
+  if (id === PLAYER_ID_AUDIO_BOOK || id === PLAYER_ID_HTTP_TTS) {
+    player.on('audioInterrupt', (info: audio.InterruptEvent) => {
+      const change: string | null = mapInterruptHint(info.hintType);
+      if (change == null) {
+        console.info('[MediaBridge] audioInterrupt 未映射: id=' + id + ' hint=' + info.hintType);
+        return;
+      }
+      const payload: AudioFocusChangeEvent = { type: 'audioFocusChange', change: change };
+      emitPlatformEvent(payload);
+    });
+  }
+
+  // 音频最大电平值定时上报 (API 13+) → 发 onAmplitude, Kotlin 侧据此驱动歌词辉光
+  // 只有音频书实例消费该事件; 低版本系统没有该事件, 订阅会抛错, 记一次日志即放弃 (不影响发声)
+  if (id === PLAYER_ID_AUDIO_BOOK) {
+    try {
+      player.on('amplitudeUpdate', (value: Array<number>) => {
+        emitEvent(id, { event: 'onAmplitude', amplitude: value });
+      });
+    } catch (e) {
+      console.warn('[MediaBridge] amplitudeUpdate 订阅失败(系统版本过低): ' + JSON.stringify(e));
+    }
+  }
+
+  // 状态变化 → 转换为 Kotlin 侧事件
+  player.on('stateChange', (state: string, reason: media.StateChangeReason) => {
+    console.info('[MediaBridge] stateChange: id=' + id + ' state=' + state + ' reason=' + reason);
+    switch (state) {
+      case 'prepared':
+        // 准备就绪 → 发 onReady (Kotlin 侧据此触发段落推进)
+        emitEvent(id, { event: 'onReady' });
+        break;
+      case 'playing':
+        emitEvent(id, { event: 'onPlaying' });
+        break;
+      case 'paused':
+        emitEvent(id, { event: 'onPaused' });
+        break;
+      case 'completed':
+        // 播放结束 → 发 onEndOfMedia (Kotlin 侧据此推进到下一段)
+        emitEvent(id, { event: 'onEndOfMedia' });
+        break;
+      case 'error':
+        emitEvent(id, { event: 'onError', message: 'AVPlayer entered error state, reason=' + reason });
+        break;
+      default:
+        // idle / initialized / stopped / released 等状态不转发
+        break;
+    }
+  });
+
+  // 错误事件 → 发 onError
+  player.on('error', (err: Error) => {
+    emitEvent(id, { event: 'onError', message: err.message ?? String(err) });
+  });
+
+  // 时长更新 → 发 onDuration (供 Kotlin 缓存 duration getter)
+  player.on('durationUpdate', (duration: number) => {
+    emitEvent(id, { event: 'onDuration', duration: duration });
+  });
+
+  // 解码分辨率变化 (装载完成 / 切清晰度) → 发 onVideoSizeChange
+  // 画面缩放的平移边界取它 (与 Kotlin 手势层同一口径), 缺失时按铺满容器兜底
+  // 回调实参是两个 number (SDK d.ts: OnVideoSizeChangeHandler = (width, height) => void)
+  player.on('videoSizeChange', (width: number, height: number) => {
+    emitEvent(id, { event: 'onVideoSizeChange', width: width, height: height });
+  });
+
+  // 播放位置更新 → 发 onPosition (供 Kotlin 缓存 currentPosition getter)
+  player.on('timeUpdate', (time: number) => {
+    emitEvent(id, { event: 'onPosition', position: time });
+  });
+
+  // 缓冲更新 → 发 onBufferingUpdate
+  // 回调签名为 (infoType, value): BufferingInfoType 是枚举, 百分比在 value 中,
+  // BUFFERING_PERCENT 档携带 0-100 百分比; BUFFERING_START/END 是起止标记, 显式映射
+  // 为 0/100, 避免 Kotlin 侧停在上一轮的旧百分比 (转圈常亮/常灭)
+  // CACHED_DURATION 档携带已缓存时长 ms, 单独走 cachedDuration 字段 (进度条缓冲层用:
+  // 百分比是"起播缓冲进度", 缓冲完成后恒 100, 折算成时长就是一条永远铺满的假缓冲条)
+  player.on('bufferingUpdate', (infoType: media.BufferingInfoType, value: number) => {
+    if (infoType === media.BufferingInfoType.BUFFERING_PERCENT) {
+      emitEvent(id, { event: 'onBufferingUpdate', percent: value });
+    } else if (infoType === media.BufferingInfoType.BUFFERING_START) {
+      emitEvent(id, { event: 'onBufferingUpdate', percent: 0 });
+    } else if (infoType === media.BufferingInfoType.BUFFERING_END) {
+      emitEvent(id, { event: 'onBufferingUpdate', percent: 100 });
+    } else if (infoType === media.BufferingInfoType.CACHED_DURATION) {
+      emitEvent(id, { event: 'onCachedDuration', cachedDuration: value });
+    }
+  });
+}
+
+// ===== 视频画面缩放 (Kotlin → ArkTS) =====
+
+/**
+ * XComponent 是原生 surface 混排节点, Compose 的图层变换作用不到它 —— 画面缩放只能在
+ * ArkTS 侧做。Kotlin 侧把缩放状态经 media 命令通道推来 (与 VideoZoom 同口径: scale 倍数,
+ * pan 为本轴可平移范围的比例 -1..1), 这里写进 AppStorage; Index.ets 的 LegadoVideoSurface
+ * 组件用 @StorageLink 订阅后施加到 XComponent。
+ */
+export const VIDEO_ZOOM_SCALE_KEY: string = 'legadoVideoZoomScale';
+export const VIDEO_ZOOM_PAN_X_KEY: string = 'legadoVideoZoomPanX';
+export const VIDEO_ZOOM_PAN_Y_KEY: string = 'legadoVideoZoomPanY';
+
+function handleSetVideoZoom(cmd: MediaCommand): void {
+  AppStorage.setOrCreate(VIDEO_ZOOM_SCALE_KEY, cmd.scale ?? 1);
+  AppStorage.setOrCreate(VIDEO_ZOOM_PAN_X_KEY, cmd.panX ?? 0);
+  AppStorage.setOrCreate(VIDEO_ZOOM_PAN_Y_KEY, cmd.panY ?? 0);
+}
+
+/** 视频解码分辨率 (px); 未装载 / 未就绪时返回 0 (调用方按铺满容器兜底)。 */
+export function getVideoPixelSize(): Size2D {
+  const player = playerOf(PLAYER_ID_VIDEO);
+  if (player == null) {
+    return { width: 0, height: 0 };
+  }
+  return { width: player.width, height: player.height };
+}
+
+// ===== 内部工具函数 =====
+
+/** 取指定 playerId 的 AVPlayer (不存在返回 null)。 */
+function playerOf(id: string): media.AVPlayer | null {
+  const slot = players.get(id);
+  return slot != null ? slot.player : null;
+}
+
+/** videoBook 播放器创建后若已有暂存 surfaceId 则立即绑定 (视频画面显示)。 */
+function bindVideoSurfaceIfNeeded(id: string, player: media.AVPlayer): void {
+  if (id !== PLAYER_ID_VIDEO) return;
+  if (videoSurfaceId == null) return;
+  try {
+    player.surfaceId = videoSurfaceId;
+    console.info('[MediaBridge] video surface bound on player create: id=' + videoSurfaceId);
+  } catch (e) {
+    console.error('[MediaBridge] bind video surface on create failed: ' + (e as Error).message);
+  }
+}
+
+/** 释放指定 playerId 的 AVPlayer 并关闭文件 fd */
+async function releasePlayer(id: string): Promise<void> {
+  const slot = players.get(id);
+  if (slot == null) {
+    return;
+  }
+  players.delete(id);
+  if (slot.player != null) {
+    try {
+      slot.player.release();
+    } catch (e) {
+      console.error('[MediaBridge] release AVPlayer error: ' + (e as Error).message);
+    }
+    slot.player = null;
+  }
+  if (slot.fd != null) {
+    try {
+      fs.closeSync(slot.fd);
+    } catch (e) {
+      console.error('[MediaBridge] close fd error: ' + (e as Error).message);
+    }
+    slot.fd = null;
+  }
+}
+
+/** 发送事件到 Kotlin (通过 EntryAbility 注入的 legado.mediaEvent 回调) + 本地 UI 监听器 */
+function emitEvent(id: string, event: MediaEventPayload): void {
+  event.playerId = id;
+  const json = JSON.stringify(event);
+  if (eventCallback != null) {
+    eventCallback(json);
+  } else {
+    console.warn('[MediaBridge] eventCallback not set, event=' + event.event);
+  }
+  // 并行推送给本地 UI 监听器 (AudioPlay 页面据此更新进度/状态)
+  for (let i = 0; i < localListeners.length; i++) {
+    const entry = localListeners[i];
+    if (entry.playerId != null && entry.playerId !== id) {
+      continue;
+    }
+    try {
+      entry.listener(json);
+    } catch (e) {
+      console.error('[MediaBridge] local listener error: ' + (e as Error).message);
+    }
+  }
+}
+
+// ===== AVSession (系统播控中心与锁屏卡片) & 后台长时任务 =====
+
+/**
+ * 获取或创建 AVSession。
+ *
+ * 同一应用只允许一个会话, 而命令是 fire-and-forget 的 (状态变化 + 变速可以连着来两条),
+ * 故把创建中的 Promise 存下来复用, 避免并发建出第二个会话。
+ */
+async function ensureAvSession(): Promise<avSession.AVSession | undefined> {
+  if (currentAvSession != undefined) {
+    return currentAvSession;
+  }
+  if (avSessionPending != undefined) {
+    return avSessionPending;
+  }
+  if (abilityContext == undefined) {
+    console.warn('[MediaBridge] ensureAvSession: abilityContext is undefined');
+    return undefined;
+  }
+  avSessionPending = createAvSession();
+  try {
+    return await avSessionPending;
+  } finally {
+    avSessionPending = undefined;
+  }
+}
+
+async function createAvSession(): Promise<avSession.AVSession | undefined> {
+  const context = abilityContext;
+  if (context == undefined) {
+    return undefined;
+  }
+  try {
+    const session = await avSession.createAVSession(context, 'LegadoAudioSession', 'audio');
+    registerAvSessionCallbacks(session);
+    // 点击播控卡片拉起应用并直达音频页 (对照 app 端音频通知的 contentIntent:
+    // 那里 putExtra("route", "audio_play"), 这里走同一条 route: 前缀约定)
+    try {
+      await session.setLaunchAbility(await buildLaunchWantAgent(context, AUDIO_PLAY_ROUTE));
+    } catch (e) {
+      console.error('[MediaBridge] setLaunchAbility failed: ' + (e as Error).message);
+    }
+    await session.activate();
+    currentAvSession = session;
+    console.info('[MediaBridge] AVSession created and activated');
+    return session;
+  } catch (e) {
+    console.error('[MediaBridge] createAVSession failed: ' + (e as Error).message);
+    return undefined;
+  }
+}
+
+/**
+ * 拉起本 Ability 的 WantAgent (播控卡片点击 / 长时任务 / 通知点击 / 通知按钮共用)。
+ *
+ * 本函数导出于本模块: EntryAbility 的通知回调需要它给 NotificationRequest.wantAgent
+ * 挂跳转目标 (对照 app 端通知的 contentIntent)、给 actionButtons 每项挂 wantAgent
+ * (对照 app 端通知的 addAction), 与播控卡片/长时任务共用同一份构建逻辑。
+ *
+ * @param uri 非空时写进 Want.uri。播控卡片传 `route:audio_play` —— 与 app 端音频通知
+ *   contentIntent 的 route extra 同一个串, 点击后由 EntryAbility.handleDeepLink 走
+ *   `legado.handleLaunchRequest` → `OhosLaunchRequests.parse` 解回 `NavigateTo("audio_play")`
+ *   (不需要新增任何协议); 长时任务不传 (保活拉起不应改变用户当前页面)。
+ * @param parameters 非空时写进 Want.parameters (与 shortcuts_config.json 的 `wants.parameters`
+ *   同一形制: 系统把参数放进被拉起 Ability 的 `want.parameters`, 不出现在 want.uri);
+ *   通知按钮用它携带动作文本 (值一律字符串), 由 EntryAbility 读回后回送 Kotlin。
+ */
+export async function buildLaunchWantAgent(
+  context: common.UIAbilityContext,
+  uri?: string,
+  parameters?: Record<string, Object>
+): Promise<WantAgent> {
+  const want: Want = {
+    bundleName: context.abilityInfo.bundleName,
+    abilityName: context.abilityInfo.name
+  };
+  if (uri !== undefined && uri.length > 0) {
+    want.uri = uri;
+  }
+  if (parameters !== undefined) {
+    want.parameters = parameters;
+  }
+  const wantAgentInfo: wantAgent.WantAgentInfo = {
+    wants: [want],
+    operationType: wantAgent.OperationType.START_ABILITY,
+    requestCode: 0,
+    wantAgentFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
+  };
+  try {
+    return await wantAgent.getWantAgent(wantAgentInfo);
+  } catch (e) {
+    console.error('[MediaBridge] getWantAgent failed: ' + JSON.stringify(e));
+    throw e as Error;
+  }
+}
+
+/** 注册 AVSession 的远程播控回调 (指令统一回传 Kotlin 侧 SystemMediaControl 判定归属)。 */
+function registerAvSessionCallbacks(session: avSession.AVSession): void {
+  try {
+    session.on('play', () => {
+      emitEvent(PLAYER_ID_SESSION, { event: 'onCommand', command: 'play' });
+    });
+
+    session.on('pause', () => {
+      emitEvent(PLAYER_ID_SESSION, { event: 'onCommand', command: 'pause' });
+    });
+
+    session.on('stop', () => {
+      emitEvent(PLAYER_ID_SESSION, { event: 'onCommand', command: 'stop' });
+    });
+
+    session.on('playNext', () => {
+      emitEvent(PLAYER_ID_SESSION, { event: 'onCommand', command: 'next' });
+    });
+
+    session.on('playPrevious', () => {
+      emitEvent(PLAYER_ID_SESSION, { event: 'onCommand', command: 'previous' });
+    });
+
+    session.on('seek', (positionMs: number) => {
+      emitEvent(PLAYER_ID_SESSION, { event: 'onCommand', command: 'seek', position: positionMs });
+    });
+  } catch (e) {
+    console.error('[MediaBridge] registerAvSessionCallbacks failed: ' + JSON.stringify(e));
+  }
+}
+
+/** 开启/关闭后台长时音频播放保活任务 (AUDIO_PLAYBACK 要求会话已注册, 故先 ensureAvSession)。 */
+async function setBackgroundTask(running: boolean): Promise<void> {
+  const context = abilityContext;
+  if (context == undefined || running === isContinuousTaskRunning) {
+    return;
+  }
+  if (continuousTaskPending != undefined) {
+    await continuousTaskPending;
+    if (running === isContinuousTaskRunning) {
+      return;
+    }
+  }
+  continuousTaskPending = switchBackgroundTask(context, running);
+  try {
+    await continuousTaskPending;
+  } finally {
+    continuousTaskPending = undefined;
+  }
+}
+
+async function switchBackgroundTask(
+  context: common.UIAbilityContext,
+  running: boolean
+): Promise<void> {
+  try {
+    if (running) {
+      // 音频绝对优先: 交仲裁器申请 (它会先把占槽的后台作业让出去);
+      // 没拿到就不置标志, 下次播放事件重试
+      const wantAgentObj: WantAgent = await buildLaunchWantAgent(context);
+      const acquired: boolean = await acquireAudioTask(context, wantAgentObj);
+      if (!acquired) {
+        console.error('[MediaBridge] audio continuous task not acquired');
+        return;
+      }
+    } else {
+      // 释放后仲裁器会把仍在期望中的后台作业重新申请回来
+      await releaseAudioTask(context);
+    }
+    isContinuousTaskRunning = running;
+    console.info('[MediaBridge] continuous task running=' + running);
+  } catch (e) {
+    console.error('[MediaBridge] switch continuous task failed: ' + (e as Error).message);
+  }
+}
+
+/** 同步元数据与状态至系统播控卡片。 */
+async function handleSyncNowPlaying(cmd: MediaCommand): Promise<void> {
+  const session = await ensureAvSession();
+  if (session == undefined) {
+    return;
+  }
+
+  // 只管开: 暂停/切章都要保住长时任务, 收任务由 clearNowPlaying (真退场) 负责
+  if (cmd.isPlaying === true) {
+    await setBackgroundTask(true);
+  }
+
+  try {
+    const title: string = cmd.title ?? '';
+    const artist: string = cmd.artist ?? '';
+    const author: string = cmd.album ?? '';
+    const cover: string = cmd.coverUrl ?? '';
+    const duration: number = cmd.duration ?? 0;
+    const metadataKey: string = title + '#' + artist + '#' + author +
+      '#' + cover + '#' + duration.toString();
+    if (metadataKey !== lastMetadataKey) {
+      lastMetadataKey = metadataKey;
+      const metadata: avSession.AVMetadata = {
+        assetId: 'legado_media',
+        title: title,
+        artist: artist,
+        author: author,
+        duration: duration
+      };
+      // 空字符串会被当成非法图片路径, 无封面时不带该字段
+      if (cover.length > 0) {
+        metadata.mediaImage = cover;
+      }
+      await session.setAVMetadata(metadata);
+    }
+
+    let stateCode = avSession.PlaybackState.PLAYBACK_STATE_STOP;
+    if (cmd.isPlaying === true) {
+      stateCode = avSession.PlaybackState.PLAYBACK_STATE_PLAY;
+    } else if (cmd.isPaused === true) {
+      stateCode = avSession.PlaybackState.PLAYBACK_STATE_PAUSE;
+    }
+
+    const playbackState: avSession.AVPlaybackState = {
+      state: stateCode,
+      position: {
+        elapsedTime: cmd.position ?? 0,
+        updateTime: new Date().getTime()
+      },
+      speed: cmd.speed ?? 1.0,
+      duration: duration
+    };
+    await session.setAVPlaybackState(playbackState);
+  } catch (e) {
+    console.error('[MediaBridge] syncNowPlaying error: ' + (e as Error).message);
+  }
+}
+
+/**
+ * 撤掉播控卡片。
+ *
+ * 只把 state 置 STOP 卡片仍会留在播控中心, 对照 app 端 `mediaSessionCompat.release()`
+ * 要 deactivate + destroy; 下次播放由 [ensureAvSession] 重建。
+ */
+async function handleClearNowPlaying(): Promise<void> {
+  await setBackgroundTask(false);
+  lastMetadataKey = '';
+  const session = currentAvSession;
+  if (session == undefined) {
+    return;
+  }
+  currentAvSession = undefined;
+  try {
+    await session.deactivate();
+    await session.destroy();
+    console.info('[MediaBridge] AVSession destroyed');
+  } catch (e) {
+    console.error('[MediaBridge] clearNowPlaying error: ' + (e as Error).message);
+  }
+}

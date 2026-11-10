@@ -1,0 +1,397 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!--
+      Live Update 资格权限 (与 Google AOSP platform-samples/user-interface/live-updates 一致).
+      不声明则系统设置内不会出现"实况通知"开关项, setRequestPromotedOngoing 形同没调.
+      Android 16.1 (API 36.1) 新增, 字符串字面量声明不依赖 compileSdk, 旧系统忽略.
+      安装方式: 添加后需要 **卸载重装** 应用以让系统刷新 per-app 通知设置, 升级安装不一定生效.
+    -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+
+            <data android:scheme="*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+
+            <data
+                android:mimeType="*/*"
+                android:scheme="*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+
+            <data android:mimeType="text/plain" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".App"
+        android:allowBackup="true"
+        android:enableOnBackInvokedCallback="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="${app_name}"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:requestLegacyExternalStorage="true"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme.Light"
+        tools:ignore="AllowBackup,GoogleAppIndexingWarning,UnusedAttribute">
+        <!-- 主入口 -->
+        <activity
+            android:name=".ui.welcome.WelcomeActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity> <!-- 图标1 -->
+        <activity
+            android:name=".ui.welcome.Launcher1"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/launcher1">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity> <!-- 图标4 -->
+
+        <activity
+            android:name=".ui.welcome.Launcher4"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/launcher4">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity> <!-- 图标5 -->
+        <activity
+            android:name=".ui.welcome.Launcher5"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/launcher5">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity> <!-- 主界面 -->
+        <!-- legado:// / yuedu:// deep link 透明壳 (对照 master AssociationActivity):
+             浮在其他应用之上只显示导入对话框, 主界面页面零渲染; 导入完成自动 finish -->
+        <activity
+            android:name=".ui.association.AssociationActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:launchMode="singleTask"
+            android:theme="@style/AppTheme.Transparent">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="legado" />
+                <data android:scheme="yuedu" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="app" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="application/json" />
+                <data android:mimeType="application/epub+zip" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:host="*" />
+                <data android:scheme="app" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="*/*" />
+                <data android:pathAdvancedPattern=".*\\.[tT][xX][tT]" />
+                <data android:pathPattern=".*\\.txt" />
+                <data android:pathPattern=".*\\.TXT" />
+                <data android:pathAdvancedPattern=".*\\.[jJ][sS][oO][nN]" />
+                <data android:pathPattern=".*\\.json" />
+                <data android:pathPattern=".*\\.JSON" />
+                <data android:pathAdvancedPattern=".*\\.[eE][pP][uU][bB]" />
+                <data android:pathPattern=".*\\.epub" />
+                <data android:pathPattern=".*\\.EPUB" />
+                <data android:pathAdvancedPattern=".*\\.[pP][dD][fF]" />
+                <data android:pathPattern=".*\\.pdf" />
+                <data android:pathPattern=".*\\.PDF" />
+                <data android:pathAdvancedPattern=".*\\.[zZ][iI][pP]" />
+                <data android:pathPattern=".*\\.zip" />
+                <data android:pathPattern=".*\\.ZIP" />
+                <data android:pathAdvancedPattern=".*\\.[rR][aA][rR]" />
+                <data android:pathPattern=".*\\.rar" />
+                <data android:pathPattern=".*\\.RAR" />
+                <data android:pathAdvancedPattern=".*\\.7[zZ]" />
+                <data android:pathPattern=".*\\.7z" />
+                <data android:pathPattern=".*\\.7Z" />
+            </intent-filter>
+            <!-- 视频直投 (与 shared AppPattern.videoFileRegex / VideoDirect 逐一对应):
+                 外部"打开方式 / 浏览器点直链"把可播地址交给播放页, 不再走导入书籍链路。
+                 三条 filter 各自补一种投递形态:
+                 1) content/file + video/*  —— 相册/文件管理器给本地视频 (末段常是数字 id, 只能靠 MIME);
+                 2) http(s) + video/*       —— 投递方明确声明是视频的直链;
+                 3) host="*" + 视频扩展名 pathPattern —— 不给 MIME 的 VIEW intent (浏览器/自研管理器)
+                    按扩展名兜底, 写法照上组 txt/json/epub (pathAdvancedPattern 走大小写类, pathPattern
+                    不支持字符类故大小写各写一条)。
+                 注:**没有**把 application/octet-stream 或泛 */* 单独挂给视频 —— 泛 MIME 只配
+                 精确扩展名 pathPattern 才有意义; 已带 octet-stream 的 content/file 投递本来就命中
+                 上面那条既有 filter (所以代码侧仍要按扩展名判, 见 Intent.videoDirectTarget)。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:host="*" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:pathAdvancedPattern=".*\\.[mM]3[uU]8" />
+                <data android:pathPattern=".*\\.m3u8" />
+                <data android:pathPattern=".*\\.M3U8" />
+                <data android:pathAdvancedPattern=".*\\.[mM][pP]4" />
+                <data android:pathPattern=".*\\.mp4" />
+                <data android:pathPattern=".*\\.MP4" />
+                <data android:pathAdvancedPattern=".*\\.[mM][kK][vV]" />
+                <data android:pathPattern=".*\\.mkv" />
+                <data android:pathPattern=".*\\.MKV" />
+                <data android:pathAdvancedPattern=".*\\.[mM][oO][vV]" />
+                <data android:pathPattern=".*\\.mov" />
+                <data android:pathPattern=".*\\.MOV" />
+                <data android:pathAdvancedPattern=".*\\.[wW][eE][bB][mM]" />
+                <data android:pathPattern=".*\\.webm" />
+                <data android:pathPattern=".*\\.WEBM" />
+                <data android:pathAdvancedPattern=".*\\.[fF][lL][vV]" />
+                <data android:pathPattern=".*\\.flv" />
+                <data android:pathPattern=".*\\.FLV" />
+                <data android:pathAdvancedPattern=".*\\.[aA][vV][iI]" />
+                <data android:pathPattern=".*\\.avi" />
+                <data android:pathPattern=".*\\.AVI" />
+                <data android:pathAdvancedPattern=".*\\.[tT][sS]" />
+                <data android:pathPattern=".*\\.ts" />
+                <data android:pathPattern=".*\\.TS" />
+            </intent-filter>
+        </activity>
+        <!-- windowSoftInputMode 必须在 manifest 声明 (对照原版逐 Activity 的 adjustResize):
+             adjustResize 下 contentInsets 与 visibleInsets 都含 ime, ViewRootImpl 的窗口
+             平移闸门 (visibleInsets > contentInsets) 才是关的; 未声明时窗口停在
+             ADJUST_UNSPECIFIED, 实测 HyperOS 归一成 adjustPan, 弹键盘时整窗被上移
+             (键盘上方留白 + 标题栏被顶出屏外)。窗口 edge-to-edge 不会被 resize,
+             键盘避让由各页 imePadding 负责 (见 ImeInsets.kt)。 -->
+        <activity
+            android:name=".ui.main.MainActivity"
+            android:alwaysRetainTaskState="true"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:supportsPictureInPicture="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- S Pen 远程操作: 注册到主界面使其全局可用, trigger_key 经系统转 KeyEvent 派发 -->
+            <intent-filter>
+                <action android:name="com.samsung.android.support.REMOTE_ACTION" />
+            </intent-filter>
+
+            <meta-data
+                android:name="com.samsung.android.support.REMOTE_ACTION"
+                android:resource="@xml/spen_remote_actions" />
+        </activity> <!-- 阅读界面 (已收编到 shared ReaderRoute) -->
+        <activity
+            android:name=".lib.permission.PermissionActivity"
+            android:theme="@style/Activity.Permission" />
+
+        <!-- 长按文本"文字操作"入口 alias 到 MainActivity: 只挂 PROCESS_TEXT, 由"其他设置→加入文字操作菜单"
+             切本组件启用态 (对照原版 OtherConfigFragment.setProcessTextEnable)。分享入口不在这里
+             (挂在下方的搜索 alias 上), 拨动本开关只决定长按选中文字时菜里有没有本应用。 -->
+        <activity-alias
+            android:name=".ui.association.ProcessTextActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:targetActivity=".ui.main.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- 搜索界面 alias 到 MainActivity (对照 master SearchActivity 冷启动直开搜索页,
+             书架不进导航栈; extra: key/searchScope/submit, key 空聚焦输入框)。
+             系统分享面板的 SEND 两条 filter 也挂这里: 分享来的文本按 shared 的 shareTextTarget
+             分流 (整段是一条 http(s) 地址交自动识别链导入, 其余进搜索页); SEND 载荷要先过
+             视频直投 / 文件导入 两道判定才落搜索 (见 Intent.toLaunchRequest), 故本 alias
+             命中不等于"直达搜索页"。
+             */* 与 text/plain 必须在同一组件上: 拆到两个组件会让分享面板里出现两个同名条目。 -->
+        <activity-alias
+            android:name=".ui.book.search.SearchActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:targetActivity=".ui.main.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity-alias>
+        <!-- 发现show 入口 alias 到 MainActivity (对照 master ExploreShowActivity 冷启动直开,
+             查源下沉到路由内显示加载态; extra: exploreName/exploreUrl/sourceUrl) -->
+        <activity-alias
+            android:name=".ui.book.explore.ExploreShowActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:targetActivity=".ui.main.MainActivity" />
+
+        <!-- 打开文件 -->
+
+        <service
+            android:name=".service.UpdateBookService"
+            android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".service.CheckSourceService"
+            android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".service.CacheBookService"
+            android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".service.ExportBookService"
+            android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".service.WebService"
+            android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".service.WebTileService"
+            android:exported="true"
+            android:foregroundServiceType="dataSync"
+            android:icon="@drawable/ic_web_service_noti"
+            android:label="legado Web Service"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        <service
+            android:name=".service.TTSReadAloudService"
+            android:foregroundServiceType="mediaPlayback" />
+        <service
+            android:name=".service.HttpReadAloudService"
+            android:foregroundServiceType="mediaPlayback" />
+        <service
+            android:name=".service.AudioPlayService"
+            android:foregroundServiceType="mediaPlayback" />
+        <service
+            android:name=".service.DownloadService"
+            android:foregroundServiceType="dataSync" />
+
+        <receiver
+            android:name=".receiver.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
+
+        <provider
+            android:name=".api.ReaderProvider"
+            android:authorities="${applicationId}.readerProvider"
+            android:enabled="true"
+            android:exported="true"
+            tools:ignore="ExportedContentProvider" />
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileProvider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge"
+            tools:ignore="MissingClass">
+            <meta-data
+                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+                tools:node="remove" />
+        </provider>
+
+        <meta-data
+            android:name="channel"
+            android:value="${APP_CHANNEL_VALUE}" />
+    </application>
+
+</manifest>

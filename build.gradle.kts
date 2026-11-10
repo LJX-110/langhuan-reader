@@ -1,0 +1,269 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+plugins {
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.android.library) apply false
+    alias(libs.plugins.android.kmp.library) apply false
+    alias(libs.plugins.kotlin.multiplatform) apply false
+    alias(libs.plugins.kotlin.parcelize) apply false
+    alias(libs.plugins.ksp) apply false
+    alias(libs.plugins.room) apply false
+    alias(libs.plugins.kotlin.jvm) apply false
+    alias(libs.plugins.kotlin.serialization) apply false
+    // 不声明 compose-multiplatform 插件: 该插件由 build-logic 的 legado.compose 约定插件
+    // 从自己的 classpath apply。在此声明会让 pluginManagement 把未修补的 fork 插件也挂上
+    // 根 buildscript classpath, 抢先于 ohos 模式下的字节码补丁 jar (见
+    // scripts/patch-cmp-plugin-for-agp9.sh), 使补丁失效并抛 NoSuchMethodError。
+    alias(libs.plugins.compose.compiler) apply false
+}
+
+val isHarmonyMode = providers.gradleProperty("enableOhosTarget").getOrNull() == "true"
+// 统一版本源: 全部从 libs.versions.toml 读取 (settings 在 enableOhosTarget 时已将 catalog 的
+// kotlin/composeMultiplatform 键切换为 ohos 版本; 配套库经 VersionCatalogsExtension 的
+// findVersion 读取 (与 build-logic 同款模式, 避免生成访问器的点分歧义)。禁止硬编码 CPF 版本
+// (2026-08 曾硬编码 0.4.0 导致 compose 库解析旧版触发 CAdapter NPE)
+private val ohosCatalog =
+    extensions.getByType<VersionCatalogsExtension>().named("libs")
+
+private fun ohosVersion(key: String): String =
+    ohosCatalog.findVersion(key).get().requiredVersion
+val ohosDependencyVersions = mapOf(
+    "org.jetbrains.kotlinx:kotlinx-coroutines-core" to ohosVersion("coroutines-ohos"),
+    "org.jetbrains.kotlinx:atomicfu" to ohosVersion("atomicfu-ohos"),
+    "com.squareup.okio:okio" to ohosVersion("okio-ohos"),
+    "org.jetbrains.kotlinx:kotlinx-serialization-core" to ohosVersion("serialization-ohos"),
+    "org.jetbrains.kotlinx:kotlinx-serialization-json" to ohosVersion("serialization-ohos"),
+    "androidx.room3:room3-common" to ohosVersion("room-ohos"),
+    "androidx.room3:room3-runtime" to ohosVersion("room-ohos"),
+    // sqlite 与 room3 一起由 CPF fork 发布 (官方 2.7.0 无 ohosArm64 变体);
+    // Gradle consistent resolution 会把 androidx.sqlite 原子组内版本对齐,
+    // 若不加此映射, 组内其余请求方的官方 2.7.0 会把 fork 版拉回去。
+    "androidx.sqlite:sqlite" to ohosVersion("sqlite-ohos"),
+    "androidx.sqlite:sqlite-framework" to ohosVersion("sqlite-ohos"),
+)
+
+subprojects {
+    configurations.all {
+        val isOhosConfiguration = name.contains("ohos", ignoreCase = true)
+        // 彻底移除 Material Icons 依赖，满足“只允许用共享 XML”的要求
+        // 两组坐标都要排: androidx.compose.material (Android 变体) 与
+        // org.jetbrains.compose.material (CMP 元数据/桌面变体, 含 -desktop 后缀; mediamp 0.3.0
+        // 的 POM 硬声明 material-icons-extended 传递依赖即走此组, 2026-08-18 实测 37MB 进 jpackage)。
+        exclude(group = "androidx.compose.material", module = "material-icons-core")
+        exclude(group = "androidx.compose.material", module = "material-icons-extended")
+        exclude(group = "org.jetbrains.compose.material", module = "material-icons-core")
+        exclude(group = "org.jetbrains.compose.material", module = "material-icons-core-desktop")
+        exclude(group = "org.jetbrains.compose.material", module = "material-icons-extended")
+        exclude(
+            group = "org.jetbrains.compose.material",
+            module = "material-icons-extended-desktop"
+        )
+
+        resolutionStrategy.eachDependency {
+            if (isHarmonyMode && requested.group == "org.jetbrains.kotlin") {
+                useVersion(ohosVersion("kotlin-ohos"))
+            }
+            if (isHarmonyMode && isOhosConfiguration && !name.startsWith(
+                    "ksp",
+                    ignoreCase = true
+                )
+            ) {
+                val coordinate = "${requested.group}:${requested.name}"
+                ohosDependencyVersions[coordinate]?.let { useVersion(it) }
+                if (requested.group == "io.ktor") {
+                    useVersion(ohosVersion("ktor-ohos"))
+                }
+                if (requested.group.startsWith("org.jetbrains.compose")) {
+                    useVersion(ohosVersion("composeMultiplatform-ohos"))
+                }
+                if (requested.group == "org.jetbrains.androidx") {
+                    useVersion(ohosVersion("androidx-ohos"))
+                }
+            }
+        }
+    }
+}
+
+tasks.register<Delete>("clean") {
+    delete(rootProject.layout.buildDirectory)
+}
+
+val ohosLibsDir = layout.projectDirectory.dir("ohosApp/entry/libs/arm64-v8a")
+val ohosIncludeDir = layout.projectDirectory.dir("ohosApp/entry/src/main/cpp/include/arm64-v8a")
+// 对标安卓 release 打包: 默认 stage release .so (LLVM 优化 + strip + gc-sections,
+// 约 50-70MB); 需要带符号的调试库时用 -PohosBuildType=debug。
+val ohosBuildType =
+    providers.gradleProperty("ohosBuildType").orNull?.lowercase() ?: "release"
+require(ohosBuildType == "release" || ohosBuildType == "debug") {
+    "ohosBuildType must be 'release' or 'debug', but was '$ohosBuildType'."
+}
+// 指定要 stage 的 ABI (逗号分隔)。只打 arm64-v8a: CPF fork 生态库 ktor/room3/sqlite-framework
+// 只有 ohosArm64 变体, 2026-08-16 实测 ohosX64 链接解析失败, 故不再声明 ohosX64 target,
+// x86_64 也不进 hap 产物。若未来 CPF 发布 ohosX64 变体, 需先恢复 shared 的 ohosX64 target。
+val ohosAbis = providers.gradleProperty("ohosAbis").orNull
+    ?.split(',')
+    ?.map { it.trim() }
+    ?.filter { it.isNotEmpty() }
+    ?.toSet()
+    ?: setOf("arm64-v8a")
+require(ohosAbis.isNotEmpty() && ohosAbis.all { it == "arm64-v8a" }) {
+    "ohosAbis must be 'arm64-v8a' (x86_64 target 已移除), but was: $ohosAbis"
+}
+val ohosBuildTypeCapitalized = ohosBuildType.replaceFirstChar { it.titlecase() }
+// :shared 已拆分为 foundation/data/core/ui, liblegado_shared.so 由出口模块 :ui 产出
+val ohosSharedOutputDir =
+    layout.projectDirectory.dir("ui/build/bin/ohosArm64/${ohosBuildType}Shared").asFile
+val ohosSharedLibrary = ohosSharedOutputDir.resolve("liblegado_shared.so")
+val ohosAppDir = layout.projectDirectory.dir("ohosApp").asFile
+// 任务动作只允许引用可序列化的局部量 (File/String/Set), 不得引用脚本级 val 或 Project
+val stageAbis = ohosAbis
+val stageBuildType = ohosBuildType
+val stageLinkTask = ":ui:link${ohosBuildTypeCapitalized}SharedOhosArm64"
+val stagedLibDir = ohosLibsDir.asFile
+val stagedIncludeDir = ohosIncludeDir.asFile
+
+val stageOhosNativeLibraries = tasks.register<Copy>("stageOhosNativeLibraries") {
+    group = "ohos"
+    description = "Build and stage CPF-KMP-CMP OHOS shared library and generated API header."
+    val abis = stageAbis
+    val sharedLib = ohosSharedLibrary
+    val sharedOutputDir = ohosSharedOutputDir
+    val buildType = stageBuildType
+    if ("arm64-v8a" in abis) {
+        dependsOn(stageLinkTask)
+    }
+    into(ohosAppDir)
+    if ("arm64-v8a" in abis) {
+        from(sharedLib) {
+            into("entry/libs/arm64-v8a")
+        }
+        from(sharedOutputDir) {
+            include("*.h")
+            into("entry/src/main/cpp/include/arm64-v8a")
+        }
+    }
+    doFirst {
+        val missing = buildList {
+            if ("arm64-v8a" in abis) {
+                if (!sharedLib.isFile) add(sharedLib)
+                if (sharedOutputDir.listFiles { f -> f.extension == "h" }.orEmpty().isEmpty()) {
+                    add(File(sharedOutputDir, "<generated-api-header>.h"))
+                }
+            }
+        }
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                "Missing CPF OHOS outputs: ${missing.joinToString()}. " +
+                    "Run with -PenableOhosTarget=true, rendererBackend=fusion-renderer " +
+                    "and ohosBuildType=$buildType."
+            )
+        }
+    }
+}
+
+val verifyOhosNativeLibraries = tasks.register("verifyOhosNativeLibraries") {
+    group = "verification"
+    description = "Verify that the CPF OHOS fusion-renderer artifacts have been staged."
+    dependsOn(stageOhosNativeLibraries)
+    val abis = stageAbis
+    val libDir = stagedLibDir
+    val includeDir = stagedIncludeDir
+    doLast {
+        val missing = buildList {
+            if ("arm64-v8a" in abis) {
+                if (!File(libDir, "liblegado_shared.so").isFile) add(libDir)
+                if (includeDir.listFiles { f -> f.extension == "h" }.orEmpty().isEmpty()) {
+                    add(includeDir)
+                }
+            }
+        }
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                "Missing HarmonyOS native artifacts in ${missing.joinToString()}."
+            )
+        }
+    }
+}
+
+/**
+ * 构建时间戳 ValueSource: 纳入配置缓存指纹, 避免 Instant.now() 在命中缓存时被跳过而导致版本名过期。
+ * 按小时 (yy.MMddHH) 离散化, 同一小时内复用配置缓存, 跨小时自然失效重算。
+ */
+abstract class BuildTimestampValueSource : ValueSource<String, ValueSourceParameters.None> {
+    override fun obtain(): String {
+        return java.time.format.DateTimeFormatter
+            .ofPattern("yy.MMddHH")
+            .withZone(java.time.ZoneId.of("GMT+8"))
+            .format(java.time.Instant.now())
+    }
+}
+
+// iOS 版本号与安卓端对齐 (app/build.gradle.kts):
+// versionCode = 10000 + git 提交数, versionName = "3." + 构建时刻 yy.MMddHH (GMT+8)。
+// 同步目标: iosApp/project.yml 的 info.properties (xcodegen generate 会用它重写 Info.plist)
+// 与 iosApp/Info.plist 两处, 保证双写一致。
+// 已挂进 iosApp Xcode 构建的 preBuildScripts, 每次构建自动执行; 也可手动 ./gradlew syncIosVersion。
+val syncIosVersion = tasks.register("syncIosVersion") {
+    group = "ios"
+    description =
+        "Sync iOS CFBundleShortVersionString/CFBundleVersion with Android versionName/versionCode."
+    // versionCode/versionName 经 providers.exec 与 BuildTimestampValueSource 纳入配置缓存输入指纹
+    // shallow clone 下 git rev-list --count 恒为 1 (versionCode 会静默算成 10001),
+    // 实际拦截在 doLast 里做: 只有本任务失败, 不影响 shallow 环境跑其他任务
+    val isShallowRepo = providers.exec {
+        commandLine("git", "rev-parse", "--is-shallow-repository")
+    }.standardOutput.asText.get().trim() == "true"
+    val commits = providers.exec {
+        commandLine("git", "rev-list", "HEAD", "--count")
+    }.standardOutput.asText.get().trim().toInt()
+    val versionCode = 10000 + commits
+    val buildTime = providers.of(BuildTimestampValueSource::class) {}.get()
+    val appVersion = providers.gradleProperty("appVersion").orNull
+    val versionName = appVersion ?: "3.$buildTime"
+    val projectYml = rootProject.file("iosApp/project.yml")
+    val infoPlist = rootProject.file("iosApp/Info.plist")
+    doLast {
+        // 取不到真实提交数就停: 静默产出假 versionCode 比构建失败更贵 (产物看不出新旧)
+        check(!isShallowRepo) {
+            "syncIosVersion 需要完整 git 历史 (git rev-list HEAD --count), 当前是 shallow clone; " +
+                "调用方 checkout 必须带 fetch-depth: 0"
+        }
+        fun rewrite(path: File, transform: (String) -> String) {
+            val updated = transform(path.readText())
+            if (updated != path.readText()) path.writeText(updated)
+        }
+        rewrite(projectYml) {
+            it.replace(
+                Regex("CFBundleShortVersionString:\\s*\"[^\"]*\""),
+                "CFBundleShortVersionString: \"$versionName\"",
+            ).replace(
+                Regex("CFBundleVersion:\\s*\"[^\"]*\""),
+                "CFBundleVersion: \"$versionCode\"",
+            )
+        }
+        rewrite(infoPlist) {
+            it.replace(
+                Regex("(<key>CFBundleShortVersionString</key>\\s*<string>)[^<]*(</string>)"),
+                "$1$versionName$2",
+            ).replace(
+                Regex("(<key>CFBundleVersion</key>\\s*<string>)[^<]*(</string>)"),
+                "$1$versionCode$2",
+            )
+        }
+        // 写回后立即回读校验: 写入被沙箱/权限静默拦下时不能继续用旧值出包
+        fun readBack(path: File, pattern: String): String? =
+            Regex(pattern).find(path.readText())?.groupValues?.get(1)
+        val ymlShort = readBack(projectYml, "CFBundleShortVersionString:\\s*\"([^\"]*)\"")
+        val ymlCode = readBack(projectYml, "CFBundleVersion:\\s*\"([^\"]*)\"")
+        val plistShort = readBack(infoPlist, "<key>CFBundleShortVersionString</key>\\s*<string>([^<]*)</string>")
+        val plistCode = readBack(infoPlist, "<key>CFBundleVersion</key>\\s*<string>([^<]*)</string>")
+        check(
+            ymlShort == versionName && ymlCode == "$versionCode" &&
+                plistShort == versionName && plistCode == "$versionCode"
+        ) {
+            "iOS 版本号写入未生效: project.yml=$ymlShort/$ymlCode, Info.plist=$plistShort/$plistCode, " +
+                "期望=$versionName/$versionCode"
+        }
+        logger.lifecycle("iOS version synced: versionName=$versionName, versionCode=$versionCode")
+    }
+}

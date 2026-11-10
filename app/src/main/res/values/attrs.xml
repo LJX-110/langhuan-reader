@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <attr name="arcoRadius" format="dimension" />
+
+    <declare-styleable name="AccentBgTextView">
+        <attr name="arcoRadius" />
+    </declare-styleable>
+
+</resources>
