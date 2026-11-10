@@ -14,7 +14,7 @@ import kotlin.time.Clock
  * 平台差异: 用户选定的书籍保存位置在沙盒之外, 写入前必须先取得该目录的持久授权
  * ([copyBackupIntoUserDir])。
  *
- * app 端 onRestoreFinished 还有换图标/日夜间刷新: 换图标是唯一平台差异
+ * app 端 onRestoreFinished 只做日夜间刷新, 不再切换图标。
  * (见 [applyRestoredLauncherIcon]), 主题由 AppTheme 订阅配置自动重组。
  *
  * 未注册时 [BackupRestoreHooks.get] 返回空默认实现 (备份/恢复照常, 仅丢时间戳/提示副作用)。
@@ -74,8 +74,6 @@ internal expect fun copyBackupIntoUserDir(
 ): Boolean
 
 /**
- * 恢复完成后同步桌面图标 (对照 app 端 Restore.kt 的 LauncherIconHelp.changeIcon)。
- *
- * iOS 读回 launcherIcon 偏好经 setAlternateIconName 切换; 鸿蒙无动态图标, 空实现。
+ * 恢复完成后无需同步桌面图标 (只保留一套图标), 各端均为空实现。
  */
 internal expect fun applyRestoredLauncherIcon()

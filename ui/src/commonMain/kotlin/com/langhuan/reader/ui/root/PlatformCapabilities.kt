@@ -789,13 +789,11 @@ interface PlatformCapabilities {
      */
     fun applyMonetColorFromWallpaper() = unsupported("莫奈取色")
 
-    // 换桌面图标平台能力 (对照 app 端 LauncherIconHelp.changeIcon: 多 LAUNCHER 组件运行时切换)。
-    // Android 端 setComponentEnabledSetting 实现; iOS 端 setAlternateIconName 实现;
-    // 桌面/鸿蒙无对应平台机制, 默认 unsupported + 设置项按 [launcherIconChangeSupported] 隐藏。
-    /** 切换到指定桌面图标 (icon 为图标值: ic_launcher/launcher1/launcher4/launcher5) */
-    fun changeLauncherIcon(icon: String) = unsupported("更换桌面图标")
+    // 图标切换已移除: 只保留一套琅嬛阁图标。
+    /** 空实现, 仅为兼容旧调用点。 */
+    fun changeLauncherIcon(icon: String) = Unit
 
-    /** 平台是否支持更换桌面图标 (决定主题设置页"换图标"项显隐, 对照 [hasSystemBars] 平台过滤) */
+    /** 图标切换已移除, 设置项不再展示。 */
     val launcherIconChangeSupported: Boolean get() = false
 
     // 其它设置平台能力 (各端按需 override, 未实现端统一给出明确提示)

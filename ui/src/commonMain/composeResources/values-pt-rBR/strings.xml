@@ -619,7 +619,7 @@
     <string name="welcome_style">启动界面样式</string>
     <string name="welcome_style_summary">启动界面图片和是否显示文字等</string>
     <string name="show_welcome_text">显示文字</string>
-    <string name="welcome_text">阅读|享受美好时光</string>
+    <string name="welcome_text">琅嬛阁</string>
     <string name="show_icon">显示图标</string>
     <string name="show_default_book_icon">显示默认书籍图标</string>
     <string name="assists_key_config">辅助按键配置</string>
@@ -887,10 +887,7 @@
         <item>反向竖屏</item>
     </string-array>
     <string-array name="icon_names">
-        <item>íconePrincipal</item>
-        <item>ícone1</item>
-        <item>ícone4</item>
-        <item>ícone5</item>
+        <item>iconMain</item>
     </string-array>
     <string-array name="chinese_mode">
         <item>Desativado</item>

@@ -63,7 +63,7 @@ interface BackupRestoreHook {
         ThemeConfigProviders.get().upConfig()
     }
 
-    /** 恢复完成后的 UI 钩子 (app 端: toast + LauncherIconHelp.changeIcon + ThemeConfig.applyDayNight)。 */
+    /** 恢复完成后的 UI 钩子 (app 端: toast + ThemeConfig.applyDayNight)。 */
     suspend fun onRestoreFinished() {}
 }
 

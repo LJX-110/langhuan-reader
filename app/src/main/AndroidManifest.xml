@@ -56,6 +56,7 @@
         android:allowBackup="true"
         android:enableOnBackInvokedCallback="true"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="${app_name}"
         android:networkSecurityConfig="@xml/network_security_config"
         android:requestLegacyExternalStorage="true"
@@ -66,40 +67,6 @@
         <activity
             android:name=".ui.welcome.WelcomeActivity"
             android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity> <!-- 图标1 -->
-        <activity
-            android:name=".ui.welcome.Launcher1"
-            android:enabled="false"
-            android:exported="true"
-            android:icon="@mipmap/launcher1">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity> <!-- 图标4 -->
-
-        <activity
-            android:name=".ui.welcome.Launcher4"
-            android:enabled="false"
-            android:exported="true"
-            android:icon="@mipmap/launcher4">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity> <!-- 图标5 -->
-        <activity
-            android:name=".ui.welcome.Launcher5"
-            android:enabled="false"
-            android:exported="true"
-            android:icon="@mipmap/launcher5">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

@@ -4,14 +4,10 @@ import android.content.Context
 import android.net.Uri
 import androidx.core.net.toUri
 import com.langhuan.reader.App
-import com.langhuan.reader.BuildConfig
-import com.langhuan.reader.constant.PreferKey
-import com.langhuan.reader.help.LauncherIconHelp
 import com.langhuan.reader.help.config.ThemeConfig
 import com.langhuan.reader.help.i18n.androidAppString
 import com.langhuan.reader.utils.FileDoc
 import com.langhuan.reader.utils.compress.ZipUtils
-import com.langhuan.reader.utils.getPrefString
 import com.langhuan.reader.utils.isContentScheme
 import com.langhuan.reader.utils.openInputStream
 import com.langhuan.reader.utils.printOnDebug
@@ -67,14 +63,11 @@ object Restore {
         ThemeConfig.upConfig()
     }
 
-    /** 恢复完成: 提示 + 切换图标 + 应用日夜间 (与原实现一致)。 */
+    /** 恢复完成: 提示 + 应用日夜间 (与原实现一致)。 */
     suspend fun onRestoreFinished() {
         App.instance.toastOnUi(androidAppString("restore_success"))
         withContext(Main) {
             delay(100)
-            if (!BuildConfig.DEBUG) {
-                LauncherIconHelp.changeIcon(App.instance.getPrefString(PreferKey.launcherIcon))
-            }
             ThemeConfig.applyDayNight(App.instance)
         }
     }

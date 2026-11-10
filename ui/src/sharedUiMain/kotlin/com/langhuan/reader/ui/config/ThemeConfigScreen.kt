@@ -43,11 +43,9 @@ import org.jetbrains.compose.resources.stringResource
 /**
  * 主题设置页（迁 pref_config_theme.xml）。逐条对齐原条目顺序/key/默认值。
  * 唯一新增为莫奈取色组 (无原版对应): 一键取色 + 自动跟随壁纸开关, 平台能力注入,
- * 仅 Android 12+ 非 eInk 显示 ([monetColorExtractSupported] 门, 同换图标的平台过滤模式)。
- * 换图标 launcherIcon 写 prefs 后经 [onIconChange] 回调宿主 (ThemeConfigRoute 委托
- * PlatformCapabilities.changeLauncherIcon → Android LauncherIconHelp / iOS setAlternateIconName);
- * [iconChangeSupported] 为 false 的端 (桌面/鸿蒙无平台机制) 隐藏"换图标"项 (对照 MoreConfig
- * hasSystemBars 平台过滤); 动态 summary（字体缩放）与点击型交互（布局/搜索/底栏/主题弹窗/NumberPicker/跳转）由宿主传入。
+ * 仅 Android 12+ 非 eInk 显示 ([monetColorExtractSupported] 门)。
+ * 换图标入口已移除: 只保留一套图标, [iconChangeSupported] 恒为 false, 该项不再展示。
+ * 动态 summary（字体缩放）与点击型交互（布局/搜索/底栏/主题弹窗/NumberPicker/跳转）由宿主传入。
  *
  * 下沉 shared/sharedUiMain:
  * - stringResource(R.string.xxx) → stringResource(Res.string.xxx) (key-based, 跨平台)

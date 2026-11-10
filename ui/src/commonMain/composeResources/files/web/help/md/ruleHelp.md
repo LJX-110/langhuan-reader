@@ -1,8 +1,5 @@
 # 源规则帮助
 
-* [阅读3.0(Langhuan)规则说明](https://mgz0227.github.io/The-tutorial-of-Langhuan/)
-* [书源帮助文档](https://mgz0227.github.io/The-tutorial-of-Langhuan/Rule/source.html)
-* [订阅源帮助文档](https://mgz0227.github.io/The-tutorial-of-Langhuan/Rule/rss.html)
 * 辅助键盘❓中可插入URL参数模板,打开帮助,js教程,选择文件
 * 规则标志, {{......}}内使用规则必须有明显的规则标志,没有规则标志当作js执行
 ```

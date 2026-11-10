@@ -448,7 +448,7 @@
     <string name="welcome_show_time">欢迎页显示时间</string>
     <string name="welcome_style">启动界面样式</string>
     <string name="welcome_style_summary">启动界面图片和是否显示文字等</string>
-    <string name="welcome_text">琅嬛阁|享受美好时光</string>
+    <string name="welcome_text">琅嬛阁</string>
     <string name="enable_welcome">启用欢迎页</string>
     <string name="enable_welcome_summary">启动时是否显示欢迎页</string>
     <string name="show_welcome_text">显示文字</string>
@@ -1543,15 +1543,9 @@ Windows: winget install shinchiro.mpv 或 scoop install mpv,
     </string-array>
     <string-array name="icon_names">
         <item>iconMain</item>
-        <item>icon1</item>
-        <item>icon4</item>
-        <item>icon5</item>
     </string-array>
     <string-array name="icons">
         <item>ic_launcher</item>
-        <item>launcher1</item>
-        <item>launcher4</item>
-        <item>launcher5</item>
     </string-array>
     <string-array name="theme_mode">
         <item>跟随系统</item>

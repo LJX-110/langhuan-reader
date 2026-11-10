@@ -562,24 +562,8 @@ object IosPlatformCapabilities : NativePlatformCapabilities {
     override suspend fun resolveBookRef(bookUrl: String): BookRef? =
         appDb.bookDao.getBook(bookUrl)?.toRouteRef()
 
-    // 换桌面图标 (对照 app 端 LauncherIconHelp.changeIcon / Android setComponentEnabledSetting):
-    // iOS 用 UIApplication.setAlternateIconName 切换 bundle 内交替图标
-    // (Info.plist/project.yml 的 CFBundleAlternateIcons 已声明 Icon1/Icon4/Icon5,
-    // 对应 iosApp/Icon1.png / Icon4.png / Icon5.png); 传 nil = 恢复主图标 (AppIcon.png)。
-    // 系统要求主线程调用, completionHandler 传 null (错误仅落系统日志)。
-    override fun changeLauncherIcon(icon: String) {
-        val alternateName = when (icon) {
-            "launcher1" -> "Icon1"
-            "launcher4" -> "Icon4"
-            "launcher5" -> "Icon5"
-            else -> null // ic_launcher = 默认主图标
-        }
-        dispatch_async(dispatch_get_main_queue()) {
-            UIApplication.sharedApplication.setAlternateIconName(alternateName, null)
-        }
-    }
-
-    override val launcherIconChangeSupported: Boolean get() = true
+    // 图标切换已移除: 只保留一套琅嬛阁图标, 平台不再声明支持
+    override val launcherIconChangeSupported: Boolean get() = false
 
     override fun getAppVersionName(): String? =
         NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleShortVersionString") as? String

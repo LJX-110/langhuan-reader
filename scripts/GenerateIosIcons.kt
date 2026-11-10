@@ -5,10 +5,7 @@
 // 本文件只管 iOS 的画布尺寸、坐标换算、图层组合与输出路径。
 //
 // 合成规则 (先画 background 再画 foreground, 同为 108x108 viewport):
-//   AppIcon (默认) = ic_launcher1_b_new + ic_launcher1   (对照 mipmap-anydpi-v26/ic_launcher.xml)
-//   Icon1          = ic_launcher1_b     + ic_launcher1   (对照 mipmap-anydpi-v26/launcher1.xml)
-//   Icon4          = ic_launcher4_b     + ic_launcher4   (对照 mipmap-anydpi-v26/launcher4.xml)
-//   Icon5          = #FAFAFA (md_grey_50) + ic_launcher6 (对照 mipmap-anydpi-v26/launcher5.xml)
+//   AppIcon = #1F2A24 (墨绿底) + ic_launcher_foreground (阁顶为书)
 //
 // 可见窗口: 层图按 108 viewport 全幅绘制后整体放大 1.5 倍, 可见窗口 = 层坐标的中央
 // 72/108。AOSP AdaptiveIconDrawable 的三条依据 —— EXTRA_INSET_PERCENTAGE = 1/4f,
@@ -18,11 +15,10 @@
 // 注意 72/108 与官方文档的 "66x66 safe zone" 不是同一个数: 66x66 是更严格的设计建议
 // 安全区 (内容不该超出), 72/108 才是系统遮罩的裁切边界, 本脚本按后者取窗口。
 //
-// 输出 1024x1024 无透明通道 PNG 到 iosApp/ (iOS 交替图标要求 bundle 内无 alpha 图标)。
-// 图标值 -> bundle 名的映射与 shared/iosMain IosPlatformCapabilities.changeLauncherIcon 一致。
+// 输出 1024x1024 无透明通道 PNG 到 iosApp/ (AppIcon.png)。
 //
 // 本脚本是备用工具: 图标资源基本不改, 只有换 launcher 图标或改 drawable 里的矢量时
-// 才需要手工重跑一次, 没有 Gradle/CI 调用点。重跑后必须把 iosApp/*.png 一并提交。
+// 才需要手工重跑一次, 没有 Gradle/CI 调用点。重跑后必须把 iosApp/AppIcon.png 一并提交。
 //
 // 运行 (仓库根目录; 需 jsvg 2.0.0 + slf4j-api 2.0.17 于 classpath, 均来自 Gradle 缓存,
 // 是 desktop 构建的正式依赖; 有 kotlinc 直接用 kotlinc, 无则用 kotlin-compiler-embeddable):
@@ -63,10 +59,7 @@ private data class Combo(
 fun main() {
     val res = Paths.get("app", "src", "main", "res")
     val combos = listOf(
-        Combo("AppIcon", "drawable/ic_launcher1_b_new.xml", null, "drawable/ic_launcher1.xml"),
-        Combo("Icon1", "drawable/ic_launcher1_b.xml", null, "drawable/ic_launcher1.xml"),
-        Combo("Icon4", "drawable/ic_launcher4_b.xml", null, "drawable/ic_launcher4.xml"),
-        Combo("Icon5", null, "#FAFAFA", "drawable/ic_launcher6.xml"),
+        Combo("AppIcon", null, "#1F2A24", "drawable/ic_launcher_foreground.xml"),
     )
     for (combo in combos) {
         val img = BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_ARGB)
@@ -93,7 +86,7 @@ fun main() {
             String(Files.readAllBytes(res.resolve(combo.fgDrawable)), StandardCharsets.UTF_8)
         )
         g.dispose()
-        // 铺白底压平: iOS 交替图标不允许 alpha 通道
+        // 铺白底压平: iOS AppIcon 不允许 alpha 通道
         val flat = BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_RGB)
         val fg = flat.createGraphics()
         fg.color = Color.WHITE

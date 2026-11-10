@@ -448,7 +448,7 @@
     <string name="welcome_show_time">Welcome page show time</string>
     <string name="welcome_style">Launch interface style</string>
     <string name="welcome_style_summary">Startup screen image and whether to display text, etc.</string>
-    <string name="welcome_text">Langhuan|Enjoy Good Times</string>
+    <string name="welcome_text">琅嬛阁</string>
     <string name="enable_welcome">Enable welcome page</string>
     <string name="enable_welcome_summary">Whether to show welcome page on startup</string>
     <string name="show_welcome_text">Display text</string>
@@ -1476,15 +1476,9 @@
     </string-array>
     <string-array name="icon_names">
         <item>iconMain</item>
-        <item>icon1</item>
-        <item>icon4</item>
-        <item>icon5</item>
     </string-array>
     <string-array name="icons">
         <item>ic_launcher</item>
-        <item>launcher1</item>
-        <item>launcher4</item>
-        <item>launcher5</item>
     </string-array>
     <string-array name="theme_mode">
         <item>Follow system</item>

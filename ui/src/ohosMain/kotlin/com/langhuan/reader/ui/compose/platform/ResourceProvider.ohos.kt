@@ -8,7 +8,7 @@ import androidx.compose.ui.graphics.painter.Painter
  *
  * - HAP 内仅 AppScope/resources/base/media 下单一 layered 图标
  *   (app_icon_background + app_icon_foreground, 见 ohosApp/AppScope),
- *   无 Android mipmap launcher1/launcher4/launcher5 / iOS bundle Icon1/Icon4/Icon5 等价物;
+ *   只保留一套图标, 不提供交替图标等价物;
  * - HarmonyOS 亦无运行时切换图标 API (对照 Android setComponentEnabledSetting /
  *   iOS setAlternateIconName), [com.langhuan.reader.ui.root.PlatformCapabilities.launcherIconChangeSupported]
  *   默认 false, 主题设置页"换图标"项已隐藏 (见 ThemeConfigRoute);

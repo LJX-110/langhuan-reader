@@ -1,18 +1,7 @@
 package com.langhuan.reader.help.storage
 
-import com.langhuan.reader.constant.DirUsage
-import com.langhuan.reader.constant.PreferKey
-import com.langhuan.reader.help.config.PreferenceProviders
-import com.langhuan.reader.ui.IosPlatformCapabilities
-import com.langhuan.reader.utils.IosSecurityScopedStorage
-
-/** iOS: 恢复 launcherIcon 偏好后经 setAlternateIconName 同步切换桌面图标。 */
-internal actual fun applyRestoredLauncherIcon() {
-    runCatching {
-        val icon = PreferenceProviders.get().getString(PreferKey.launcherIcon, "ic_launcher")
-        IosPlatformCapabilities.changeLauncherIcon(icon)
-    }
-}
+/** iOS: 只保留一套图标, 恢复备份后不再切换桌面图标。 */
+internal actual fun applyRestoredLauncherIcon() = Unit
 
 /**
  * 备份 zip 写进用户选定的书籍保存位置下的 backup 子目录: 写入期间持该目录的 security-scoped 租约。

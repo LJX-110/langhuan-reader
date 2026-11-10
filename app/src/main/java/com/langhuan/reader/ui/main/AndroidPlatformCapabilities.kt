@@ -48,7 +48,6 @@ import com.langhuan.reader.help.AppWebDav
 import com.langhuan.reader.help.CrashHandler
 import com.langhuan.reader.help.DirectLinkUpload
 import com.langhuan.reader.help.IntentHelp
-import com.langhuan.reader.help.LauncherIconHelp
 import com.langhuan.reader.help.book.BookHelp
 import com.langhuan.reader.help.book.delBookCore
 import com.langhuan.reader.help.book.bookshelfJson
@@ -1424,13 +1423,8 @@ class AndroidPlatformCapabilities(
         }
     }
 
-    // 换桌面图标 (对照 master ThemeConfigFragment: launcherIcon -> LauncherIconHelp.changeIcon):
-    // setComponentEnabledSetting 切换 WelcomeActivity / Launcher1/4/5 的启用态, 桌面图标即变
-    override fun changeLauncherIcon(icon: String) {
-        LauncherIconHelp.changeIcon(icon)
-    }
-
-    override val launcherIconChangeSupported: Boolean get() = true
+    // 图标切换已移除: 只保留一套琅嬛阁图标, 平台不再声明支持
+    override val launcherIconChangeSupported: Boolean get() = false
 
     // AudioPlayService / WebService 用 MediaPlaybackLock 真持唤醒锁, 两个唤醒锁开关只在本端显示
     override val wakeLockSupported: Boolean get() = true

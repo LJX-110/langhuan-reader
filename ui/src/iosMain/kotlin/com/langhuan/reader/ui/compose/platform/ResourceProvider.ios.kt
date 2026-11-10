@@ -13,25 +13,15 @@ import org.jetbrains.compose.resources.painterResource
 import platform.Foundation.NSBundle
 
 /**
- * iOS actual: 从 main bundle 读交替图标 PNG (AppIcon/Icon1/Icon4/Icon5, 与
- * Info.plist CFBundleAlternateIcons 同名) 经 skia 解码转 [BitmapPainter]。
- *
- * 映射与 [com.langhuan.reader.ui.IosPlatformCapabilities.changeLauncherIcon] 一致:
- * ic_launcher -> AppIcon, launcher1 -> Icon1, launcher4 -> Icon4, launcher5 -> Icon5。
+ * iOS actual: 只读主图标 AppIcon.png (不再提供交替图标)。
  * 资源缺失时返回 null (与 Android 端资源缺失兜底一致)。
  */
 @Composable
 actual fun rememberLauncherIconPainters(iconValues: List<String>): List<Painter?> {
     return remember(iconValues) {
         iconValues.map { value ->
-            val bundleName = when (value) {
-                "ic_launcher" -> "AppIcon"
-                "launcher1" -> "Icon1"
-                "launcher4" -> "Icon4"
-                "launcher5" -> "Icon5"
-                else -> null
-            } ?: return@map null
-            val path = NSBundle.mainBundle.pathForResource(bundleName, "png") ?: return@map null
+            if (value != "ic_launcher") return@map null
+            val path = NSBundle.mainBundle.pathForResource("AppIcon", "png") ?: return@map null
             runCatching {
                 BitmapPainter(
                     org.jetbrains.skia.Image.makeFromEncoded(File(path).readBytes())

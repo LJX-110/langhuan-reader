@@ -16,8 +16,8 @@
 //   - iOS 脚本: 缩放 SIZE/VISIBLE_VIEW 再平移, 直接输出可见窗口 1024x1024
 //
 // 输出 (AppScope/resources/base/media/):
-//   app_icon_background.png = ic_launcher1_b_new           (对照 mipmap-anydpi-v26/ic_launcher.xml 的 background)
-//   app_icon_foreground.png = ic_launcher1 叠加在透明底上  (同文件的 foreground)
+//   app_icon_background.png = #1F2A24 纯色底
+//   app_icon_foreground.png = ic_launcher_foreground (阁顶为书) 叠加在透明底上
 // 两层分别独立输出: 前景层必须透明底 (系统要与背景层合成), 故不做压平。
 //
 // ⚠️ entry/src/main/module.json5 的 startWindowIcon 也指向 app_icon_foreground.png,
@@ -50,9 +50,9 @@ fun main() {
     val res = Paths.get("app", "src", "main", "res")
     val outDir = Paths.get("ohosApp", "AppScope", "resources", "base", "media")
     Files.createDirectories(outDir)
-    // 两层分开输出: 背景层不透明 (书页底), 前景层透明底 (薯条 + 文字)
-    render(res, outDir, "app_icon_background.png", "drawable/ic_launcher1_b_new.xml", null)
-    render(res, outDir, "app_icon_foreground.png", null, "drawable/ic_launcher1.xml")
+    // 两层分开输出: 背景层不透明 (墨绿底), 前景层透明底 (阁顶为书)
+    render(res, outDir, "app_icon_background.png", "#1F2A24", null, null)
+    render(res, outDir, "app_icon_foreground.png", null, null, "drawable/ic_launcher_foreground.xml")
 }
 
 /**
@@ -65,6 +65,7 @@ private fun render(
     res: java.nio.file.Path,
     outDir: java.nio.file.Path,
     fileName: String,
+    bgColor: String?,
     bgDrawable: String?,
     fgDrawable: String?,
 ) {
@@ -74,6 +75,10 @@ private fun render(
     g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
     g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE)
     g.scale(SIZE / VIEW, SIZE / VIEW)
+    if (bgColor != null) {
+        g.color = java.awt.Color.decode(bgColor)
+        g.fillRect(0, 0, VIEW.toInt(), VIEW.toInt())
+    }
     if (bgDrawable != null) {
         renderSvg(g, String(Files.readAllBytes(res.resolve(bgDrawable)), StandardCharsets.UTF_8))
     }

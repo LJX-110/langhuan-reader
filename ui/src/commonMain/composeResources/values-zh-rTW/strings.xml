@@ -637,7 +637,7 @@
     <string name="welcome_style">啟動介面樣式</string>
     <string name="welcome_style_summary">啟動介面圖片和是否顯示文字等</string>
     <string name="show_welcome_text">顯示文字</string>
-    <string name="welcome_text">琅嬛閣|享受美好時光</string>
+    <string name="welcome_text">琅嬛阁</string>
     <string name="show_icon">顯示圖示</string>
     <string name="show_default_book_icon">顯示預設書籍圖示</string>
     <string name="assists_key_config">輔助按鍵配置</string>
@@ -1002,9 +1002,6 @@
     </string-array>
     <string-array name="icon_names">
         <item>iconMain</item>
-        <item>icon1</item>
-        <item>icon4</item>
-        <item>icon5</item>
     </string-array>
     <string-array name="chinese_mode">
         <item>關閉</item>
