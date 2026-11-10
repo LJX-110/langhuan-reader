@@ -1,0 +1,399 @@
+package com.langhuan.reader.desktop.ui
+
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.Job
+import com.langhuan.reader.constant.AppLog
+import com.langhuan.reader.constant.DirUsage
+import com.langhuan.reader.constant.PreferKey
+import com.langhuan.reader.help.config.resolveImagePath
+import com.langhuan.reader.help.crash.CRASH_LOG_FILE_PREFIX
+import com.langhuan.reader.help.storage.BackupFileOps
+import com.langhuan.reader.help.storage.DataStorageProviders
+import com.langhuan.reader.help.toast.DesktopTrayNotifier
+import com.langhuan.reader.help.writeBytesAtomically
+import com.langhuan.reader.model.bakeCoverImageFile
+import com.langhuan.reader.model.bakedImagePath
+import com.langhuan.reader.model.deleteImageIfUnreferenced
+import com.langhuan.reader.ui.root.BrowserService
+import com.langhuan.reader.ui.root.CrashLogProvider
+import com.langhuan.reader.ui.root.ExternalRequestService
+import com.langhuan.reader.ui.root.FileFilter
+import com.langhuan.reader.ui.root.FilePickerService
+import com.langhuan.reader.ui.root.PickedFile
+import com.langhuan.reader.ui.root.KeyboardController
+import com.langhuan.reader.ui.root.LaunchRequest
+import com.langhuan.reader.ui.root.MediaService
+import com.langhuan.reader.ui.root.NotificationService
+import com.langhuan.reader.ui.root.OrientationPolicy
+import com.langhuan.reader.ui.root.PermissionService
+import com.langhuan.reader.ui.root.PlatformCapabilities
+import com.langhuan.reader.ui.root.PlatformServices
+import com.langhuan.reader.ui.root.ShareService
+import com.langhuan.reader.ui.root.SoftInputPolicy
+import com.langhuan.reader.ui.root.SystemBarsPolicy
+import com.langhuan.reader.ui.root.WindowController
+import com.langhuan.reader.ui.root.importImageSetFile
+import com.langhuan.reader.ui.root.SavedRef
+import com.langhuan.reader.utils.browseUrl
+import com.langhuan.reader.desktop.help.DesktopCrashLogDirs
+import com.langhuan.reader.desktop.help.DesktopKeepAwake
+import com.langhuan.reader.desktop.ui.component.FileDialogs
+import java.awt.Toolkit
+import java.awt.Window
+import java.awt.datatransfer.StringSelection
+import java.io.File
+
+/**
+ * AWT 窗口句柄持有者: Main.kt 在 Compose Window 组装后注入 [window],
+ * 供 [DesktopWindowController] 切换全屏等窗口策略。
+ */
+class DesktopWindowHandle {
+    @Volatile
+    var window: Window? = null
+}
+
+/**
+ * desktop 端 [PlatformServices] 实现：聚合 10 项平台能力。
+ *
+ * 各子能力提供最小可用实现：FilePicker/Share/Browser 走 AWT/系统原生可用;
+ * Window 全屏经 [DesktopFullscreenController] 切 Windows 真全屏 (无边框独占窗口覆盖任务栏),
+ * 非 Windows 平台显式日志暂不支持 (不做 AWT fallback); Orientation/SystemBars 桌面端无对应概念为 no-op。
+ * 不伪造行为, 无法实现的返回空/no-op。
+ */
+class DesktopPlatformServices(
+    private val capabilitiesImpl: PlatformCapabilities,
+    val windowHandle: DesktopWindowHandle = DesktopWindowHandle(),
+) : PlatformServices {
+
+    override val capabilities: PlatformCapabilities get() = capabilitiesImpl
+    override val files: FilePickerService = DesktopFilePickerService()
+    override val sharing: ShareService = DesktopShareService()
+    override val browser: BrowserService = DesktopBrowserService()
+    override val permissions: PermissionService = DesktopPermissionService()
+    override val window: WindowController = DesktopWindowController(windowHandle)
+    override val keyboard: KeyboardController = DesktopKeyboardController()
+    override val media: MediaService = DesktopMediaService()
+    override val notifications: NotificationService = DesktopNotificationService()
+    override val externalRequests: ExternalRequestService = DesktopExternalRequestService()
+    override val crashLogs: CrashLogProvider = DesktopCrashLogProvider()
+}
+
+/**
+ * 面板显示期间盯住调用方 Job: 页面退出 (取消) 时关闭原生面板并结束等待。
+ * 阻塞返回后面板与等待方同归一个资格判定: 面板被撤 (句柄取消, 含撤销关面板与
+ * 用户确认竞态下面板仍回出结果) 与等待方被撤都不交结果。
+ */
+internal suspend fun <T> withDialogCancel(block: suspend (FileDialogs.DialogCancelHandle) -> T): T {
+    val handle = FileDialogs.newCancelHandle()
+    var completed = false
+    val job = currentCoroutineContext()[Job]
+    // 子协程挂在调用方 Job 上: 调用方取消时它立即进入 finally, 只关本请求的 handle
+    val closer = job?.let { parent ->
+        CoroutineScope(parent + Dispatchers.IO).launch(start = CoroutineStart.UNDISPATCHED) {
+            try {
+                awaitCancellation()
+            } finally {
+                if (!completed) FileDialogs.close(handle)
+            }
+        }
+    }
+    return try {
+        val result = block(handle)
+        if (handle.cancelled) {
+            // 面板已被撤: 阻塞返回值 (含确认/关闭竞态下回出的真实选择) 不交回等待方
+            throw CancellationException("文件选择面板已取消")
+        }
+        currentCoroutineContext().ensureActive()
+        result
+    } finally {
+        completed = true
+        closer?.cancel()
+    }
+}
+
+// Windows 走 COM IFileDialog 现代对话框, macOS/Linux 走 AWT (统一入口 FileDialogs)
+private class DesktopFilePickerService : FilePickerService {
+
+    override suspend fun pickFile(filter: FileFilter): String? =
+        withDialogCancel { handle ->
+            FileDialogs.pickOpenFile(extensions = filter.extensions, handle = handle)?.absolutePath
+        }
+
+    override suspend fun pickFiles(filter: FileFilter): List<PickedFile> =
+        withDialogCancel { handle ->
+            FileDialogs.pickOpenFiles(extensions = filter.extensions, handle = handle)
+                .map { PickedFile(it.absolutePath, it.name) }
+        }
+
+    override suspend fun saveText(suggestedName: String, text: String): SavedRef? {
+        val dest = withDialogCancel { handle -> pickSaveFile(suggestedName, handle) } ?: return null
+        currentCoroutineContext().ensureActive()
+        // 整份就位: 覆盖写被打断会在用户目录留下半截文件
+        check(writeBytesAtomically(dest, text.encodeToByteArray())) { "写入文件失败: $dest" }
+        return SavedRef(dest)
+    }
+
+    /** 同上, 内容按整份复制到选定位置。 */
+    override suspend fun saveFromFile(srcPath: String, suggestedName: String): SavedRef? {
+        val dest = withDialogCancel { handle -> pickSaveFile(suggestedName, handle) } ?: return null
+        currentCoroutineContext().ensureActive()
+        BackupFileOps.copyFile(srcPath, dest)
+        return SavedRef(dest)
+    }
+
+    private fun pickSaveFile(
+        suggestedName: String,
+        handle: FileDialogs.DialogCancelHandle? = null,
+    ): String? =
+        FileDialogs.pickSaveFile(
+            defaultName = suggestedName,
+            initialDir = userExportDir()?.let(::File)?.takeIf { it.isDirectory },
+            handle = handle,
+        )?.absolutePath
+
+    override suspend fun saveImageBytes(suggestedName: String, bytes: ByteArray): Boolean? {
+        // 保存对话框选位置 → 写文件 (对照 master PhotoDialog 的保存语义)
+        // 用户取消选择位置返回 null, 调用方静默; 仅写文件失败返回 false
+        val dest = withDialogCancel { handle ->
+            FileDialogs.pickSaveFile(defaultName = suggestedName, handle = handle)
+        } ?: return null
+        currentCoroutineContext().ensureActive()
+        // 落盘整份归位: 用户选了同名文件时覆盖写会先把旧图截断, 写到一半被打断就留下半张图
+        return runCatching { writeBytesAtomically(dest.path, bytes) }.getOrDefault(false)
+    }
+
+    override val supportsDirWrite: Boolean = true
+
+    // 写进已选目录 (对照 app 端 FileUtils.saveImage(dirUri)); 落盘整份归位, 覆盖同名图时目标始终完整
+    override fun writeImageToDir(dir: String, fileName: String, bytes: ByteArray): Boolean =
+        runCatching {
+            val destDir = File(dir).apply { mkdirs() }
+            writeBytesAtomically(File(destDir, fileName).path, bytes)
+        }.getOrDefault(false)
+
+    // 桌面无沙盒: 选定目录是普通文件路径, 不产生系统授权, 用途无法强制 —— 本地书文件访问不做用途校验;
+    // 安卓的树 URI 权限同样没有用途维度, 由应用侧按用途登记, 故该参数在那里被登记使用
+    override suspend fun pickDirectory(usage: DirUsage): String? =
+        withDialogCancel { handle ->
+            FileDialogs.pickDirectory(
+                initialDir = userExportDir()?.let(::File)?.takeIf { it.isDirectory },
+                handle = handle,
+            )?.absolutePath
+        }
+
+    // 选图导入: 原图复制进图集目录 (备份链路) + 按屏幕尺寸居中裁剪缩放烘焙产物写缓存
+    // (使用链路, 烘焙核心与全端共用 bakeCoverImageFile, WEBP q80 不放大);
+    // 返回**裸文件名相对引用**供调用方写 pref,
+    // 产物是按屏幕尺寸裁剪的派生物, 原图在图集随备份打包, 丢了/换机可重烘焙。
+    override fun processWelcomeImage(
+        srcPath: String,
+        oldPath: String?,
+        isNight: Boolean,
+    ): String? = runCatching {
+        val ref = importAndBakeCoverImage(srcPath) ?: return@runCatching null
+        // 旧原图+旧产物一并清 (旧 pref 可能指向旧机制处理图/绝对路径);
+        // 四键引用保护 (同图可能被启动封面另一模式/界面背景日/夜复用), 无引用才删
+        val resolvedOld = resolveImagePath(oldPath)
+        if (resolvedOld != null && resolvedOld != resolveImagePath(ref)) {
+            deleteImageIfUnreferenced(
+                resolvedOld,
+                withFile = true,
+                excludeKey = if (isNight) PreferKey.welcomeImageDark else PreferKey.welcomeImage,
+            )
+        }
+        ref
+    }.onFailure { AppLog.put("欢迎图导入失败", it) }.getOrNull()
+
+    // 图集导入 + 按屏幕尺寸烘焙清晰产物 (与 app 端 importAndBakeCoverImage 同构, 平台各自实现)。
+    // 返回裸文件名相对引用; 导入失败 null; 烘焙失败只记日志 (渲染端冷路径现场重烘焙)。阻塞 IO。
+    private fun importAndBakeCoverImage(srcPath: String): String? {
+        val ref = importImageSetFile(srcPath) ?: return null
+        val absSrc = resolveImagePath(ref)!!
+        val screen = java.awt.Toolkit.getDefaultToolkit().screenSize
+        if (!bakeCoverImageFile(absSrc, bakedImagePath(absSrc), screen.width, screen.height)) {
+            AppLog.put("图集图烘焙失败: $absSrc")
+        }
+        return ref
+    }
+}
+
+/** 用户可见产物目录 (不存在则创建), 取不到返回 null 让对话框用系统默认起始目录。 */
+private fun userExportDir(): String? = runCatching {
+    val dir = File(DataStorageProviders.get().userExportDir)
+    if (dir.isDirectory || dir.mkdirs()) dir.absolutePath else null
+}.getOrNull()
+
+// shareText 走系统剪贴板; shareFile 用系统文件管理器定位文件
+private class DesktopShareService : ShareService {
+    override fun shareText(text: String) {
+        Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
+    }
+
+    override fun shareFile(filePath: String, mimeType: String) {
+        val file = File(filePath)
+        if (!file.isFile) {
+            AppLog.put("DesktopShareService.shareFile: 文件不存在: " + filePath)
+            return
+        }
+        revealInFileManager(file)
+    }
+}
+
+/** 跨平台打开文件管理器并选中文件 (Windows: explorer /select; macOS: open -R; Linux: xdg-open)。 */
+internal fun revealInFileManager(file: File) {
+    runCatching {
+        val absolutePath = file.absolutePath
+        val osName = System.getProperty("os.name").lowercase()
+        when {
+            osName.contains("win") ->
+                Runtime.getRuntime().exec(arrayOf("explorer", "/select,", absolutePath))
+
+            osName.contains("mac") ->
+                Runtime.getRuntime().exec(arrayOf("open", "-R", absolutePath))
+
+            else ->
+                Runtime.getRuntime().exec(arrayOf("xdg-open", file.parentFile.absolutePath))
+        }
+    }.onFailure {
+        AppLog.put("revealInFileManager: 打开文件位置失败: " + it.localizedMessage)
+    }
+}
+
+// openUrl 走 shared browseUrl (Desktop.browse, 失败记 AppLog 静默降级);
+// openUrlInApp 无内置 WebView, 降级走系统浏览器
+private class DesktopBrowserService : BrowserService {
+    override fun openUrl(url: String) {
+        browseUrl(url)
+    }
+
+    override fun openUrlInApp(url: String) = openUrl(url)
+}
+
+// desktop 无权限模型, hasPermission 恒真 (无权限即授予); requestPermission 无需请求直接成功
+private class DesktopPermissionService : PermissionService {
+    override fun hasPermission(permission: String): Boolean = true
+    override fun requestPermission(permission: String): Boolean = true
+}
+
+// Window 全屏: Windows 走原生 HWND 真全屏 (无边框独占窗口覆盖任务栏, 经
+// DesktopFullscreenController); 非 Windows 平台显式日志暂不支持; 仅供 F11 手动切换;
+// 常亮走 DesktopKeepAwake (阻止系统休眠); 方向/系统栏桌面端无对应概念, no-op
+private class DesktopWindowController(
+    private val handle: DesktopWindowHandle,
+) : WindowController {
+    // 路由策略的 fullscreen 是 Android 沉浸式隐藏系统栏语义, 桌面无系统栏, 不该据此改窗口尺寸
+    override val appliesPolicyFullscreen: Boolean get() = false
+
+    override fun setFullscreen(enabled: Boolean) {
+        val window = handle.window ?: return
+        // 操作结果同步到全局状态: 成功才翻转 DesktopWindowChrome.fullscreen,
+        // 自绘控制栏据此隐藏/显示 + 菜单勾选态; 控制栏菜单与窗口策略共用本入口,
+        // 单点同步防两处状态分叉
+        val ok = DesktopFullscreenController.setFullscreen(window, enabled)
+        if (ok) DesktopWindowChrome.fullscreen = enabled
+    }
+
+    override fun setKeepScreenOn(enabled: Boolean) {
+        // 对照 app 端 FLAG_KEEP_SCREEN_ON: 阻止系统休眠/息屏 (Win=SetThreadExecutionState,
+        // mac=caffeinate, Linux=systemd-inhibit), 见 DesktopKeepAwake。窗口不可见时由那边释放
+        DesktopKeepAwake.requestKeepScreenOn(enabled)
+    }
+
+    override fun setOrientation(policy: OrientationPolicy) {
+        // desktop 无屏幕方向概念, no-op
+    }
+
+    override fun setSystemBars(policy: SystemBarsPolicy) {
+        // desktop 无系统栏 (状态栏/导航栏), no-op
+    }
+}
+
+// 软输入法: desktop 无软键盘, no-op
+private class DesktopKeyboardController : KeyboardController {
+    override fun hideSoftInput() = Unit
+    override fun setSoftInputPolicy(policy: SoftInputPolicy) = Unit
+}
+
+// 媒体播放: 已核实 commonMain 无调用方 (MediaService 接口仅声明, 桌面端朗读/音频走
+// 独立的 TtsEngineProvider / DesktopHttpTtsPlayer), 保持 no-op, 待音频路由接入时再接线
+private class DesktopMediaService : MediaService {
+    override fun playMedia(url: String, headers: Map<String, String>) {
+        // TODO: 待接入桌面媒体播放 (当前无调用方)
+    }
+
+    override fun pauseMedia() = Unit
+    override fun stopMedia() = Unit
+}
+
+// 通知: 经 DesktopTrayNotifier 委托宿主托盘图标显示气泡 (与 toast 同通道),
+// 托盘未注册 (无头 / 无托盘) 时落 AppLog; 气泡由系统自动超时消失, cancel 为 no-op
+private class DesktopNotificationService : NotificationService {
+    override fun notify(id: Int, title: String, content: String) {
+        val message = "$title | $content"
+        val sent = runCatching {
+            DesktopTrayNotifier.sender?.invoke(message) == true
+        }.getOrDefault(false)
+        if (!sent) AppLog.put(message, tag = "notification")
+    }
+
+    override fun cancelNotification(id: Int) = Unit
+}
+
+// 外部请求: desktop 启动请求经 Main.kt handleDeepLinkArgs 处理, 此处返回 null/false
+private class DesktopExternalRequestService : ExternalRequestService {
+    override fun parseLaunchRequest(request: Any): LaunchRequest? = null
+    override fun handleLaunchRequest(request: LaunchRequest): Boolean = false
+}
+
+// 桌面端崩溃日志提供者: 读 DesktopCrashHandler 落盘的两个目录 (缓存 + 书籍保存位置),
+// 对照 app 端 CrashViewModel.initData 同样从外部缓存 + 用户选定目录两处收集, 都按 crash- 前缀过滤
+private class DesktopCrashLogProvider : CrashLogProvider {
+
+    private fun dirs(): List<File> = DesktopCrashLogDirs.readDirs()
+
+    /** 同名文件优先取先出现的目录 (writeDirs 顺序即优先级)。 */
+    private fun findFile(name: String): File? =
+        dirs().map { File(it, name) }.firstOrNull { it.isFile }
+
+    override suspend fun loadCrashLogs(): List<CrashLogProvider.CrashLogEntry> {
+        // 只列自己的日志目录: JVM 致命错误现场在启动时已被认领并搬进来
+        // (见 DesktopCrashHandler.collectJvmFatalErrorLogs), 故这里不再跨目录扫描 ——
+        // 工作目录/临时目录/用户主目录是多进程共享的, 在那里读会列出别的 JVM 的报告,
+        // 清空时更会删掉别人的文件。
+        // 只收 crash- 前缀: 目录里同时放着运行日志 (appLog-), 它不是崩溃现场
+        return dirs()
+            .filter { it.isDirectory }
+            .flatMap {
+                it.listFiles { f -> f.isFile && f.name.startsWith(CRASH_LOG_FILE_PREFIX) }
+                    ?.toList().orEmpty()
+            }
+            .sortedByDescending { it.name }
+            .distinctBy { it.name }
+            .map { CrashLogProvider.CrashLogEntry(it.name) }
+    }
+
+    override suspend fun readCrashLog(name: String): String? = findFile(name)?.readText()
+
+    override suspend fun clearCrashLogs() {
+        // 只删崩溃现场: 目录里还有运行日志 (appLog-), 它们不该被"清空崩溃日志"连带删掉
+        dirs().forEach { dir ->
+            if (dir.isDirectory) {
+                dir.listFiles { f -> f.isFile && f.name.startsWith(CRASH_LOG_FILE_PREFIX) }
+                    ?.forEach { it.delete() }
+            }
+        }
+    }
+
+    override fun shareCrashLog(name: String) {
+        // desktop 无系统分享面板, 改为打开文件所在目录并选中
+        findFile(name)?.let { revealInFileManager(it) }
+    }
+}

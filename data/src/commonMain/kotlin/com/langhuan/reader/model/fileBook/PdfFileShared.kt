@@ -1,0 +1,179 @@
+package com.langhuan.reader.model.fileBook
+
+import com.langhuan.reader.constant.AppLog
+import com.langhuan.reader.data.entities.Book
+import com.langhuan.reader.data.entities.BookChapter
+import com.langhuan.reader.help.writeBytesAtomically
+import com.langhuan.reader.utils.File
+import com.langhuan.reader.utils.InputStream
+import com.langhuan.reader.utils.toInputStream
+import kotlin.concurrent.Volatile
+import kotlin.math.ceil
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
+
+/**
+ * PDF 本地书编排骨架 (commonMain, 四端共用, 对照 app 端 `PdfFile`)。
+ *
+ * 骨架只做编排: 每 [PAGE_SIZE] 页一章 (`分段_N`, url `pdf_N`)、正文按
+ * `<img src="页码">` 拼装、首页渲染 JPEG 写封面、打开失败按"书籍导入异常"处理、
+ * 按 bookUrl 换书关闭重建单例。渲染后端 (app PdfRenderer / 桌面 PDFBox /
+ * iOS、鸿蒙端各自实现) 经 [PdfRenderProviders] 注入 [PdfRenderPort]。
+ *
+ * 文档操作和清理使用同一互斥锁。锁顺序为骨架 → 渲染端口，端口不得回调骨架或阅读层。
+ *
+ * 页图磁盘缓存经各端的 BookImageStorage 读写，缓存键包含页码与实际渲染宽度。
+ */
+object PdfFileShared : BaseFileBook {
+
+    private var pFile: PdfBookFile? = null
+
+    private val lock = SynchronizedObject()
+
+    /** pdf分页尺寸 */
+    const val PAGE_SIZE = 10
+
+    /** 选书/换书重建 (调用方须已持 [lock], 见各入口); 关闭旧文档在此同步完成。 */
+    private fun getPFile(book: Book): PdfBookFile {
+        if (pFile == null || pFile?.book?.bookUrl != book.bookUrl || pFile?.invalid == true) {
+            pFile?.closePdf()
+            pFile = PdfBookFile(book)
+        } else {
+            pFile?.book = book
+        }
+        return pFile!!
+    }
+
+    override fun upBookInfo(book: Book) {
+        synchronized(lock) { getPFile(book).upBookInfo() }
+    }
+
+    override fun getChapterList(book: Book): ArrayList<BookChapter> {
+        return synchronized(lock) { getPFile(book).getChapterList() }
+    }
+
+    override fun getContent(book: Book, chapter: BookChapter): String? {
+        return synchronized(lock) { getPFile(book).getContent(chapter) }
+    }
+
+    override fun getImage(book: Book, href: String): InputStream? {
+        return synchronized(lock) { getPFile(book).getImage(href) }
+    }
+
+    override fun clear() {
+        synchronized(lock) {
+            pFile?.closePdf()
+            pFile = null
+        }
+    }
+}
+
+/**
+ * 单本书的 PDF 解析实例 (骨架): 持有书与打开状态, 渲染一律走 [PdfRenderPort]。
+ *
+ * 由 [PdfFileShared] 在其互斥锁内创建并调用。
+ */
+class PdfBookFile(internal var book: Book) {
+
+    private val port = PdfRenderProviders.get()
+
+    /** 打开失败标记: [PdfFileShared.getPFile] 据此丢弃实例, 下次调用重建重试。 */
+    @Volatile
+    internal var invalid: Boolean = false
+        private set
+
+    @Volatile
+    private var open = false
+
+    init {
+        upBookCover(true)
+    }
+
+    /** 懒打开 (打开失败标记 [invalid], 由换书重建重试)。 */
+    private fun ensureOpen(): Boolean {
+        if (open) return true
+        return port.openDocument(book).also {
+            open = it
+            if (!it) invalid = true
+        }
+    }
+
+    private fun pageCount(): Int = if (ensureOpen()) port.pageCount() else 0
+
+    /** 关闭pdf文件 */
+    fun closePdf() {
+        runCatching { port.closeDocument() }
+        open = false
+    }
+
+    internal fun getContent(chapter: BookChapter): String? {
+        if (!ensureOpen()) return null
+        val count = port.pageCount()
+        return buildString {
+            val start = chapter.index * PdfFileShared.PAGE_SIZE
+            val end = ((chapter.index + 1) * PdfFileShared.PAGE_SIZE).coerceAtMost(count)
+            (start until end).forEach {
+                append("<img src=").append('"').append(it).append('"').append(" >")
+                    .append('\n')
+            }
+        }
+    }
+
+    internal fun getImage(href: String): InputStream? {
+        val index = href.toIntOrNull() ?: return null
+        port.readCachedPage(book, index)?.let { return it }
+        val bytes = port.renderPageJpegBytes(index) ?: return null
+        port.writeCachedPage(book, index, bytes)
+        return bytes.toInputStream()
+    }
+
+    internal fun getChapterList(): ArrayList<BookChapter> {
+        val chapterList = ArrayList<BookChapter>()
+        val pageCount = pageCount()
+        if (pageCount > 0) {
+            val chapterCount = ceil(pageCount.toDouble() / PdfFileShared.PAGE_SIZE).toInt()
+            (0 until chapterCount).forEach {
+                val chapter = BookChapter()
+                chapter.index = it
+                chapter.bookUrl = book.bookUrl
+                chapter.title = "分段_${it}"
+                chapter.url = "pdf_${it}"
+                chapterList.add(chapter)
+            }
+        }
+        return chapterList
+    }
+
+    /** 首页封面整份落盘；fastCheck 时复用已存在的封面文件。 */
+    private fun upBookCover(fastCheck: Boolean = false) {
+        try {
+            if (!ensureOpen()) return
+            if (book.coverUrl.isNullOrEmpty()) {
+                book.coverUrl = FileBook.getCoverPath(book.bookUrl)
+            }
+            val coverPath = port.coverFilePath(book) ?: return
+            if (fastCheck && File(coverPath).exists()) {
+                return
+            }
+            val bytes = port.renderPageJpegBytes(0) ?: return
+            if (!writeBytesAtomically(coverPath, bytes)) {
+                AppLog.put("加载书籍封面失败\n封面写入失败: $coverPath")
+            }
+        } catch (e: Exception) {
+            AppLog.put("加载书籍封面失败\n${e.message}", e)
+        }
+    }
+
+    fun upBookInfo() {
+        if (!ensureOpen()) {
+            closePdf()
+            invalid = true
+            book.intro = "书籍导入异常"
+        } else {
+            upBookCover()
+            if (book.name.isEmpty()) {
+                book.name = book.originName.replace(".pdf", "")
+            }
+        }
+    }
+}

@@ -1,11 +1,11 @@
-# Legado KMP × 鸿蒙 ArkTS 互操作方案
+# Langhuan KMP × 鸿蒙 ArkTS 互操作方案
 
 ## 1. 背景与目标
 
-Legado 项目的 KMP 全平台化任务需要让 CPF `ohosArm64` target 复用共享模块中的共享业务代码 (
+Langhuan 项目的 KMP 全平台化任务需要让 CPF `ohosArm64` target 复用共享模块中的共享业务代码 (
 ChineseUtils / MD5Utils / HTTP / 数据库等)，并由 ArkUI 融合渲染承载 Compose UI。
 
-ArkTS 通过 NAPI 获取 `liblegado_shared.so` 导出的 Compose 控制器和业务 C ABI；`@cpf-kmp-cmp/compose`
+ArkTS 通过 NAPI 获取 `liblanghuan_shared.so` 导出的 Compose 控制器和业务 C ABI；`@cpf-kmp-cmp/compose`
 再按 backend id 将控制器接入 Fusion Renderer 的 ArkUI RenderNode。
 
 本文档说明完整的桥接方案与各层职责。
@@ -17,18 +17,18 @@ ArkTS 通过 NAPI 获取 `liblegado_shared.so` 导出的 Compose 控制器和业
 │  ArkTS 层 (ohosApp/entry/src/main/ets)                          │
 │  EntryAbility.ets / Index.ets (Compose 渲染宿主)                │
 │                                                                  │
-│    ↓ import legado from 'liblegado_napi.so'                      │
-│    ↓ legado.chineseT2S('简体')                                  │
+│    ↓ import langhuan from 'liblanghuan_napi.so'                      │
+│    ↓ langhuan.chineseT2S('简体')                                  │
 └────────────────────────────┬────────────────────────────────────┘
                              │
                              │ napi 调用 (node-addon-api)
                              ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│  napi 桥接层 (ohosApp/entry/src/main/cpp/legado_napi.cpp)       │
+│  napi 桥接层 (ohosApp/entry/src/main/cpp/langhuan_napi.cpp)       │
 │  把 ArkTS 字符串拷贝为 C 字符串, 调用 dlsym 解析的符号,         │
 │  把返回的 C 字符串包装回 napi_value (ArkTS string)              │
 │                                                                  │
-│    ↓ dlsym("legado_chinese_t2s")                                 │
+│    ↓ dlsym("langhuan_chinese_t2s")                                 │
 │    ↓ g_chinese_t2s(input_cstr)                                  │
 └────────────────────────────┬────────────────────────────────────┘
                              │
@@ -36,9 +36,9 @@ ArkTS 通过 NAPI 获取 `liblegado_shared.so` 导出的 Compose 控制器和业
                              ↓
 ┌─────────────────────────────────────────────────────────────────┐
 │  Kotlin/Native 层 (ui/src/ohosMain/.../napi/)       │
-│  LegadoNativeExports.kt                                         │
+│  LanghuanNativeExports.kt                                         │
 │                                                                  │
-│    @CName("legado_chinese_t2s")                                  │
+│    @CName("langhuan_chinese_t2s")                                  │
 │    fun chineseT2S(input: CPointer<ByteVar>): CPointer<ByteVar>  │
 │      ↓                                                           │
 │    ChineseUtils.t2s(input.toKString()).cstr.getPointer(...)     │
@@ -56,20 +56,20 @@ ArkTS 通过 NAPI 获取 `liblegado_shared.so` 导出的 Compose 控制器和业
 
 ### 3.1 Kotlin/Native 导出层 (:ui ohosMain)
 
-- **`ui/src/ohosMain/kotlin/io/legado/app/napi/LegadoNativeExports.kt`**
-  - 用 `@CName("legado_xxx")` 注解导出 C ABI 函数
+- **`ui/src/ohosMain/kotlin/com/langhuan/reader/napi/LanghuanNativeExports.kt`**
+  - 用 `@CName("langhuan_xxx")` 注解导出 C ABI 函数
   - 当前导出 6 个函数: chineseT2S / chineseS2T / md5Encode / formatPercentUs / isProvidersRegistered / registerOhosProviders
 
 ### 3.2 napi 桥接层 (ohosApp/entry/src/main/cpp)
 
-- **`legado_napi.cpp`** - napi module 实现, 通过 dlsym 加载 .so 符号并包装为 ArkTS 方法
-- **`CMakeLists.txt`** - 链接 `libace_napi.z.so` + `liblegado_shared.so` 编译为 `liblegado_napi.so`
-- **`types/liblegado_napi/Index.d.ts`** - ArkTS 侧 TypeScript 类型声明
+- **`langhuan_napi.cpp`** - napi module 实现, 通过 dlsym 加载 .so 符号并包装为 ArkTS 方法
+- **`CMakeLists.txt`** - 链接 `libace_napi.z.so` + `liblanghuan_shared.so` 编译为 `liblanghuan_napi.so`
+- **`types/liblanghuan_napi/Index.d.ts`** - ArkTS 侧 TypeScript 类型声明
 
 ### 3.3 ArkTS 调用方 (ohosApp/entry/src/main/ets)
 
-- **`pages/Index.ets`** - Compose 渲染宿主入口, 调用 legado.MainArkUIViewController() 接入 shared
-  LegadoApp
+- **`pages/Index.ets`** - Compose 渲染宿主入口, 调用 langhuan.MainArkUIViewController() 接入 shared
+  LanghuanApp
 - **`entryability/EntryAbility.ets`** - UIAbility 入口, onCreate 中调用 `registerOhosProviders()`
 
 ### 3.4 ohosMain 配置 provider stub
@@ -92,7 +92,7 @@ ArkTS 通过 NAPI 获取 `liblegado_shared.so` 导出的 Compose 控制器和业
 
 Gradle staging 契约包含：
 
-- `liblegado_shared.so`：`:ui:linkDebugSharedOhosArm64` 的 CPF 融合渲染产物。
+- `liblanghuan_shared.so`：`:ui:linkDebugSharedOhosArm64` 的 CPF 融合渲染产物。
 - K/N 自动生成的 API 头：供 entry NAPI 直接调用 `MainArkUIViewController` 与 Compose 初始化符号。
 - Compose ArkTS/native 运行时：由 `@cpf-kmp-cmp/compose:1.9.2-0.4.0` 提供，不再维护 AntUI XComponent
   桥接库。
@@ -115,8 +115,8 @@ mock 版本。
 ```
 1. DevEco Studio 连接鸿蒙模拟器或真机
 2. Run → Run 'entry'
-3. 应用启动后, EntryAbility.onCreate 调用 legado_register_providers()
-4. Index.ets 加载 shared LegadoApp Compose UI, 业务 UI 由共享模块统一渲染
+3. 应用启动后, EntryAbility.onCreate 调用 langhuan_register_providers()
+4. Index.ets 加载 shared LanghuanApp Compose UI, 业务 UI 由共享模块统一渲染
 ```
 
 ## 5. 内存与生命周期约定
@@ -139,7 +139,7 @@ mock 版本。
 ### 5.1 桌面快捷方式 (静态声明)
 
 `entry/src/main/resources/base/profile/shortcuts_config.json` 三项对应 Android
-`app/src/main/java/io/legado/app/api/ShortCuts.kt` 的三项 (最近阅读 / 直接朗读 / 书架);
+`app/src/main/java/com/langhuan/reader/api/ShortCuts.kt` 的三项 (最近阅读 / 直接朗读 / 书架);
 Android 走 `ShortcutManagerCompat.setDynamicShortcuts` 动态注册, 鸿蒙只支持这份静态配置。
 
 **该文件必须是纯 JSON, 不能写注释**: 资源目录下的 JSON 由 restool 按严格 JSON 解析,
@@ -155,7 +155,7 @@ Android 走 `ShortcutManagerCompat.setDynamicShortcuts` 动态注册, 鸿蒙只�
 - `icon` 复用 AppScope 既有的 `app_icon_foreground` (`$media` 资源跨模块可见); 它是 288x288
   的前景图层, 未达官方推荐的 450x450 (未新增图片资源, 如后续要按规范补齐再换)。
 - `bundleName` 缺省: 本工程实际包名由 `ohosApp/hvigorfile.ts` 的 appOpt 在构建期按 buildMode
-  覆盖 (debug → `shutiao.reader.debug`, release → `shutiao.reader.release`), 而这份 profile
+  覆盖 (debug → `com.langhuan.reader.debug`, release → `com.langhuan.reader.release`), 而这份 profile
   里的字符串不参与该覆盖 —— 写死任一变体都会在另一个变体上指向不存在的包 (快捷方式失效)。
   故缺省后由系统按当前应用包名解析。本机 SDK 与官方文档中未查证到 profile 文件里可用的
   包名占位符 (搜 `${application.` 无命中)。**待真机验证**: 缺省 `bundleName` 后桌面快捷方式
@@ -165,7 +165,7 @@ Android 走 `ShortcutManagerCompat.setDynamicShortcuts` 动态注册, 鸿蒙只�
 配置 schema 逐字: "parameters: Indicates the parameters for the target ability", 值只允许
 string), **不会**变成 `want.uri`。所以 route 值必须是**裸路由名** (与 Android 快捷方式 intent
 的 `route` extra、iOS 的 `UIApplicationShortcutItemUserInfo["route"]` 同一形制), 由
-`EntryAbility` 的 handleDeepLink 补上 `route:` 前缀投给 `legado.handleLaunchRequest`
+`EntryAbility` 的 handleDeepLink 补上 `route:` 前缀投给 `langhuan.handleLaunchRequest`
 (前缀约定见 `ui/src/ohosMain` 的 `OhosLaunchRequests.ROUTE_PREFIX`, 与通知点击同一条链)。
 
 三项语义 (逐项对照原版):
@@ -180,7 +180,7 @@ string), **不会**变成 `want.uri`。所以 route 值必须是**裸路由名**
   (appCtx, false))。故这里带裸路由名 `read_aloud` —— 由共享层补出的
   `HeadlessReadAloud.startFromShortcut()` 承接 (分支顺序逐条对照原版 readAloud 那份:
   朗读在跑→暂停继续 / 有声书在跑→暂停继续 / 音频页在→交页面 / 阅读页在→交页面 /
-  都没有→从最近阅读的书无头准备正文并起朗读, **不打开阅读页**; 见 LegadoApp 的
+  都没有→从最近阅读的书无头准备正文并起朗读, **不打开阅读页**; 见 LanghuanApp 的
   NavigateTo "read_aloud" 分支)。
 
 ### 5.2 字符串传递 (ArkTS ↔ Kotlin)
@@ -223,9 +223,9 @@ string), **不会**变成 `want.uri`。所以 route 值必须是**裸路由名**
 
 - [x] ohosApp 工程基础结构 (AppScope / entry / build-profile / hvigorfile / oh-package)
 - [x] ArkTS UI 骨架 (EntryAbility / Index)
-- [x] 业务 UI 由 shared LegadoApp 统一渲染, Index.ets 仅作为 Compose 渲染宿主
-- [x] Kotlin/Native C ABI 导出函数 (LegadoNativeExports.kt @CName)
-- [x] napi 桥接 C++ 骨架 (legado_napi.cpp + CMakeLists.txt + .d.ts)
+- [x] 业务 UI 由 shared LanghuanApp 统一渲染, Index.ets 仅作为 Compose 渲染宿主
+- [x] Kotlin/Native C ABI 导出函数 (LanghuanNativeExports.kt @CName)
+- [x] napi 桥接 C++ 骨架 (langhuan_napi.cpp + CMakeLists.txt + .d.ts)
 - [x] ohosMain config provider stub (AppConfigAccessor / PreferenceProvider / 集中注册)
 - [x] 本文档 (INTEROP.md)
 
@@ -257,18 +257,18 @@ KP6 已完成鸿蒙端 Room KMP + BundledSQLiteDriver 真实数据库接入, 替
 
 | 文件 | 职责 | 真实化状态 |
 | --- | --- | --- |
-| `data/src/ohosMain/kotlin/io/legado/app/data/OhosDatabaseDriver.kt` | `DatabaseDriverProvider` actual: `Room.databaseBuilder<AppDatabase>` + `BundledSQLiteDriver` 构造真实 Room 数据库, dbPath 默认 `{AppFilesDirs.filesDir}/legado.db` (鸿蒙沙盒) | ✅ 真实实现 |
-| `data/src/ohosMain/kotlin/io/legado/app/data/OhosAppDatabaseProvider.kt` | `AppDatabaseProvider` actual: 委托 `OhosDatabaseDriver.appDatabase` 暴露 `AppDatabase` 单例 | ✅ 真实实现 |
-| `data/src/ohosMain/kotlin/io/legado/app/data/OhosAppDbAccessor.kt` | `AppDbAccessor` actual: 转发 14 个 DAO + `registerOhosAppDb(driver)` 便捷注册函数 | ✅ 真实实现 |
-| `ui/src/ohosMain/kotlin/io/legado/app/help/config/OhosProviderRegistry.kt` | `registerOhosProviders()` 中 `DatabaseDriverProviders.register` + `registerOhosAppDb` (含 AppDatabaseProviders + AppDbProviders) | ✅ 已注册 |
+| `data/src/ohosMain/kotlin/com/langhuan/reader/data/OhosDatabaseDriver.kt` | `DatabaseDriverProvider` actual: `Room.databaseBuilder<AppDatabase>` + `BundledSQLiteDriver` 构造真实 Room 数据库, dbPath 默认 `{AppFilesDirs.filesDir}/legado.db` (鸿蒙沙盒) | ✅ 真实实现 |
+| `data/src/ohosMain/kotlin/com/langhuan/reader/data/OhosAppDatabaseProvider.kt` | `AppDatabaseProvider` actual: 委托 `OhosDatabaseDriver.appDatabase` 暴露 `AppDatabase` 单例 | ✅ 真实实现 |
+| `data/src/ohosMain/kotlin/com/langhuan/reader/data/OhosAppDbAccessor.kt` | `AppDbAccessor` actual: 转发 14 个 DAO + `registerOhosAppDb(driver)` 便捷注册函数 | ✅ 真实实现 |
+| `ui/src/ohosMain/kotlin/com/langhuan/reader/help/config/OhosProviderRegistry.kt` | `registerOhosProviders()` 中 `DatabaseDriverProviders.register` + `registerOhosAppDb` (含 AppDatabaseProviders + AppDbProviders) | ✅ 已注册 |
 
 ### 10.2 napi 桥接真实化 (ohosApp)
 
 | 文件 | 真实化状态 |
 | --- | --- |
-| `ohosApp/entry/src/main/cpp/legado_napi.cpp` | `BookshelfList`/`SearchBook`/`LoadChapter`/`ImportBookSource` 通过 dlsym 调用 `legado_bookshelf_list` 等 @CName 符号; dlsym 失败时返回 `"[]"`/`""`/`0` 兜底 (非 mock, 是 .so 未加载时的容错) |
-| `ui/src/ohosMain/kotlin/io/legado/app/napi/LegadoNativeExports.kt` | `legado_bookshelf_list` 等已走 `AppDbProviders.get().bookDao.getBooksByGroup(BookGroup.IdAll)` 真实 DAO 查询, runBlocking 转 suspend |
-| `ohosApp/entry/src/main/ets/entryability/EntryAbility.ets` | `onCreate` 调用 `legado.registerOhosProviders()` 完成 provider 注入 |
+| `ohosApp/entry/src/main/cpp/langhuan_napi.cpp` | `BookshelfList`/`SearchBook`/`LoadChapter`/`ImportBookSource` 通过 dlsym 调用 `langhuan_bookshelf_list` 等 @CName 符号; dlsym 失败时返回 `"[]"`/`""`/`0` 兜底 (非 mock, 是 .so 未加载时的容错) |
+| `ui/src/ohosMain/kotlin/com/langhuan/reader/napi/LanghuanNativeExports.kt` | `langhuan_bookshelf_list` 等已走 `AppDbProviders.get().bookDao.getBooksByGroup(BookGroup.IdAll)` 真实 DAO 查询, runBlocking 转 suspend |
+| `ohosApp/entry/src/main/ets/entryability/EntryAbility.ets` | `onCreate` 调用 `langhuan.registerOhosProviders()` 完成 provider 注入 |
 
 ### 10.3 sqlite-bundled linuxArm64 变体验证结论 (任务 9 核心标注)
 
@@ -296,6 +296,6 @@ KP6 已完成鸿蒙端 Room KMP + BundledSQLiteDriver 真实数据库接入, 替
 
 **替代方案 (万一运行时 native 库加载失败)**: 通过 napi 桥接鸿蒙原生 `@ohos.data.relationalStore`
 (关系型数据库 API) 实现 `androidx.sqlite.SQLiteDriver` 接口, 替换 `BundledSQLiteDriver`。
-该方案需在 `legado_napi.cpp` 新增 `relationalStore` 相关 napi 方法 (getRdbStore/execSQL/query),
+该方案需在 `langhuan_napi.cpp` 新增 `relationalStore` 相关 napi 方法 (getRdbStore/execSQL/query),
 并在 `OhosDatabaseDriver` 中用自定义 `SQLiteDriver` 包装 napi 调用。
 当前优先保留 BundledSQLiteDriver 方案 (KMP 一致性最佳), 替代方案仅在真机验证失败后启用。

@@ -6,7 +6,7 @@ import { BridgeCommand, parseBridgeCommand } from './BridgeDispatch';
  *
  * 接收 Kotlin OhosNativeBridge.sendTtsCommand 通过 tsfn dispatch 过来的 TTS 命令,
  * 调用 @kit.CoreSpeechKit textToSpeech 执行真实语音合成,
- * TTS 事件通过 legado.ttsEvent(eventJson) 回送给 Kotlin。
+ * TTS 事件通过 langhuan.ttsEvent(eventJson) 回送给 Kotlin。
  *
  * # JSON 协议 (与 OhosSystemTtsEngine.kt / OhosNativeBridge.kt TtsCommand 对齐)
  *
@@ -19,7 +19,7 @@ import { BridgeCommand, parseBridgeCommand } from './BridgeDispatch';
  *   "lang": "<string?>"           // createEngine 时为语种 (如 "zh-CN")
  * }
  *
- * ## 事件 (ArkTS → Kotlin, via legado.ttsEvent)
+ * ## 事件 (ArkTS → Kotlin, via langhuan.ttsEvent)
  * {
  *   "event": "onStart" | "onComplete" | "onStop" | "onError",
  *   "utteranceId": "<string?>",   // 对应 speak 时的 utteranceId
@@ -39,7 +39,7 @@ import { BridgeCommand, parseBridgeCommand } from './BridgeDispatch';
  * 由 Kotlin 侧标记状态 + 朗读控制器重播当前段落。
  */
 
-// TTS 事件回调类型 (由 EntryAbility 注入, 内部调 legado.ttsEvent)
+// TTS 事件回调类型 (由 EntryAbility 注入, 内部调 langhuan.ttsEvent)
 export type TtsEventCallback = (eventJson: string) => void;
 
 // 当前 TTS 引擎实例 (同一时间仅一个引擎活跃, 与 Kotlin 侧单 listener 模型一致)
@@ -74,7 +74,7 @@ interface TtsEventPayload {
 /**
  * 初始化 TTS 桥接 (由 EntryAbility.onCreate 调用, 注入事件回送函数)。
  *
- * @param callback 事件回送函数 (EntryAbility 注入 legado.ttsEvent)
+ * @param callback 事件回送函数 (EntryAbility 注入 langhuan.ttsEvent)
  */
 export function initTtsBridge(callback: TtsEventCallback): void {
   eventCallback = callback;
@@ -226,7 +226,7 @@ function handleShutdown(): void {
   });
 }
 
-// ===== TTS 引擎事件监听 (onStart/onComplete/onStop/onError → legado.ttsEvent) =====
+// ===== TTS 引擎事件监听 (onStart/onComplete/onStop/onError → langhuan.ttsEvent) =====
 
 function registerTtsListener(engine: textToSpeech.TextToSpeechEngine): void {
   engine.setListener({
@@ -267,7 +267,7 @@ async function shutdownEngine(): Promise<void> {
   engineCreatePromise = null;
 }
 
-/** 发送事件到 Kotlin (通过 EntryAbility 注入的 legado.ttsEvent 回调) */
+/** 发送事件到 Kotlin (通过 EntryAbility 注入的 langhuan.ttsEvent 回调) */
 function emitEvent(event: TtsEventPayload): void {
   if (eventCallback != null) {
     eventCallback(JSON.stringify(event));

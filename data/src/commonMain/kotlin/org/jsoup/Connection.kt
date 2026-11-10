@@ -2,8 +2,8 @@
 
 package org.jsoup
 
-import io.legado.app.utils.InputStream
-import io.legado.app.utils.URL
+import com.langhuan.reader.utils.InputStream
+import com.langhuan.reader.utils.URL
 import org.jsoup.internal.HttpConnection
 import org.jsoup.nodes.Document
 

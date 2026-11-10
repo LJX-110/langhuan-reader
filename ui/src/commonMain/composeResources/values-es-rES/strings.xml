@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Legado</string>
-    <string name="app_name_a">Legado·A</string>
-    <string name="receiving_shared_label">Legado·buscador</string>
-    <string name="tip_perm_request_storage">Legado necesita de acceso de almacenamineto para buscar y leer libros. Por favor, diríjase a los "Ajustes de la aplicación" para conceder el "Permiso de almacenamineto".</string>
+    <string name="app_name">Langhuan</string>
+    <string name="app_name_a">Langhuan·A</string>
+    <string name="receiving_shared_label">Langhuan·buscador</string>
+    <string name="tip_perm_request_storage">Langhuan necesita de acceso de almacenamineto para buscar y leer libros. Por favor, diríjase a los "Ajustes de la aplicación" para conceder el "Permiso de almacenamineto".</string>
     <string name="dialog_title">Aviso</string>
     <string name="dialog_cancel">Cancelar</string>
     <string name="dialog_setting">Ir a Ajustes</string>
@@ -63,7 +63,7 @@
     <string name="offline_cache">Caché sin conexión</string>
     <string name="change_origin">Cambiar origen</string>
     <string name="about_description">Este es una aplicación de lectura bajo software libre, desarrollado en Kotlin, en que podrás participar.</string>
-    <string name="app_share_description">Legado (YueDu 3.0) disponible para descargar en：https://github.com/gedoor/legado/releases</string>
+    <string name="app_share_description">Langhuan disponible para descargar en：https://github.com/LJX-110/langhuan-reader/releases</string>
     <string name="pt_auto_refresh">Actualización automática</string>
     <string name="ps_auto_refresh">Actualiza los libros automáticamente al abrir la App</string>
     <string name="backup_restore">Respaldo y restauración</string>
@@ -392,7 +392,7 @@
     <string name="sys_folder_picker">Selector de carpetas del sistema</string>
     <string name="app_folder_picker">Selector de carpetas de aplicaciones</string>
     <string name="app_file_picker">Selector de archivos de la aplicación</string>
-    <string name="add_to_text_context_menu_s">Mantenga pulsado para mostrar Legado·Búsqueda en el menú de operaciones</string>
+    <string name="add_to_text_context_menu_s">Mantenga pulsado para mostrar Langhuan·Búsqueda en el menú de operaciones</string>
     <string name="add_to_text_context_menu_t">Buscar en pantalla de operación de texto</string>
     <string name="record_log">Registro</string>
     <string name="log">Registro</string>

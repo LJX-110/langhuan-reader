@@ -9,10 +9,10 @@ import android.content.Context
 import android.os.Build
 import android.webkit.WebSettings
 import android.webkit.WebView
-import io.legado.app.constant.AppLog
-import io.legado.app.help.http.WebViewUtil
-import io.legado.app.help.http.setDefaultSettings
-import io.legado.app.help.http.setUserAgent
+import com.langhuan.reader.constant.AppLog
+import com.langhuan.reader.help.http.WebViewUtil
+import com.langhuan.reader.help.http.setDefaultSettings
+import com.langhuan.reader.help.http.setUserAgent
 import okhttp3.Headers
 import okhttp3.Request
 import java.util.Locale

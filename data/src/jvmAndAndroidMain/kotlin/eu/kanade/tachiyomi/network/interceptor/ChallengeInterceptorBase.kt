@@ -3,8 +3,8 @@
 // cookie 契约, 故把状态机收在本类, 两端只实现"怎么解"。
 package eu.kanade.tachiyomi.network.interceptor
 
-import io.legado.app.constant.AppLog
-import io.legado.app.help.http.cookieJarHeader
+import com.langhuan.reader.constant.AppLog
+import com.langhuan.reader.help.http.cookieJarHeader
 import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response

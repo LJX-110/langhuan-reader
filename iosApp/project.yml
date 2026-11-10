@@ -17,7 +17,7 @@
 
 name: iosApp
 options:
-  bundleIdPrefix: shutiao.reader
+  bundleIdPrefix: com.langhuan.reader
   deploymentTarget:
     iOS: "14.0"
   developmentLanguage: zh-Hans
@@ -58,7 +58,7 @@ targets:
         # 显示名的真值在各 <lang>.lproj/InfoPlist.strings (CFBundleDisplayName)。
         # 这里的字面量是缺本地化资源时的兜底, 对照 app 端 res/values/strings.xml 的
         # app_name (英文态)。改显示名要同时改那四份 InfoPlist.strings。
-        CFBundleDisplayName: Legado
+        CFBundleDisplayName: Langhuan
         # 版本号与安卓端对齐 (app/build.gradle.kts versionName/versionCode):
         # 真值由根工程 syncIosVersion 任务按 git 提交数 + GMT+8 构建时刻写入。
         # 下面两个值是缺任务写入时的占位 (xcodegen 会用它重写 Info.plist),
@@ -104,7 +104,7 @@ targets:
         # BGTaskScheduler 任务标识, 必须与 shared IosBackgroundTasks.kt 的
         # CACHE_BOOK_TASK_ID 编译期常量逐字一致 (对不上 register 直接崩), 故写死不用变量
         BGTaskSchedulerPermittedIdentifiers:
-          - shutiao.reader.cachebook
+          - com.langhuan.reader.cachebook
         # 沙盒 Documents 在"文件"App 与 Finder 可见 (导出/另存为落地点)
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
@@ -120,10 +120,10 @@ targets:
         # 缺任一样时本键是死数据 (容器 URL 仍 null, 代码已按 null 兜底)。
         # ⚠️ 本段与 Info.plist 双写 (xcodegen generate 用本段重写 Info.plist)
         NSUbiquitousContainers:
-          iCloud.io.legado.app.ios:
+          iCloud.com.langhuan.reader.ios:
             NSUbiquitousContainerIsDocumentScopePublic: true
             NSUbiquitousContainerSupportedFolderLevels: "Any"
-            NSUbiquitousContainerName: legado
+            NSUbiquitousContainerName: langhuan
         # 保存图片到相册权限说明 (图片长按菜单"保存到相册"; iOS 14+ 缺此 key 调用会直接崩)
         NSPhotoLibraryAddUsageDescription: 保存阅读页图片到系统相册需要访问你的照片库
         # 本地网络权限说明 (iOS 14+)。内置 Web 服务在 0.0.0.0 起 HTTP 监听
@@ -131,19 +131,20 @@ targets:
         # "向本地网络地址发出流量", 系统会要求本地网络访问授权; 缺此键时该授权弹窗
         # 没有说明文案 (Apple: "Any app that uses the local network, directly or
         # indirectly, should include this description")。
-        NSLocalNetworkUsageDescription: 局域网内的设备访问本机的 legado Web 服务需要本地网络权限
-        # legado:// / yuedu:// deep link (一键导入书源/替换规则/主题等),
-        # 对照 app 端 AndroidManifest AssociationActivity intent-filter (scheme legado/yuedu)。
+        NSLocalNetworkUsageDescription: 局域网内的设备访问本机的琅嬛阁 Web 服务需要本地网络权限
+        # langhuan:// / yuedu:// deep link (一键导入书源/替换规则/主题等),
+        # 对照 app 端 AndroidManifest AssociationActivity intent-filter (scheme langhuan/yuedu)。
         # 回调链: SwiftUI onOpenURL (iOSApp.swift) → shared framework
-        # LegadoDeepLinkIosKt.handleLegadoDeepLink → commonMain LegadoDeepLinkHandler
+        # LanghuanDeepLinkIosKt.handleLanghuanDeepLink → commonMain LanghuanDeepLinkHandler
         CFBundleURLTypes:
-          - CFBundleURLName: io.legado.app.deeplink
+          - CFBundleURLName: com.langhuan.reader.deeplink
             CFBundleTypeRole: Viewer
             CFBundleURLSchemes:
+              - langhuan
               - legado
               - yuedu
         # 文档类型投递入口 (对照 Android AssociationActivity 的 VIEW intent-filter):
-        # 让 legado 出现在"用其他应用打开 / 分享到"候选里, 打开后由 iOSApp.swift onOpenURL →
+        # 让 langhuan 出现在"用其他应用打开 / 分享到"候选里, 打开后由 iOSApp.swift onOpenURL →
         # shared handleIosLaunchRequest → LaunchRequest.ImportFile → FileAssociationDispatch
         # 按扩展名分流 (书籍/压缩包/JSON 导入; 可播视频改推播放页直投态)。
         #
@@ -218,7 +219,7 @@ targets:
         # 标题只是缺本地化资源时的兜底: 真值在各 <lang>.lproj/InfoPlist.strings
         # (Apple: "You can, optionally, internationalize a quick action title by employing
         # your app's InfoPlist.strings file", 键名 = 这里写的占位串)。
-        # 三项的 route 均对应 shared 已有的 NavigateTo 分支 (LegadoApp.handleLaunchRequest:
+        # 三项的 route 均对应 shared 已有的 NavigateTo 分支 (LanghuanApp.handleLaunchRequest:
         # "last_read" 开最近阅读, "read_aloud" 直接朗读; 书架项不带 route, 开 App 即完成——
         # 对照 app 端 ShortCuts.buildBookShelfShortCutInfo 的 intent 不带任何 extra)。
         # 只能静态声明: iOS 端无 Android 那样的"带 extra 的快捷方式 intent", 故 readAloud 的
@@ -228,15 +229,15 @@ targets:
         UIApplicationShortcutItems:
           - UIApplicationShortcutItemType: bookshelf
             UIApplicationShortcutItemIconType: UIApplicationShortcutIconTypeBookmark
-            UIApplicationShortcutItemTitle: legado.shortcut.bookshelf
+            UIApplicationShortcutItemTitle: langhuan.shortcut.bookshelf
           - UIApplicationShortcutItemType: lastRead
             UIApplicationShortcutItemIconType: UIApplicationShortcutIconTypeTime
-            UIApplicationShortcutItemTitle: legado.shortcut.last_read
+            UIApplicationShortcutItemTitle: langhuan.shortcut.last_read
             UIApplicationShortcutItemUserInfo:
               route: last_read
           - UIApplicationShortcutItemType: readAloud
             UIApplicationShortcutItemIconType: UIApplicationShortcutIconTypeAudio
-            UIApplicationShortcutItemTitle: legado.shortcut.read_aloud
+            UIApplicationShortcutItemTitle: langhuan.shortcut.read_aloud
             UIApplicationShortcutItemUserInfo:
               route: read_aloud
         # 应用图标与交替图标 (换桌面图标, 对照 Android Launcher1/4/5):
@@ -273,7 +274,7 @@ targets:
                 - Icon5
     settings:
       base:
-        PRODUCT_NAME: legado
+        PRODUCT_NAME: langhuan
         # Kotlin 官方 direct integration 将当前 SDK/架构/构建类型对应的 framework
         # 复制到 TARGET_BUILD_DIR 并签名，不再硬编码 ui/build/bin 下的变体路径。
         FRAMEWORK_SEARCH_PATHS:
@@ -288,15 +289,15 @@ targets:
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         # App Group: 主 App 侧声明 (与 ShareExtension target 同一组); 值须与
         # iosApp.entitlements / ShareExtension.entitlements / ShareViewController.swift 的
-        # legadoAppGroupId / Kotlin IosShareInbox.APP_GROUP_ID 逐字一致
+        # langhuanAppGroupId / Kotlin IosShareInbox.APP_GROUP_ID 逐字一致
         CODE_SIGN_ENTITLEMENTS: iosApp.entitlements
-      # 包名与安卓端对齐 (applicationId 基包 shutiao.reader):
-      # Debug 构建 → shutiao.reader.debug, Release 构建 → shutiao.reader.release
+      # 包名与安卓端对齐 (applicationId 基包 com.langhuan.reader):
+      # Debug 构建 → com.langhuan.reader.debug, Release 构建 → com.langhuan.reader.release
       configs:
         debug:
-          PRODUCT_BUNDLE_IDENTIFIER: shutiao.reader.debug
+          PRODUCT_BUNDLE_IDENTIFIER: com.langhuan.reader.debug
         release:
-          PRODUCT_BUNDLE_IDENTIFIER: shutiao.reader.release
+          PRODUCT_BUNDLE_IDENTIFIER: com.langhuan.reader.release
     # Share Extension 随主 App 一起打进 Payload/*.app/PlugIns/ (embed 走 Xcode 的
     # "Embed App Extensions" 复制阶段)。Apple 只给 Today / iMessage 两类扩展点开
     # NSExtensionContext.open 这条路, 因此**保证送达**的通道只能走 App Group 容器;
@@ -312,9 +313,9 @@ targets:
           #!/bin/bash
           set -e
           cd "$SRCROOT/.."
-          # LEGADO_APP_VERSION 由 CI 的 xcodebuild 以用户定义构建设置传入 (与 ipa 文件名同源);
+          # LANGHUAN_APP_VERSION 由 CI 的 xcodebuild 以用户定义构建设置传入 (与 ipa 文件名同源);
           # IDE 直编没有它, 回退到任务自己按构建时刻生成。
-          ./gradlew syncIosVersion ${LEGADO_APP_VERSION:+-PappVersion=$LEGADO_APP_VERSION} --quiet
+          ./gradlew syncIosVersion ${LANGHUAN_APP_VERSION:+-PappVersion=$LANGHUAN_APP_VERSION} --quiet
         name: Sync iOS version with Android
         basedOnDependencyAnalysis: false
       - script: |
@@ -334,7 +335,7 @@ targets:
 
   # ===== Share Extension (已接线: 分享面板 → App Group 容器 → 宿主启动取件) =====
   #
-  # 目标: 让 legado 出现在其它 App「分享」面板的接收候选里 (对照 Android
+  # 目标: 让 langhuan 出现在其它 App「分享」面板的接收候选里 (对照 Android
   # AssociationActivity 的 SEND intent-filter / 鸿蒙 module.json5 的分享声明)。
   #
   # 链路三处都已就位:
@@ -343,7 +344,7 @@ targets:
   #      dependencies) —— 扩展随 App 打进 Payload/*.app/PlugIns/。
   #
   #   2. 两个 target 声明同一个 App Group (com.apple.security.application-groups,
-  #      值 group.shutiao.reader), 经 CODE_SIGN_ENTITLEMENTS 指向
+  #      值 group.com.langhuan.reader), 经 CODE_SIGN_ENTITLEMENTS 指向
   #      iosApp/iosApp.entitlements 与 iosApp/ShareExtension/ShareExtension.entitlements。
   #      这是**硬前提**: 分享扩展**不能拉起宿主 App** (扩展进程里没有通往宿主的 openURL
   #      通道, Apple 限制), 业界唯一交付通道是把文件写进 App Group 共享容器、
@@ -381,7 +382,7 @@ targets:
     info:
       path: ShareExtension/Info.plist
       properties:
-        CFBundleDisplayName: Legado
+        CFBundleDisplayName: Langhuan
         # 版本号与主 App 保持一致 (App Store 校验要求扩展与宿主同版本);
         # 根工程 syncIosVersion 按正则重写 project.yml 里**所有**的
         # CFBundleShortVersionString/CFBundleVersion (含本段), 随后 xcodegen generate
@@ -422,7 +423,7 @@ targets:
         # binary's bundle identifier is not prefixed with the parent app's bundle identifier"),
         # 而主 App 的 id 按 Debug/Release 分叉, 故本 target 也按 config 分叉;
         # base 值保留不带 config 后缀的形态 (两个 config 都会覆盖它)。
-        PRODUCT_BUNDLE_IDENTIFIER: shutiao.reader.ShareExtension
+        PRODUCT_BUNDLE_IDENTIFIER: com.langhuan.reader.ShareExtension
         # App Group: 扩展侧声明 (与主 App 同一组; 值与上面几个位置逐字一致)
         CODE_SIGN_ENTITLEMENTS: ShareExtension/ShareExtension.entitlements
         SWIFT_VERSION: "5.9"
@@ -430,6 +431,6 @@ targets:
         ENABLE_BITCODE: NO
       configs:
         debug:
-          PRODUCT_BUNDLE_IDENTIFIER: shutiao.reader.debug.ShareExtension
+          PRODUCT_BUNDLE_IDENTIFIER: com.langhuan.reader.debug.ShareExtension
         release:
-          PRODUCT_BUNDLE_IDENTIFIER: shutiao.reader.release.ShareExtension
+          PRODUCT_BUNDLE_IDENTIFIER: com.langhuan.reader.release.ShareExtension

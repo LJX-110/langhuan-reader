@@ -2,7 +2,7 @@ package org.jsoup
 
 import com.fleeksoft.ksoup.Ksoup
 import com.fleeksoft.ksoup.parser.Parser as KsParser
-import io.legado.app.utils.InputStream
+import com.langhuan.reader.utils.InputStream
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.asFacadeDocument
 

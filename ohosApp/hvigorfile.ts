@@ -3,7 +3,7 @@
 // 启用hvigorfile.ts后, 鸿蒙工程能力从hvigor-config.json5读取
 //
 // 包名/版本号与安卓端对齐 (app/build.gradle.kts):
-// - bundleName  = shutiao.reader + 构建类型后缀 (debug → shutiao.reader.debug, release → shutiao.reader.release)
+// - bundleName  = com.langhuan.reader + 构建类型后缀 (debug → com.langhuan.reader.debug, release → com.langhuan.reader.release)
 // - versionCode = 10000 + git 提交数
 // - versionName = "3." + 构建时刻 yy.MMddHH (GMT+8 墙上时钟)
 // 经 hvigor 官方 overrides.appOpt 在配置阶段覆盖 app.json5 的静态值,
@@ -38,7 +38,7 @@ function gmt8(): Date {
 const commits = gitCommits();
 const mode = buildMode();
 const now = gmt8();
-const bundleName = 'shutiao.reader' + (mode === 'release' ? '.release' : '.debug');
+const bundleName = 'com.langhuan.reader' + (mode === 'release' ? '.release' : '.debug');
 const versionName = '3.' + pad(now.getUTCFullYear() % 100) + '.' + pad(now.getUTCMonth() + 1) +
   pad(now.getUTCDate()) + pad(now.getUTCHours());
 

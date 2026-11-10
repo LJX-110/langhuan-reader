@@ -40,7 +40,7 @@ const cancelledCopyDirs: Set<string> = new Set<string>();
  *
  * 接收 Kotlin OhosNativeBridge.invokeFilePickerSync 通过 tsfn dispatch 过来的文件选择请求,
  * 调用 @ohos.file.picker.DocumentViewPicker (选文件) / @ohos.file.fs (读内容) 执行真实操作,
- * 完成后通过 legado.filePickerCallback(requestId, resultJson) 回送结果给 Kotlin。
+ * 完成后通过 langhuan.filePickerCallback(requestId, resultJson) 回送结果给 Kotlin。
  *
  * # JSON 协议 (与 OhosFilePicker.ohos.kt / OhosNativeBridge.kt 对齐)
  *
@@ -94,7 +94,7 @@ const cancelledCopyDirs: Set<string> = new Set<string>();
  * 13900042 Unknown error) 是真实失败, 原样带 code 回传, 不当作取消。
  */
 
-// FilePicker callback 类型 (由 EntryAbility 注入, 内部调 legado.filePickerCallback)
+// FilePicker callback 类型 (由 EntryAbility 注入, 内部调 langhuan.filePickerCallback)
 export type FilePickerCallback = (requestId: number, resultJson: string) => void;
 
 // UIAbilityContext (saveImageToAlbum 的相册权限与 photoAccessHelper 需要; 由 EntryAbility 注入)
@@ -175,7 +175,7 @@ export function initFilePickerBridge(context: common.UIAbilityContext): void {
  * 处理来自 Kotlin 的文件选择请求 (由 EntryAbility 注册的 tsfn 回调调用)。
  *
  * @param requestJson 请求 JSON 字符串 (含 requestId/action/payload)
- * @param callback 回送结果的函数 (EntryAbility 注入 legado.filePickerCallback)
+ * @param callback 回送结果的函数 (EntryAbility 注入 langhuan.filePickerCallback)
  */
 function generationOf(requestJson: string): number {
   try {

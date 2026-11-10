@@ -1,0 +1,2731 @@
+/**
+ * langhuan_napi.cpp - 鸿蒙 napi 桥接层实现。
+ *
+ * 用途: 把 liblanghuan_shared.so (Kotlin/Native) 中的 @CName 导出函数
+ *       包装为 napi 方法, 暴露给 ArkTS 调用。
+ *
+ * 函数列表 (与 LanghuanNativeExports.kt @CName 一一对应):
+ *
+ * 工具类 (KP4 已存在):
+ * - chineseT2S(text: string): string        → langhuan_chinese_t2s(const char*)
+ * - chineseS2T(text: string): string        → langhuan_chinese_s2t(const char*)
+ * - md5Encode(text: string): string          → langhuan_md5_encode(const char*)
+ * - formatPercentUs(value: number): string  → langhuan_format_percent_us(double)
+ * - isProvidersRegistered(): boolean        → langhuan_providers_registered() -> int
+ * - registerOhosProviders(): void           → langhuan_register_providers()
+ *
+ * 业务类 (KP5 新增, 接入真实 KMP 数据):
+ * - bookshelfList(): string                 → langhuan_bookshelf_list() -> const char* (JSON 数组)
+ * - searchBook(query: string): string       → langhuan_search_book(const char*) -> const char* (JSON 数组)
+ * - loadChapter(bookUrl: string, chapterIndex: number): string
+ *                                            → langhuan_load_chapter(const char*, int) -> const char* (章节正文)
+ * - chapterList(bookUrl: string): string    → langhuan_chapter_list(const char*) -> const char* (章节目录 JSON 数组)
+ * - importBookSource(json: string): number  → langhuan_import_booksource(const char*) -> int (导入数量)
+ *
+ * FileDir/CacheDir 路径注入 (KP7+ 新增, ArkTS → Kotlin 同步推送):
+ * - registerFileDir(path: string): void     → langhuan_register_file_dir(const char*) (注入 filesDir)
+ * - registerCacheDir(path: string): void    → langhuan_register_cache_dir(const char*) (注入 cacheDir)
+ *
+ * 应用版本名注入 (ArkTS → Kotlin 同步推送, 同 FileDir 模式):
+ * - registerAppVersion(name: string): void  → langhuan_register_app_version(const char*) (注入版本名)
+ *
+ * 宿主层崩溃现场落盘 (ArkTS → Kotlin 同步推送, 同 FileDir 模式):
+ * - reportHostException(kind: string, detail: string): void
+ *                                           → langhuan_report_host_exception(const char*, const char*)
+ *                                             (系统崩溃事件 watcher 把 APP_CRASH 现场交给 KMP 落盘,
+ *                                              与 K/N 崩溃日志同目录)
+ *
+ * langhuan:// deep link 投递 (ArkTS → Kotlin 同步推送, 无回调):
+ * - handleDeepLink(uri: string): boolean    → langhuan_handle_deep_link(const char*) -> int
+ *                                            (Kotlin LanghuanDeepLinkHandler 解析后写 pending, Compose 侧消费)
+ *
+ * Toast/Notification tsfn 回调注册 (KP7+ 新增, KMP → ArkTS 跨线程 dispatch):
+ * - registerToastCallback(cb): void         → C++ 创建 tsfn 包装 cb, 通过 langhuan_register_toast_fn
+ *                                            注入 ohos_toast_dispatch 函数指针到 Kotlin OhosNativeBridge.toastTsfn
+ * - registerNotificationCallback(cb): void  → 同上, 注入 ohos_notification_dispatch 到 notificationTsfn
+ *
+ * Image/Media tsfn 回调注册 + ArkTS → Kotlin 回调 (KP8+ 新增):
+ * - registerImageCallback(cb): void         → 同 Toast, 注入 ohos_image_dispatch 到 imageTsfn
+ * - registerMediaCallback(cb): void         → 同 Toast, 注入 ohos_media_dispatch 到 mediaTsfn
+ * - imageCallback(requestId, result): void  → ArkTS → Kotlin 图片操作结果 (dlsym langhuan_image_callback)
+ * - mediaEvent(event): void                 → ArkTS → Kotlin media 事件 (dlsym langhuan_media_event)
+ *
+ * TTS tsfn 回调注册 + ArkTS → Kotlin 回调 (KP8+ 新增, 同 Image/Media 模式):
+ * - registerTtsCallback(cb): void           → 同 Toast, 注入 ohos_tts_dispatch 到 ttsTsfn
+ * - ttsEvent(event): void                   → ArkTS → Kotlin TTS 事件 (dlsym langhuan_tts_event)
+ *
+ * 统一平台事件 (ArkTS → Kotlin 单向推送, HTTP 下载进度 + 应用生命周期, 同 mediaEvent 模式):
+ * - platformEvent(event: string): void      → ArkTS → Kotlin 统一事件 (dlsym langhuan_platform_event)
+ *
+ * Crypto tsfn 回调注册 + ArkTS → Kotlin 回调 (KP8+ 新增, 同 Image 模式: encrypt/decrypt/sign/verify):
+ * - registerCryptoCallback(cb): void        → 同 Image, 注入 ohos_crypto_dispatch 到 cryptoTsfn
+ * - cryptoCallback(requestId, result): void → ArkTS → Kotlin crypto 结果 (dlsym langhuan_crypto_callback)
+ *
+ * OpenUrl tsfn 回调注册 (KP8+ 新增, 同 Toast 模式, fire-and-forget dispatch, 无结果回调):
+ * - registerOpenUrlCallback(cb): void       → 同 Toast, 注入 ohos_open_url_dispatch 到 openUrlTsfn
+ *                                            (无 openUrlCallback: openUrl 无需返回结果, 与 Toast 同模式)
+ *
+ * FilePicker tsfn 回调注册 + ArkTS → Kotlin 回调 (KP8+ 新增, 同 Image/Crypto/Http 模式: pickDocuments/pickDocumentContent):
+ * - registerFilePickerCallback(cb): void    → 同 Image, 注入 ohos_file_picker_dispatch 到 filePickerTsfn
+ * - filePickerCallback(requestId, result): void → ArkTS → Kotlin filePicker 结果 (dlsym langhuan_file_picker_callback)
+ *
+ * Pasteboard tsfn 回调注册 + ArkTS → Kotlin 回调 (同 FilePicker 模式: read/write 纯文本):
+ * - registerPasteboardCallback(cb): void    → 注入 ohos_pasteboard_dispatch 到 pasteboardTsfn
+ * - pasteboardCallback(requestId, result): void → ArkTS → Kotlin pasteboard 结果 (dlsym langhuan_pasteboard_callback)
+ *
+ * 详细方案见 ohosApp/INTEROP.md。
+ *
+ * ## 同步语义注意
+ * 业务类函数 (bookshelfList/searchBook/loadChapter/importBookSource) 内部用 runBlocking
+ * 把 suspend DAO 调用转同步, 在 napi 主线程调用可能阻塞 UI。
+ * ArkTS 侧应通过 TaskPool / Worker 调用这些函数, 避免阻塞主线程。
+ */
+
+#include "liblanghuan_shared_api.h"
+#include "napi/native_api.h"
+#include <dlfcn.h>
+#include <hilog/log.h>
+#include <atomic>
+#include <cstdlib>
+#include <cstring>
+#include <map>
+#include <mutex>
+#include <stdio.h>
+#include <stdlib.h>
+
+#define LOG_TAG "LanghuanNapi"
+
+// Kotlin/Native 导出符号类型定义
+typedef const char* (*langhuan_str_str_fn)(const char*);
+typedef const char* (*langhuan_double_str_fn)(double);
+typedef const char* (*langhuan_void_str_fn)(void);
+typedef const char* (*langhuan_str_int_str_fn)(const char*, int);
+typedef int (*langhuan_str_int_fn)(const char*);
+typedef int (*langhuan_int_fn)(void);
+typedef void (*langhuan_void_fn)(void);
+typedef void (*langhuan_cstr_void_fn)(const char*);
+
+typedef void (*langhuan_int_int_void_fn)(int, int);
+typedef void (*langhuan_cstr_cstr_void_fn)(const char*, const char*);
+typedef void (*langhuan_channel_notify_fn)(void);
+/** 无通道失效通知的注册通道: 显式类型的空函数指针 (不是 NoOp 函数). */
+static langhuan_channel_notify_fn const kNoChannelNotify = nullptr;
+typedef void (*langhuan_int64_cstr_void_fn)(int64_t, const char*);
+
+typedef void (*langhuan_int64_cstr_cstr_void_fn)(int64_t, const char *, const char *);
+
+// 二进制混合协议 (KP9+: Http/Image 大字节面裸传, napi ArrayBuffer, 同 WebView 混合协议思路):
+// - 注册函数注入的 dispatch 入口: 控制面 JSON + 数据面裸字节指针 + 长度
+//   (Kotlin usePinned 零拷贝直传, C++ malloc 深拷贝后经 tsfn 异步投递)
+// - ArkTS → Kotlin 回调: requestId + 控制面 JSON + 数据面裸字节指针 + 长度
+//   (C++ napi_get_arraybuffer_info 零拷贝取 ArrayBuffer 数据指针)
+typedef void (*langhuan_bin_dispatch_fn)(const char *, const void *, size_t);
+
+typedef void (*langhuan_register_bin_dispatch_fn)(langhuan_bin_dispatch_fn);
+
+typedef void (*langhuan_int64_cstr_bin_void_fn)(int64_t, const char *, const void *, size_t);
+
+// dlsym 加载的函数指针 - 工具类 (KP4)
+static langhuan_str_str_fn g_chinese_t2s = nullptr;
+static langhuan_str_str_fn g_chinese_s2t = nullptr;
+static langhuan_str_str_fn g_md5_encode = nullptr;
+static langhuan_double_str_fn g_format_percent_us = nullptr;
+static langhuan_int_fn g_providers_registered = nullptr;
+static langhuan_void_fn g_register_providers = nullptr;
+
+// dlsym 加载的函数指针 - 业务类 (KP5 新增)
+static langhuan_void_str_fn g_bookshelf_list = nullptr;
+static langhuan_str_str_fn g_search_book = nullptr;
+static langhuan_str_int_str_fn g_load_chapter = nullptr;
+static langhuan_str_str_fn g_chapter_list = nullptr;
+static langhuan_str_int_fn g_import_booksource = nullptr;
+
+// dlsym 加载的函数指针 - FileDir/CacheDir 路径注入 (KP7+ 新增, ArkTS → Kotlin 同步推送)
+static langhuan_cstr_void_fn g_register_file_dir = nullptr;
+static langhuan_cstr_void_fn g_register_cache_dir = nullptr;
+
+// dlsym 加载的函数指针 - 应用版本名注入 (ArkTS → Kotlin 同步推送, 同 FileDir 模式)
+static langhuan_cstr_void_fn g_register_app_version = nullptr;
+
+// 宿主层异常落盘 (langhuan_report_host_exception): 双字符串入参
+static langhuan_cstr_cstr_void_fn g_report_host_exception = nullptr;
+
+// dlsym 加载的函数指针 - 屏幕尺寸注入 (ArkTS → Kotlin 同步推送, 同 FileDir 模式)
+static langhuan_int_int_void_fn g_register_screen_size = nullptr;
+
+// dlsym 加载的函数指针 - langhuan:// deep link 投递 (ArkTS → Kotlin 同步推送, 返回是否已识别)
+static langhuan_str_int_fn g_handle_deep_link = nullptr;
+
+// dlsym 加载的函数指针 - Toast/Notification tsfn 注入 (KP7+ 新增, C++ → Kotlin @CName 注入 dispatch 函数指针)
+// Kotlin 侧 langhuan_register_toast_fn / langhuan_register_notification_fn 接收一个 C 函数指针,
+// 包成 (String) -> Unit lambda 存入 OhosNativeBridge.toastTsfn / notificationTsfn;
+// KMP 业务调用 showToast/showNotification 时, lambda 调用此 dispatch 函数指针回到 C++,
+// 由 C++ napi_call_threadsafe_function 跨线程 dispatch 到 ArkTS 主线程执行回调。
+typedef void (*langhuan_register_dispatch_fn)(langhuan_cstr_void_fn);
+
+// 带来源代次的 dispatch: (请求 JSON, 注册时的通道代次)。Window/FilePicker/Permission 使用,
+// 让“实际投递对象”和“请求来源代次”在同一调用里绑定; 旧代次不会投到新注册的 TSFN。
+typedef void (*langhuan_cstr_i64_i64_void_fn)(const char *, int64_t, int64_t);
+typedef void (*langhuan_register_dispatch_gen_fn)(langhuan_cstr_i64_i64_void_fn);
+static langhuan_register_dispatch_gen_fn g_register_window_gen_fn = nullptr;
+static langhuan_register_dispatch_gen_fn g_register_file_picker_gen_fn = nullptr;
+static langhuan_register_dispatch_gen_fn g_register_permission_gen_fn = nullptr;
+
+// 三通道 gen 投递/通知前置声明 (注册器在文件后部统一定义)
+extern "C" void ohos_window_dispatch_gen(const char *, int64_t, int64_t);
+extern "C" void ohos_file_picker_dispatch_gen(const char *, int64_t, int64_t);
+extern "C" void ohos_permission_dispatch_gen(const char *, int64_t, int64_t);
+static void NotifyDialogRequestFailed(long long, long long);
+static void NotifyDialogChannelClosed(int64_t);
+static void NotifyFilePickerRequestFailed(long long, long long);
+static void NotifyPdfRequestFailed(long long, long long);
+static void NotifyPdfChannelClosed(int64_t);
+static void NotifyFilePickerChannelClosed(int64_t);
+static void NotifyPermissionRequestFailed(long long, long long);
+static void NotifyPermissionChannelClosed(int64_t);
+static langhuan_register_dispatch_fn g_register_toast_fn = nullptr;
+static langhuan_register_dispatch_fn g_register_notification_fn = nullptr;
+
+// WebView 混合协议注册函数类型: C++ 注入双字符串 dispatch 入口 (控制面 JSON + 数据面裸 html)
+typedef void (*langhuan_register_webview_dispatch_fn)(langhuan_cstr_cstr_void_fn);
+
+// dlsym 加载的函数指针 - Image/Media tsfn 注入 (KP8+ 新增, 同 Toast/Notification 模式)
+// Image 桥 KP9+ 升级为二进制混合协议 (JSON + 裸字节), 用 langhuan_register_bin_dispatch_fn
+static langhuan_register_bin_dispatch_fn g_register_image_fn = nullptr;
+// PDF 桥 (官方 PDFKit; 纯 JSON 请求面, 走 Window/FilePicker 同款源代次通道)
+static langhuan_register_dispatch_gen_fn g_register_pdf_gen_fn = nullptr;
+static langhuan_register_dispatch_fn g_register_media_fn = nullptr;
+
+// dlsym 加载的函数指针 - Image/Media ArkTS → Kotlin 回调 (KP8+ 新增, 同 FileDir @CName 模式)
+// ArkTS 侧 imageCallback(requestId, resultJson, body?) / mediaEvent(eventJson) 通过 napi 调 C++,
+// C++ 通过 dlsym 调 Kotlin @CName 函数, 把结果/事件推送给 Kotlin。
+// Image 桥 KP9+ 升级为二进制混合协议 (JSON + 裸字节), 用 langhuan_int64_cstr_bin_void_fn
+static langhuan_int64_cstr_bin_void_fn g_image_callback = nullptr;
+// PDF 桥 ArkTS → Kotlin 回调 (同 image 四参签名: requestId/resultJson/bytes/bytesLen)
+static langhuan_int64_cstr_bin_void_fn g_pdf_callback = nullptr;
+static langhuan_cstr_void_fn g_media_event = nullptr;
+
+// dlsym 加载的函数指针 - TTS tsfn 注入 + ArkTS → Kotlin 回调 (KP8+ 新增, 同 Image/Media 模式)
+static langhuan_register_dispatch_fn g_register_tts_fn = nullptr;
+static langhuan_cstr_void_fn g_tts_event = nullptr;
+
+// dlsym 加载的函数指针 - Crypto tsfn 注入 + ArkTS → Kotlin 回调 (KP8+ 新增, 同 Image 模式, encrypt/decrypt/sign/verify)
+static langhuan_register_dispatch_fn g_register_crypto_fn = nullptr;
+static langhuan_int64_cstr_void_fn g_crypto_callback = nullptr;
+
+// dlsym 加载的函数指针 - Http tsfn 注入 + ArkTS → Kotlin 回调 (KP8+ 新增, 同 Image/Crypto 模式, execute/cancel)
+// Http 桥 KP9+ 升级为二进制混合协议 (JSON + 裸字节), 用 langhuan_register_bin_dispatch_fn /
+// langhuan_int64_cstr_bin_void_fn
+static langhuan_register_bin_dispatch_fn g_register_http_fn = nullptr;
+static langhuan_int64_cstr_bin_void_fn g_http_callback = nullptr;
+
+// dlsym 加载的函数指针 - OpenUrl tsfn 注入 (KP8+ 新增, 同 Toast 模式, fire-and-forget dispatch)
+static langhuan_register_dispatch_fn g_register_open_url_fn = nullptr;
+
+// dlsym 加载的函数指针 - FilePicker tsfn 注入 + ArkTS → Kotlin 回调 (KP8+ 新增, 同 Image/Crypto/Http 模式, pickDocuments/pickDocumentContent)
+static langhuan_register_dispatch_fn g_register_file_picker_fn = nullptr;
+static langhuan_int64_cstr_void_fn g_file_picker_callback = nullptr;
+
+// dlsym 加载的函数指针 - Pasteboard tsfn 注入 + ArkTS → Kotlin 回调 (同 FilePicker 模式, read/write)
+static langhuan_register_dispatch_fn g_register_pasteboard_fn = nullptr;
+static langhuan_int64_cstr_void_fn g_pasteboard_callback = nullptr;
+static langhuan_register_dispatch_fn g_register_network_fn = nullptr;
+static langhuan_int64_cstr_void_fn g_network_callback = nullptr;
+
+// dlsym 加载的函数指针 - Battery tsfn 注入 + ArkTS → Kotlin 回调 (同 Crypto 模式, getLevel)
+static langhuan_register_dispatch_fn g_register_battery_fn = nullptr;
+static langhuan_int64_cstr_void_fn g_battery_callback = nullptr;
+
+// dlsym 加载的函数指针 - Share tsfn 注入 (同 Toast 模式, fire-and-forget, 无 ArkTS → Kotlin 回调)
+static langhuan_register_dispatch_fn g_register_share_fn = nullptr;
+
+// dlsym 加载的函数指针 - Keyboard tsfn 注入 (同 Window 模式, fire-and-forget, 无 ArkTS → Kotlin 回调)
+static langhuan_register_dispatch_fn g_register_keyboard_fn = nullptr;
+
+// dlsym 加载的函数指针 - Permission tsfn 注入 + ArkTS → Kotlin 回调 (同 Pasteboard 模式, check/request)
+static langhuan_register_dispatch_fn g_register_permission_fn = nullptr;
+static langhuan_int64_cstr_void_fn g_permission_callback = nullptr;
+
+// dlsym 加载的函数指针 - 外部启动请求投递 (ArkTS → Kotlin 同步推送, 同 langhuan_handle_deep_link 模式)
+static langhuan_str_int_fn g_handle_launch_request = nullptr;
+
+// dlsym 加载的函数指针 - Markdown 查看器 HTML 构建导出 (ArkTS → Kotlin 同步调用, 无参返回字符串;
+// 运行时从 composeResources 直读模板 + js/css 内联, 零拷贝零重复)
+typedef const char *(*langhuan_void_cstr_fn)();
+
+static langhuan_void_cstr_fn g_build_markdown_viewer = nullptr;
+
+// dlsym 加载的函数指针 - WebView tsfn 注入 + ArkTS → Kotlin 回调 (混合协议: 控制面 JSON + 数据面裸字符串, 后台 WebView 抓取)
+static langhuan_register_webview_dispatch_fn g_register_webview_fn = nullptr;
+static langhuan_int64_cstr_cstr_void_fn g_webview_callback = nullptr;
+
+// dlsym 加载的函数指针 - 前台 Web 控制器 tsfn 注入 + ArkTS → Kotlin 结果/事件回调
+// (可见 Web 组件, 与后台抓取 webview 链相互独立; 协议为单 JSON 字符串)
+static langhuan_register_dispatch_fn g_register_web_controller_fn = nullptr;
+static langhuan_int64_cstr_void_fn g_web_controller_callback = nullptr;
+
+// dlsym 加载的函数指针 - Window tsfn 注入 (KMP → ArkTS @ohos.window 窗口策略命令, 同 Toast 模式, fire-and-forget)
+static langhuan_register_dispatch_fn g_register_window_fn = nullptr;
+
+// dlsym 加载的函数指针 - Markdown 查看器 tsfn 注入 + ArkTS → Kotlin 事件回调
+// (KMP MarkdownContent → composeResources 直读内联的 Web 渲染, 同 Toast/Media 模式; 链接点击经 markdownEvent 回送)
+static langhuan_register_dispatch_fn g_register_markdown_fn = nullptr;
+static langhuan_cstr_void_fn g_markdown_event = nullptr;
+
+// dlsym 加载的函数指针 - 统一平台事件 ArkTS → Kotlin 回调 (HTTP 下载进度 + 应用生命周期, 同 mediaEvent 模式)
+// ArkTS 侧经 langhuan.platformEvent(eventJson) 推送统一 JSON 事件 (type=httpProgress|lifecycle),
+// 本符号转发到 Kotlin OhosNativeBridge.onPlatformEvent → OhosPlatformEventChannel 分发。
+static langhuan_cstr_void_fn g_platform_event = nullptr;
+
+// Toast/Notification/Image/Media/TTS/Crypto/Http/OpenUrl/FilePicker/Pasteboard threadsafe_function 引用 (C++ 侧持有, ArkTS registerXxxCallback 时创建)
+static napi_threadsafe_function g_toast_tsfn = nullptr;
+static napi_threadsafe_function g_notification_tsfn = nullptr;
+static napi_threadsafe_function g_image_tsfn = nullptr;
+static napi_threadsafe_function g_media_tsfn = nullptr;
+static napi_threadsafe_function g_tts_tsfn = nullptr;
+static napi_threadsafe_function g_crypto_tsfn = nullptr;
+static napi_threadsafe_function g_http_tsfn = nullptr;
+static napi_threadsafe_function g_open_url_tsfn = nullptr;
+static napi_threadsafe_function g_file_picker_tsfn = nullptr;
+static napi_threadsafe_function g_pasteboard_tsfn = nullptr;
+static napi_threadsafe_function g_webview_tsfn = nullptr;
+static napi_threadsafe_function g_web_controller_tsfn = nullptr;
+static napi_threadsafe_function g_window_tsfn = nullptr;
+static napi_threadsafe_function g_battery_tsfn = nullptr;
+static napi_threadsafe_function g_share_tsfn = nullptr;
+static napi_threadsafe_function g_keyboard_tsfn = nullptr;
+static napi_threadsafe_function g_permission_tsfn = nullptr;
+static napi_threadsafe_function g_markdown_tsfn = nullptr;
+
+// liblanghuan_shared.so 句柄
+static void* g_langhuan_so = nullptr;
+
+// 加载 liblanghuan_shared.so 并解析符号
+// ===== 通道注册代次 (真实来源) =====
+typedef void (*langhuan_int64_void_fn)(int64_t);
+static langhuan_int64_void_fn g_set_window_epoch = nullptr;
+static langhuan_int64_void_fn g_set_file_picker_epoch = nullptr;
+static langhuan_int64_void_fn g_set_permission_epoch = nullptr;
+static langhuan_int64_void_fn g_set_pdf_epoch = nullptr;
+
+static std::atomic<int64_t> g_epoch_window{0};
+static std::atomic<int64_t> g_epoch_file_picker{0};
+static std::atomic<int64_t> g_epoch_permission{0};
+static std::atomic<int64_t> g_epoch_pdf{0};
+
+// 候选代次序列: 只有 TSFN 创建成功后才提交为当前代次 (创建失败不影响旧源)
+static std::atomic<int64_t> g_seq_window{0};
+static std::atomic<int64_t> g_seq_file_picker{0};
+static std::atomic<int64_t> g_seq_permission{0};
+static std::atomic<int64_t> g_seq_pdf{0};
+
+static std::atomic<int64_t> *EpochSlot(const char *name) {
+    if (name == nullptr) return nullptr;
+    if (strcmp(name, "Window") == 0) return &g_epoch_window;
+    if (strcmp(name, "FilePicker") == 0) return &g_epoch_file_picker;
+    if (strcmp(name, "Permission") == 0) return &g_epoch_permission;
+    if (strcmp(name, "Pdf") == 0) return &g_epoch_pdf;
+    return nullptr;
+}
+
+static std::atomic<int64_t> *SeqSlot(const char *name) {
+    if (name == nullptr) return nullptr;
+    if (strcmp(name, "Window") == 0) return &g_seq_window;
+    if (strcmp(name, "FilePicker") == 0) return &g_seq_file_picker;
+    if (strcmp(name, "Permission") == 0) return &g_seq_permission;
+    if (strcmp(name, "Pdf") == 0) return &g_seq_pdf;
+    return nullptr;
+}
+
+static int64_t NextChannelEpoch(const char *name) {
+    std::atomic<int64_t> *slot = SeqSlot(name);
+    return slot == nullptr ? 0 : ++(*slot);
+}
+
+/** 只在真实 TSFN 创建成功后提交当前代次。 */
+static void CommitChannelEpoch(const char *name, int64_t epoch) {
+    std::atomic<int64_t> *slot = EpochSlot(name);
+    if (slot != nullptr) slot->store(epoch);
+}
+
+static int64_t CurrentChannelEpoch(const char *name) {
+    std::atomic<int64_t> *slot = EpochSlot(name);
+    return slot == nullptr ? 0 : slot->load();
+}
+
+static void PublishChannelEpoch(const char *name, int64_t epoch) {
+    if (name == nullptr) return;
+    if (strcmp(name, "Window") == 0 && g_set_window_epoch != nullptr) {
+        g_set_window_epoch(epoch);
+    } else if (strcmp(name, "FilePicker") == 0 && g_set_file_picker_epoch != nullptr) {
+        g_set_file_picker_epoch(epoch);
+    } else if (strcmp(name, "Permission") == 0 && g_set_permission_epoch != nullptr) {
+        g_set_permission_epoch(epoch);
+    } else if (strcmp(name, "Pdf") == 0 && g_set_pdf_epoch != nullptr) {
+        g_set_pdf_epoch(epoch);
+    }
+}
+
+// ===== 真实 TSFN 对象表 =====
+// 每个注册代次一个对象槽: dispatch 先按来源代次取对象并 acquire, 再投递, 用完 release。
+// 重绑只 release 旧对象的初始引用, 不 abort; 已在飞行的旧源调用仍投旧 TSFN, 不会进新源。
+struct TsfnEntry {
+    napi_threadsafe_function tsfn;
+    int64_t epoch;
+};
+
+struct DispatchPayload {
+    char *json;
+    int64_t request_id;
+    int64_t gen;
+};
+
+static std::mutex g_tsfn_mutex;
+static std::map<int64_t, TsfnEntry*> g_window_entries;
+static std::map<int64_t, TsfnEntry*> g_file_picker_entries;
+static std::map<int64_t, TsfnEntry*> g_permission_entries;
+static std::map<int64_t, TsfnEntry*> g_pdf_entries;
+
+static std::map<int64_t, TsfnEntry*> *EntryMapFor(const char *name) {
+    if (name == nullptr) return nullptr;
+    if (strcmp(name, "Window") == 0) return &g_window_entries;
+    if (strcmp(name, "FilePicker") == 0) return &g_file_picker_entries;
+    if (strcmp(name, "Permission") == 0) return &g_permission_entries;
+    if (strcmp(name, "Pdf") == 0) return &g_pdf_entries;
+    return nullptr;
+}
+
+static bool IsEntryLive(const char *name, TsfnEntry *entry) {
+    std::map<int64_t, TsfnEntry*> *entries = EntryMapFor(name);
+    if (entries == nullptr || entry == nullptr) return false;
+    std::lock_guard<std::mutex> lock(g_tsfn_mutex);
+    auto it = entries->find(entry->epoch);
+    return it != entries->end() && it->second == entry;
+}
+
+/** 关闭窗口/通道: 撤销当前源资格; 新注册的更高代次仍可重新建立。 */
+static void InvalidateChannelSource(const char *name, std::map<int64_t, TsfnEntry*> &entries) {
+    int64_t epoch = CurrentChannelEpoch(name);
+    TsfnEntry *old = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_tsfn_mutex);
+        auto it = entries.find(epoch);
+        if (it != entries.end()) {
+            old = it->second;
+            entries.erase(it);
+        }
+    }
+    if (old != nullptr) {
+        napi_release_threadsafe_function(old->tsfn, napi_tsfn_release);
+    }
+}
+
+static TsfnEntry *AcquireEntry(std::map<int64_t, TsfnEntry*> &entries, int64_t epoch) {
+    std::lock_guard<std::mutex> lock(g_tsfn_mutex);
+    auto it = entries.find(epoch);
+    if (it == entries.end()) return nullptr;
+    TsfnEntry *entry = it->second;
+    // acquire 期间对象不会被 finalize; 调用结束 release 后才允许释放
+    if (napi_acquire_threadsafe_function(entry->tsfn) != napi_ok) return nullptr;
+    return entry;
+}
+
+/** TSFN 真正关闭后的唯一释放点: context/finalize 拥有条目内存。 */
+static void TsfnEntryFinalize(napi_env /*env*/, void *finalize_data, void * /*hint*/) {
+    delete static_cast<TsfnEntry *>(finalize_data);
+}
+
+static bool load_langhuan_shared() {
+    if (g_langhuan_so != nullptr) return true;
+
+    // 尝试加载 liblanghuan_shared.so (HAP 内置)
+    g_langhuan_so = dlopen("liblanghuan_shared.so", RTLD_NOW | RTLD_GLOBAL);
+    if (g_langhuan_so == nullptr) {
+        OH_LOG_ERROR(LOG_APP, "dlopen liblanghuan_shared.so failed: %{public}s", dlerror());
+        return false;
+    }
+
+    // 解析 @CName 导出符号 - 工具类 (KP4)
+    g_chinese_t2s = (langhuan_str_str_fn)dlsym(g_langhuan_so, "langhuan_chinese_t2s");
+    g_chinese_s2t = (langhuan_str_str_fn)dlsym(g_langhuan_so, "langhuan_chinese_s2t");
+    g_md5_encode = (langhuan_str_str_fn)dlsym(g_langhuan_so, "langhuan_md5_encode");
+    g_format_percent_us = (langhuan_double_str_fn)dlsym(g_langhuan_so, "langhuan_format_percent_us");
+    g_providers_registered = (langhuan_int_fn)dlsym(g_langhuan_so, "langhuan_providers_registered");
+    g_register_providers = (langhuan_void_fn)dlsym(g_langhuan_so, "langhuan_register_providers");
+
+    // 解析 @CName 导出符号 - 业务类 (KP5 新增)
+    g_bookshelf_list = (langhuan_void_str_fn)dlsym(g_langhuan_so, "langhuan_bookshelf_list");
+    g_search_book = (langhuan_str_str_fn)dlsym(g_langhuan_so, "langhuan_search_book");
+    g_load_chapter = (langhuan_str_int_str_fn)dlsym(g_langhuan_so, "langhuan_load_chapter");
+    g_chapter_list = (langhuan_str_str_fn)dlsym(g_langhuan_so, "langhuan_chapter_list");
+    g_import_booksource = (langhuan_str_int_fn)dlsym(g_langhuan_so, "langhuan_import_booksource");
+
+    // 解析 @CName 导出符号 - FileDir/CacheDir 路径注入 (KP7+ 新增)
+    g_register_file_dir = (langhuan_cstr_void_fn)dlsym(g_langhuan_so, "langhuan_register_file_dir");
+    g_register_cache_dir = (langhuan_cstr_void_fn)dlsym(g_langhuan_so, "langhuan_register_cache_dir");
+
+    // 解析 @CName 导出符号 - 应用版本名注入
+    g_register_app_version = (langhuan_cstr_void_fn)dlsym(g_langhuan_so, "langhuan_register_app_version");
+
+    // 解析 @CName 导出符号 - 宿主层异常落盘
+    g_report_host_exception = (langhuan_cstr_cstr_void_fn)dlsym(g_langhuan_so, "langhuan_report_host_exception");
+
+    // 解析 @CName 导出符号 - 屏幕尺寸注入
+    g_register_screen_size = (langhuan_int_int_void_fn) dlsym(g_langhuan_so, "langhuan_register_screen_size");
+
+    // 解析 @CName 导出符号 - langhuan:// deep link 投递
+    g_handle_deep_link = (langhuan_str_int_fn)dlsym(g_langhuan_so, "langhuan_handle_deep_link");
+
+    // 解析 @CName 导出符号 - Toast/Notification tsfn 注入 (KP7+ 新增)
+    g_register_toast_fn = (langhuan_register_dispatch_fn)dlsym(g_langhuan_so, "langhuan_register_toast_fn");
+    g_register_notification_fn = (langhuan_register_dispatch_fn)dlsym(g_langhuan_so, "langhuan_register_notification_fn");
+
+    // 解析 @CName 导出符号 - Window tsfn 注入 (KMP → ArkTS 窗口策略, 同 Toast 模式)
+    g_register_window_fn = (langhuan_register_dispatch_fn) dlsym(g_langhuan_so, "langhuan_register_window_fn");
+    g_register_window_gen_fn = (langhuan_register_dispatch_gen_fn) dlsym(g_langhuan_so, "langhuan_register_window_gen_fn");
+
+    // 解析 @CName 导出符号 - Image/Media tsfn 注入 + ArkTS → Kotlin 回调 (KP8+ 新增)
+    g_register_image_fn = (langhuan_register_bin_dispatch_fn) dlsym(g_langhuan_so, "langhuan_register_image_fn");
+    g_register_pdf_gen_fn = (langhuan_register_dispatch_gen_fn) dlsym(g_langhuan_so, "langhuan_register_pdf_gen_fn");
+    g_pdf_callback = (langhuan_int64_cstr_bin_void_fn) dlsym(g_langhuan_so, "langhuan_pdf_callback");
+    g_register_media_fn = (langhuan_register_dispatch_fn)dlsym(g_langhuan_so, "langhuan_register_media_fn");
+    g_image_callback = (langhuan_int64_cstr_bin_void_fn) dlsym(g_langhuan_so, "langhuan_image_callback");
+    g_media_event = (langhuan_cstr_void_fn)dlsym(g_langhuan_so, "langhuan_media_event");
+
+    // 解析 @CName 导出符号 - TTS tsfn 注入 + ArkTS → Kotlin 回调 (KP8+ 新增, 同 Image/Media 模式)
+    g_register_tts_fn = (langhuan_register_dispatch_fn)dlsym(g_langhuan_so, "langhuan_register_tts_fn");
+    g_tts_event = (langhuan_cstr_void_fn)dlsym(g_langhuan_so, "langhuan_tts_event");
+
+    // 解析 @CName 导出符号 - Crypto tsfn 注入 + ArkTS → Kotlin 回调 (KP8+ 新增, 同 Image 模式)
+    g_register_crypto_fn = (langhuan_register_dispatch_fn)dlsym(g_langhuan_so, "langhuan_register_crypto_fn");
+    g_crypto_callback = (langhuan_int64_cstr_void_fn)dlsym(g_langhuan_so, "langhuan_crypto_callback");
+
+    // 解析 @CName 导出符号 - Http tsfn 注入 + ArkTS → Kotlin 回调 (KP8+ 新增, 同 Image/Crypto 模式)
+    g_register_http_fn = (langhuan_register_bin_dispatch_fn) dlsym(g_langhuan_so, "langhuan_register_http_fn");
+    g_http_callback = (langhuan_int64_cstr_bin_void_fn) dlsym(g_langhuan_so, "langhuan_http_callback");
+
+    // 解析 @CName 导出符号 - OpenUrl tsfn 注入 (KP8+ 新增, 同 Toast 模式, fire-and-forget dispatch)
+    g_register_open_url_fn = (langhuan_register_dispatch_fn)dlsym(g_langhuan_so, "langhuan_register_open_url_fn");
+
+    // 解析 @CName 导出符号 - FilePicker tsfn 注入 + ArkTS → Kotlin 回调 (KP8+ 新增, 同 Image/Crypto/Http 模式)
+    g_register_file_picker_fn = (langhuan_register_dispatch_fn)dlsym(g_langhuan_so, "langhuan_register_file_picker_fn");
+    g_register_file_picker_gen_fn = (langhuan_register_dispatch_gen_fn)dlsym(g_langhuan_so, "langhuan_register_file_picker_gen_fn");
+    g_file_picker_callback = (langhuan_int64_cstr_void_fn)dlsym(g_langhuan_so, "langhuan_file_picker_callback");
+
+    // 解析 @CName 导出符号 - Pasteboard tsfn 注入 + ArkTS → Kotlin 回调 (同 FilePicker 模式)
+    g_register_pasteboard_fn = (langhuan_register_dispatch_fn)dlsym(g_langhuan_so, "langhuan_register_pasteboard_fn");
+    g_pasteboard_callback = (langhuan_int64_cstr_void_fn)dlsym(g_langhuan_so, "langhuan_pasteboard_callback");
+
+    // 解析 @CName 导出符号 - Network tsfn 注入 + ArkTS → Kotlin 回调 (同 Pasteboard 模式)
+    g_register_network_fn = (langhuan_register_dispatch_fn)dlsym(g_langhuan_so, "langhuan_register_network_fn");
+    g_network_callback = (langhuan_int64_cstr_void_fn)dlsym(g_langhuan_so, "langhuan_network_callback");
+
+    // 解析 @CName 导出符号 - Battery tsfn 注入 + ArkTS → Kotlin 回调 (同 Crypto 模式)
+    g_register_battery_fn = (langhuan_register_dispatch_fn) dlsym(g_langhuan_so, "langhuan_register_battery_fn");
+    g_battery_callback = (langhuan_int64_cstr_void_fn) dlsym(g_langhuan_so, "langhuan_battery_callback");
+
+    // 解析 @CName 导出符号 - Share tsfn 注入 (同 Toast 模式, fire-and-forget)
+    g_register_share_fn = (langhuan_register_dispatch_fn) dlsym(g_langhuan_so, "langhuan_register_share_fn");
+
+    // 解析 @CName 导出符号 - Keyboard tsfn 注入 (同 Window 模式, fire-and-forget)
+    g_register_keyboard_fn = (langhuan_register_dispatch_fn) dlsym(g_langhuan_so, "langhuan_register_keyboard_fn");
+
+    // 解析 @CName 导出符号 - Permission tsfn 注入 + ArkTS → Kotlin 回调 (同 Pasteboard 模式)
+    g_register_permission_fn = (langhuan_register_dispatch_fn) dlsym(g_langhuan_so, "langhuan_register_permission_fn");
+    g_register_permission_gen_fn = (langhuan_register_dispatch_gen_fn) dlsym(g_langhuan_so, "langhuan_register_permission_gen_fn");
+    g_permission_callback = (langhuan_int64_cstr_void_fn) dlsym(g_langhuan_so, "langhuan_permission_callback");
+    g_set_window_epoch = (langhuan_int64_void_fn) dlsym(g_langhuan_so, "langhuan_set_window_epoch");
+    g_set_file_picker_epoch = (langhuan_int64_void_fn) dlsym(g_langhuan_so, "langhuan_set_file_picker_epoch");
+    g_set_permission_epoch = (langhuan_int64_void_fn) dlsym(g_langhuan_so, "langhuan_set_permission_epoch");
+    g_set_pdf_epoch = (langhuan_int64_void_fn) dlsym(g_langhuan_so, "langhuan_set_pdf_epoch");
+
+    // 解析 @CName 导出符号 - 外部启动请求投递 (ArkTS → Kotlin 同步推送, 同 deep link 模式)
+    g_handle_launch_request = (langhuan_str_int_fn) dlsym(g_langhuan_so, "langhuan_handle_launch_request");
+
+    // 解析 @CName 导出符号 - Markdown 查看器 HTML 构建 (运行时从 composeResources 直读内联)
+    g_build_markdown_viewer = (langhuan_void_cstr_fn) dlsym(g_langhuan_so, "langhuan_build_markdown_viewer");
+
+    // 解析 @CName 导出符号 - WebView tsfn 注入 + ArkTS → Kotlin 回调 (混合协议: 控制面 JSON + 数据面裸字符串)
+    g_register_webview_fn = (langhuan_register_webview_dispatch_fn) dlsym(g_langhuan_so, "langhuan_register_webview_fn");
+    g_webview_callback = (langhuan_int64_cstr_cstr_void_fn) dlsym(g_langhuan_so, "langhuan_webview_callback");
+
+    // 解析 @CName 导出符号 - 前台 Web 控制器 tsfn 注入 + ArkTS → Kotlin 结果/事件回调 (可见 Web 组件)
+    g_register_web_controller_fn = (langhuan_register_dispatch_fn) dlsym(g_langhuan_so, "langhuan_register_web_controller_fn");
+    g_web_controller_callback = (langhuan_int64_cstr_void_fn) dlsym(g_langhuan_so, "langhuan_web_controller_callback");
+
+    // 解析 @CName 导出符号 - Markdown 查看器 tsfn 注入 + ArkTS → Kotlin 事件回调 (同 Toast/Media 模式)
+    g_register_markdown_fn = (langhuan_register_dispatch_fn) dlsym(g_langhuan_so, "langhuan_register_markdown_fn");
+    g_markdown_event = (langhuan_cstr_void_fn) dlsym(g_langhuan_so, "langhuan_markdown_event");
+
+    // 解析 @CName 导出符号 - 统一平台事件 (HTTP 下载进度 + 应用生命周期, ArkTS → Kotlin)
+    g_platform_event = (langhuan_cstr_void_fn) dlsym(g_langhuan_so, "langhuan_platform_event");
+
+    OH_LOG_INFO(LOG_APP, "liblanghuan_shared.so loaded, symbols resolved (KP5: + bookshelfList/searchBook/loadChapter/chapterList/importBookSource; KP7+: + registerFileDir/registerCacheDir/registerToastFn/registerNotificationFn; KP8+: + registerImageFn/registerMediaFn/imageCallback/mediaEvent/registerTtsFn/ttsEvent/registerCryptoFn/cryptoCallback/registerHttpFn/httpCallback/registerOpenUrlFn/registerFilePickerFn/filePickerCallback/registerPasteboardFn/pasteboardCallback)");
+    return true;
+}
+
+// CPF Compose 控制器：把 K/N 导出的 MainArkUIViewController(env) 暴露给 ArkTS。
+static napi_value CreateMainArkUIViewController(napi_env env, napi_callback_info info) {
+    return reinterpret_cast<napi_value>(MainArkUIViewController(env));
+}
+
+// ============ 工具类 napi 包装 (KP4 已存在) ============
+
+// napi 包装: chineseT2S(text: string): string
+static napi_value ChineseT2S(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[0], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[0], buf, str_len + 1, &str_len);
+
+    const char* result = "[mock t2s] (liblanghuan_shared.so not loaded)";
+    if (load_langhuan_shared() && g_chinese_t2s != nullptr) {
+        result = g_chinese_t2s(buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_create_string_utf8(env, result, NAPI_AUTO_LENGTH, &ret);
+    return ret;
+}
+
+// napi 包装: chineseS2T(text: string): string
+static napi_value ChineseS2T(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[0], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[0], buf, str_len + 1, &str_len);
+
+    const char* result = "[mock s2t] (liblanghuan_shared.so not loaded)";
+    if (load_langhuan_shared() && g_chinese_s2t != nullptr) {
+        result = g_chinese_s2t(buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_create_string_utf8(env, result, NAPI_AUTO_LENGTH, &ret);
+    return ret;
+}
+
+// napi 包装: md5Encode(text: string): string
+static napi_value Md5Encode(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[0], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[0], buf, str_len + 1, &str_len);
+
+    const char* result = "[mock md5] (liblanghuan_shared.so not loaded)";
+    if (load_langhuan_shared() && g_md5_encode != nullptr) {
+        result = g_md5_encode(buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_create_string_utf8(env, result, NAPI_AUTO_LENGTH, &ret);
+    return ret;
+}
+
+// napi 包装: formatPercentUs(value: number): string
+static napi_value FormatPercentUs(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    double value = 0.0;
+    napi_get_value_double(env, args[0], &value);
+
+    const char* result = "[mock percent] (liblanghuan_shared.so not loaded)";
+    if (load_langhuan_shared() && g_format_percent_us != nullptr) {
+        result = g_format_percent_us(value);
+    }
+
+    napi_value ret;
+    napi_create_string_utf8(env, result, NAPI_AUTO_LENGTH, &ret);
+    return ret;
+}
+
+// napi 包装: isProvidersRegistered(): boolean
+static napi_value IsProvidersRegistered(napi_env env, napi_callback_info info) {
+    int registered = 0;
+    if (load_langhuan_shared() && g_providers_registered != nullptr) {
+        registered = g_providers_registered();
+    }
+    napi_value ret;
+    napi_get_boolean(env, registered != 0, &ret);
+    return ret;
+}
+
+// napi 包装: registerOhosProviders(): void
+static napi_value RegisterOhosProviders(napi_env env, napi_callback_info info) {
+    if (load_langhuan_shared() && g_register_providers != nullptr) {
+        g_register_providers();
+    }
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// ============ 业务类 napi 包装 (KP5 新增) ============
+
+// napi 包装: bookshelfList(): string (返回 JSON 数组)
+// 注: 内部 runBlocking 转 suspend, 调用方应在 TaskPool/Worker 中调用避免阻塞 UI
+static napi_value BookshelfList(napi_env env, napi_callback_info info) {
+    const char* result = "[]";  // 兜底空数组 (liblanghuan_shared.so 未加载或异常时)
+    if (load_langhuan_shared() && g_bookshelf_list != nullptr) {
+        result = g_bookshelf_list();
+    }
+
+    napi_value ret;
+    napi_create_string_utf8(env, result, NAPI_AUTO_LENGTH, &ret);
+    return ret;
+}
+
+// napi 包装: searchBook(query: string): string (返回 JSON 数组, 书架内搜索)
+static napi_value SearchBook(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[0], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[0], buf, str_len + 1, &str_len);
+
+    const char* result = "[]";  // 兜底空数组
+    if (load_langhuan_shared() && g_search_book != nullptr) {
+        result = g_search_book(buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_create_string_utf8(env, result, NAPI_AUTO_LENGTH, &ret);
+    return ret;
+}
+
+// napi 包装: loadChapter(bookUrl: string, chapterIndex: number): string (返回章节正文)
+static napi_value LoadChapter(napi_env env, napi_callback_info info) {
+    size_t argc = 2;
+    napi_value args[2] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    // args[0]: bookUrl (string)
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[0], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[0], buf, str_len + 1, &str_len);
+
+    // args[1]: chapterIndex (number)
+    int32_t chapter_index = 0;
+    napi_get_value_int32(env, args[1], &chapter_index);
+
+    const char* result = "";  // 兜底空字符串 (缓存未命中或异常时)
+    if (load_langhuan_shared() && g_load_chapter != nullptr) {
+        result = g_load_chapter(buf, chapter_index);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_create_string_utf8(env, result, NAPI_AUTO_LENGTH, &ret);
+    return ret;
+}
+
+// napi 包装: chapterList(bookUrl: string): string (返回章节目录 JSON 数组)
+static napi_value ChapterList(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[0], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[0], buf, str_len + 1, &str_len);
+
+    const char* result = "[]";  // 兜底空数组 (异常时)
+    if (load_langhuan_shared() && g_chapter_list != nullptr) {
+        result = g_chapter_list(buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_create_string_utf8(env, result, NAPI_AUTO_LENGTH, &ret);
+    return ret;
+}
+
+// napi 包装: importBookSource(json: string): number (返回导入数量)
+static napi_value ImportBookSource(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[0], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[0], buf, str_len + 1, &str_len);
+
+    int imported = 0;  // 兜底 0 (异常时)
+    if (load_langhuan_shared() && g_import_booksource != nullptr) {
+        imported = g_import_booksource(buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_create_int32(env, imported, &ret);
+    return ret;
+}
+
+// ============ FileDir/CacheDir 路径注入 napi 包装 (KP7+ 新增) ============
+
+// napi 包装: registerFileDir(path: string): void  注入鸿蒙沙盒 filesDir 路径 (ArkTS → Kotlin)
+// 注: 调用时机须在 registerOhosProviders 之前 (见 EntryAbility.ets), 使 DatabaseDriver 读到真实沙盒路径
+static napi_value RegisterFileDir(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[0], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[0], buf, str_len + 1, &str_len);
+
+    if (load_langhuan_shared() && g_register_file_dir != nullptr) {
+        g_register_file_dir(buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// napi 包装: registerCacheDir(path: string): void  注入鸿蒙沙盒 cacheDir 路径
+static napi_value RegisterCacheDir(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[0], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[0], buf, str_len + 1, &str_len);
+
+    if (load_langhuan_shared() && g_register_cache_dir != nullptr) {
+        g_register_cache_dir(buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// napi 包装: reportHostException(kind: string, detail: string): void
+// 系统崩溃事件 watcher 把 APP_CRASH 现场交给 KMP 落盘 (与 K/N 崩溃日志同目录同格式)
+static napi_value ReportHostException(napi_env env, napi_callback_info info) {
+    size_t argc = 2;
+    napi_value args[2] = {nullptr, nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    auto readString = [env](napi_value value) -> char* {
+        size_t len = 0;
+        napi_get_value_string_utf8(env, value, nullptr, 0, &len);
+        char* buf = new char[len + 1];
+        napi_get_value_string_utf8(env, value, buf, len + 1, &len);
+        return buf;
+    };
+    char* kind = readString(args[0]);
+    char* detail = readString(args[1]);
+
+    if (load_langhuan_shared() && g_report_host_exception != nullptr) {
+        g_report_host_exception(kind, detail);
+    }
+    delete[] kind;
+    delete[] detail;
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// napi 包装: registerAppVersion(name: string): void  注入应用版本名 (ArkTS → Kotlin)
+// 调用方: EntryAbility.onCreate (读 bundleManager.getBundleInfoForSelfSync().versionName),
+// 供关于页显示/复制版本号; Kotlin/Native 无读取应用包信息的 API, 只能由 ArkTS 注入。
+static napi_value RegisterAppVersion(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[0], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[0], buf, str_len + 1, &str_len);
+
+    if (load_langhuan_shared() && g_register_app_version != nullptr) {
+        g_register_app_version(buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// ============ 屏幕尺寸注入 napi 包装 (ArkTS → Kotlin 同步推送, 同 FileDir 模式) ============
+
+// napi 包装: registerScreenSize(widthPx: number, heightPx: number): void  注入显示物理像素尺寸
+// 调用方: EntryAbility.onWindowStageCreate (loadContent 之前, 任何 shared 对话框尺寸计算之前),
+// 由 Kotlin LanghuanNativeExports.registerScreenSize → OhosNativeBridge.registerScreenSizeFn 存储;
+// sharedUiMain AppDialogSizes 兜底取 ScreenInfoProviders.get() (未注册时 error 导致对话框崩溃)。
+static napi_value RegisterScreenSize(napi_env env, napi_callback_info info) {
+    size_t argc = 2;
+    napi_value args[2] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    int32_t width = 0;
+    int32_t height = 0;
+    napi_get_value_int32(env, args[0], &width);
+    napi_get_value_int32(env, args[1], &height);
+
+    if (load_langhuan_shared() && g_register_screen_size != nullptr) {
+        g_register_screen_size(width, height);
+    }
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// ============ langhuan:// deep link 投递 napi 包装 ============
+
+// napi 包装: handleDeepLink(uri: string): boolean  投递 langhuan://|yuedu:// 一键导入链接
+// 调用方: EntryAbility.onCreate / onNewWant (want.uri), 由 Kotlin LanghuanDeepLinkHandler 解析后
+// 写入 pending (StateFlow), Compose 侧 DeepLinkImportHost 消费弹勾选对话框。
+// 同步返回 (不走 tsfn): Kotlin 侧被动接收无回调, 仅需告知 ArkTS 是否已识别。
+static napi_value HandleDeepLink(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[0], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[0], buf, str_len + 1, &str_len);
+
+    int handled = 0;  // 兜底 0 (so 未加载/符号缺失/非 langhuan scheme)
+    if (load_langhuan_shared() && g_handle_deep_link != nullptr) {
+        handled = g_handle_deep_link(buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_get_boolean(env, handled != 0, &ret);
+    return ret;
+}
+
+// ============ Toast/Notification tsfn 接线 (KP7+ 新增, KMP → ArkTS 跨线程 dispatch) ============
+// 设计: KMP 业务线程 (OhosNativeBridge.showToast/showNotification) 不能直接调 ArkTS API
+// (promptAction.showToast / notificationManager.publish 仅 ArkTS 可用), 故用 napi_threadsafe_function
+// 把调用 dispatch 到 ArkTS 主线程。
+//
+// 调用链 (以 toast 为例):
+// KMP OhosNativeBridge.showToast(msg, dur)
+//   → toastTsfn?.invoke(json)              (toastTsfn 为 Kotlin (String)->Unit lambda)
+//   → lambda 调 C++ ohos_toast_dispatch(json) (函数指针由 langhuan_register_toast_fn 注入)
+//   → napi_call_threadsafe_function(g_toast_tsfn, json_dup, nonblocking)
+//   → [ArkTS 主线程] ToastCallJs(env, js_cb, ctx, json_dup)
+//   → napi_create_string_utf8 + napi_call_function(js_cb, jsonArg) (调 ArkTS 注册的 callback)
+//   → ArkTS callback 解析 JSON 后调 promptAction.showToast
+
+// C++ dispatch 入口: 由 Kotlin lambda (注入到 OhosNativeBridge.toastTsfn) 调用。
+// 接收 JSON 字符串, 拷贝一份后通过 napi_call_threadsafe_function 异步 dispatch 到 ArkTS。
+// 注: 原 json 字符串生命周期由 Kotlin lambda 控制 (调用结束即回收), 故需拷贝;
+//     拷贝在 ToastCallJs 回调中释放 (调用成功时) 或在本函数中释放 (调用失败时)。
+extern "C" void ohos_toast_dispatch(const char* json) {
+    if (g_toast_tsfn == nullptr || json == nullptr) return;
+    size_t len = strlen(json) + 1;
+    char* json_dup = (char*)malloc(len);
+    if (json_dup == nullptr) return;
+    memcpy(json_dup, json, len);
+    napi_status status = napi_call_threadsafe_function(g_toast_tsfn, json_dup, napi_tsfn_nonblocking);
+    if (status != napi_ok) {
+        // 调用失败 (队列满 / tsfn 关闭中): 自行释放拷贝, 回调不会执行
+        free(json_dup);
+    }
+}
+
+extern "C" void ohos_notification_dispatch(const char* json) {
+    if (g_notification_tsfn == nullptr || json == nullptr) return;
+    size_t len = strlen(json) + 1;
+    char* json_dup = (char*)malloc(len);
+    if (json_dup == nullptr) return;
+    memcpy(json_dup, json, len);
+    napi_status status = napi_call_threadsafe_function(g_notification_tsfn, json_dup, napi_tsfn_nonblocking);
+    if (status != napi_ok) {
+        free(json_dup);
+    }
+}
+
+// tsfn call-js 回调: 在 ArkTS 主线程执行, 把 data (JSON 串) 包成 napi string 后调用 ArkTS 回调。
+// 调用完成后释放 ohos_toast_dispatch 中 malloc 的 JSON 拷贝。
+static void ToastCallJs(napi_env env, napi_value js_cb, void* /*context*/, void* data) {
+    if (data == nullptr) return;
+    char* json = static_cast<char*>(data);
+    if (js_cb == nullptr || env == nullptr) {
+        // tsfn 已 abort: 回调不再投递, 只释放队列里的数据
+        free(json);
+        return;
+    }
+    napi_value json_arg;
+    napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &json_arg);
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    napi_call_function(env, undef, js_cb, 1, &json_arg, nullptr);
+    free(json);
+}
+
+static void NotificationCallJs(napi_env env, napi_value js_cb, void* /*context*/, void* data) {
+    if (data == nullptr) return;
+    char* json = static_cast<char*>(data);
+    if (js_cb == nullptr || env == nullptr) {
+        // tsfn 已 abort: 回调不再投递, 只释放队列里的数据
+        free(json);
+        return;
+    }
+    napi_value json_arg;
+    napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &json_arg);
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    napi_call_function(env, undef, js_cb, 1, &json_arg, nullptr);
+    free(json);
+}
+
+// C++ dispatch 入口: 由 Kotlin lambda (注入到 OhosNativeBridge.markdownTsfn) 调用。
+// 同 ohos_toast_dispatch: 拷贝 JSON 后 napi_call_threadsafe_function 异步 dispatch 到 ArkTS
+// (MarkdownContent 渲染请求 { content, isDark, fontSize }, fire-and-forget)。
+extern "C" void ohos_markdown_dispatch(const char *json) {
+    if (g_markdown_tsfn == nullptr || json == nullptr) return;
+    size_t len = strlen(json) + 1;
+    char *json_dup = (char *) malloc(len);
+    if (json_dup == nullptr) return;
+    memcpy(json_dup, json, len);
+    napi_status status = napi_call_threadsafe_function(g_markdown_tsfn, json_dup, napi_tsfn_nonblocking);
+    if (status != napi_ok) {
+        free(json_dup);
+    }
+}
+
+// tsfn call-js 回调: 在 ArkTS 主线程执行, 把 JSON 包成 napi string 后调用 ArkTS 回调。
+static void MarkdownCallJs(napi_env env, napi_value js_cb, void * /*context*/, void *data) {
+    if (data == nullptr) return;
+    char *json = static_cast<char *>(data);
+    if (js_cb == nullptr || env == nullptr) {
+        // tsfn 已 abort: 回调不再投递, 只释放队列里的数据
+        free(json);
+        return;
+    }
+    napi_value json_arg;
+    napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &json_arg);
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    napi_call_function(env, undef, js_cb, 1, &json_arg, nullptr);
+    free(json);
+}
+
+
+
+// 对话框通道失效 (窗口销毁 / 请求未能投递到 ArkTS): 以 requestId=0 回传;
+// 能确定失败请求时携带 pendingIds, 否则空集 (Kotlin 只结束列出的请求)。
+static void NotifyDialogRequestFailed(long long id, long long gen) {
+    if (g_platform_event == nullptr) return;
+    char payload[192];
+    snprintf(payload, sizeof(payload),
+             "{\"type\":\"dialogResult\",\"requestId\":0,\"dialogResult\":\"{\\\"ok\\\":false,\\\"pendingIds\\\":[%lld],\\\"gen\\\":%lld}\"}",
+             id, gen);
+    g_platform_event(payload);
+}
+
+static void NotifyDialogChannelClosed(int64_t old_gen) {
+    if (g_platform_event == nullptr) return;
+    long long gen = old_gen;
+    char payload[192];
+    snprintf(payload, sizeof(payload),
+             "{\"type\":\"dialogResult\",\"requestId\":0,\"dialogResult\":\"{\\\"ok\\\":false,\\\"pendingIds\\\":[],\\\"rebind\\\":true,\\\"gen\\\":%lld}\"}",
+             gen);
+    g_platform_event(payload);
+}
+
+// 带源代次的投递: 只有本次请求所属注册代次仍是当前代次才投; 旧源请求在该源上直接结束,
+// 不会被投到新注册的窗口通道。
+extern "C" void ohos_window_dispatch_gen(const char *json, int64_t gen, int64_t request_id) {
+    if (json == nullptr) return;
+    TsfnEntry *entry = AcquireEntry(g_window_entries, gen);
+    if (entry == nullptr) {
+        if (request_id > 0) NotifyDialogRequestFailed(request_id, gen);
+        return;
+    }
+    size_t len = strlen(json) + 1;
+    char *dup = (char *) malloc(len);
+    napi_status status = napi_closing;
+    DispatchPayload *payload = nullptr;
+    if (dup != nullptr) {
+        memcpy(dup, json, len);
+        payload = new DispatchPayload{dup, request_id, gen};
+        status = napi_call_threadsafe_function(entry->tsfn, payload, napi_tsfn_nonblocking);
+        if (status != napi_ok) {
+            free(dup);
+            delete payload;
+        }
+    }
+    if (status != napi_ok && request_id > 0) NotifyDialogRequestFailed(request_id, gen);
+    napi_release_threadsafe_function(entry->tsfn, napi_tsfn_release);
+}
+
+// gen 通道 call-js 通用体: 在 ArkTS 主线程执行, 把 data (JSON 串) 包成 napi string 后
+// 调用 ArkTS 回调; 旧源退休/已 abort 都按该请求 id/来源代次失败回执, 不投过期输入。
+static void DispatchGenCallJsCommon(napi_env env, napi_value js_cb, void *context, void *data,
+        const char *channel, void (*failed_fn)(long long, long long)) {
+    if (data == nullptr) return;
+    DispatchPayload *payload = static_cast<DispatchPayload *>(data);
+    char *json = payload->json;
+    TsfnEntry *entry = static_cast<TsfnEntry *>(context);
+    if (!IsEntryLive(channel, entry)) {
+        // 旧源已退休: 不再启动过期输入, 按该请求失败回执
+        failed_fn(payload->request_id, payload->gen);
+        free(json);
+        delete payload;
+        return;
+    }
+    if (js_cb == nullptr || env == nullptr) {
+        // tsfn 已 abort: 回调不再投递, 按该请求 id/来源代次回失败
+        failed_fn(payload->request_id, payload->gen);
+        free(json);
+        delete payload;
+        return;
+    }
+    napi_value json_arg;
+    napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &json_arg);
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    napi_call_function(env, undef, js_cb, 1, &json_arg, nullptr);
+    free(json);
+    delete payload;
+}
+
+static void WindowCallJs(napi_env env, napi_value js_cb, void *context, void *data) {
+    DispatchGenCallJsCommon(env, js_cb, context, data, "Window", NotifyDialogRequestFailed);
+}
+
+// ============ Register*Callback 通用宏 ============
+// 19 个注册函数 (Window/Toast/Notification/Markdown/Image/Media/Tts/Crypto/Http/WebView/WebController/OpenUrl/
+// FilePicker/Pasteboard/Network/Battery/Share/Keyboard/Permission) 结构完全同构:
+// 校验 argc → 释放旧 tsfn (并结束旧通道上等待中的请求) → napi_create_threadsafe_function
+// 包装 ArkTS callback (XxxCallJs) → 存入 g_xxx_tsfn → 经 g_register_xxx_fn 把 dispatch
+// 函数指针注入 Kotlin OhosNativeBridge。
+// name 派生 napi 方法名 (registerXxxCallback) 与 work_name (LanghuanXxxTsfn); dispatch_fn 显式传入
+// (name 为 PascalCase, dispatch 符号为 snake_case 如 ohos_toast_dispatch, 无法自动拼接);
+// notify_fn 只在"请求型通道被换掉时需结束 Kotlin 侧等待"时传入 (Window/filePicker), 其余传 nullptr;
+// call-js 回调按传输协议选型 (纯 JSON / 二进制 ArrayBuffer / 双裸字符串), 宏体不关心其内部实现。
+#define REGISTER_TSFN_CALLBACK(name, call_js, tsfn_var, register_fn, dispatch_fn, notify_fn, warn_msg) \
+static napi_value Register##name##Callback(napi_env env, napi_callback_info info) {     \
+    size_t argc = 1;                                                                     \
+    napi_value args[1] = {nullptr};                                                      \
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);                          \
+    if (argc < 1) {                                                                      \
+        napi_throw_type_error(env, nullptr, "register" #name "Callback requires 1 argument (callback)"); \
+        napi_value ret;                                                                  \
+        napi_get_undefined(env, &ret);                                                   \
+        return ret;                                                                      \
+    }                                                                                    \
+    int64_t current_epoch = NextChannelEpoch(#name);                                       /* 重复注册场景: 释放旧 tsfn */                                                      \
+    bool had_old_channel = (tsfn_var != nullptr);\
+    napi_value work_name;                                                                \
+    napi_create_string_utf8(env, "Langhuan" #name "Tsfn", NAPI_AUTO_LENGTH, &work_name);  \
+    napi_threadsafe_function tsfn;                                                       \
+    napi_status status = napi_create_threadsafe_function(                                \
+            env, args[0], nullptr, work_name, 0, 1,                                      \
+            nullptr, nullptr, nullptr, call_js, &tsfn);                                  \
+    if (status != napi_ok) {                                                             \
+        OH_LOG_ERROR(LOG_APP, "register" #name "Callback: napi_create_threadsafe_function failed: %{public}d", status); \
+        napi_value ret;                                                                  \
+        napi_get_undefined(env, &ret);                                                   \
+        return ret;                                                                      \
+    }                                                                                    \
+    /* 把 ohos_xxx_dispatch 函数指针注入 Kotlin (Kotlin 包成 lambda 存入 OhosNativeBridge) */ \
+    if (load_langhuan_shared() && register_fn != nullptr) {                                \
+        register_fn(&dispatch_fn);                                            \
+    } else {                                                                             \
+        OH_LOG_WARN(LOG_APP, warn_msg);                                                  \
+    }                                                                                    \
+    PublishChannelEpoch(#name, current_epoch);                                       \
+    napi_threadsafe_function old_tsfn = tsfn_var;\
+    tsfn_var = tsfn;\
+    if (old_tsfn != nullptr) {\
+        napi_release_threadsafe_function(old_tsfn, napi_tsfn_abort);\
+    }\
+    /* 旧通道通知放在 register_fn 之后: Kotlin 代次已 +1, rebind 才能只结束旧代次 */                     \
+    if (had_old_channel && notify_fn != nullptr) {                                   \
+        notify_fn();                                                                 \
+    }                                                                                \
+    napi_value ret;                                                                      \
+    napi_get_undefined(env, &ret);                                                       \
+    return ret;                                                                          \
+}
+
+// napi 包装: registerWindowCallback(callback: (json: string) => void): void
+// ArkTS 注册窗口策略回调; C++ 创建 napi_threadsafe_function 包装 ArkTS callback, 存入 g_window_tsfn,
+// 并通过 @CName langhuan_register_window_fn 把 ohos_window_dispatch 函数指针注入 Kotlin
+// (Kotlin 包成 (String) -> Unit lambda 存入 OhosNativeBridge.windowTsfn),
+// 使 KMP sendWindowCommand (全屏/常亮/方向/系统栏) 能跨线程 dispatch 到 ArkTS 执行 @ohos.window API。
+// 三通道统一注册生命周期: 创建成功才提交代次; 新对象入表后 release 旧对象初始引用,
+// 已 acquire 的飞行调用仍按旧对象完成。dispatch 注册后才发布代次并通知重绑。
+static napi_value RegisterTsfnWithGen(napi_env env, napi_callback_info info,
+        const char *name, std::map<int64_t, TsfnEntry*> &entries,
+        langhuan_register_dispatch_gen_fn register_fn,
+        langhuan_cstr_i64_i64_void_fn dispatch_fn,
+        napi_threadsafe_function_call_js call_js,
+        void (*notify_fn)(int64_t), const char *warn_msg) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+    if (argc < 1) {
+        napi_throw_type_error(env, nullptr, "register callback requires 1 argument (callback)");
+        napi_value ret;
+        napi_get_undefined(env, &ret);
+        return ret;
+    }
+    int64_t epoch = NextChannelEpoch(name);
+    napi_value work_name;
+    napi_create_string_utf8(env, name, NAPI_AUTO_LENGTH, &work_name);
+    // context/finalize 绑定本次注册的真实源对象; 关闭时由 finalize 释放
+    TsfnEntry *entry = new TsfnEntry{nullptr, epoch};
+    napi_threadsafe_function tsfn;
+    napi_status status = napi_create_threadsafe_function(
+            env, args[0], nullptr, work_name, 0, 1,
+            entry, TsfnEntryFinalize, entry, call_js, &tsfn);
+    if (status != napi_ok) {
+        delete entry;
+        OH_LOG_ERROR(LOG_APP, "register %{public}s callback: create tsfn failed: %{public}d", name, status);
+        // 创建失败: 如实抛错, ArkTS 不得把返回值当作成功代次去失效合法旧源
+        napi_throw_error(env, nullptr, "create threadsafe function failed");
+        napi_value ret;
+        napi_get_undefined(env, &ret);
+        return ret;
+    }
+    entry->tsfn = tsfn;
+    int64_t old_epoch = CurrentChannelEpoch(name);
+    TsfnEntry *old_entry = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_tsfn_mutex);
+        auto it = entries.find(old_epoch);
+        if (it != entries.end()) {
+            old_entry = it->second;
+            entries.erase(it);
+        }
+        entries[epoch] = entry;
+    }
+    CommitChannelEpoch(name, epoch);
+    const bool had_old = (old_entry != nullptr);
+    const int64_t old_gen = had_old ? old_entry->epoch : 0;
+    if (had_old) {
+        // 只释放初始引用: 飞行中的 acquire 结束后 finalize 才释放对象内存
+        napi_release_threadsafe_function(old_entry->tsfn, napi_tsfn_release);
+    }
+    if (load_langhuan_shared() && register_fn != nullptr) {
+        // dispatch_fn 已是函数指针值; 不能取参数地址 (那是指向局部变量的指针)
+        register_fn(dispatch_fn);
+    } else {
+        OH_LOG_WARN(LOG_APP, "%{public}s", warn_msg);
+    }
+    PublishChannelEpoch(name, epoch);
+    if (had_old && notify_fn != nullptr) notify_fn(old_gen);
+    // 返回真实注册代次: ArkTS 在注册边界同步建立 ETS 队列的源资格
+    napi_value ret;
+    napi_create_int64(env, epoch, &ret);
+    return ret;
+}
+
+static napi_value RegisterWindowCallback(napi_env env, napi_callback_info info) {
+    return RegisterTsfnWithGen(env, info, "Window", g_window_entries,
+        g_register_window_gen_fn, ohos_window_dispatch_gen, WindowCallJs, NotifyDialogChannelClosed,
+        "registerWindowCallback: langhuan_register_window_gen_fn not resolved");
+}
+
+// napi 包装: registerToastCallback(callback: (json: string) => void): void
+// ArkTS 注册 toast 回调; C++ 创建 napi_threadsafe_function 包装 ArkTS callback, 存入 g_toast_tsfn,
+// 并通过 @CName langhuan_register_toast_fn 把 ohos_toast_dispatch 函数指针注入 Kotlin
+// (Kotlin 包成 (String) -> Unit lambda 存入 OhosNativeBridge.toastTsfn), 使 KMP showToast 能跨线程 dispatch。
+REGISTER_TSFN_CALLBACK(Toast, ToastCallJs, g_toast_tsfn, g_register_toast_fn, ohos_toast_dispatch,
+    kNoChannelNotify,
+    "registerToastCallback: langhuan_register_toast_fn not resolved, tsfn 仅 C++ 侧持有 (KMP showToast 将降级 println)")
+
+// napi 包装: registerNotificationCallback(callback: (json: string) => void): void
+// 同 RegisterToastCallback, 注入 ohos_notification_dispatch 到 Kotlin OhosNativeBridge.notificationTsfn。
+REGISTER_TSFN_CALLBACK(Notification, NotificationCallJs, g_notification_tsfn, g_register_notification_fn, ohos_notification_dispatch,
+    kNoChannelNotify,
+    "registerNotificationCallback: langhuan_register_notification_fn not resolved, tsfn 仅 C++ 侧持有 (KMP showNotification 将降级 println)")
+
+// napi 包装: registerMarkdownCallback(callback: (json: string) => void): void
+// 同 RegisterToastCallback: 创建 napi_threadsafe_function 包装 ArkTS callback, 存入 g_markdown_tsfn,
+// 并通过 @CName langhuan_register_markdown_fn 把 ohos_markdown_dispatch 函数指针注入 Kotlin
+// (Kotlin 包成 (String) -> Unit lambda 存入 OhosNativeBridge.markdownTsfn), 使 KMP MarkdownContent
+// 能跨线程 dispatch 渲染请求到 ArkTS MarkdownBridgeHandler (composeResources 直读内联的 viewer 页面,
+// marked + hljs 渲染)。
+REGISTER_TSFN_CALLBACK(Markdown, MarkdownCallJs, g_markdown_tsfn, g_register_markdown_fn, ohos_markdown_dispatch,
+    kNoChannelNotify,
+    "registerMarkdownCallback: langhuan_register_markdown_fn not resolved, tsfn 仅 C++ 侧持有 (KMP MarkdownContent 内容将不渲染)")
+
+// ============ 二进制混合协议 tsfn 传输基建 (KP9+: Http/Image 大字节面裸传, napi ArrayBuffer) ============
+// 与 WebView 混合协议 (双裸字符串) 同思路: 控制面 JSON 走字符串, 大字节数据面 (HTTP body /
+// 图片字节) 走 napi ArrayBuffer 裸传, 不经 base64 (避免 33% 体积膨胀 + 双端编解码拷贝),
+// 二进制保真。
+// 生命周期: Kotlin 侧 usePinned 零拷贝直传 → ohos_xxx_dispatch malloc 深拷贝 (tsfn 异步投递,
+// 原指针生命周期不可控) → call-js 回调 (ArkTS 主线程) 把 bytes 用 external ArrayBuffer 包装
+// (零拷贝, 所有权转移给 JS, GC 时 finalize 释放)。
+
+// tsfn 跨线程传输数据: 控制面 JSON + 可选数据面裸字节
+struct DispatchBinaryData {
+    char *json;          // malloc 分配, CallJsWithBinary 统一释放
+    uint8_t *bytes;      // malloc 分配 (可为 null); 非空且长度>0 时所有权转移给 external ArrayBuffer
+    size_t bytes_len;
+};
+
+// external ArrayBuffer 被 GC 回收时释放对应 malloc 内存
+static void DispatchBinaryFinalize(napi_env /*env*/, void *data, void * /*hint*/) {
+    free(data);
+}
+
+// 通用 call-js 回调体: 把 (JSON, bytes) 包成 (napi string, napi ArrayBuffer|undefined) 两个参数
+// 调 ArkTS 回调; bytes_len>0 时 external ArrayBuffer 零拷贝包装 (无二次拷贝)
+static void CallJsWithBinary(napi_env env, napi_value js_cb, void *data) {
+    if (data == nullptr) return;
+    DispatchBinaryData *d = static_cast<DispatchBinaryData *>(data);
+    if (js_cb == nullptr || env == nullptr) {
+        // tsfn 已 abort: 回调不再投递, 只释放队列里的数据
+        free(d->bytes);
+        free(d->json);
+        free(d);
+        return;
+    }
+    napi_value args[2];
+    napi_create_string_utf8(env, d->json, NAPI_AUTO_LENGTH, &args[0]);
+    if (d->bytes != nullptr && d->bytes_len > 0) {
+        napi_status st = napi_create_external_arraybuffer(
+                env, d->bytes, d->bytes_len, DispatchBinaryFinalize, nullptr, &args[1]);
+        if (st != napi_ok) {
+            // 包装失败 (极罕见): 释放字节, 降级传 undefined (调用方按无字节面处理)
+            free(d->bytes);
+            napi_get_undefined(env, &args[1]);
+        }
+    } else {
+        napi_get_undefined(env, &args[1]);
+    }
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    napi_call_function(env, undef, js_cb, 2, args, nullptr);
+    free(d->json);
+    free(d);
+}
+
+// 通用 dispatch 入口: 深拷贝 JSON + 可选字节后投递给 tsfn (napi_call_threadsafe_function 异步,
+// 调用方指针生命周期不可控, 必须拷贝; 拷贝由 call-js 回调 / external ArrayBuffer finalize 释放)
+static bool DispatchBinaryCommon(napi_threadsafe_function tsfn, const char *json,
+        const void *bytes, size_t bytes_len) {
+    if (tsfn == nullptr) {
+        OH_LOG_ERROR(LOG_APP, "dispatch binary: tsfn is null");
+        return false;
+    }
+    if (json == nullptr) {
+        OH_LOG_ERROR(LOG_APP, "dispatch binary: json is null");
+        return false;
+    }
+    DispatchBinaryData *d = (DispatchBinaryData *) malloc(sizeof(DispatchBinaryData));
+    if (d == nullptr) {
+        OH_LOG_ERROR(LOG_APP, "dispatch binary: malloc data failed");
+        return false;
+    }
+    d->bytes = nullptr;
+    d->bytes_len = bytes_len;
+    size_t json_len = strlen(json) + 1;
+    d->json = (char *) malloc(json_len);
+    if (d->json == nullptr) {
+        OH_LOG_ERROR(LOG_APP, "dispatch binary: malloc json failed");
+        free(d);
+        return false;
+    }
+    memcpy(d->json, json, json_len);
+    if (bytes != nullptr && bytes_len > 0) {
+        d->bytes = (uint8_t *) malloc(bytes_len);
+        if (d->bytes == nullptr) {
+            OH_LOG_ERROR(LOG_APP, "dispatch binary: malloc bytes failed");
+            free(d->json);
+            free(d);
+            return false;
+        }
+        memcpy(d->bytes, bytes, bytes_len);
+    }
+    napi_status status = napi_call_threadsafe_function(tsfn, d, napi_tsfn_nonblocking);
+    if (status != napi_ok) {
+        OH_LOG_ERROR(LOG_APP, "dispatch binary: napi_call_threadsafe_function failed: %{public}d", status);
+        free(d->json);
+        free(d->bytes);
+        free(d);
+        return false;
+    }
+    return true;
+}
+
+// ============ Image/Media/TTS tsfn 接线 (KP8+ 新增, 同 Toast/Notification 模式) ============
+// 设计与 Toast/Notification 完全一致:
+// - KMP 通过 OhosNativeBridge.invokeImageSync / sendMediaCommand / speakTts 发请求
+// - 请求经 C++ dispatch 函数 → napi_call_threadsafe_function → ArkTS 主线程回调
+// - ArkTS 处理后通过 imageCallback/mediaEvent/ttsEvent (napi → @CName) 回送结果/事件给 Kotlin
+
+// C++ dispatch 入口: 由 Kotlin lambda (注入到 OhosNativeBridge.imageTsfn) 调用
+// 混合协议双参: 控制面 JSON + 数据面裸字节 (decode 的图片字节, 可为 null)
+extern "C" void ohos_image_dispatch(const char *json, const void *bytes, size_t bytes_len) {
+    if (!DispatchBinaryCommon(g_image_tsfn, json, bytes, bytes_len)) {
+        OH_LOG_ERROR(LOG_APP, "image dispatch failed: %{public}s", json != nullptr ? json : "null");
+    }
+}
+
+extern "C" void ohos_media_dispatch(const char* json) {
+    if (g_media_tsfn == nullptr || json == nullptr) return;
+    size_t len = strlen(json) + 1;
+    char* json_dup = (char*)malloc(len);
+    if (json_dup == nullptr) return;
+    memcpy(json_dup, json, len);
+    napi_status status = napi_call_threadsafe_function(g_media_tsfn, json_dup, napi_tsfn_nonblocking);
+    if (status != napi_ok) {
+        free(json_dup);
+    }
+}
+
+extern "C" void ohos_tts_dispatch(const char* json) {
+    if (g_tts_tsfn == nullptr || json == nullptr) return;
+    size_t len = strlen(json) + 1;
+    char* json_dup = (char*)malloc(len);
+    if (json_dup == nullptr) return;
+    memcpy(json_dup, json, len);
+    napi_status status = napi_call_threadsafe_function(g_tts_tsfn, json_dup, napi_tsfn_nonblocking);
+    if (status != napi_ok) {
+        free(json_dup);
+    }
+}
+
+// tsfn call-js 回调: 在 ArkTS 主线程执行, 把 data (JSON + 裸字节) 包成
+// (napi string, napi ArrayBuffer|undefined) 后调用 ArkTS 回调
+static void ImageCallJs(napi_env env, napi_value js_cb, void* /*context*/, void* data) {
+    CallJsWithBinary(env, js_cb, data);
+}
+
+static void MediaCallJs(napi_env env, napi_value js_cb, void* /*context*/, void* data) {
+    if (data == nullptr) return;
+    char* json = static_cast<char*>(data);
+    if (js_cb == nullptr || env == nullptr) {
+        // tsfn 已 abort: 回调不再投递, 只释放队列里的数据
+        free(json);
+        return;
+    }
+    napi_value json_arg;
+    napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &json_arg);
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    napi_call_function(env, undef, js_cb, 1, &json_arg, nullptr);
+    free(json);
+}
+
+static void TtsCallJs(napi_env env, napi_value js_cb, void* /*context*/, void* data) {
+    if (data == nullptr) return;
+    char* json = static_cast<char*>(data);
+    if (js_cb == nullptr || env == nullptr) {
+        // tsfn 已 abort: 回调不再投递, 只释放队列里的数据
+        free(json);
+        return;
+    }
+    napi_value json_arg;
+    napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &json_arg);
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    napi_call_function(env, undef, js_cb, 1, &json_arg, nullptr);
+    free(json);
+}
+
+// napi 包装: registerImageCallback(callback: (json: string, bytes?: ArrayBuffer) => void): void
+// ArkTS 注册 image 回调; C++ 创建 tsfn, 通过 langhuan_register_image_fn 注入 ohos_image_dispatch 到 Kotlin
+// (混合协议: 第二参数 bytes 为 decode 图片字节的 external ArrayBuffer, 无字节面时 undefined)
+REGISTER_TSFN_CALLBACK(Image, ImageCallJs, g_image_tsfn, g_register_image_fn, ohos_image_dispatch,
+    kNoChannelNotify,
+    "registerImageCallback: langhuan_register_image_fn not resolved (KMP invokeImageSync 将降级)")
+
+// PDF 桥失败/通道回执: 经 langhuan_pdf_callback (K 侧) 按 requestId 结算; requestId=0 表示
+// 通道级事件 (重注册结算全部在途)。
+static void NotifyPdfRequestFailed(long long request_id, long long gen) {
+    if (g_pdf_callback == nullptr) return;
+    char payload[192];
+    snprintf(payload, sizeof(payload),
+             "{\"ok\":false,\"error\":\"PDF 请求通道已退休或未送达\",\"requestGen\":%lld}", gen);
+    g_pdf_callback(request_id, payload, nullptr, 0);
+}
+
+static void NotifyPdfChannelClosed(int64_t old_gen) {
+    if (g_pdf_callback == nullptr) return;
+    long long gen = old_gen;
+    char payload[192];
+    snprintf(payload, sizeof(payload),
+             "{\"ok\":false,\"channelClosed\":true,\"rebind\":true,\"gen\":%lld}", gen);
+    g_pdf_callback(0, payload, nullptr, 0);
+}
+
+// 带源代次的 PDF 投递: 只有本次请求所属注册代次仍持有源对象才投; 旧源请求在该请求上
+// 直接失败回执, 不会投到新注册通道。PDF 请求面纯 JSON。
+extern "C" void ohos_pdf_dispatch_gen(const char *json, int64_t gen, int64_t request_id) {
+    if (json == nullptr) return;
+    TsfnEntry *entry = AcquireEntry(g_pdf_entries, gen);
+    if (entry == nullptr) {
+        if (request_id > 0) NotifyPdfRequestFailed(request_id, gen);
+        return;
+    }
+    size_t len = strlen(json) + 1;
+    char *dup = (char *) malloc(len);
+    napi_status status = napi_closing;
+    DispatchPayload *payload = nullptr;
+    if (dup != nullptr) {
+        memcpy(dup, json, len);
+        payload = new DispatchPayload{dup, request_id, gen};
+        status = napi_call_threadsafe_function(entry->tsfn, payload, napi_tsfn_nonblocking);
+        if (status != napi_ok) {
+            free(dup);
+            delete payload;
+        }
+    }
+    if (status != napi_ok && request_id > 0) NotifyPdfRequestFailed(request_id, gen);
+    napi_release_threadsafe_function(entry->tsfn, napi_tsfn_release);
+}
+
+static void PdfCallJs(napi_env env, napi_value js_cb, void *context, void *data) {
+    DispatchGenCallJsCommon(env, js_cb, context, data, "Pdf", NotifyPdfRequestFailed);
+}
+
+// napi 包装: registerPdfCallback(callback: (json: string) => void): number
+// ArkTS 注册 PDF 回调; 走 Window/FilePicker 同款源代次通道 (RegisterTsfnWithGen):
+// C++ 创建 per-代次 tsfn, 经 langhuan_register_pdf_gen_fn 注入 ohos_pdf_dispatch_gen
+// (单 JSON+代次+请求 id) 到 Kotlin, 返回注册代次。
+static napi_value RegisterPdfCallback(napi_env env, napi_callback_info info) {
+    return RegisterTsfnWithGen(env, info, "Pdf", g_pdf_entries,
+        g_register_pdf_gen_fn, ohos_pdf_dispatch_gen, PdfCallJs, NotifyPdfChannelClosed,
+        "registerPdfCallback: langhuan_register_pdf_gen_fn not resolved (KMP invokePdfSync 将降级)");
+}
+
+// napi 包装: registerMediaCallback(callback: (json: string) => void): void
+// ArkTS 注册 media 回调; C++ 创建 tsfn, 通过 langhuan_register_media_fn 注入 ohos_media_dispatch 到 Kotlin
+REGISTER_TSFN_CALLBACK(Media, MediaCallJs, g_media_tsfn, g_register_media_fn, ohos_media_dispatch,
+    kNoChannelNotify,
+    "registerMediaCallback: langhuan_register_media_fn not resolved (KMP sendMediaCommand 将降级)")
+
+// napi 包装: registerTtsCallback(callback: (json: string) => void): void
+// ArkTS 注册 tts 回调; C++ 创建 tsfn, 通过 langhuan_register_tts_fn 注入 ohos_tts_dispatch 到 Kotlin
+REGISTER_TSFN_CALLBACK(Tts, TtsCallJs, g_tts_tsfn, g_register_tts_fn, ohos_tts_dispatch,
+    kNoChannelNotify,
+    "registerTtsCallback: langhuan_register_tts_fn not resolved (KMP speakTts 将降级)")
+
+// ============ Image/Media/TTS ArkTS → Kotlin 回调 napi 包装 (KP8+ 新增) ============
+// ArkTS 侧处理完图片操作/AVPlayer/TTS 事件后, 通过这三个 napi 方法把结果/事件回送给 Kotlin。
+// C++ 通过 dlsym 调 Kotlin @CName 函数 (langhuan_image_callback / langhuan_media_event / langhuan_tts_event)。
+
+// napi 包装: imageCallback(requestId: number, result: string, body?: ArrayBuffer): void
+// ArkTS → Kotlin 图片操作结果回调 (decode/encode/size/crop/split/stitch 完成后调用, 混合协议)
+static napi_value ImageCallback(napi_env env, napi_callback_info info) {
+    size_t argc = 3;
+    napi_value args[3] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    // args[0]: requestId (number, int64)
+    int64_t request_id = 0;
+    napi_get_value_int64(env, args[0], &request_id);
+
+    // args[1]: resultJson (string, 控制面: 不含字节的结果 JSON)
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[1], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[1], buf, str_len + 1, &str_len);
+
+    // args[2]: body (ArrayBuffer, 数据面: encode 的 packed 字节; 无字节面时 undefined)
+    // napi_get_arraybuffer_info 零拷贝取数据指针, 调用期间 ArrayBuffer 由 JS 引擎持有, 生命周期安全
+    const void *bytes = nullptr;
+    size_t bytes_len = 0;
+    bool is_ab = false;
+    if (argc >= 3 && args[2] != nullptr &&
+            napi_is_arraybuffer(env, args[2], &is_ab) == napi_ok && is_ab) {
+        napi_get_arraybuffer_info(env, args[2], (void **) &bytes, &bytes_len);
+    }
+
+    if (load_langhuan_shared() && g_image_callback != nullptr) {
+        g_image_callback(request_id, buf, bytes, bytes_len);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// napi 包装: pdfCallback(requestId: number, result: string, body?: ArrayBuffer): void
+// ArkTS → Kotlin PDF 操作结果回调 (openDocument/renderPage/closeDocument 完成后调用, 混合协议;
+// renderPage 的 JPEG 字节走 body, 其余操作/失败为 undefined)
+static napi_value PdfCallback(napi_env env, napi_callback_info info) {
+    size_t argc = 3;
+    napi_value args[3] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    int64_t request_id = 0;
+    napi_get_value_int64(env, args[0], &request_id);
+
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[1], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[1], buf, str_len + 1, &str_len);
+
+    const void *bytes = nullptr;
+    size_t bytes_len = 0;
+    bool is_ab = false;
+    if (argc >= 3 && args[2] != nullptr &&
+            napi_is_arraybuffer(env, args[2], &is_ab) == napi_ok && is_ab) {
+        napi_get_arraybuffer_info(env, args[2], (void **) &bytes, &bytes_len);
+    }
+
+    if (load_langhuan_shared() && g_pdf_callback != nullptr) {
+        g_pdf_callback(request_id, buf, bytes, bytes_len);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// napi 包装: mediaEvent(event: string): void
+// ArkTS → Kotlin media 事件回调 (AVPlayer onReady/onEndOfMedia/onError/onBufferingUpdate 等)
+static napi_value MediaEvent(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[0], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[0], buf, str_len + 1, &str_len);
+
+    if (load_langhuan_shared() && g_media_event != nullptr) {
+        g_media_event(buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// napi 包装: markdownEvent(event: string): void
+// ArkTS → Kotlin Markdown 查看器事件回调 (viewer 页面链接点击 → javaScriptProxy → 本函数 →
+// dlsym("langhuan_markdown_event") → KMP OhosNativeBridge.onMarkdownEvent → 系统浏览器打开)。
+static napi_value MarkdownEvent(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[0], nullptr, 0, &str_len);
+    char *buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[0], buf, str_len + 1, &str_len);
+
+    if (load_langhuan_shared() && g_markdown_event != nullptr) {
+        g_markdown_event(buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// napi 包装: ttsEvent(event: string): void
+// ArkTS → Kotlin TTS 事件回调 (onStart/onComplete/onError/onRange 等)
+static napi_value TtsEvent(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[0], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[0], buf, str_len + 1, &str_len);
+
+    if (load_langhuan_shared() && g_tts_event != nullptr) {
+        g_tts_event(buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// napi 包装: platformEvent(event: string): void
+// ArkTS → Kotlin 统一平台事件回调: HTTP 下载进度 (HttpBridgeHandler requestInStream
+// dataReceive) 与 UIAbility 生命周期 (onForeground/onBackground) 共用一个通道。
+// 与 mediaEvent/ttsEvent 同模式 (单 JSON 字符串, dlsym @CName, 无 tsfn):
+// 事件方向恒为 ArkTS → Kotlin, 无需 KMP → ArkTS 反向 dispatch。
+static napi_value PlatformEvent(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+    if (argc < 1) {
+        napi_throw_type_error(env, nullptr, "platformEvent requires 1 argument (eventJson)");
+        napi_value ret;
+        napi_get_undefined(env, &ret);
+        return ret;
+    }
+
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[0], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[0], buf, str_len + 1, &str_len);
+
+    if (load_langhuan_shared() && g_platform_event != nullptr) {
+        g_platform_event(buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// ============ Crypto tsfn 接线 (KP8+ 新增, 同 Image 模式: tsfn 发请求 + @CName 回调返回结果) ============
+// 设计与 Image 完全一致:
+// - KMP 通过 OhosNativeBridge.invokeCryptoSync 发 encrypt/decrypt/sign/verify 请求
+// - 请求经 C++ ohos_crypto_dispatch → napi_call_threadsafe_function → ArkTS 主线程回调
+// - ArkTS CryptoBridgeHandler 调 @ohos.security.cryptoFramework 执行真实运算
+// - 完成后通过 cryptoCallback(requestId, resultJson) (napi → @CName) 回送结果给 Kotlin
+
+// C++ dispatch 入口: 由 Kotlin lambda (注入到 OhosNativeBridge.cryptoTsfn) 调用
+extern "C" void ohos_crypto_dispatch(const char* json) {
+    if (g_crypto_tsfn == nullptr || json == nullptr) return;
+    size_t len = strlen(json) + 1;
+    char* json_dup = (char*)malloc(len);
+    if (json_dup == nullptr) return;
+    memcpy(json_dup, json, len);
+    napi_status status = napi_call_threadsafe_function(g_crypto_tsfn, json_dup, napi_tsfn_nonblocking);
+    if (status != napi_ok) {
+        free(json_dup);
+    }
+}
+
+// tsfn call-js 回调: 在 ArkTS 主线程执行, 把 data (JSON 串) 包成 napi string 后调用 ArkTS 回调
+static void CryptoCallJs(napi_env env, napi_value js_cb, void* /*context*/, void* data) {
+    if (data == nullptr) return;
+    char* json = static_cast<char*>(data);
+    if (js_cb == nullptr || env == nullptr) {
+        // tsfn 已 abort: 回调不再投递, 只释放队列里的数据
+        free(json);
+        return;
+    }
+    napi_value json_arg;
+    napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &json_arg);
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    napi_call_function(env, undef, js_cb, 1, &json_arg, nullptr);
+    free(json);
+}
+
+// napi 包装: registerCryptoCallback(callback: (json: string) => void): void
+// ArkTS 注册 crypto 回调; C++ 创建 tsfn, 通过 langhuan_register_crypto_fn 注入 ohos_crypto_dispatch 到 Kotlin
+REGISTER_TSFN_CALLBACK(Crypto, CryptoCallJs, g_crypto_tsfn, g_register_crypto_fn, ohos_crypto_dispatch,
+    kNoChannelNotify,
+    "registerCryptoCallback: langhuan_register_crypto_fn not resolved (KMP invokeCryptoSync 将降级)")
+
+// napi 包装: cryptoCallback(requestId: number, result: string): void
+// ArkTS → Kotlin crypto 操作结果回调 (encrypt/decrypt/sign/verify 完成后调用)
+static napi_value CryptoCallback(napi_env env, napi_callback_info info) {
+    size_t argc = 2;
+    napi_value args[2] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    // args[0]: requestId (number, int64)
+    int64_t request_id = 0;
+    napi_get_value_int64(env, args[0], &request_id);
+
+    // args[1]: resultJson (string)
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[1], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[1], buf, str_len + 1, &str_len);
+
+    if (load_langhuan_shared() && g_crypto_callback != nullptr) {
+        g_crypto_callback(request_id, buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// ============ Http tsfn 接线 (KP8+ 新增, 二进制混合协议: 控制面 JSON + 数据面裸字节) ============
+// 设计与 Image 一致 (KP9+ 升级):
+// - KMP 通过 OhosNativeBridge.invokeHttpSync 发 execute/cancel 请求
+// - 请求经 C++ ohos_http_dispatch(json, body, bodyLen) → napi_call_threadsafe_function →
+//   ArkTS 主线程回调 (body 为请求体字节, napi external ArrayBuffer 零拷贝包装)
+// - ArkTS HttpBridgeHandler 调 @ohos.net.http 执行真实请求
+// - 完成后通过 httpCallback(requestId, resultJson, bodyArrayBuffer) (napi → @CName) 回送结果给 Kotlin
+//   (resultJson 为控制面小字段, body 为响应体裸字节)
+
+// C++ dispatch 入口: 由 Kotlin lambda (注入到 OhosNativeBridge.httpTsfn) 调用
+// 混合协议双参: 控制面 JSON + 数据面裸字节 (请求 body, 可为 null)
+extern "C" void ohos_http_dispatch(const char *json, const void *bytes, size_t bytes_len) {
+    DispatchBinaryCommon(g_http_tsfn, json, bytes, bytes_len);
+}
+
+// tsfn call-js 回调: 在 ArkTS 主线程执行, 把 data (JSON + 裸字节) 包成
+// (napi string, napi ArrayBuffer|undefined) 后调用 ArkTS 回调
+static void HttpCallJs(napi_env env, napi_value js_cb, void* /*context*/, void* data) {
+    CallJsWithBinary(env, js_cb, data);
+}
+
+// napi 包装: registerHttpCallback(callback: (json: string, body?: ArrayBuffer) => void): void
+// ArkTS 注册 http 回调; C++ 创建 tsfn, 通过 langhuan_register_http_fn 注入 ohos_http_dispatch 到 Kotlin
+// (混合协议: 第二参数 body 为请求体字节的 external ArrayBuffer, 无 body 时 undefined)
+REGISTER_TSFN_CALLBACK(Http, HttpCallJs, g_http_tsfn, g_register_http_fn, ohos_http_dispatch,
+    kNoChannelNotify,
+    "registerHttpCallback: langhuan_register_http_fn not resolved (KMP invokeHttpSync 将降级)")
+
+// napi 包装: httpCallback(requestId: number, result: string, body?: ArrayBuffer): void
+// ArkTS → Kotlin HTTP 请求结果回调 (execute 完成后调用, 混合协议)
+static napi_value HttpCallback(napi_env env, napi_callback_info info) {
+    size_t argc = 3;
+    napi_value args[3] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    // args[0]: requestId (number, int64)
+    int64_t request_id = 0;
+    napi_get_value_int64(env, args[0], &request_id);
+
+    // args[1]: resultJson (string, 控制面: 不含 body 的结果 JSON)
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[1], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[1], buf, str_len + 1, &str_len);
+
+    // args[2]: body (ArrayBuffer, 数据面: 响应 body 裸字节; 无 body 时 undefined)
+    // napi_get_arraybuffer_info 零拷贝取数据指针, 调用期间 ArrayBuffer 由 JS 引擎持有, 生命周期安全
+    const void *bytes = nullptr;
+    size_t bytes_len = 0;
+    bool is_ab = false;
+    if (argc >= 3 && args[2] != nullptr &&
+            napi_is_arraybuffer(env, args[2], &is_ab) == napi_ok && is_ab) {
+        napi_get_arraybuffer_info(env, args[2], (void **) &bytes, &bytes_len);
+    }
+
+    if (load_langhuan_shared() && g_http_callback != nullptr) {
+        g_http_callback(request_id, buf, bytes, bytes_len);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// ============ WebView tsfn 接线 (混合协议: 控制面 JSON + 数据面裸字符串) ============
+// 设计与 Http/Image 一致, 但传输为混合协议, 避免大段 HTML 的 JSON 转义膨胀 + 双端编解码拷贝:
+// - KMP 通过 OhosNativeBridge.invokeWebViewSync(jsonControl, htmlRaw) 发后台 WebView 抓取请求 (书源 webView 规则)
+// - 请求经 C++ ohos_webview_dispatch(json, html) → napi_call_threadsafe_function → ArkTS 主线程回调
+//   (tsfn data 携带两个字符串: 控制面 JSON + 数据面裸 html, 均不经 JSON 转义)
+// - ArkTS WebViewBridgeHandler 用隐藏 Web 组件 loadUrl/loadData + onPageEnd 后 runJavaScript 取源码
+// - 完成后通过 webViewCallback(requestId, resultJson, bodyRaw) (napi → @CName) 回送结果给 Kotlin
+//   (resultJson 为控制面小字段, bodyRaw 为裸源码/命中 URL)
+
+// tsfn 传输数据: 控制面 JSON + 数据面裸 html (均 malloc 拷贝, WebViewCallJs 统一释放)
+struct WebViewDispatchData {
+    char *json;
+    char *html;
+};
+
+// C++ dispatch 入口: 由 Kotlin lambda (注入到 OhosNativeBridge.webViewTsfn) 调用
+// html 为第二参数裸字符串 (Kotlin 侧已把 null 归一为空串, 此处仅防御性判空)
+extern "C" void ohos_webview_dispatch(const char *json, const char *html) {
+    if (g_webview_tsfn == nullptr || json == nullptr) return;
+    if (html == nullptr) html = "";
+    WebViewDispatchData *data = (WebViewDispatchData *) malloc(sizeof(WebViewDispatchData));
+    if (data == nullptr) return;
+    size_t json_len = strlen(json) + 1;
+    size_t html_len = strlen(html) + 1;
+    data->json = (char *) malloc(json_len);
+    data->html = (char *) malloc(html_len);
+    if (data->json == nullptr || data->html == nullptr) {
+        free(data->json);
+        free(data->html);
+        free(data);
+        return;
+    }
+    memcpy(data->json, json, json_len);
+    memcpy(data->html, html, html_len);
+    napi_status status = napi_call_threadsafe_function(g_webview_tsfn, data, napi_tsfn_nonblocking);
+    if (status != napi_ok) {
+        free(data->json);
+        free(data->html);
+        free(data);
+    }
+}
+
+// tsfn call-js 回调: 在 ArkTS 主线程执行, 把 data (JSON + html) 包成两个 napi string 后调用 ArkTS 回调
+static void WebViewCallJs(napi_env env, napi_value js_cb, void * /*context*/, void *data) {
+    if (data == nullptr) return;
+    WebViewDispatchData *d = static_cast<WebViewDispatchData *>(data);
+    if (js_cb == nullptr || env == nullptr) {
+        // tsfn 已 abort: 回调不再投递, 只释放队列里的数据
+        free(d->json);
+        free(d->html);
+        free(d);
+        return;
+    }
+    napi_value args[2];
+    napi_create_string_utf8(env, d->json, NAPI_AUTO_LENGTH, &args[0]);
+    napi_create_string_utf8(env, d->html, NAPI_AUTO_LENGTH, &args[1]);
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    napi_call_function(env, undef, js_cb, 2, args, nullptr);
+    free(d->json);
+    free(d->html);
+    free(d);
+}
+
+// napi 包装: registerWebViewCallback(callback: (json: string, html: string) => void): void
+// ArkTS 注册 webView 回调; C++ 创建 tsfn, 通过 langhuan_register_webview_fn 注入 ohos_webview_dispatch 到 Kotlin
+REGISTER_TSFN_CALLBACK(WebView, WebViewCallJs, g_webview_tsfn, g_register_webview_fn, ohos_webview_dispatch,
+    kNoChannelNotify,
+    "registerWebViewCallback: langhuan_register_webview_fn not resolved (KMP invokeWebViewSync 将降级)")
+
+// napi 包装: webViewCallback(requestId: number, result: string, body: string): void
+// ArkTS → Kotlin webView 后台抓取结果回调 (混合协议: 控制面 JSON + 数据面裸源码/命中 URL)
+static napi_value WebViewCallback(napi_env env, napi_callback_info info) {
+    size_t argc = 3;
+    napi_value args[3] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    // args[0]: requestId (number, int64)
+    int64_t request_id = 0;
+    napi_get_value_int64(env, args[0], &request_id);
+
+    // args[1]: resultJson (string, 控制面: 不含 body 的结果 JSON)
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[1], nullptr, 0, &str_len);
+    char *buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[1], buf, str_len + 1, &str_len);
+
+    // args[2]: bodyRaw (string, 数据面: 裸源码/命中 URL, 失败或空结果时为空串)
+    size_t body_len = 0;
+    napi_get_value_string_utf8(env, args[2], nullptr, 0, &body_len);
+    char *body_buf = new char[body_len + 1];
+    napi_get_value_string_utf8(env, args[2], body_buf, body_len + 1, &body_len);
+
+    if (load_langhuan_shared() && g_webview_callback != nullptr) {
+        g_webview_callback(request_id, buf, body_buf);
+    }
+    delete[] buf;
+    delete[] body_buf;
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// ============ 前台 Web 控制器 tsfn 接线 (可见 Web 组件, 与后台 WebView 链相互独立) ============
+// 与 WebView tsfn 的分工:
+// - 后台 WebView (g_webview_tsfn): 隐藏 Web 组件 + 混合协议 (控制面 JSON + 数据面裸 HTML),
+//   服务书源 webView 规则抓取 (WebViewBridgeHandler.ets, 回送 webViewCallback);
+// - 前台 Web 控制器 (g_web_controller_tsfn, 本节): 可见 Web 组件直接挂在屏幕之上, 服务
+//   Compose WebView slot (WebViewRoute/ReadRssRoute/登录 Overlay), 单 JSON 字符串协议。
+// - KMP 通过 OhosVisibleWebViewBridge (loadUrl/runJavaScript/getCookies/show/hide 等) 发命令
+// - 请求经 C++ ohos_web_controller_dispatch → napi_call_threadsafe_function → ArkTS 主线程回调
+// - ArkTS 完成操作后通过 webControllerCallback(requestId, resultJson) (napi → @CName) 回送结果;
+//   requestId==0 时为主动页面事件 (onPageFinished/onUrlChanged/onReceivedTitle/onProgressChanged/onCloseWindow)
+
+// C++ dispatch 入口: 由 Kotlin lambda (注入到 OhosVisibleWebViewBridge.dispatch) 调用
+// 单 JSON 字符串协议 (与 Toast/Crypto/Pasteboard 同形): requestId/action/payload
+// (前台命令含页面快照, 但页面 HTML 也走 payload JSON —— 与后台抓取的大段 HTML 裸传不同,
+//  前台 html 是配置期一次性小字段, 无高频大传输, 保持单 JSON 协议更简单)
+extern "C" void ohos_web_controller_dispatch(const char* json) {
+    if (g_web_controller_tsfn == nullptr || json == nullptr) return;
+    size_t len = strlen(json) + 1;
+    char* json_dup = (char*)malloc(len);
+    if (json_dup == nullptr) return;
+    memcpy(json_dup, json, len);
+    napi_status status = napi_call_threadsafe_function(g_web_controller_tsfn, json_dup, napi_tsfn_nonblocking);
+    if (status != napi_ok) {
+        free(json_dup);
+    }
+}
+
+// tsfn call-js 回调: 在 ArkTS 主线程执行, 把 data (JSON 串) 包成 napi string 后调用 ArkTS 回调
+static void WebControllerCallJs(napi_env env, napi_value js_cb, void* /*context*/, void* data) {
+    if (data == nullptr) return;
+    char* json = static_cast<char*>(data);
+    if (js_cb == nullptr || env == nullptr) {
+        // tsfn 已 abort: 回调不再投递, 只释放队列里的数据
+        free(json);
+        return;
+    }
+    napi_value json_arg;
+    napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &json_arg);
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    napi_call_function(env, undef, js_cb, 1, &json_arg, nullptr);
+    free(json);
+}
+
+// napi 包装: registerWebControllerCallback(callback: (json: string) => void): void
+// ArkTS 注册前台 Web 控制器回调; C++ 创建 tsfn, 通过 langhuan_register_web_controller_fn 注入
+// ohos_web_controller_dispatch 到 Kotlin (OhosVisibleWebViewBridge.registerDispatch)
+REGISTER_TSFN_CALLBACK(WebController, WebControllerCallJs, g_web_controller_tsfn, g_register_web_controller_fn, ohos_web_controller_dispatch,
+    kNoChannelNotify,
+    "registerWebControllerCallback: langhuan_register_web_controller_fn not resolved (KMP 前台 WebView 将降级)")
+
+// napi 包装: webControllerCallback(requestId: number, result: string): void
+// ArkTS → Kotlin 前台 Web 结果/事件回调 (命令响应 requestId>0; 主动页面事件 requestId==0)
+static napi_value WebControllerCallback(napi_env env, napi_callback_info info) {
+    size_t argc = 2;
+    napi_value args[2] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    // args[0]: requestId (number, int64; 0 = 主动页面事件)
+    int64_t request_id = 0;
+    napi_get_value_int64(env, args[0], &request_id);
+
+    // args[1]: resultJson (string: 结果或事件 JSON)
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[1], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[1], buf, str_len + 1, &str_len);
+
+    if (load_langhuan_shared() && g_web_controller_callback != nullptr) {
+        g_web_controller_callback(request_id, buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// ============ OpenUrl tsfn 接线 (KP8+ 新增, 同 Toast 模式: fire-and-forget dispatch) ============
+// 设计与 Toast 完全一致 (fire-and-forget, 无需 ArkTS → Kotlin 结果回调):
+// - KMP 通过 OhosNativeBridge.openUrl 发 URL 打开请求
+// - 请求经 C++ ohos_open_url_dispatch → napi_call_threadsafe_function → ArkTS 主线程回调
+// - ArkTS SystemBridgeHandler.handleOpenUrl 调 context.startAbility(Want.uri=url) 打开 URL
+// 注: 与 Image/Crypto/Http 的 "tsfn + @CName callback" 模式不同, openUrl 无需返回结果,
+//     故不注册 langhuan_open_url_callback (与 Toast 不注册 langhuan_toast_callback 同理)。
+
+// C++ dispatch 入口: 由 Kotlin lambda (注入到 OhosNativeBridge.openUrlTsfn) 调用
+extern "C" void ohos_open_url_dispatch(const char* json) {
+    if (g_open_url_tsfn == nullptr || json == nullptr) return;
+    size_t len = strlen(json) + 1;
+    char* json_dup = (char*)malloc(len);
+    if (json_dup == nullptr) return;
+    memcpy(json_dup, json, len);
+    napi_status status = napi_call_threadsafe_function(g_open_url_tsfn, json_dup, napi_tsfn_nonblocking);
+    if (status != napi_ok) {
+        free(json_dup);
+    }
+}
+
+// tsfn call-js 回调: 在 ArkTS 主线程执行, 把 data (JSON 串) 包成 napi string 后调用 ArkTS 回调
+static void OpenUrlCallJs(napi_env env, napi_value js_cb, void* /*context*/, void* data) {
+    if (data == nullptr) return;
+    char* json = static_cast<char*>(data);
+    if (js_cb == nullptr || env == nullptr) {
+        // tsfn 已 abort: 回调不再投递, 只释放队列里的数据
+        free(json);
+        return;
+    }
+    napi_value json_arg;
+    napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &json_arg);
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    napi_call_function(env, undef, js_cb, 1, &json_arg, nullptr);
+    free(json);
+}
+
+// napi 包装: registerOpenUrlCallback(callback: (json: string) => void): void
+// ArkTS 注册 openUrl 回调; C++ 创建 tsfn, 通过 langhuan_register_open_url_fn 注入 ohos_open_url_dispatch 到 Kotlin
+REGISTER_TSFN_CALLBACK(OpenUrl, OpenUrlCallJs, g_open_url_tsfn, g_register_open_url_fn, ohos_open_url_dispatch,
+    kNoChannelNotify,
+    "registerOpenUrlCallback: langhuan_register_open_url_fn not resolved (KMP openUrl 将降级 println)")
+
+// ============ FilePicker tsfn 接线 (KP8+ 新增, 同 Image/Crypto/Http 模式: tsfn 发请求 + @CName 回调返回结果) ============
+// 设计与 Image/Crypto/Http 完全一致:
+// - KMP 通过 OhosNativeBridge.invokeFilePickerSync 发 pickDocuments/pickDocumentContent 请求
+// - 请求经 C++ ohos_file_picker_dispatch → napi_call_threadsafe_function → ArkTS 主线程回调
+// - ArkTS FilePickerBridgeHandler 调 @ohos.file.picker.DocumentViewPicker / @ohos.file.fs 执行真实操作
+// - 完成后通过 filePickerCallback(requestId, resultJson) (napi → @CName) 回送结果给 Kotlin
+
+// filePicker 通道失效 (请求未能投递到 ArkTS): 以 requestId=0 回传, Kotlin 侧
+// OhosNativeBridge.onFilePickerResult(0, ...) 用失败结果结束该通道上全部等待。
+static void NotifyFilePickerRequestFailed(long long id, long long gen) {
+    if (g_file_picker_callback == nullptr) return;
+    char payload[128];
+    snprintf(payload, sizeof(payload),
+             "{\"ok\":false,\"channelClosed\":true,\"pendingIds\":[%lld],\"gen\":%lld}", id, gen);
+    g_file_picker_callback(0, payload);
+}
+
+static void NotifyFilePickerChannelClosed(int64_t old_gen) {
+    if (g_file_picker_callback == nullptr) return;
+    long long gen = old_gen;
+    char payload[128];
+    snprintf(payload, sizeof(payload),
+             "{\"ok\":false,\"channelClosed\":true,\"pendingIds\":[],\"rebind\":true,\"gen\":%lld}", gen);
+    g_file_picker_callback(0, payload);
+}
+
+// 带源代次的文件选择投递: 旧源请求直接按该请求结束, 不投到新注册 TSFN。
+extern "C" void ohos_file_picker_dispatch_gen(const char *json, int64_t gen, int64_t request_id) {
+    if (json == nullptr) return;
+    TsfnEntry *entry = AcquireEntry(g_file_picker_entries, gen);
+    if (entry == nullptr) {
+        if (request_id > 0) NotifyFilePickerRequestFailed(request_id, gen);
+        return;
+    }
+    size_t len = strlen(json) + 1;
+    char *dup = (char *) malloc(len);
+    napi_status status = napi_closing;
+    DispatchPayload *payload = nullptr;
+    if (dup != nullptr) {
+        memcpy(dup, json, len);
+        payload = new DispatchPayload{dup, request_id, gen};
+        status = napi_call_threadsafe_function(entry->tsfn, payload, napi_tsfn_nonblocking);
+        if (status != napi_ok) {
+            free(dup);
+            delete payload;
+        }
+    }
+    if (status != napi_ok && request_id > 0) NotifyFilePickerRequestFailed(request_id, gen);
+    napi_release_threadsafe_function(entry->tsfn, napi_tsfn_release);
+}
+
+// tsfn call-js 回调: 在 ArkTS 主线程执行, 把 data (JSON 串) 包成 napi string 后调用 ArkTS 回调
+static void FilePickerCallJs(napi_env env, napi_value js_cb, void* context, void* data) {
+    DispatchGenCallJsCommon(env, js_cb, context, data, "FilePicker", NotifyFilePickerRequestFailed);
+}
+
+// napi 包装: registerFilePickerCallback(callback: (json: string) => void): void
+// ArkTS 注册 filePicker 回调; C++ 创建 tsfn, 通过 langhuan_register_file_picker_fn 注入 ohos_file_picker_dispatch 到 Kotlin
+static napi_value RegisterFilePickerCallback(napi_env env, napi_callback_info info) {
+    return RegisterTsfnWithGen(env, info, "FilePicker", g_file_picker_entries,
+        g_register_file_picker_gen_fn, ohos_file_picker_dispatch_gen, FilePickerCallJs, NotifyFilePickerChannelClosed,
+        "registerFilePickerCallback: langhuan_register_file_picker_gen_fn not resolved");
+}
+
+// 窗口销毁时由 ArkTS 调用: 立即撤销 C++ 当前文件选择源资格
+static napi_value InvalidateAllSources(napi_env env, napi_callback_info /*info*/) {
+    InvalidateChannelSource("Window", g_window_entries);
+    InvalidateChannelSource("FilePicker", g_file_picker_entries);
+    InvalidateChannelSource("Permission", g_permission_entries);
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+static napi_value InvalidateFilePickerSource(napi_env env, napi_callback_info /*info*/) {
+    InvalidateChannelSource("FilePicker", g_file_picker_entries);
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// napi 包装: filePickerCallback(requestId: number, result: string): void
+// ArkTS → Kotlin filePicker 操作结果回调 (pickDocuments/pickDocumentContent 完成后调用)
+static napi_value FilePickerCallback(napi_env env, napi_callback_info info) {
+    size_t argc = 2;
+    napi_value args[2] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    // args[0]: requestId (number, int64)
+    int64_t request_id = 0;
+    napi_get_value_int64(env, args[0], &request_id);
+
+    // args[1]: resultJson (string)
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[1], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[1], buf, str_len + 1, &str_len);
+
+    if (load_langhuan_shared() && g_file_picker_callback != nullptr) {
+        g_file_picker_callback(request_id, buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// ============ Pasteboard tsfn 接线 (同 FilePicker 模式: tsfn 发请求 + @CName 回调返回结果) ============
+// - KMP 通过 OhosNativeBridge.invokePasteboardSync 发 read/write 请求
+// - 请求经 C++ ohos_pasteboard_dispatch → napi_call_threadsafe_function → ArkTS 主线程回调
+// - ArkTS PasteboardBridgeHandler 调 @ohos.pasteboard.getSystemPasteboard 读写纯文本
+// - 完成后通过 pasteboardCallback(requestId, resultJson) (napi → @CName) 回送结果给 Kotlin
+
+// C++ dispatch 入口: 由 Kotlin lambda (注入到 OhosNativeBridge.pasteboardTsfn) 调用
+extern "C" void ohos_pasteboard_dispatch(const char* json) {
+    if (g_pasteboard_tsfn == nullptr || json == nullptr) return;
+    size_t len = strlen(json) + 1;
+    char* json_dup = (char*)malloc(len);
+    if (json_dup == nullptr) return;
+    memcpy(json_dup, json, len);
+    napi_status status = napi_call_threadsafe_function(g_pasteboard_tsfn, json_dup, napi_tsfn_nonblocking);
+    if (status != napi_ok) {
+        free(json_dup);
+    }
+}
+
+// tsfn call-js 回调: 在 ArkTS 主线程执行, 把 data (JSON 串) 包成 napi string 后调用 ArkTS 回调
+static void PasteboardCallJs(napi_env env, napi_value js_cb, void* /*context*/, void* data) {
+    if (data == nullptr) return;
+    char* json = static_cast<char*>(data);
+    if (js_cb == nullptr || env == nullptr) {
+        // tsfn 已 abort: 回调不再投递, 只释放队列里的数据
+        free(json);
+        return;
+    }
+    napi_value json_arg;
+    napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &json_arg);
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    napi_call_function(env, undef, js_cb, 1, &json_arg, nullptr);
+    free(json);
+}
+
+// napi 包装: registerPasteboardCallback(callback: (json: string) => void): void
+// ArkTS 注册 pasteboard 回调; C++ 创建 tsfn, 通过 langhuan_register_pasteboard_fn 注入 ohos_pasteboard_dispatch 到 Kotlin
+REGISTER_TSFN_CALLBACK(Pasteboard, PasteboardCallJs, g_pasteboard_tsfn, g_register_pasteboard_fn, ohos_pasteboard_dispatch,
+    kNoChannelNotify,
+    "registerPasteboardCallback: langhuan_register_pasteboard_fn not resolved (KMP invokePasteboardSync 将降级)")
+
+// napi 包装: pasteboardCallback(requestId: number, result: string): void
+// ArkTS → Kotlin pasteboard 操作结果回调 (read/write 完成后调用)
+static napi_value PasteboardCallback(napi_env env, napi_callback_info info) {
+    size_t argc = 2;
+    napi_value args[2] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    // args[0]: requestId (number, int64)
+    int64_t request_id = 0;
+    napi_get_value_int64(env, args[0], &request_id);
+
+    // args[1]: resultJson (string)
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[1], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[1], buf, str_len + 1, &str_len);
+
+    if (load_langhuan_shared() && g_pasteboard_callback != nullptr) {
+        g_pasteboard_callback(request_id, buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// ============ Network tsfn 接线 (同 Pasteboard 模式: tsfn 发请求 + @CName 回调返回结果) ============
+// - KMP 通过 OhosNativeBridge.invokeNetworkSync 发 query 请求 (网络可用性 + 是否 WiFi)
+// - 请求经 C++ ohos_network_dispatch → napi_call_threadsafe_function → ArkTS 主线程回调
+// - ArkTS NetworkBridgeHandler 调 @ohos.net.connection getDefaultNetSync + getConnectionPropertiesSync
+//   (需 ohos.permission.GET_NETWORK_INFO, normal + system_grant, module.json5 声明即自动授予)
+// - 完成后通过 networkCallback(requestId, resultJson) (napi → @CName) 回送结果给 Kotlin
+
+// tsfn 引用 (RegisterNetworkCallback 创建)
+static napi_threadsafe_function g_network_tsfn = nullptr;
+
+// C++ dispatch 入口: 由 Kotlin lambda (注入到 OhosNativeBridge.networkTsfn) 调用
+extern "C" void ohos_network_dispatch(const char* json) {
+    if (g_network_tsfn == nullptr || json == nullptr) return;
+    size_t len = strlen(json) + 1;
+    char* json_dup = (char*)malloc(len);
+    if (json_dup == nullptr) return;
+    memcpy(json_dup, json, len);
+    napi_status status = napi_call_threadsafe_function(g_network_tsfn, json_dup, napi_tsfn_nonblocking);
+    if (status != napi_ok) {
+        free(json_dup);
+    }
+}
+
+// tsfn call-js 回调: 在 ArkTS 主线程执行, 把 data (JSON 串) 包成 napi string 后调用 ArkTS 回调
+static void NetworkCallJs(napi_env env, napi_value js_cb, void* /*context*/, void* data) {
+    if (data == nullptr) return;
+    char* json = static_cast<char*>(data);
+    if (js_cb == nullptr || env == nullptr) {
+        // tsfn 已 abort: 回调不再投递, 只释放队列里的数据
+        free(json);
+        return;
+    }
+    napi_value json_arg;
+    napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &json_arg);
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    napi_call_function(env, undef, js_cb, 1, &json_arg, nullptr);
+    free(json);
+}
+
+// napi 包装: registerNetworkCallback(callback: (json: string) => void): void
+// ArkTS 注册 network 回调; C++ 创建 tsfn, 通过 langhuan_register_network_fn 注入 ohos_network_dispatch 到 Kotlin
+REGISTER_TSFN_CALLBACK(Network, NetworkCallJs, g_network_tsfn, g_register_network_fn, ohos_network_dispatch,
+    kNoChannelNotify,
+    "registerNetworkCallback: langhuan_register_network_fn not resolved (KMP invokeNetworkSync 将降级)")
+
+// napi 包装: networkCallback(requestId: number, result: string): void
+// ArkTS → Kotlin network 查询结果回调 (query 完成后调用)
+static napi_value NetworkCallback(napi_env env, napi_callback_info info) {
+    size_t argc = 2;
+    napi_value args[2] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    // args[0]: requestId (number, int64)
+    int64_t request_id = 0;
+    napi_get_value_int64(env, args[0], &request_id);
+
+    // args[1]: resultJson (string)
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[1], nullptr, 0, &str_len);
+    char* buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[1], buf, str_len + 1, &str_len);
+
+    if (load_langhuan_shared() && g_network_callback != nullptr) {
+        g_network_callback(request_id, buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// ============ Battery tsfn 接线 (同 Crypto 模式: tsfn 发请求 + @CName 回调返回结果) ============
+// 阅读页电池电量: KMP getBatteryLevel → invokeBatterySync → tsfn dispatch 到 ArkTS →
+// BatteryBridgeHandler 调 @ohos.batteryInfo.batterySOC → batteryCallback 回送结果。
+
+// C++ dispatch 入口: 由 Kotlin lambda (注入到 OhosNativeBridge.batteryTsfn) 调用
+extern "C" void ohos_battery_dispatch(const char *json) {
+    if (g_battery_tsfn == nullptr || json == nullptr) return;
+    size_t len = strlen(json) + 1;
+    char *json_dup = (char *) malloc(len);
+    if (json_dup == nullptr) return;
+    memcpy(json_dup, json, len);
+    napi_status status = napi_call_threadsafe_function(g_battery_tsfn, json_dup, napi_tsfn_nonblocking);
+    if (status != napi_ok) {
+        free(json_dup);
+    }
+}
+
+// tsfn call-js 回调: 在 ArkTS 主线程执行, 把 data (JSON 串) 包成 napi string 后调用 ArkTS 回调
+static void BatteryCallJs(napi_env env, napi_value js_cb, void * /*context*/, void *data) {
+    if (data == nullptr) return;
+    char *json = static_cast<char *>(data);
+    if (js_cb == nullptr || env == nullptr) {
+        // tsfn 已 abort: 回调不再投递, 只释放队列里的数据
+        free(json);
+        return;
+    }
+    napi_value json_arg;
+    napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &json_arg);
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    napi_call_function(env, undef, js_cb, 1, &json_arg, nullptr);
+    free(json);
+}
+
+// napi 包装: registerBatteryCallback(callback: (json: string) => void): void
+// ArkTS 注册电量查询回调; C++ 创建 tsfn, 通过 langhuan_register_battery_fn 注入 ohos_battery_dispatch 到 Kotlin
+REGISTER_TSFN_CALLBACK(Battery, BatteryCallJs, g_battery_tsfn, g_register_battery_fn, ohos_battery_dispatch,
+    kNoChannelNotify,
+    "registerBatteryCallback: langhuan_register_battery_fn not resolved (KMP getBatteryLevel 将返回 -1)")
+
+// napi 包装: batteryCallback(requestId: number, result: string): void
+// ArkTS → Kotlin 电量查询结果回调 (getLevel 完成后调用)
+static napi_value BatteryCallback(napi_env env, napi_callback_info info) {
+    size_t argc = 2;
+    napi_value args[2] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    int64_t request_id = 0;
+    napi_get_value_int64(env, args[0], &request_id);
+
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[1], nullptr, 0, &str_len);
+    char *buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[1], buf, str_len + 1, &str_len);
+
+    if (load_langhuan_shared() && g_battery_callback != nullptr) {
+        g_battery_callback(request_id, buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// ============ Share tsfn 接线 (同 Toast 模式: fire-and-forget dispatch, 无结果回调) ============
+// 系统分享: KMP shareText/shareFile → tsfn dispatch 到 ArkTS → SystemShareBridgeHandler 调
+// @ohos.share.systemShare SharePanel。分享面板由用户操作, 结果对调用方无意义, 无 ArkTS → Kotlin 回调。
+
+// C++ dispatch 入口: 由 Kotlin lambda (注入到 OhosNativeBridge.shareTsfn) 调用
+extern "C" void ohos_share_dispatch(const char *json) {
+    if (g_share_tsfn == nullptr || json == nullptr) return;
+    size_t len = strlen(json) + 1;
+    char *json_dup = (char *) malloc(len);
+    if (json_dup == nullptr) return;
+    memcpy(json_dup, json, len);
+    napi_status status = napi_call_threadsafe_function(g_share_tsfn, json_dup, napi_tsfn_nonblocking);
+    if (status != napi_ok) {
+        free(json_dup);
+    }
+}
+
+// tsfn call-js 回调: 在 ArkTS 主线程执行, 把 data (JSON 串) 包成 napi string 后调用 ArkTS 回调
+static void ShareCallJs(napi_env env, napi_value js_cb, void * /*context*/, void *data) {
+    if (data == nullptr) return;
+    char *json = static_cast<char *>(data);
+    if (js_cb == nullptr || env == nullptr) {
+        // tsfn 已 abort: 回调不再投递, 只释放队列里的数据
+        free(json);
+        return;
+    }
+    napi_value json_arg;
+    napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &json_arg);
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    napi_call_function(env, undef, js_cb, 1, &json_arg, nullptr);
+    free(json);
+}
+
+// napi 包装: registerShareCallback(callback: (json: string) => void): void
+// ArkTS 注册分享回调; C++ 创建 tsfn, 通过 langhuan_register_share_fn 注入 ohos_share_dispatch 到 Kotlin
+REGISTER_TSFN_CALLBACK(Share, ShareCallJs, g_share_tsfn, g_register_share_fn, ohos_share_dispatch,
+    kNoChannelNotify,
+    "registerShareCallback: langhuan_register_share_fn not resolved (KMP shareText/shareFile 将降级剪贴板)")
+
+// ============ Keyboard tsfn 接线 (同 Window 模式: fire-and-forget dispatch, 无结果回调) ============
+// 软键盘收起/避让: KMP hideSoftInput/setKeyboardAvoidMode → tsfn dispatch 到 ArkTS →
+// KeyboardBridgeHandler 调 @ohos.inputMethod。命令 fire-and-forget, 无 ArkTS → Kotlin 回调。
+
+// C++ dispatch 入口: 由 Kotlin lambda (注入到 OhosNativeBridge.keyboardTsfn) 调用
+extern "C" void ohos_keyboard_dispatch(const char *json) {
+    if (g_keyboard_tsfn == nullptr || json == nullptr) return;
+    size_t len = strlen(json) + 1;
+    char *json_dup = (char *) malloc(len);
+    if (json_dup == nullptr) return;
+    memcpy(json_dup, json, len);
+    napi_status status = napi_call_threadsafe_function(g_keyboard_tsfn, json_dup, napi_tsfn_nonblocking);
+    if (status != napi_ok) {
+        free(json_dup);
+    }
+}
+
+// tsfn call-js 回调: 在 ArkTS 主线程执行, 把 data (JSON 串) 包成 napi string 后调用 ArkTS 回调
+static void KeyboardCallJs(napi_env env, napi_value js_cb, void * /*context*/, void *data) {
+    if (data == nullptr) return;
+    char *json = static_cast<char *>(data);
+    if (js_cb == nullptr || env == nullptr) {
+        // tsfn 已 abort: 回调不再投递, 只释放队列里的数据
+        free(json);
+        return;
+    }
+    napi_value json_arg;
+    napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &json_arg);
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    napi_call_function(env, undef, js_cb, 1, &json_arg, nullptr);
+    free(json);
+}
+
+// napi 包装: registerKeyboardCallback(callback: (json: string) => void): void
+// ArkTS 注册软键盘回调; C++ 创建 tsfn, 通过 langhuan_register_keyboard_fn 注入 ohos_keyboard_dispatch 到 Kotlin
+REGISTER_TSFN_CALLBACK(Keyboard, KeyboardCallJs, g_keyboard_tsfn, g_register_keyboard_fn, ohos_keyboard_dispatch,
+    kNoChannelNotify,
+    "registerKeyboardCallback: langhuan_register_keyboard_fn not resolved (KMP 软键盘命令将降级 println)")
+
+// ============ Permission tsfn 接线 (同 Pasteboard 模式: tsfn 发请求 + @CName 回调返回结果) ============
+// 权限查询/申请: KMP hasPermission/requestPermission → invokePermissionSync → tsfn dispatch 到 ArkTS →
+// PermissionBridgeHandler 调 @ohos.abilityAccessCtrl → permissionCallback 回送结果。
+
+// 权限通道失效: 只结束这次投递失败的请求 (无请求时空集)。
+static void NotifyPermissionRequestFailed(long long id, long long gen) {
+    if (g_permission_callback == nullptr) return;
+    char payload[128];
+    snprintf(payload, sizeof(payload), "{\"ok\":false,\"pendingIds\":[%lld],\"gen\":%lld}", id, gen);
+    g_permission_callback(0, payload);
+}
+
+static void NotifyPermissionChannelClosed(int64_t old_gen) {
+    if (g_permission_callback == nullptr) return;
+    long long gen = old_gen;
+    char payload[128];
+    snprintf(payload, sizeof(payload), "{\"ok\":false,\"pendingIds\":[],\"rebind\":true,\"gen\":%lld}", gen);
+    g_permission_callback(0, payload);
+}
+
+// 带源代次的权限投递: 旧源请求按该请求结束, 不投到新注册 TSFN。
+extern "C" void ohos_permission_dispatch_gen(const char *json, int64_t gen, int64_t request_id) {
+    if (json == nullptr) return;
+    TsfnEntry *entry = AcquireEntry(g_permission_entries, gen);
+    if (entry == nullptr) {
+        if (request_id > 0) NotifyPermissionRequestFailed(request_id, gen);
+        return;
+    }
+    size_t len = strlen(json) + 1;
+    char *dup = (char *) malloc(len);
+    napi_status status = napi_closing;
+    DispatchPayload *payload = nullptr;
+    if (dup != nullptr) {
+        memcpy(dup, json, len);
+        payload = new DispatchPayload{dup, request_id, gen};
+        status = napi_call_threadsafe_function(entry->tsfn, payload, napi_tsfn_nonblocking);
+        if (status != napi_ok) {
+            free(dup);
+            delete payload;
+        }
+    }
+    if (status != napi_ok && request_id > 0) NotifyPermissionRequestFailed(request_id, gen);
+    napi_release_threadsafe_function(entry->tsfn, napi_tsfn_release);
+}
+
+// tsfn call-js 回调: 在 ArkTS 主线程执行, 把 data (JSON 串) 包成 napi string 后调用 ArkTS 回调
+static void PermissionCallJs(napi_env env, napi_value js_cb, void *context, void *data) {
+    if (data == nullptr) return;
+    DispatchPayload *payload = static_cast<DispatchPayload *>(data);
+    char *json = payload->json;
+    TsfnEntry *entry = static_cast<TsfnEntry *>(context);
+    if (!IsEntryLive("Permission", entry)) {
+        // 旧源已退休: 不再启动过期权限输入
+        NotifyPermissionRequestFailed(payload->request_id, payload->gen);
+        free(json);
+        delete payload;
+        return;
+    }
+    if (js_cb == nullptr || env == nullptr) {
+        // tsfn 已 abort: 回调不再投递, 只释放队列里的数据
+        NotifyPermissionRequestFailed(payload->request_id, payload->gen);
+        free(json);
+        delete payload;
+        return;
+    }
+    napi_value json_arg;
+    napi_create_string_utf8(env, json, NAPI_AUTO_LENGTH, &json_arg);
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    napi_call_function(env, undef, js_cb, 1, &json_arg, nullptr);
+    free(json);
+    delete payload;
+}
+
+// napi 包装: registerPermissionCallback(callback: (json: string) => void): void
+// ArkTS 注册权限回调; C++ 创建 tsfn, 通过 langhuan_register_permission_fn 注入 ohos_permission_dispatch 到 Kotlin
+static napi_value RegisterPermissionCallback(napi_env env, napi_callback_info info) {
+    return RegisterTsfnWithGen(env, info, "Permission", g_permission_entries,
+        g_register_permission_gen_fn, ohos_permission_dispatch_gen, PermissionCallJs, NotifyPermissionChannelClosed,
+        "registerPermissionCallback: langhuan_register_permission_gen_fn not resolved");
+}
+
+// napi 包装: permissionCallback(requestId: number, result: string): void
+// ArkTS → Kotlin 权限查询/申请结果回调 (check/request 完成后调用)
+static napi_value PermissionCallback(napi_env env, napi_callback_info info) {
+    size_t argc = 2;
+    napi_value args[2] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    int64_t request_id = 0;
+    napi_get_value_int64(env, args[0], &request_id);
+
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[1], nullptr, 0, &str_len);
+    char *buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[1], buf, str_len + 1, &str_len);
+
+    if (load_langhuan_shared() && g_permission_callback != nullptr) {
+        g_permission_callback(request_id, buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_get_undefined(env, &ret);
+    return ret;
+}
+
+// ============ 外部启动请求投递 napi 包装 (ArkTS → Kotlin, 同 langhuan_handle_deep_link 模式) ============
+// 文件关联 / 通知 route / 处理文本 / 其他 scheme deep link: ArkTS EntryAbility 拿到 want.uri 后
+// 经本函数投递给 Kotlin OhosLaunchRequests.parse + LaunchRequestBus.dispatch (Compose 侧消费)。
+// 同步返回 (不走 tsfn): 与 handleDeepLink 同模式, 仅告知 ArkTS 是否已识别。
+
+// napi 包装: handleLaunchRequest(uri: string): boolean
+static napi_value HandleLaunchRequest(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    size_t str_len = 0;
+    napi_get_value_string_utf8(env, args[0], nullptr, 0, &str_len);
+    char *buf = new char[str_len + 1];
+    napi_get_value_string_utf8(env, args[0], buf, str_len + 1, &str_len);
+
+    int handled = 0;  // 兜底 0 (so 未加载/符号缺失/无法识别)
+    if (load_langhuan_shared() && g_handle_launch_request != nullptr) {
+        handled = g_handle_launch_request(buf);
+    }
+    delete[] buf;
+
+    napi_value ret;
+    napi_get_boolean(env, handled != 0, &ret);
+    return ret;
+}
+
+// napi 包装: buildMarkdownViewerHtml(): string
+// ArkTS → Kotlin 同步调用: 运行时从 composeResources 直读模板 + js/css 内联成完整 viewer HTML,
+// 供 WebviewController.loadData 加载 (零拷贝零重复, 无平台端资源副本)。
+static napi_value BuildMarkdownViewerHtml(napi_env env, napi_callback_info info) {
+    const char *result = "";  // 兜底空串 (so 未加载/读取失败, ArkTS 侧跳过 loadData)
+    if (load_langhuan_shared() && g_build_markdown_viewer != nullptr) {
+        result = g_build_markdown_viewer();
+    }
+
+    napi_value ret;
+    napi_create_string_utf8(env, result, NAPI_AUTO_LENGTH, &ret);
+    return ret;
+}
+
+// napi module 初始化: 注册所有方法
+EXTERN_C_START
+static napi_value Init(napi_env env, napi_value exports) {
+androidx_compose_ui_arkui_init(env, exports
+);
+    napi_property_descriptor desc[] = {
+            {"MainArkUIViewController", nullptr, CreateMainArkUIViewController, nullptr, nullptr, nullptr, napi_default, nullptr},
+        // 工具类 (KP4)
+        {"chineseT2S", nullptr, ChineseT2S, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"chineseS2T", nullptr, ChineseS2T, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"md5Encode", nullptr, Md5Encode, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"formatPercentUs", nullptr, FormatPercentUs, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"isProvidersRegistered", nullptr, IsProvidersRegistered, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"registerOhosProviders", nullptr, RegisterOhosProviders, nullptr, nullptr, nullptr, napi_default, nullptr},
+        // 业务类 (KP5 新增)
+        {"bookshelfList", nullptr, BookshelfList, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"searchBook", nullptr, SearchBook, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"loadChapter", nullptr, LoadChapter, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"chapterList", nullptr, ChapterList, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"importBookSource", nullptr, ImportBookSource, nullptr, nullptr, nullptr, napi_default, nullptr},
+        // FileDir/CacheDir 路径注入 (KP7+ 新增, ArkTS → Kotlin 同步推送)
+        {"registerFileDir", nullptr, RegisterFileDir, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"registerCacheDir", nullptr, RegisterCacheDir, nullptr, nullptr, nullptr, napi_default, nullptr},
+        // 应用版本名注入 (ArkTS → Kotlin 同步推送, 同 FileDir 模式)
+        {"registerAppVersion", nullptr, RegisterAppVersion, nullptr, nullptr, nullptr, napi_default, nullptr},
+        // 宿主层崩溃现场落盘 (ArkTS → Kotlin 同步推送, 同 FileDir 模式)
+        {"reportHostException", nullptr, ReportHostException, nullptr, nullptr, nullptr, napi_default, nullptr},
+            // 屏幕尺寸注入 (ArkTS → Kotlin 同步推送, 同 FileDir 模式)
+            {"registerScreenSize", nullptr, RegisterScreenSize, nullptr, nullptr, nullptr, napi_default, nullptr},
+        // langhuan:// deep link 投递 (ArkTS → Kotlin 同步推送, 返回是否已识别)
+        {"handleDeepLink", nullptr, HandleDeepLink, nullptr, nullptr, nullptr, napi_default, nullptr},
+        // Toast/Notification tsfn 回调注册 (KP7+ 新增, KMP → ArkTS 跨线程 dispatch)
+        {"registerToastCallback", nullptr, RegisterToastCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"registerNotificationCallback", nullptr, RegisterNotificationCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+            // Window tsfn 回调注册 (KMP → ArkTS 窗口策略命令: 全屏/常亮/方向/系统栏)
+            {"registerWindowCallback", nullptr, RegisterWindowCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+        // Image/Media tsfn 回调注册 (KP8+ 新增, KMP → ArkTS 跨线程 dispatch)
+        {"registerImageCallback", nullptr, RegisterImageCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"registerMediaCallback", nullptr, RegisterMediaCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+        // TTS tsfn 回调注册 (KP8+ 新增, 同 Image/Media 模式)
+        {"registerTtsCallback", nullptr, RegisterTtsCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+        // Image/Media ArkTS → Kotlin 回调 (KP8+ 新增, ArkTS → Kotlin 结果/事件推送)
+        {"imageCallback", nullptr, ImageCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+        // PDF tsfn 回调注册 + ArkTS → Kotlin 回调 (官方 PDFKit, 同 Image 模式)
+        {"registerPdfCallback", nullptr, RegisterPdfCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"pdfCallback", nullptr, PdfCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"mediaEvent", nullptr, MediaEvent, nullptr, nullptr, nullptr, napi_default, nullptr},
+        // TTS ArkTS → Kotlin 回调 (KP8+ 新增, 同 Image/Media 模式)
+        {"ttsEvent", nullptr, TtsEvent, nullptr, nullptr, nullptr, napi_default, nullptr},
+            // 统一平台事件 (HTTP 下载进度 + 应用生命周期, ArkTS → Kotlin 单向推送, 同 mediaEvent 模式)
+            {"platformEvent", nullptr, PlatformEvent, nullptr, nullptr, nullptr, napi_default, nullptr},
+        // Crypto tsfn 回调注册 + ArkTS → Kotlin 回调 (KP8+ 新增, 同 Image 模式)
+        {"registerCryptoCallback", nullptr, RegisterCryptoCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"cryptoCallback", nullptr, CryptoCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+        // Http tsfn 回调注册 + ArkTS → Kotlin 回调 (KP8+ 新增, 同 Image/Crypto 模式)
+        {"registerHttpCallback", nullptr, RegisterHttpCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"httpCallback", nullptr, HttpCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+        // OpenUrl tsfn 回调注册 (KP8+ 新增, 同 Toast 模式, fire-and-forget dispatch)
+        {"registerOpenUrlCallback", nullptr, RegisterOpenUrlCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+        // FilePicker tsfn 回调注册 + ArkTS → Kotlin 回调 (KP8+ 新增, 同 Image/Crypto/Http 模式)
+        {"registerFilePickerCallback", nullptr, RegisterFilePickerCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"invalidateFilePickerSource", nullptr, InvalidateFilePickerSource, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"invalidateAllSources", nullptr, InvalidateAllSources, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"filePickerCallback", nullptr, FilePickerCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+        // Pasteboard tsfn 回调注册 + ArkTS → Kotlin 回调 (同 FilePicker 模式, read/write)
+        {"registerPasteboardCallback", nullptr, RegisterPasteboardCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"pasteboardCallback", nullptr, PasteboardCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+        // Network tsfn 回调注册 + ArkTS → Kotlin 回调 (同 Pasteboard 模式, query)
+        {"registerNetworkCallback", nullptr, RegisterNetworkCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"networkCallback", nullptr, NetworkCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+            // WebView tsfn 回调注册 + ArkTS → Kotlin 回调 (后台 WebView 抓取, 同 Http/Image 模式)
+            {"registerWebViewCallback", nullptr, RegisterWebViewCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+            {"webViewCallback", nullptr, WebViewCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+            // 前台 Web 控制器 tsfn 回调注册 + ArkTS → Kotlin 结果/事件回调 (可见 Web 组件, 单 JSON 协议)
+            {"registerWebControllerCallback", nullptr, RegisterWebControllerCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+            {"webControllerCallback", nullptr, WebControllerCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+            // Markdown 查看器 tsfn 回调注册 + ArkTS → Kotlin 事件回调 (composeResources 直读 Web 渲染, 同 Toast/Media 模式)
+            {"registerMarkdownCallback", nullptr, RegisterMarkdownCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+            {"markdownEvent", nullptr, MarkdownEvent, nullptr, nullptr, nullptr, napi_default, nullptr},
+            // Markdown 查看器 HTML 构建 (运行时 composeResources 直读内联, ArkTS → Kotlin 同步)
+            {"buildMarkdownViewerHtml", nullptr, BuildMarkdownViewerHtml, nullptr, nullptr, nullptr, napi_default, nullptr},
+            // Battery tsfn 回调注册 + ArkTS → Kotlin 回调 (阅读页电量, 同 Crypto 模式)
+            {"registerBatteryCallback", nullptr, RegisterBatteryCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+            {"batteryCallback", nullptr, BatteryCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+            // Share tsfn 回调注册 (同 Toast 模式, fire-and-forget dispatch, 无结果回调)
+            {"registerShareCallback", nullptr, RegisterShareCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+            // Keyboard tsfn 回调注册 (同 Window 模式, fire-and-forget dispatch, 无结果回调)
+            {"registerKeyboardCallback", nullptr, RegisterKeyboardCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+            // Permission tsfn 回调注册 + ArkTS → Kotlin 回调 (同 Pasteboard 模式, check/request)
+            {"registerPermissionCallback", nullptr, RegisterPermissionCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+            {"permissionCallback", nullptr, PermissionCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+            // 外部启动请求投递 (ArkTS → Kotlin 同步推送, 文件关联/其他 deep link)
+            {"handleLaunchRequest", nullptr, HandleLaunchRequest, nullptr, nullptr, nullptr, napi_default, nullptr},
+    };
+    napi_define_properties(env, exports, sizeof(desc) / sizeof(desc[0]), desc);
+    return exports;
+}
+EXTERN_C_END
+
+// napi module 注册
+static napi_module langhuanNapiModule = {
+    .nm_version = 1,
+    .nm_flags = 0,
+    .nm_filename = "langhuan_napi",
+    .nm_register_func = Init,
+        .nm_modname = "langhuan_napi",
+    .nm_priv = ((void *)0),
+    .reserved = {0},
+};
+
+extern "C" __attribute__((constructor)) void RegisterLanghuanNapiModule(void) {
+    napi_module_register(&langhuanNapiModule);
+}

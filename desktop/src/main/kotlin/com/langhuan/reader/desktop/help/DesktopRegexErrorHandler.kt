@@ -1,0 +1,63 @@
+package com.langhuan.reader.desktop.help
+
+import com.langhuan.reader.constant.AppLog
+import com.langhuan.reader.help.toast.Toasters
+import com.langhuan.reader.utils.RegexErrorHandler
+import com.langhuan.reader.utils.RegexErrorHandlers
+import com.langhuan.reader.desktop.help.DesktopRegexErrorHandler.onTimeoutToast
+import com.langhuan.reader.desktop.help.DesktopRegexErrorHandler.restartApp
+import com.langhuan.reader.desktop.help.DesktopRegexErrorHandler.saveCrashInfo
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.system.exitProcess
+
+/**
+ * [RegexErrorHandler] 桌面 JVM 实现。
+ *
+ * 对照 app 端 AndroidRegexErrorHandler:
+ * - [onTimeoutToast] → [Toasters.get] 长通知 (替代 appCtx.longToastOnUi)
+ * - [saveCrashInfo] → [AppLog.put] (桌面无 CrashHandler 落盘, 走统一日志通道)
+ * - [restartApp] → 共享的 [launchRestartProcess] (与切语言重启同一实现) 后退出进程
+ *
+ * 在 desktop Main.kt 经 [registerDesktopRegexErrorHandler] 注入, 供 shared JvmRegexReplacer 在
+ * 正则替换超时分支调用。须在任何 webBook 编排层触发 RegexReplacers.get().replace 之前注册。
+ */
+private object DesktopRegexErrorHandler : RegexErrorHandler {
+
+    /** 失控告警只弹一次, 避免一批规则同时超时时刷屏。 */
+    private val runawayNotified = AtomicBoolean(false)
+
+    override fun onTimeoutToast(message: String) {
+        // 桌面端经 SystemTray + TrayIcon 显示长通知 (Toasters.jvm.kt)
+        Toasters.get().toastLong(message)
+    }
+
+    override fun saveCrashInfo(exception: Throwable) {
+        // 桌面无 CrashHandler 落盘, 走 AppLog 统一记录
+        AppLog.put("Regex replace crash", exception)
+    }
+
+    override fun restartApp() {
+        // 到这里说明超时后又等了 3 秒线程仍未结束 = 灾难性回溯, Matcher 不响应中断, 该线程会一直吃满一核。
+        // 桌面端真正重启: 用 ProcessBuilder 以当前 java + classpath + 启动参数拉起新进程, 再退出当前进程。
+        // 新进程凭 --langhuan-restart-wait=<pid> 等到本进程退出 (shutdown hook 释放单实例锁) 后才接管,
+        // 避免新进程把参数转发给正在退出的旧进程后自杀。启动失败 (classpath 不可用等) 退回可见告警。
+        if (launchRestartProcess()) {
+            // 立即退出: shutdown hook 会关闭单实例监听并删 lock, 新进程等待后接管
+            exitProcess(0)
+            return
+        }
+        AppLog.put("正则替换超时 3 秒后线程仍未结束(灾难性回溯), 该线程将持续占用 CPU", null)
+        if (runawayNotified.compareAndSet(false, true)) {
+            Toasters.get().toastLong(
+                "有替换规则/书源正则陷入回溯死循环, 本次替换已中止且该规则已被禁用。" +
+                    "该后台线程无法中止, 建议重启应用释放 CPU。"
+            )
+        }
+    }
+
+}
+
+/** 桌面端 main 入口注册 [RegexErrorHandler], 须在任何正则替换之前。 */
+fun registerDesktopRegexErrorHandler() {
+    RegexErrorHandlers.register(DesktopRegexErrorHandler)
+}

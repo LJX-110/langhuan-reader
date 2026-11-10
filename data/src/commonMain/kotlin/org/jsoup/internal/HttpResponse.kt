@@ -3,13 +3,13 @@
 package org.jsoup.internal
 
 import com.fleeksoft.ksoup.Ksoup
-import io.legado.app.help.http.KmpResponse
-import io.legado.app.help.http.charsetName
-import io.legado.app.help.http.header
-import io.legado.app.utils.InputStream
-import io.legado.app.utils.URL
-import io.legado.app.utils.textCharsetCodec
-import io.legado.app.utils.toInputStream
+import com.langhuan.reader.help.http.KmpResponse
+import com.langhuan.reader.help.http.charsetName
+import com.langhuan.reader.help.http.header
+import com.langhuan.reader.utils.InputStream
+import com.langhuan.reader.utils.URL
+import com.langhuan.reader.utils.textCharsetCodec
+import com.langhuan.reader.utils.toInputStream
 import org.jsoup.Connection
 import org.jsoup.Connection.Method
 import org.jsoup.nodes.Document

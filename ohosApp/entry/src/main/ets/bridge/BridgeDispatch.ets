@@ -29,7 +29,7 @@ export interface BridgeResponse {
   code?: number;
 }
 
-/** 结果回送函数 (由 EntryAbility 注入, 内部调 legado.xxxCallback)。 */
+/** 结果回送函数 (由 EntryAbility 注入, 内部调 langhuan.xxxCallback)。 */
 export type BridgeResultCallback = (requestId: number, resultJson: string) => void;
 
 /**
@@ -42,7 +42,7 @@ export type BridgeResultCallback = (requestId: number, resultJson: string) => vo
  * @param requestJson 请求 JSON 字符串 (含 requestId/action/payload)
  * @param tag 日志 tag (如 'NetworkBridge')
  * @param handleAction 按 action 分发到具体处理函数, 返回响应
- * @param callback 回送结果的函数 (EntryAbility 注入 legado.xxxCallback)
+ * @param callback 回送结果的函数 (EntryAbility 注入 langhuan.xxxCallback)
  */
 export function dispatchBridgeRequest(
   requestJson: string,

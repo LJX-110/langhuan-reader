@@ -233,7 +233,7 @@ const currentChapterRawContent = computed(() => {
 })
 
 const effectiveMode = computed<'text' | 'comic' | 'audio' | 'video'>(() => {
-  // 1. 严格依据书籍类型标志位 (BookType 掩码，对齐 Legado 原版: 2048 视频, 32 音频, 64 图片/漫画, 8 文本)
+  // 1. 严格依据书籍类型标志位 (BookType 掩码，对齐 Langhuan 原版: 2048 视频, 32 音频, 64 图片/漫画, 8 文本)
   const bType = bookType.value || store.readingBook.type || 0
   if (bType > 0) {
     if ((bType & 2048) !== 0) return 'video'
@@ -650,10 +650,10 @@ let isComponentMounted = false
 const currentJsLibElements: HTMLElement[] = []
 
 const cleanJsLib = () => {
-  document.querySelectorAll('[data-legado-jslib]').forEach(el => el.remove())
+  document.querySelectorAll('[data-langhuan-jslib]').forEach(el => el.remove())
   currentJsLibElements.length = 0
-  if ((window as any).__LEGADO_SOURCE__) {
-    delete (window as any).__LEGADO_SOURCE__
+  if ((window as any).__LANGHUAN_SOURCE__) {
+    delete (window as any).__LANGHUAN_SOURCE__
   }
 }
 
@@ -691,13 +691,13 @@ const loadSourceJsLib = async (originUrl: string) => {
     const jsLib = source?.jsLib?.trim()
     if (!jsLib) return
 
-    ;(window as any).__LEGADO_SOURCE__ = {
+    ;(window as any).__LANGHUAN_SOURCE__ = {
       bookSourceUrl: source?.bookSourceUrl,
       bookSourceName: source?.bookSourceName,
       bookSourceGroup: source?.bookSourceGroup,
     }
 
-    console.log(`[Legado Web] 正在加载书源《${source?.bookSourceName || originUrl}》的 jsLib`)
+    console.log(`[Langhuan Web] 正在加载书源《${source?.bookSourceName || originUrl}》的 jsLib`)
 
     // 1. 若包含完整 <script> 标签
     if (/<script[^>]*>/i.test(jsLib)) {
@@ -707,7 +707,7 @@ const loadSourceJsLib = async (originUrl: string) => {
       scripts.forEach(s => {
         if (!isComponentMounted || currentGen !== jsLibGeneration) return
         const scriptEl = document.createElement('script')
-        scriptEl.setAttribute('data-legado-jslib', 'true')
+        scriptEl.setAttribute('data-langhuan-jslib', 'true')
         if (s.src) {
           scriptEl.src = s.src
           scriptEl.async = false
@@ -727,7 +727,7 @@ const loadSourceJsLib = async (originUrl: string) => {
       lines.forEach((url: string) => {
         if (!isComponentMounted || currentGen !== jsLibGeneration) return
         const scriptEl = document.createElement('script')
-        scriptEl.setAttribute('data-legado-jslib', 'true')
+        scriptEl.setAttribute('data-langhuan-jslib', 'true')
         scriptEl.src = url
         scriptEl.async = false
         document.head.appendChild(scriptEl)
@@ -739,19 +739,19 @@ const loadSourceJsLib = async (originUrl: string) => {
     // 3. 否则作为内联 JS 脚本动态执行注入
     if (!isComponentMounted || currentGen !== jsLibGeneration) return
     const scriptEl = document.createElement('script')
-    scriptEl.setAttribute('data-legado-jslib', 'true')
+    scriptEl.setAttribute('data-langhuan-jslib', 'true')
     scriptEl.type = 'text/javascript'
     scriptEl.textContent = `
       try {
         ${jsLib}
       } catch (err) {
-        console.error('[Legado jsLib 执行错误]:', err);
+        console.error('[Langhuan jsLib 执行错误]:', err);
       }
     `
     document.head.appendChild(scriptEl)
     currentJsLibElements.push(scriptEl)
   } catch (e) {
-    console.warn('[Legado Web] 书源 jsLib 加载失败:', e)
+    console.warn('[Langhuan Web] 书源 jsLib 加载失败:', e)
   }
 }
 

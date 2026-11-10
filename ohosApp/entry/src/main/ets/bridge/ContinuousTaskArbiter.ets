@@ -154,9 +154,9 @@ export function isTransferHolderOwner(owner: string): boolean {
 async function releaseSystemTask(context: common.UIAbilityContext): Promise<void> {
   try {
     await backgroundTaskManager.stopBackgroundRunning(context);
-    console.info('[Legado] continuous task released');
+    console.info('[Langhuan] continuous task released');
   } catch (e) {
-    console.error('[Legado] release continuous task failed: ' + JSON.stringify(e));
+    console.error('[Langhuan] release continuous task failed: ' + JSON.stringify(e));
   } finally {
     transferNotificationId = 0;
     clearTransferHeartbeat();
@@ -178,7 +178,7 @@ async function reconcile(): Promise<void> {
     const holder: TaskHolder = current;
     const held: boolean | undefined = await verifyHeldTask(context, holder);
     if (held === false) {
-      console.info('[Legado] continuous task missing in system, owner=' + holder.owner);
+      console.info('[Langhuan] continuous task missing in system, owner=' + holder.owner);
       transferNotificationId = 0;
       clearTransferHeartbeat();
       current = undefined;
@@ -194,7 +194,7 @@ async function reconcile(): Promise<void> {
       const yielded: TaskHolder = current;
       await releaseSystemTask(context);
       current = undefined;
-      console.info('[Legado] background task yielded to audio, owner=' + yielded.owner);
+      console.info('[Langhuan] background task yielded to audio, owner=' + yielded.owner);
     }
     const wantAgentObj: WantAgent | undefined = audioWantAgent;
     if (wantAgentObj != undefined) {
@@ -205,12 +205,12 @@ async function reconcile(): Promise<void> {
           owner: OWNER_AUDIO, kind: KIND_AUDIO, mode: MODE_AUDIO, wantAgent: wantAgentObj,
           continuousTaskId: res.continuousTaskId
         };
-        console.info('[Legado] audio continuous task started');
+        console.info('[Langhuan] audio continuous task started');
         return;
       } catch (e) {
         // 音频没拿到槽位 (无权限/已有其它任务/类型校验不过等): 槽位空着也不能给后台作业 ——
         // 音频仍是优先级最高的业务, 后台作业占槽后音频下次申请又得先把它们赶下来
-        console.error('[Legado] audio continuous task failed: ' + JSON.stringify(e));
+        console.error('[Langhuan] audio continuous task failed: ' + JSON.stringify(e));
         return;
       }
     }
@@ -222,7 +222,7 @@ async function reconcile(): Promise<void> {
     // 置否的话音频任务会一直占着槽位, 同一次应用存活期内等待中的后台作业再也申请不到保活
     await releaseSystemTask(context);
     current = undefined;
-    console.info('[Legado] audio continuous task released');
+    console.info('[Langhuan] audio continuous task released');
   }
 
   // 2) 后台作业: 业务已结束的先释放, 再按先到先得拿一个槽位
@@ -254,10 +254,10 @@ async function reconcile(): Promise<void> {
           scheduleTransferHeartbeat();
         }
       }
-      console.info('[Legado] background continuous task started, owner=' + holder.owner +
+      console.info('[Langhuan] background continuous task started, owner=' + holder.owner +
         ', mode=' + holder.mode + ', notificationId=' + transferNotificationId);
     } catch (e) {
-      console.error('[Legado] background continuous task failed: ' + JSON.stringify(e) +
+      console.error('[Langhuan] background continuous task failed: ' + JSON.stringify(e) +
         ', owner=' + holder.owner + ', mode=' + holder.mode);
     }
     return;
@@ -341,7 +341,7 @@ export function notifySystemCancelled(reason: number, continuousTaskId: number):
   const cancelled: TaskHolder | undefined =
     current != undefined && current.continuousTaskId === continuousTaskId ? current : undefined;
   if (cancelled == undefined) {
-    console.info('[Legado] continuous task cancelled by system (not the one we hold), id=' +
+    console.info('[Langhuan] continuous task cancelled by system (not the one we hold), id=' +
       continuousTaskId + ', reason=' + reason);
     return;
   }
@@ -351,13 +351,13 @@ export function notifySystemCancelled(reason: number, continuousTaskId: number):
   clearTransferHeartbeat();
   if (cancelled.kind === KIND_AUDIO) {
     audioSuppressed = true;
-    console.info('[Legado] audio continuous task cancelled by system, reason=' + reason);
+    console.info('[Langhuan] audio continuous task cancelled by system, reason=' + reason);
     return;
   }
   if (workSuppressed.find((item: string): boolean => item === cancelled.owner) == undefined) {
     workSuppressed.push(cancelled.owner);
   }
-  console.info('[Legado] background continuous task cancelled by system, owner=' + cancelled.owner +
+  console.info('[Langhuan] background continuous task cancelled by system, owner=' + cancelled.owner +
     ', reason=' + reason);
   const payload: ContinuousTaskCancelEvent = {
     type: 'continuousTaskCancel',
@@ -447,11 +447,11 @@ async function verifyHeldTask(
       return false;
     }
     if (mine.suspendState) {
-      console.info('[Legado] continuous task suspended, owner=' + holder.owner);
+      console.info('[Langhuan] continuous task suspended, owner=' + holder.owner);
     }
     return true;
   } catch (e) {
-    console.error('[Legado] continuous task state query failed: ' + JSON.stringify(e));
+    console.error('[Langhuan] continuous task state query failed: ' + JSON.stringify(e));
     return undefined;
   }
 }
@@ -488,11 +488,11 @@ async function publishTransferLiveView(template: TransferTemplate): Promise<void
   };
   try {
     await notificationManager.publish(request);
-    console.info('[Legado] transfer live view updated, id=' + transferNotificationId +
+    console.info('[Langhuan] transfer live view updated, id=' + transferNotificationId +
       ', value=' + template.progressValue);
   } catch (e) {
     // 实况窗已不在 (被系统删掉/保活已丢) 时 publish 会失败: 记日志, 心跳与业务重述会再试
-    console.error('[Legado] transfer live view update failed: ' + JSON.stringify(e));
+    console.error('[Langhuan] transfer live view update failed: ' + JSON.stringify(e));
   }
 }
 
@@ -507,7 +507,7 @@ function scheduleTransferHeartbeat(): void {
   transferHeartbeat = setTimeout((): void => {
     transferHeartbeat = undefined;
     transferHeartbeatTick().catch((e: Error): void => {
-      console.error('[Legado] transfer heartbeat failed: ' + JSON.stringify(e));
+      console.error('[Langhuan] transfer heartbeat failed: ' + JSON.stringify(e));
     });
   }, TRANSFER_HEARTBEAT_MS);
 }

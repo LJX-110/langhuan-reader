@@ -7,7 +7,7 @@ import { BridgeRequest, BridgeResponse, dispatchBridgeRequest } from './BridgeDi
  *
  * 接收 Kotlin OhosNativeBridge.invokeNetworkSync 通过 tsfn dispatch 过来的网络状态查询,
  * 调用 @ohos.net.connection 的 getDefaultNetSync + getNetCapabilitiesSync (API 10+,
- * 同步 API) 查询网络可用性与网络类型, 完成后通过 legado.networkCallback(requestId, resultJson)
+ * 同步 API) 查询网络可用性与网络类型, 完成后通过 langhuan.networkCallback(requestId, resultJson)
  * 回送结果给 Kotlin。
  *
  * # JSON 协议 (与 NetworkAvailability.ohos.kt / OhosNativeBridge.kt 对齐)
@@ -34,7 +34,7 @@ import { BridgeRequest, BridgeResponse, dispatchBridgeRequest } from './BridgeDi
  * 句柄有效但取连接属性失败 (权限/其他异常) → 返回 { ok: false, error } 由 Kotlin 降级处理。
  */
 
-// Network callback 类型 (由 EntryAbility 注入, 内部调 legado.networkCallback)
+// Network callback 类型 (由 EntryAbility 注入, 内部调 langhuan.networkCallback)
 export type NetworkCallback = (requestId: number, resultJson: string) => void;
 
 // ===== 请求/响应接口定义 (与 Kotlin 侧 JSON 协议对齐) =====
@@ -48,7 +48,7 @@ interface NetworkResponse extends BridgeResponse {
  * 处理来自 Kotlin 的网络状态查询 (由 EntryAbility 注册的 tsfn 回调调用)。
  *
  * @param requestJson 请求 JSON 字符串 (含 requestId/action/payload)
- * @param callback 回送结果的函数 (EntryAbility 注入 legado.networkCallback)
+ * @param callback 回送结果的函数 (EntryAbility 注入 langhuan.networkCallback)
  */
 export function handleNetworkRequest(requestJson: string, callback: NetworkCallback): void {
   dispatchBridgeRequest(requestJson, 'NetworkBridge', handleAction, callback);

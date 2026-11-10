@@ -1,0 +1,343 @@
+package com.langhuan.reader.help.config
+
+import android.content.SharedPreferences
+import android.os.Build
+import com.langhuan.reader.App
+import com.langhuan.reader.BuildConfig
+import com.langhuan.reader.constant.PreferKey
+import com.langhuan.reader.help.i18n.androidAppString
+import com.langhuan.reader.utils.getPrefBoolean
+import com.langhuan.reader.utils.getPrefInt
+import com.langhuan.reader.utils.getPrefString
+import com.langhuan.reader.utils.isNightMode
+import com.langhuan.reader.utils.putPrefBoolean
+import com.langhuan.reader.utils.putPrefInt
+import com.langhuan.reader.utils.putPrefString
+import com.langhuan.reader.utils.sysConfiguration
+import com.langhuan.reader.utils.toastOnUi
+
+@Suppress("MemberVisibilityCanBePrivate", "ConstPropertyName")
+object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
+
+    // 缓存字段：热路径读取，监听器中重载
+    var isCronet by cachedBoolPref(PreferKey.cronet)
+    var userAgent by cachedPref(
+        PreferKey.userAgent,
+        { getPrefUserAgent() },
+        { App.instance.putPrefString(PreferKey.userAgent, it) },
+    )
+    var themeMode by cachedStringPref(PreferKey.themeMode, "0")
+    var useDefaultCover by cachedBoolPref(PreferKey.useDefaultCover, false)
+    var recordLog by cachedBoolPref(PreferKey.recordLog)
+    var clickActionTL by cachedIntPref(PreferKey.clickActionTL, 2)
+    var clickActionTC by cachedIntPref(PreferKey.clickActionTC, 2)
+    var clickActionTR by cachedIntPref(PreferKey.clickActionTR, 1)
+    var clickActionML by cachedIntPref(PreferKey.clickActionML, 2)
+    var clickActionMC by cachedIntPref(PreferKey.clickActionMC, 0)
+    var clickActionMR by cachedIntPref(PreferKey.clickActionMR, 1)
+    var clickActionBL by cachedIntPref(PreferKey.clickActionBL, 2)
+    var clickActionBC by cachedIntPref(PreferKey.clickActionBC, 1)
+    var clickActionBR by cachedIntPref(PreferKey.clickActionBR, 1)
+
+    val isEInkMode get() = themeMode == "3"
+
+    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
+        key ?: return
+        reloadCachedPref(key)
+        when (key) {
+            PreferKey.cronet -> if (isCronet) {
+                com.langhuan.reader.help.http.Cronet.preDownload { success ->
+                    if (success) {
+                        com.langhuan.reader.help.http.recreateOkHttpClient()
+                        App.instance.toastOnUi(androidAppString("cronet_enabled"))
+                    } else {
+                        App.instance.toastOnUi(androidAppString("cronet_download_failed"))
+                    }
+                }
+            }
+        }
+    }
+
+    var isNightTheme: Boolean
+        get() = when (themeMode) {
+            "1" -> false
+            "2" -> true
+            "3" -> false
+            else -> sysConfiguration.isNightMode
+        }
+        set(value) {
+            if (isNightTheme != value) {
+                App.instance.putPrefString(PreferKey.themeMode, if (value) "2" else "1")
+            }
+        }
+
+    var showUnread by boolPref(PreferKey.showUnread, true)
+    var showLastUpdateTime by boolPref(PreferKey.showLastUpdateTime, false)
+    var bookshelfListShowKind by boolPref(PreferKey.bookshelfListShowKind, false)
+    var bookshelfListShowIntro by boolPref(PreferKey.bookshelfListShowIntro, false)
+    var bookshelfListIntroLines by intPref(
+        PreferKey.bookshelfListIntroLines,
+        2,
+        AppConfigRanges.bookshelfListIntroLines,
+    )
+    var bookshelfCoverHeight by intPref(
+        PreferKey.bookshelfCoverHeight,
+        120,
+        AppConfigRanges.bookshelfCoverHeight,
+    )
+
+    // 与 BookSource.exploreStyle 同一套位编码 (低 3 位列数, 0x10 视频)
+    var searchLayout by intPref(PreferKey.searchLayout, 1)
+
+    var bottomBarHeight by intPref(
+        PreferKey.bottomBarHeight,
+        AppConfigConstants.BOTTOM_BAR_HEIGHT_DEFAULT,
+        AppConfigConstants.BOTTOM_BAR_HEIGHT_MIN..AppConfigConstants.BOTTOM_BAR_HEIGHT_MAX,
+    )
+    var bottomBarIconSize by intPref(
+        PreferKey.bottomBarIconSize,
+        AppConfigConstants.BOTTOM_BAR_ICON_DEFAULT,
+        AppConfigConstants.BOTTOM_BAR_ICON_MIN..AppConfigConstants.BOTTOM_BAR_ICON_MAX,
+    )
+
+    /**
+     * 0 = unlabeled, 1 = labeled, 2 = selected, 3 = auto
+     */
+    var bottomBarLabelMode by intPref(
+        PreferKey.bottomBarLabelMode,
+        AppConfigConstants.BOTTOM_BAR_LABEL_DEFAULT,
+        0..3
+    )
+
+    var bookshelfShowGroupCount by boolPref(PreferKey.bookshelfShowGroupCount, true)
+
+    val screenOrientation by stringPref(PreferKey.screenOrientation)
+
+    var bookGroupStyle by intPref(PreferKey.bookGroupStyle, 0)
+
+    var bookshelfLayout: Int
+        get() {
+            val value = App.instance.getPrefInt(PreferKey.bookshelfLayout, 0)
+            if (!App.instance.getPrefBoolean("bookshelfLayoutMigrated", false)) {
+                val migrated = when (value) {
+                    1 -> 3
+                    2 -> 4
+                    3 -> 5
+                    4 -> 6
+                    else -> value
+                }
+                App.instance.putPrefInt(PreferKey.bookshelfLayout, migrated)
+                App.instance.putPrefBoolean("bookshelfLayoutMigrated", true)
+                return migrated
+            }
+            return value
+        }
+        set(value) {
+            App.instance.putPrefInt(PreferKey.bookshelfLayout, value)
+        }
+
+    var bookshelfFixedWidthMode by boolPref(PreferKey.bookshelfFixedWidthMode, false)
+    var bookshelfGridWidth by intPref(PreferKey.bookshelfGridWidth, 120)
+    var saveTabPosition by intPref(PreferKey.saveTabPosition, 0)
+    var bookExportFileName by stringPref(PreferKey.bookExportFileName)
+
+    // 保存 自定义导出章节模式 文件名js表达式
+    var episodeExportFileName by stringPref(PreferKey.episodeExportFileName, "")
+
+    var bookImportFileName by stringPref(PreferKey.bookImportFileName)
+
+    // 书籍保存位置 (下载书籍、备份 zip、导出书籍共用)
+    var defaultBookTreeUri by stringPrefClearOnEmpty(PreferKey.defaultBookTreeUri)
+
+    var showDiscovery by boolPref(PreferKey.showDiscovery, true)
+
+    var showHome by boolPref(PreferKey.showHome, true)
+
+    var bottomNavItemOrder by stringPref(PreferKey.bottomNavItemOrder, "")
+
+    val autoRefreshBook by boolPref(PreferKey.autoRefresh)
+
+    var threadCount by intPref(PreferKey.threadCount, 16)
+    var remoteServerId by longPref(PreferKey.remoteServerId)
+
+    // 添加本地选择的目录
+    var importBookPath by stringPrefClearOnEmpty("importBookPath")
+
+    var ttsFlowSys by boolPref(PreferKey.ttsFollowSys, true)
+    var ttsSpeechRate by intPref(PreferKey.ttsSpeechRate, AppConfigConstants.defaultSpeechRate)
+    var ttsTimer by intPref(PreferKey.ttsTimer, 0)
+
+    val readAloudWakeLock by boolPref(PreferKey.readAloudWakeLock, false)
+    val readAloudByPage by boolPref(PreferKey.readAloudByPage)
+    val mediaButtonPerNext by boolPref("mediaButtonPerNext", false)
+
+    val speechRatePlay: Int get() = if (ttsFlowSys) AppConfigConstants.defaultSpeechRate else ttsSpeechRate
+
+    var chineseConverterType by intPref(PreferKey.chineseConverterType)
+    var systemTypefaces by intPref(PreferKey.systemTypefaces)
+    var fontFolder by stringPref(PreferKey.fontFolder)
+    var processText by boolPref(PreferKey.processText, true)
+
+    var readUrlInBrowser by boolPref(PreferKey.readUrlOpenInBrowser)
+
+    var exportCharset: String
+        get() {
+            val c = App.instance.getPrefString(PreferKey.exportCharset)
+            return if (c.isNullOrBlank()) "UTF-8" else c
+        }
+        set(value) {
+            App.instance.putPrefString(PreferKey.exportCharset, value)
+        }
+
+    var exportUseReplace by boolPref(PreferKey.exportUseReplace, true)
+    var exportToWebDav by boolPref(PreferKey.exportToWebDav)
+    var exportNoChapterName by boolPref(PreferKey.exportNoChapterName)
+
+    // 是否启用自定义导出 default->false
+    var enableCustomExport by boolPref(PreferKey.enableCustomExport, false)
+
+    var exportType by intPref(PreferKey.exportType)
+    var changeSourceCheckAuthor by boolPref(PreferKey.changeSourceCheckAuthor)
+    var ttsEngine by stringPref(PreferKey.ttsEngine)
+    var webPort by intPref(PreferKey.webPort, 1122)
+    val webServiceWakeLock by boolPref(PreferKey.webServiceWakeLock, false)
+    var webService by boolPref(PreferKey.webService)
+    var tocUiUseReplace by boolPref(PreferKey.tocUiUseReplace)
+    var tocCountWords by boolPref(PreferKey.tocCountWords, true)
+    var enableReadRecord by boolPref(PreferKey.enableReadRecord, true)
+
+    val autoChangeSource by boolPref(PreferKey.autoChangeSource, true)
+
+    var changeSourceLoadInfo by boolPref(PreferKey.changeSourceLoadInfo)
+    var changeSourceLoadToc by boolPref(PreferKey.changeSourceLoadToc)
+    var changeSourceLoadWordCount by boolPref(PreferKey.changeSourceLoadWordCount)
+    var contentSelectSpeakMod by intPref(PreferKey.contentSelectSpeakMod)
+    var batchChangeSourceDelay by intPref(PreferKey.batchChangeSourceDelay)
+
+    var importKeepName by boolPref(PreferKey.importKeepName)
+    var importKeepGroup by boolPref(PreferKey.importKeepGroup)
+    var importKeepEnable by boolPref(PreferKey.importKeepEnable, false)
+    var localBookImportSort by intPref(PreferKey.localBookImportSort)
+
+    var previewImageByClick by boolPref(PreferKey.previewImageByClick, false)
+    var preDownloadNum by intPref(PreferKey.preDownloadNum, 10)
+
+    val syncBookProgress by boolPref(PreferKey.syncBookProgress, true)
+    val syncBookProgressPlus by boolPref(PreferKey.syncBookProgressPlus, false)
+    val mediaButtonOnExit by boolPref("mediaButtonOnExit", true)
+    val readAloudByMediaButton by boolPref(PreferKey.readAloudByMediaButton, false)
+    val replaceEnableDefault by boolPref(PreferKey.replaceEnableDefault, true)
+    val webDavUrl by stringPref(PreferKey.webDavUrl)
+    val webDavAccount by stringPref(PreferKey.webDavAccount)
+    var webDavPassword by stringPref(PreferKey.webDavPassword)
+    val webDavDir by stringPref(PreferKey.webDavDir, "langhuan")
+    val webDavDeviceName by stringPref(PreferKey.webDavDeviceName, Build.MODEL)
+    val recordHeapDump by boolPref(PreferKey.recordHeapDump, false)
+    val showAddToShelfAlert by boolPref(PreferKey.showAddToShelfAlert, true)
+    val coverShowName by boolPref(PreferKey.coverShowName, true)
+    val coverShowNameN by boolPref(PreferKey.coverShowNameN, true)
+    val coverShowAuthor by boolPref(PreferKey.coverShowAuthor, true)
+    val coverShowAuthorN by boolPref(PreferKey.coverShowAuthorN, true)
+
+    var bookInfoDeleteAlert by boolPref(PreferKey.bookInfoDeleteAlert, true)
+
+    val ignoreAudioFocus by boolPref(PreferKey.ignoreAudioFocus, false)
+
+    var pauseReadAloudWhilePhoneCalls by boolPref(PreferKey.pauseReadAloudWhilePhoneCalls, false)
+
+    val onlyLatestBackup by boolPref(PreferKey.onlyLatestBackup, true)
+    val autoCheckNewBackup by boolPref(PreferKey.autoCheckNewBackup, true)
+    val autoCheckUpdate by boolPref(PreferKey.autoCheckUpdate, true)
+    val defaultHomePage by stringPref(PreferKey.defaultHomePage, "bookshelf")
+    val updateToVariant by stringPref(PreferKey.updateToVariant, "default_version")
+    val streamReadAloudAudio by boolPref(PreferKey.streamReadAloudAudio, false)
+    val doublePageHorizontal by stringPref(PreferKey.doublePageHorizontal)
+    val progressBarBehavior by stringPref(PreferKey.progressBarBehavior, "page")
+    var prevKeys by stringPref(PreferKey.prevKeys)
+    var nextKeys by stringPref(PreferKey.nextKeys)
+    val keepLight by stringPref(PreferKey.keepLight)
+
+    var precisionSearch by boolPref(PreferKey.precisionSearch)
+
+    var searchScope by nonNullStringPref("searchScope", "")
+    var searchGroup by nonNullStringPref("searchGroup", "")
+
+    var pageTouchSlop by intPref(PreferKey.pageTouchSlop, 0)
+    var bookshelfSort by intPref(PreferKey.bookshelfSort, 0)
+
+    private fun getPrefUserAgent(): String {
+        val ua = App.instance.getPrefString(PreferKey.userAgent)
+        if (ua.isNullOrBlank()) {
+            return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + BuildConfig.Cronet_Main_Version + " Safari/537.36"
+        }
+        return ua
+    }
+
+    var bitmapCacheSize by intPref(PreferKey.bitmapCacheSize, 50)
+    var showReadTitleBarAddition by boolPref(PreferKey.showReadTitleAddition, true)
+
+    var sourceEditMaxLine: Int
+        get() {
+            // 设置界面 range 5..30, 存储值不在该区间一律视为不限制 (兼容旧版写入的
+            // Int.MAX_VALUE 与残留脏值), 返回 Int.MAX_VALUE 供 maxLines 直接消费
+            val maxLine = App.instance.getPrefInt(PreferKey.sourceEditMaxLine, Int.MAX_VALUE)
+            return if (maxLine in 5..30) maxLine else Int.MAX_VALUE
+        }
+        set(value) {
+            App.instance.putPrefInt(PreferKey.sourceEditMaxLine, value)
+        }
+
+    var audioPlayUseWakeLock by boolPref(PreferKey.audioPlayWakeLock)
+
+    fun detectClickArea() {
+        if (clickActionTL * clickActionTC * clickActionTR
+            * clickActionML * clickActionMC * clickActionMR
+            * clickActionBL * clickActionBC * clickActionBR != 0
+        ) {
+            App.instance.putPrefInt(PreferKey.clickActionMC, 0)
+            App.instance.toastOnUi("当前没有配置菜单区域,自动恢复中间区域为菜单.")
+        }
+    }
+
+    //点击书目直接进入阅读，跳过详情页
+    val devFeat by boolPref(PreferKey.devFeat, false)
+
+    //书目详情页改为横向布局（封面在左、信息在右）
+    val bookInfoHorizontalLayout by boolPref(PreferKey.bookInfoHorizontalLayout, false)
+
+    var disableMangaPageAnim by boolPref(PreferKey.disableMangaPageAnim, false)
+
+    //漫画预加载数量
+    var mangaPreDownloadNum by intPref(PreferKey.mangaPreDownloadNum, 10)
+
+    //漫画滚动速度
+    var mangaAutoPageSpeed by intPref(PreferKey.mangaAutoPageSpeed, 3)
+
+    //漫画页脚配置
+    var mangaFooterConfig by stringPref(PreferKey.mangaFooterConfig, "")
+
+    //漫画水平滚动
+    var enableMangaHorizontalScroll by boolPref(PreferKey.enableMangaHorizontalScroll, false)
+
+    var mangaColorFilter by stringPref(PreferKey.mangaColorFilter, "")
+
+    //禁用漫画内标题
+    var hideMangaTitle by boolPref(PreferKey.hideMangaTitle, false)
+
+    var enableMangaGray by boolPref(PreferKey.enableMangaGray, false)
+
+    //GIF播放完成后自动翻到下一张（仅横向翻页模式）
+    var enableMangaGifAutoNext by boolPref(PreferKey.enableMangaGifAutoNext, false)
+
+    var welcomeImage by stringPref(PreferKey.welcomeImage)
+    var welcomeShowText by boolPref(PreferKey.welcomeShowText, true)
+    var welcomeShowIcon by boolPref(PreferKey.welcomeShowIcon, true)
+    // 不再做区间钳制: 存什么就用什么 (设置界面数值选择器只能限制"能从界面里选出哪些值",
+    // 不能反过来改写已有存储值); <=0 时 WelcomeActivity 直接进主界面
+    var welcomeShowTime by intPref(PreferKey.welcomeShowTime, 600)
+    var welcomeImageDark by stringPref(PreferKey.welcomeImageDark)
+    var welcomeShowTextDark by boolPref(PreferKey.welcomeShowTextDark, true)
+    var welcomeShowIconDark by boolPref(PreferKey.welcomeShowIconDark, true)
+    val enableWelcome by boolPref(PreferKey.enableWelcome, true)
+
+}

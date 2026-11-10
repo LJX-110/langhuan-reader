@@ -33,4 +33,4 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "legado-build-logic"
+rootProject.name = "langhuan-build-logic"

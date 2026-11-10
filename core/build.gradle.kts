@@ -8,7 +8,7 @@ import org.jetbrains.kotlin.gradle.plugin.KotlinDependencyHandler
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 
 plugins {
-    id("legado.kmp.library")
+    id("langhuan.kmp.library")
     alias(libs.plugins.kotlin.serialization)
 }
 
@@ -33,7 +33,7 @@ kotlin {
     jvm()
 
     android {
-        namespace = "io.legado.core"
+        namespace = "com.langhuan.reader.core"
         compileSdk = 37
         minSdk = 24
     }
@@ -55,7 +55,7 @@ kotlin {
     }
 
     if (enableOhosTarget) {
-        pluginManager.apply("legado.kmp.ohos")
+        pluginManager.apply("langhuan.kmp.ohos")
     }
 
     sourceSets {
@@ -106,7 +106,7 @@ kotlin {
                 // 非 mac: signalposix cinterop (需本机 Apple SDK) 无法生成, 信号标记通道
                 // 由 iosWindowsCheckMain 源根的同签名 stub 顶替 (与 :data 的 KVO 观察器同款处理)。
                 if (!isMacHost) {
-                    kotlin.exclude("io/legado/app/help/crash/IosSignalMarker.kt")
+                    kotlin.exclude("com/langhuan/reader/help/crash/IosSignalMarker.kt")
                     kotlin.srcDir("src/iosWindowsCheckMain/kotlin")
                 }
             }

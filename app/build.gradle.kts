@@ -3,12 +3,12 @@ import com.android.build.api.variant.BuiltArtifactsLoader
 import com.android.build.api.variant.FilterConfiguration
 
 plugins {
-    id("legado.android.application")
+    id("langhuan.android.application")
     // Baseline Profile app target/consumer: 为 :app 创建 nonMinifiedRelease/benchmarkRelease
     // 扩展变体 (复制 release 配置, 关闭混淆), 并消费 app/src/main/baseline-prof.txt
     alias(libs.plugins.androidx.baselineprofile)
     alias(libs.plugins.kotlin.serialization)
-    id("legado.compose")
+    id("langhuan.compose")
     alias(libs.plugins.ksp)
 }
 
@@ -51,8 +51,8 @@ abstract class CopyRenamedApks : DefaultTask() {
 
 val name = "langhuan"
 
-// CI 传 -PappVersion 注入统一版本号; 本地构建默认 1.0.0 (首个正式版)
-val version = providers.gradleProperty("appVersion").orNull ?: "1.0.0"
+// CI 传 -PappVersion 注入统一版本号; 本地构建默认 2.0.0 (硬分叉首个版本)
+val version = providers.gradleProperty("appVersion").orNull ?: "2.0.0"
 
 // 共存构建 (CI 传 -PcoexistBuild=true): 包名后缀与 APK 文件名后缀同源,
 // 与原包名版本可同时安装, 且 releaseA 字样是应用内更新识别渠道变体的依据 (AppReleaseInfo)
@@ -62,7 +62,7 @@ val gitCommits = providers.exec {
 }.standardOutput.asText.get().trim().toInt()
 
 android {
-    namespace = "io.legado.app"
+    namespace = "com.langhuan.reader"
     compileSdk = 37
 
     signingConfigs {
@@ -164,8 +164,8 @@ android {
     ksp {
         arg(
             "jsapi.extraClasses",
-            "io.legado.app.data.entities.BaseSource,io.legado.app.data.entities.BookSource," +
-                "io.legado.app.data.entities.HttpTTS,io.legado.app.help.CacheManager"
+            "com.langhuan.reader.data.entities.BaseSource,com.langhuan.reader.data.entities.BookSource," +
+                "com.langhuan.reader.data.entities.HttpTTS,com.langhuan.reader.help.CacheManager"
         )
     }
 

@@ -1,0 +1,111 @@
+package com.langhuan.reader.help.i18n
+
+import kotlin.concurrent.Volatile
+
+/**
+ * 非 UI 层字符串通道。model/help 的异常/报错文案统一走 appString 取本地化字符串,
+ * key 与 composeResources 的资源名一一对应; 本文件零 Android 依赖, 已下沉 commonMain。
+ *
+ * 取值走「provider 注册」而非 expect/actual: appString 的平台差异只在「谁提供 key→本地化串的映射」,
+ * 取值逻辑本身无平台 API 差异, 是依赖注入而非编译期分叉。故 :data 只留注入点, 四端宿主启动时
+ * 调 :ui 的 registerComposeStringProviders 注册同一份 composeResources 查表实现
+ * (ComposeResourceLookup.kt); 未注册时 fallback 返回 key 名, 运行期安全不崩。
+ */
+@Suppress("EnumEntryName")
+enum class AppStringKey {
+    // webBook/fileBook 抓书异常
+    error_get_web_content,
+    chapter_list_empty,
+    unsupport_archivefile_entry,
+
+    // ImageProvider 图片解码
+    error_decode_bitmap,
+    error_image_url_empty,
+
+    // SearchScope 显示 "全部书源"
+    all_source,
+
+    // AudioPlay 加载占位标题
+    data_loading,
+
+    // 阅读页消息页文案 (对照 app 端 R.string.toc_updateing / error_load_toc)
+    toc_updateing,
+    error_load_toc,
+
+    // 直链上传 (对照 app 端 DirectLinkUpload.upLoad 的硬编码文案, key 与
+    // composeResources 的 upload_url_not_configured / download_url_rule_not_configured /
+    // upload_failed_with_body 一一对应)
+    upload_url_not_configured,
+    download_url_rule_not_configured,
+    upload_failed_with_body,
+
+    // 直链上传打包单条目 zip 失败 (iOS/鸿蒙 NativeZipCodec): JVM/Android 端同一环节是
+    // ZipUtils 抛 IOException, 文案由 JDK 给出, 不在此列
+    upload_compress_failed_with_name,
+
+    // 批注：跨章选区无单章区间可存
+    underline_cross_chapter_unsupported,
+
+    // AppWebDav 授权失败
+    webdav_application_authorization_error,
+
+    // 书籍保存位置未设置 (对照 app 端 R.string.no_books_dir, 即原版 NoBooksDirException 的文案)。
+    // 用于共用层在"未设置书籍保存位置"时抛 InvalidBooksDirException, 让四端既有
+    // "去设置目录"分支 (InvalidBooksDirException) 能匹配上。
+    no_books_dir,
+
+    // 未设置保存位置且网盘不可用: 本次备份没有任何可取出备份包的出口
+    backup_no_destination,
+
+    // 未设置保存位置且无网络: 网盘是唯一出口, 离线时无法上传
+    network_connection_unavailable,
+
+    // 保存位置已设置但不可写: 本次备份只上传网盘, 本地不保留副本
+    backup_dir_unwritable,
+
+    // ReplaceRule 校验失败
+    replace_rule_invalid,
+
+    // BackupConfig 备份忽略项标题 (与 app 端 R.string 一一对应)
+    read_config,
+    theme_mode,
+    theme_config,
+    cover_config,
+    bookshelf_layout,
+    thread_count,
+    local_book,
+
+    // UpdateBook 更新进度通知标题 (与 app 端 R.string 一一对应)
+    force_refresh_book,
+    update_toc,
+
+    // 阅读页翻页边界提示 (对照原版 R.string.no_prev_page / no_next_page,
+    // PageDelegate 无上一页/下一页时弹长 toast)
+    no_prev_page,
+    no_next_page,
+}
+
+/**
+ * key→本地化字符串的映射提供者, 由宿主平台注册。args 对应资源里的 %s/%1$s 等格式化参数。
+ */
+fun interface AppStringProvider {
+    fun getString(key: AppStringKey, args: Array<out Any?>): String
+}
+
+@Volatile
+private var appStringProvider: AppStringProvider? = null
+
+/**
+ * 宿主启动早期注册一次(任何 appString 调用之前)。
+ */
+fun registerAppStringProvider(provider: AppStringProvider) {
+    appStringProvider = provider
+}
+
+/**
+ * 取 key 对应的本地化字符串, args 为格式化参数(对应资源里的 %s/%1$s 等)。
+ * provider 未注册时 fallback 返回 key 名(仅可能出现在无宿主的测试/工具场景)。
+ */
+fun appString(key: AppStringKey, vararg args: Any?): String {
+    return appStringProvider?.getString(key, args) ?: key.name
+}

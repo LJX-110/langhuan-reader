@@ -23,7 +23,7 @@ import {
  * 3. 接入长时任务 (AUDIO_PLAYBACK) 保障后台播放不被冻结 —— 申请/释放统一走 [ContinuousTaskArbiter]
  *    (音频优先级最高: 会抢占占槽的后台作业; 目前会申请长时任务的只有音频与缓存下载/Web 服务,
  *    导出/校验书源/更新书籍三种业务按官方场景表无可用模式, 不申请保活);
- * 4. AVPlayer 事件与系统播控指令通过 legado.mediaEvent(eventJson) 回送给 Kotlin。
+ * 4. AVPlayer 事件与系统播控指令通过 langhuan.mediaEvent(eventJson) 回送给 Kotlin。
  *
  * # 多实例 (playerId)
  * 音频书 (audioBook)、HttpTTS 朗读 (httpTts) 与视频书 (videoBook) 需同时各持一个 AVPlayer,
@@ -55,7 +55,7 @@ import {
  *   "coverUrl": "<string?>"    // 封面 URL / 本地路径, 无封面时不带
  * }
  *
- * ## 事件 (ArkTS → Kotlin, via legado.mediaEvent)
+ * ## 事件 (ArkTS → Kotlin, via langhuan.mediaEvent)
  * {
  *   "playerId": "<string>",    // 必带, 与命令的 playerId 对应; 播控指令固定 "session"
  *   "event": "onReady" | "onEndOfMedia" | "onError" | "onBufferingUpdate" |
@@ -67,7 +67,7 @@ import {
  *   "command": "<string?>"     // onCommand: play|pause|stop|next|previous|seek
  * }
  *
- * ## 平台事件 (ArkTS → Kotlin, via legado.platformEvent, 非本模块的 mediaEvent)
+ * ## 平台事件 (ArkTS → Kotlin, via langhuan.platformEvent, 非本模块的 mediaEvent)
  * 音频设备变化与音频打断不经 mediaEvent, 而是 PlatformEventBridge 的统一通道:
  * `{ type: 'audioDeviceChange', disconnected: true }` /
  * `{ type: 'audioFocusChange', change: 'gain'|'loss'|'lossTransient'|'lossTransientCanDuck' }`
@@ -86,7 +86,7 @@ import {
  * - 位置更新 → timeUpdate 事件 → 发 onPosition
  */
 
-// Media 事件回调类型 (由 EntryAbility 注入, 内部调 legado.mediaEvent)
+// Media 事件回调类型 (由 EntryAbility 注入, 内部调 langhuan.mediaEvent)
 export type MediaEventCallback = (eventJson: string) => void;
 
 /** 缺省 playerId: 无 playerId 字段的旧协议消息落到这里。 */
@@ -244,7 +244,7 @@ export interface Size2D {
 /**
  * 初始化 Media 桥接 (由 EntryAbility.onCreate 调用, 注入事件回送函数与 Ability 上下文)。
  *
- * @param callback 事件回送函数 (EntryAbility 注入 legado.mediaEvent)
+ * @param callback 事件回送函数 (EntryAbility 注入 langhuan.mediaEvent)
  * @param context UIAbilityContext
  */
 export function initMediaBridge(callback: MediaEventCallback, context: common.UIAbilityContext): void {
@@ -866,12 +866,12 @@ function registerPlayerEvents(id: string, player: media.AVPlayer): void {
 /**
  * XComponent 是原生 surface 混排节点, Compose 的图层变换作用不到它 —— 画面缩放只能在
  * ArkTS 侧做。Kotlin 侧把缩放状态经 media 命令通道推来 (与 VideoZoom 同口径: scale 倍数,
- * pan 为本轴可平移范围的比例 -1..1), 这里写进 AppStorage; Index.ets 的 LegadoVideoSurface
+ * pan 为本轴可平移范围的比例 -1..1), 这里写进 AppStorage; Index.ets 的 LanghuanVideoSurface
  * 组件用 @StorageLink 订阅后施加到 XComponent。
  */
-export const VIDEO_ZOOM_SCALE_KEY: string = 'legadoVideoZoomScale';
-export const VIDEO_ZOOM_PAN_X_KEY: string = 'legadoVideoZoomPanX';
-export const VIDEO_ZOOM_PAN_Y_KEY: string = 'legadoVideoZoomPanY';
+export const VIDEO_ZOOM_SCALE_KEY: string = 'langhuanVideoZoomScale';
+export const VIDEO_ZOOM_PAN_X_KEY: string = 'langhuanVideoZoomPanX';
+export const VIDEO_ZOOM_PAN_Y_KEY: string = 'langhuanVideoZoomPanY';
 
 function handleSetVideoZoom(cmd: MediaCommand): void {
   AppStorage.setOrCreate(VIDEO_ZOOM_SCALE_KEY, cmd.scale ?? 1);
@@ -933,7 +933,7 @@ async function releasePlayer(id: string): Promise<void> {
   }
 }
 
-/** 发送事件到 Kotlin (通过 EntryAbility 注入的 legado.mediaEvent 回调) + 本地 UI 监听器 */
+/** 发送事件到 Kotlin (通过 EntryAbility 注入的 langhuan.mediaEvent 回调) + 本地 UI 监听器 */
 function emitEvent(id: string, event: MediaEventPayload): void {
   event.playerId = id;
   const json = JSON.stringify(event);
@@ -989,7 +989,7 @@ async function createAvSession(): Promise<avSession.AVSession | undefined> {
     return undefined;
   }
   try {
-    const session = await avSession.createAVSession(context, 'LegadoAudioSession', 'audio');
+    const session = await avSession.createAVSession(context, 'LanghuanAudioSession', 'audio');
     registerAvSessionCallbacks(session);
     // 点击播控卡片拉起应用并直达音频页 (对照 app 端音频通知的 contentIntent:
     // 那里 putExtra("route", "audio_play"), 这里走同一条 route: 前缀约定)
@@ -1017,7 +1017,7 @@ async function createAvSession(): Promise<avSession.AVSession | undefined> {
  *
  * @param uri 非空时写进 Want.uri。播控卡片传 `route:audio_play` —— 与 app 端音频通知
  *   contentIntent 的 route extra 同一个串, 点击后由 EntryAbility.handleDeepLink 走
- *   `legado.handleLaunchRequest` → `OhosLaunchRequests.parse` 解回 `NavigateTo("audio_play")`
+ *   `langhuan.handleLaunchRequest` → `OhosLaunchRequests.parse` 解回 `NavigateTo("audio_play")`
  *   (不需要新增任何协议); 长时任务不传 (保活拉起不应改变用户当前页面)。
  * @param parameters 非空时写进 Want.parameters (与 shortcuts_config.json 的 `wants.parameters`
  *   同一形制: 系统把参数放进被拉起 Ability 的 `want.parameters`, 不出现在 want.uri);
@@ -1151,7 +1151,7 @@ async function handleSyncNowPlaying(cmd: MediaCommand): Promise<void> {
     if (metadataKey !== lastMetadataKey) {
       lastMetadataKey = metadataKey;
       const metadata: avSession.AVMetadata = {
-        assetId: 'legado_media',
+        assetId: 'langhuan_media',
         title: title,
         artist: artist,
         author: author,

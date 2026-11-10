@@ -58,10 +58,10 @@
 
 | # | 平台 | 文件 | 引用方式 |
 | --- | --- | --- | --- |
-| 1 | Android / JVM (JNI) | `modules/quickjs-android-native/src/main/cpp/CMakeLists.txt` | `set(QUICKJS_NG_DIR "${LEGADO_PROJECT_ROOT}/modules/quickjs/src/main/cinterop/quickjs-ng")` |
-| 2 | 鸿蒙 native (.so) | `ohosApp/entry/src/main/cpp/CMakeLists.txt` | `set(LEGADO_QUICKJS_NG_DIR .../modules/quickjs/src/main/cinterop/quickjs-ng)` |
+| 1 | Android / JVM (JNI) | `modules/quickjs-android-native/src/main/cpp/CMakeLists.txt` | `set(QUICKJS_NG_DIR "${LANGHUAN_PROJECT_ROOT}/modules/quickjs/src/main/cinterop/quickjs-ng")` |
+| 2 | 鸿蒙 native (.so) | `ohosApp/entry/src/main/cpp/CMakeLists.txt` | `set(LANGHUAN_QUICKJS_NG_DIR .../modules/quickjs/src/main/cinterop/quickjs-ng)` |
 | 3 | iOS cinterop | `data/src/cinterop/quickjs.def` + `data/build.gradle.kts` (`includeDirs`) | `#include "quickjs.h"` + wrapper 函数 |
-| 4 | 鸿蒙 cinterop | `build-logic/src/ohos/kotlin/io/legado/buildlogic/OhosTargetConventionPlugin.kt` | `includeDirs(File(cinteropDir, "quickjs-ng"))` |
+| 4 | 鸿蒙 cinterop | `build-logic/src/ohos/kotlin/com/langhuan/buildlogic/OhosTargetConventionPlugin.kt` | `includeDirs(File(cinteropDir, "quickjs-ng"))` |
 | 5 | iOS 静态库预编译 | `scripts/build-ios-native.sh` | `QUICKJS_DIR="$ROOT_DIR/modules/quickjs/src/main/cinterop/quickjs-ng"` |
 
 上层 Kotlin 消费方（仅供定位，不直接读本目录）：

@@ -1,0 +1,5 @@
+package com.langhuan.reader.constant
+
+enum class Theme {
+    Dark, Light, Auto, Transparent, EInk;
+}

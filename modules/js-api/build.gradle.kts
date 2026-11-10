@@ -1,5 +1,5 @@
 plugins {
-    id("legado.kmp.library")
+    id("langhuan.kmp.library")
 }
 
 val isMacHost = System.getProperty("os.name").startsWith("Mac", ignoreCase = true)

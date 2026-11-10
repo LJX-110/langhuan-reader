@@ -16,7 +16,7 @@
 > 在书源规则中使用`@js` `<js>` `{{}}`可使用JavaScript调用阅读部分内置的类和方法
 
 >
-注意为了安全，阅读会屏蔽部分java类调用，见[JsSecurityPolicy](https://github.com/huajideshutiao/legado/blob/master/modules/quickjs/src/commonMain/kotlin/com/script/quickjs/JsSecurityPolicy.kt)
+注意为了安全，阅读会屏蔽部分java类调用，见JsSecurityPolicy
 ；源开启`enableDangerousApi`后放行（慎用）
 
 > 不同的书源规则中支持的调用的Java类和方法可能有所不同
@@ -28,28 +28,28 @@
 | java           | 当前类                                                                                                                                            |
 | baseUrl        | 当前url,String                                                                                                                                   |
 | result         | 上一步的结果                                                                                                                                         |
-| book           | [书籍类](https://github.com/huajideshutiao/legado/blob/master/data/src/commonMain/kotlin/io/legado/app/data/entities/Book.kt)                   |
-| chapter        | [章节类](https://github.com/huajideshutiao/legado/blob/master/data/src/roomEntitiesMain/kotlin/io/legado/app/data/entities/BookChapter.kt)            |
-| source         | [基础书源类](https://github.com/huajideshutiao/legado/blob/master/data/src/commonMain/kotlin/io/legado/app/data/entities/BaseSource.kt)           |
-| cookie         | [cookie操作类](https://github.com/huajideshutiao/legado/blob/master/data/src/commonMain/kotlin/io/legado/app/help/http/CookieStoreBase.kt)      | 
-| cache          | [缓存操作类](https://github.com/huajideshutiao/legado/blob/master/data/src/commonMain/kotlin/io/legado/app/help/CacheManager.kt)                  |
+| book           | 书籍类                   |
+| chapter        | 章节类            |
+| source         | 基础书源类           |
+| cookie         | cookie操作类      | 
+| cache          | 缓存操作类                  |
 | title          | 章节当前标题 String                                                                                                                                  |
 | src            | 当前解析的源码（图片解密规则中为图片地址）                                                                                                                          |
 | nextChapterUrl | 下一章节url                                                                                                                                        |
 | platform       | 运行平台名 String，取值 `android`/`ios`/`ohos`/`desktop`，见 platform 变量章节                                                                                   |
-| image          | [图片解密操作类](https://github.com/huajideshutiao/legado/blob/master/data/src/commonMain/kotlin/io/legado/app/help/image/ImageOps.kt)，见 image 对象章节 |
+| image          | 图片解密操作类，见 image 对象章节 |
 
 > 部分场景会额外注入局部变量：搜索/发现/字典规则中的 `key`（关键字）与 `page`（页数）、
 > httpTTS 规则中的 `speakText` `speakSpeed`（见网络朗读帮助）、段评规则中的 `paragraphIndex` `sort` `reviewId` `selected`
 
 ## 当前类对象的可使用的部分方法
 
-### [RssJsApi](https://github.com/huajideshutiao/legado/blob/master/ui/src/commonMain/kotlin/io/legado/app/ui/rss/RssJsExtensions.kt)
+### RssJsApi
 > 只能在书源正文规则的`shouldOverrideUrlLoading`规则中使用（订阅源已并入书源，本规则用于内置浏览器网页跳转拦截）  
 > js返回true拦截本次跳转, js变量`url`为将要跳转的地址  
 > url跳转拦截规则不能执行耗时操作  
 > searchBook/addBook 四端均可用  
-> 例子https://github.com/huajideshutiao/legado/discussions/3259
+> 例子
 
 * 调用阅读搜索
 
@@ -63,11 +63,11 @@ java.searchBook(key: String)
 java.addBook(bookUrl: String)
 ```
 
-### [AnalyzeUrl](https://github.com/huajideshutiao/legado/blob/master/app/src/main/java/io/legado/app/model/analyzeRule/AnalyzeUrl.kt) 部分函数
+### AnalyzeUrl 部分函数
 
 > js中通过java.调用,只在`登录检查JS`规则中有效  
 >
-核心实现已下沉 [AnalyzeUrlCore](https://github.com/huajideshutiao/legado/blob/master/data/src/commonMain/kotlin/io/legado/app/model/analyzeRule/AnalyzeUrlCore.kt)
+核心实现已下沉 AnalyzeUrlCore
 ```js
 initUrl() //重新解析url,可以用于登录检测js登录后重新解析url重新访问
 getHeaderMap().putAll(source.getHeaderMap(true)) //重新设置登录头
@@ -75,10 +75,10 @@ getStrResponse(jsStr: String? = null, sourceRegex: String? = null, allowWebView:
 getResponse(): KmpResponse //返回访问结果(KMP统一响应类型,成员:code/message/body/isSuccessful/headers()等),网络朗读引擎采用的是这个,调用登录后在调用这方法可以重新访问,参考阿里云登录检测
 ```
 
-### [AnalyzeRule](https://github.com/huajideshutiao/legado/blob/master/app/src/main/java/io/legado/app/model/analyzeRule/AnalyzeRule.kt) 部分函数
+### AnalyzeRule 部分函数
 
 >
-核心实现已下沉 [AnalyzeRuleCore](https://github.com/huajideshutiao/legado/blob/master/data/src/commonMain/kotlin/io/legado/app/model/analyzeRule/AnalyzeRuleCore.kt)
+核心实现已下沉 AnalyzeRuleCore
 * 获取文本/文本列表
 > `mContent` 待解析源代码，默认为当前页面  
 > `isUrl` 链接标识，默认为`false`
@@ -131,10 +131,10 @@ java.get(key)
 java.put(key, value)
 ```
 
-### [js扩展类](https://github.com/huajideshutiao/legado/blob/master/data/src/commonMain/kotlin/io/legado/app/help/JsExtensionsCommon.kt) 部分函数
+### js扩展类 部分函数
 
 *
-链接解析[JsURL](https://github.com/huajideshutiao/legado/blob/master/foundation/src/commonMain/kotlin/io/legado/app/utils/JsURL.kt)
+链接解析JsURL
 ```js
 java.toURL(url): JsURL
 java.toURL(url, baseUrl): JsURL
@@ -358,7 +358,7 @@ deleteFile(path: String): Boolean
 ```
 
 *
-字体解析,返回[字体解析类](https://github.com/huajideshutiao/legado/blob/master/data/src/commonMain/kotlin/io/legado/app/model/analyzeRule/QueryTTF.kt)
+字体解析,返回字体解析类
 > `data`支持url、本地文件相对路径、base64、ByteArray，自动判断并自动缓存；`useCache`可省略默认true  
 > `java.queryBase64TTF(data)`已过时，请改用`queryTTF`
 ```js
@@ -374,11 +374,11 @@ java.replaceFont(text: String, errorQueryTTF: QueryTTF?, correctQueryTTF: QueryT
 java.toNumChapter(s: String?): String? //如 第一千零三章 -> 第1003章
 ```
 
-### [js加解密类](https://github.com/huajideshutiao/legado/blob/master/data/src/commonMain/kotlin/io/legado/app/help/JsEncodeUtils.kt) 部分函数
+### js加解密类 部分函数
 
 > 提供在JavaScript环境中快捷调用crypto算法的函数，android/desktop
 > 由[hutool-crypto](https://www.hutool.cn/docs/#/crypto/概述)
-> 实现（[JsEncodeUtilsDefaults](https://github.com/huajideshutiao/legado/blob/master/data/src/jvmAndAndroidMain/kotlin/io/legado/app/help/JsEncodeUtils.kt)；桌面端另以低优先级注册 bcprov 补齐 SM2/SM3/SM4/PKCS7Padding）  
+> 实现（JsEncodeUtilsDefaults；桌面端另以低优先级注册 bcprov 补齐 SM2/SM3/SM4/PKCS7Padding）  
 > 由于兼容性问题，hutool-crypto当前版本为5.8.22  
 > ios/ohos 为平台委托实现（iOS=CommonCrypto/Security，鸿蒙=cryptoFramework 桥，另含双端同源
 > 纯 Kotlin 侧车），支持算法为 hutool 的子集，明细见下方"platform 变量"一节的能力差异表  

@@ -191,7 +191,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useBookStore } from '@/store'
 import API from '@api'
 import { toast } from '@/utils/toast'
-import { isLegadoUrl } from '@/utils/utils'
+import { isLanghuanUrl } from '@/utils/utils'
 import type { BaseBook, Book, BookChapter, SeachBook } from '@/book'
 import BookCatalogDialog from '@/components/BookCatalogDialog.vue'
 
@@ -240,7 +240,7 @@ const coverUrl = computed(() => {
   if (!book.value) return ''
   const c = book.value.coverUrl
   if (!c) return API.getProxyCoverUrl(book.value.bookUrl)
-  return isLegadoUrl(c) ? API.getProxyCoverUrl(c) : c
+  return isLanghuanUrl(c) ? API.getProxyCoverUrl(c) : c
 })
 
 const proxyImage = (evt: Event) => {
@@ -471,7 +471,7 @@ const searchAuthor = () => {
   const origin = ('origin' in book.value ? book.value.origin : '') || ''
 
   // 1. 如果包含 :: 且后半部分为探索 URL，跳转发现分类页
-  if (tmp.length > 1 && tmp[1] && origin && isLegadoUrl(origin)) {
+  if (tmp.length > 1 && tmp[1] && origin && isLanghuanUrl(origin)) {
     router.push({
       path: '/explore-show',
       query: {
@@ -489,7 +489,7 @@ const searchAuthor = () => {
   if (!cleanName) return
 
   const query: Record<string, string> = { key: cleanName }
-  if (origin && isLegadoUrl(origin) && originText.value) {
+  if (origin && isLanghuanUrl(origin) && originText.value) {
     query.sourceUrl = origin
     query.sourceName = originText.value
   }
@@ -499,7 +499,7 @@ const searchAuthor = () => {
 // 搜索标签 (对照 Compose onSearchKind)
 const searchTag = (tagItem: BookTagItem) => {
   const origin = (book.value && 'origin' in book.value ? book.value.origin : '') || ''
-  if (tagItem.exploreUrl && origin && isLegadoUrl(origin)) {
+  if (tagItem.exploreUrl && origin && isLanghuanUrl(origin)) {
     router.push({
       path: '/explore-show',
       query: {
@@ -513,7 +513,7 @@ const searchTag = (tagItem: BookTagItem) => {
   }
 
   const query: Record<string, string> = { key: tagItem.title }
-  if (origin && isLegadoUrl(origin) && originText.value) {
+  if (origin && isLanghuanUrl(origin) && originText.value) {
     query.sourceUrl = origin
     query.sourceName = originText.value
   }
@@ -554,7 +554,7 @@ const onSelectChapter = (idx: number) => {
 const startReading = async (targetIndex?: number) => {
   if (!book.value) return
 
-  // 自动将在线未入架的书放入书架，对齐 Legado 原生逻辑
+  // 自动将在线未入架的书放入书架，对齐 Langhuan 原生逻辑
   let nowInShelf = inBookshelf.value
   if (!nowInShelf) {
     try {

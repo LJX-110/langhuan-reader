@@ -1,4 +1,4 @@
-package io.legado.app.napi.quickjs
+package com.langhuan.reader.napi.quickjs
 
 // 导出 quickjs.h 的全部 extern API (JS_Eval / JS_GetPropertyStr / JS_GetLength /
 // JS_GetOwnPropertyNames / JSPropertyEnum / JSAtom / JSValueTag 枚举等),

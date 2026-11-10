@@ -983,11 +983,11 @@
     <string name="keep_original_name">Keep the original name</string>
     <string name="keep_group">Keep group</string>
     <string name="keep_enable">Retain Enabled Status</string>
-    <string name="deep_link_type_not_supported">This legado:// import type is not supported yet: %1$s</string>
+    <string name="deep_link_type_not_supported">This import link type is not supported yet: %1$s</string>
     <string name="rule_sub_load_failed">Failed to load data in the rule subscription screen\n%1$s</string>
     <string name="input_valid_url">Enter a valid URL</string>
     <string name="check_update_failed">Failed to check for updates\n%1$s</string>
-    <string name="desktop_install_mode_not_portable">[legado-desktop] install mode = %1$s (portable.root not set, falls back to portable.txt marker/system data directory)</string>
+    <string name="desktop_install_mode_not_portable">[langhuan-desktop] install mode = %1$s (portable.root not set, falls back to portable.txt marker/system data directory)</string>
     <string name="image_decode_failed_bytes">image.decode: failed to decode image bytes (%1$s bytes)</string>
     <string name="image_encode_unsupported_format">image.encode: unsupported format %1$s, only png/jpg/webp</string>
     <string name="image_encode_write_failed">image.encode: ImageIO.write failed format=%1$s</string>
@@ -1255,7 +1255,7 @@
     <string name="delete_book_file">Delete source file</string>
     <string name="cloud_progress_exceeds_current">The cloud progress exceeds the current progress. Do you want to synchronize?</string>
     <string name="reply_review_to">Reply: %1$s</string>
-    <string name="about_description">This is an open source reading software newly developed by Kotlin, welcome to join us.</string>
+    <string name="about_description">An open-source book reader built with Kotlin. Welcome to join us.</string>
     <string name="add_group">Add to Groups</string>
     <string name="add_to_group">Add to Group</string>
     <string name="all_bookmark">All bookmarks</string>
@@ -1624,7 +1624,7 @@
     <string name="tag_explore_disabled">Flag: found disabled</string>
     <string name="restore_last_book_process">Whether to return to the reading progress before the jump？</string>
     <string name="update_book_fail">Update failed</string>
-    <string name="notification_permission_rationale">Reading requires sending notifications to show reading control and download progress</string>
+    <string name="notification_permission_rationale">Langhuan requires sending notifications to show reading control and download progress</string>
     <string name="webdav_after_local_restore_confirm">The webDav book source is newer than the local one, whether to restore it or not</string>
     <string name="confirm">Confirm</string>
     <string name="url_rule">URL Rule(urlRule)</string>

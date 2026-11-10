@@ -1,22 +1,22 @@
 // :modules:treeview —— 内嵌第三方库 (vendored) 的独立承载模块。
 //
-// 承载 io.legado.treeview (JSON 树形展示, Apache-2.0)。来源与本地改动见
+// 承载 com.langhuan.reader.treeview (JSON 树形展示, Apache-2.0)。来源与本地改动见
 // 同包目录 VENDORED.md。相对上游已裁剪: 删除 diff 包 (消除 kotlin-multiplatform-diff
 // 依赖) 与其唯一调用点 toRenderString, 并把 material3 换成 md2。
 //
 // 本模块持有自己的 composeResources (展开箭头图标与子项计数文案), 不引用 :ui 的资源
 // —— 依赖方向是 :ui -> :modules:treeview, 反向不可。
 plugins {
-    id("legado.kmp.library")
-    id("legado.compose")
+    id("langhuan.kmp.library")
+    id("langhuan.compose")
 }
 
 compose.resources {
     generateResClass = always
     publicResClass = true
-    // 默认包名按项目名推导 (legado.treeview.generated.resources), 显式钉成上游包名前缀，
+    // 默认包名按项目名推导 (langhuan.treeview.generated.resources), 显式钉成上游包名前缀，
     // 使本模块的 Res 与第三方源码同属一个命名空间，便于识别。
-    packageOfResClass = "io.legado.treeview.generated.resources"
+    packageOfResClass = "com.langhuan.reader.treeview.generated.resources"
 }
 
 val isMacHost = System.getProperty("os.name").startsWith("Mac", ignoreCase = true)
@@ -51,7 +51,7 @@ kotlin {
     jvm()
 
     android {
-        namespace = "io.legado.treeview"
+        namespace = "com.langhuan.reader.treeview"
         compileSdk = 37
         minSdk = 24
         // compose.resources 需要 assets 接入 (与 :ui 同款机制)
@@ -64,7 +64,7 @@ kotlin {
     }
 
     if (enableOhosTarget) {
-        pluginManager.apply("legado.kmp.ohos")
+        pluginManager.apply("langhuan.kmp.ohos")
     }
 
     sourceSets {

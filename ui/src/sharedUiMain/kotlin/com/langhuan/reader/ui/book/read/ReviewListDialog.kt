@@ -1,0 +1,720 @@
+package com.langhuan.reader.ui.book.read
+
+// I18N KEYS (新增/复用, 待 ResourceProvider.jvm.kt 补全桌面端字面量):
+// - review_post_hint / reply_review / review_replies_detail_title / review /
+//   review_replies_section_title / review_sort_hot /
+//   review_sort_latest / review_expand / review_collapse / confirm_delete_review /
+//   vote_up / vote_down / review_replies_count / cancel / delete / menu / bottom_line
+//
+// PAINTER KEYS (新增 SVG):
+// - ic_review_close / ic_review_thumb_up / ic_review_thumb_up_filled /
+//   ic_review_thumb_down / ic_review_thumb_down_filled / ic_arrow_drop_down /
+//   ic_more_vert
+//
+// COLOR KEYS (新增/复用):
+// - background / primaryText / secondaryText / divider / btn_bg / background_card / review_voted
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.CircularProgressIndicator
+import androidx.compose.material.DropdownMenuItem
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
+import androidx.compose.material.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.langhuan.reader.data.entities.Review
+import com.langhuan.reader.ui.book.read.review.ReviewInputCapsule
+import com.langhuan.reader.ui.book.read.review.ReviewInputHint
+import com.langhuan.reader.ui.compose.component.AppDropdownField
+import com.langhuan.reader.ui.compose.component.AppDropdownMenu
+import com.langhuan.reader.ui.compose.platform.rememberColor
+import com.langhuan.reader.ui.compose.platform.rememberPainter
+import com.langhuan.reader.ui.compose.platform.rememberString
+import com.langhuan.reader.ui.compose.theme.AppTheme
+import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
+import com.langhuan.reader.ui.root.PlatformCapabilityProviders
+import com.langhuan.reader.ui.generated.resources.Res
+import com.langhuan.reader.ui.generated.resources.bottom_line
+import com.langhuan.reader.ui.generated.resources.cancel
+import com.langhuan.reader.ui.generated.resources.copy
+import com.langhuan.reader.ui.generated.resources.delete
+import com.langhuan.reader.ui.generated.resources.ic_more_vert
+import com.langhuan.reader.ui.generated.resources.ic_review_close
+import com.langhuan.reader.ui.generated.resources.menu
+import com.langhuan.reader.ui.generated.resources.review_replies_count
+import com.langhuan.reader.ui.generated.resources.review_sort_hot
+import com.langhuan.reader.ui.generated.resources.review_sort_latest
+import com.langhuan.reader.ui.generated.resources.vote_down
+import com.langhuan.reader.ui.generated.resources.vote_up
+import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.stringResource
+
+/**
+ * 评论列表对话框内容 (KMP 共享, app + desktop 复用)。
+ *
+ * 对应 app 端 ReviewListDialog (BottomSheetDialogFragment), 去掉对 Android Fragment /
+ * ViewModel / LiveData / Glide / IntentData / alert DSL 的依赖, 改纯 @Composable + 回调:
+ * 调用方持有全部状态传入; 交互经回调上抛; 图片渲染经 [avatarSlot]/[imageSlot] 注入
+ * (app 端 Glide); 删除确认 / 发书评 / 查看大图由调用方实现平台专属行为。
+ *
+ * 业务 (对照 app 端原版 ReviewListContent): 顶部关闭按钮 + 居中标题, 列表模式评论数由调用方
+ * 缝合进标题、排序入口在顶栏右侧 (回复模式无排序); LazyColumn 列表, 回复模式顶部 parentReview
+ * 原文; 单条评论含头像/昵称/
+ * 正文 6 行折叠/点赞/点踩/回复入口; footer loading/noMore; 翻底触发 onLoadMore。
+ *
+ * 与 app 端差异: BottomSheet 滚动交还的 nestedScrollInteropConnection 经 [lazyListModifier]
+ * 由调用方注入 (Android 传 rememberNestedScrollInteropConnection(), 桌面传 Modifier)。
+ *
+ * @param title 顶部标题文本 (列表模式评论数已由调用方缝合)
+ * @param parentReview 回复模式的楼主原评论; null = 段评/章节评论模式
+ * @param repliesTitleText 回复模式 "全部回复·N" 文本
+ * @param inputHint 底部输入栏提示文本
+ * @param reviews 当前评论列表
+ * @param sortState 当前排序 (0=最热, 1=最新)
+ * @param footerLoading footer 是否显示 loading 转圈
+ * @param footerHasMore 是否还有更多 (false 时 footer 显示 bottom_line)
+ * @param expandedKeys 已展开全文的评论 id 集合
+ * @param votedIds 已点赞的评论 id 集合
+ * @param votedDownIds 已点踩的评论 id 集合
+ * @param onDismiss 关闭对话框
+ * @param onLoadMore 翻到底加载更多
+ * @param onChangeSort 切换排序 (参数 0=最热, 1=最新)
+ * @param onReviewClick 点击单条评论 (回复)
+ * @param onReviewLongClick 长按单条评论 (复制内容)
+ * @param onToggleExpand 切换展开/折叠 (参数为 expandKey)
+ * @param onVoteUp 点赞
+ * @param onVoteDown 点踩
+ * @param onDeleteClick 删除 (调用方自行弹确认对话框)
+ * @param onOpenReplies 打开回复详情
+ * @param onPostClick 点击底部输入栏 (发书评/回复)
+ * @param onAvatarClick 点击头像 (查看大图)
+ * @param onImageClick 点击评论配图 (查看大图)
+ * @param avatarSlot 头像渲染槽 (url, modifier) -> Unit
+ * @param imageSlot 配图渲染槽 (url, modifier) -> Unit
+ * @param lazyListModifier LazyColumn 的额外 modifier (Android 端注入 nestedScroll)
+ * @param modifier 整体容器的 modifier
+ */
+@Composable
+fun ReviewListDialog(
+    title: String,
+    parentReview: Review?,
+    repliesTitleText: String,
+    inputHint: String,
+    reviews: List<Review>,
+    sortState: Int,
+    footerLoading: Boolean,
+    footerHasMore: Boolean,
+    expandedKeys: Set<String>,
+    votedIds: Set<String>,
+    votedDownIds: Set<String>,
+    onDismiss: () -> Unit,
+    onLoadMore: () -> Unit,
+    onChangeSort: (Int) -> Unit,
+    onReviewClick: (Review) -> Unit,
+    onReviewLongClick: (Review) -> Unit,
+    onToggleExpand: (String) -> Unit,
+    onVoteUp: (Review) -> Unit,
+    onVoteDown: (Review) -> Unit,
+    onDeleteClick: (Review) -> Unit,
+    onOpenReplies: (Review) -> Unit,
+    onPostClick: () -> Unit,
+    onAvatarClick: (String?) -> Unit,
+    onImageClick: (String) -> Unit,
+    avatarSlot: @Composable (String?, Modifier) -> Unit,
+    imageSlot: @Composable (String, Modifier) -> Unit,
+    lazyListModifier: Modifier = Modifier,
+    modifier: Modifier = Modifier,
+) {
+    val listState = rememberLazyListState()
+
+    ReviewListLoadMoreEffect(
+        listState = listState,
+        reviews = reviews,
+        footerHasMore = footerHasMore,
+        footerLoading = footerLoading,
+        onLoadMore = onLoadMore,
+    )
+
+    Column(
+        modifier
+            .fillMaxSize()
+    ) {
+        // 顶栏三段: 左关闭槽 + 居中标题 + 右排序槽。标题居中于整条顶栏 (对照原版
+        // tv_title layout_gravity=center), 可用宽度对称扣除两侧槽宽, 长标题不压住排序入口
+        TitleBarRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(DesignTokens.viewHeightXl),
+            leading = {
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(Res.drawable.ic_review_close),
+                        contentDescription = stringResource(Res.string.cancel),
+                        tint = rememberColor("primaryText"),
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            },
+            trailing = {
+                // 列表模式: 排序入口收在顶栏右侧; 回复详情模式留同宽空槽, 标题居中不因模式而偏
+                if (parentReview == null) {
+                    ReviewSortEntry(sortState, onChangeSort)
+                } else {
+                    Spacer(Modifier.width(48.dp))
+                }
+            },
+        ) {
+            Text(
+                text = title,
+                color = rememberColor("primaryText"),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = DesignTokens.spacingDefault),
+            )
+        }
+        ReviewListBody(
+            listState = listState,
+            parentReview = parentReview,
+            repliesTitleText = repliesTitleText,
+            reviews = reviews,
+            footerLoading = footerLoading,
+            footerHasMore = footerHasMore,
+            expandedKeys = expandedKeys,
+            votedIds = votedIds,
+            votedDownIds = votedDownIds,
+            onReviewClick = onReviewClick,
+            onReviewLongClick = onReviewLongClick,
+            onToggleExpand = onToggleExpand,
+            onVoteUp = onVoteUp,
+            onVoteDown = onVoteDown,
+            onDeleteClick = onDeleteClick,
+            onOpenReplies = onOpenReplies,
+            onAvatarClick = onAvatarClick,
+            onImageClick = onImageClick,
+            avatarSlot = avatarSlot,
+            imageSlot = imageSlot,
+            modifier = lazyListModifier
+                .weight(1f)
+                .fillMaxWidth(),
+        )
+        InputBar(inputHint, onPostClick)
+    }
+}
+
+/**
+ * 评论列表主体 (items + footer), Dialog 与整页 Screen 共用; 排序与评论数在各外壳顶栏。
+ *
+ * 外壳差异 (BottomSheet 圆角+关闭钮 / 整页 AppTitleBar+返回) 由调用方各自提供。
+ * [listState] 由调用方持有以便自行挂翻页监听 (见 [ReviewListDialog] 的 snapshotFlow)。
+ */
+@Composable
+internal fun ReviewListBody(
+    listState: LazyListState,
+    parentReview: Review?,
+    repliesTitleText: String,
+    reviews: List<Review>,
+    footerLoading: Boolean,
+    footerHasMore: Boolean,
+    expandedKeys: Set<String>,
+    votedIds: Set<String>,
+    votedDownIds: Set<String>,
+    onReviewClick: (Review) -> Unit,
+    onReviewLongClick: (Review) -> Unit,
+    onToggleExpand: (String) -> Unit,
+    onVoteUp: (Review) -> Unit,
+    onVoteDown: (Review) -> Unit,
+    onDeleteClick: (Review) -> Unit,
+    onOpenReplies: (Review) -> Unit,
+    onAvatarClick: (String?) -> Unit,
+    onImageClick: (String) -> Unit,
+    avatarSlot: @Composable (String?, Modifier) -> Unit,
+    imageSlot: @Composable (String, Modifier) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        state = listState,
+        modifier = modifier,
+        contentPadding = PaddingValues(bottom = DesignTokens.spacingDefault),
+    ) {
+        if (parentReview != null) {
+            // 回复模式: 顶部楼主原评论 + "全部回复·N" 分隔条
+            item {
+                ReviewItem(
+                    parentReview,
+                    isParent = true,
+                    expandedKeys = expandedKeys,
+                    votedIds = votedIds,
+                    votedDownIds = votedDownIds,
+                    onReviewClick = onReviewClick,
+                    onReviewLongClick = onReviewLongClick,
+                    onToggleExpand = onToggleExpand,
+                    onVoteUp = onVoteUp,
+                    onVoteDown = onVoteDown,
+                    onDeleteClick = onDeleteClick,
+                    onOpenReplies = onOpenReplies,
+                    onAvatarClick = onAvatarClick,
+                    onImageClick = onImageClick,
+                    avatarSlot = avatarSlot,
+                    imageSlot = imageSlot,
+                )
+            }
+            item { RepliesHeader(repliesTitleText) }
+        }
+        items(reviews.size) { index ->
+            ReviewItem(
+                reviews[index],
+                isParent = false,
+                expandedKeys = expandedKeys,
+                votedIds = votedIds,
+                votedDownIds = votedDownIds,
+                onReviewClick = onReviewClick,
+                onReviewLongClick = onReviewLongClick,
+                onToggleExpand = onToggleExpand,
+                onVoteUp = onVoteUp,
+                onVoteDown = onVoteDown,
+                onDeleteClick = onDeleteClick,
+                onOpenReplies = onOpenReplies,
+                onAvatarClick = onAvatarClick,
+                onImageClick = onImageClick,
+                avatarSlot = avatarSlot,
+                imageSlot = imageSlot,
+            )
+        }
+        item { LoadMoreFooter(footerLoading, footerHasMore) }
+    }
+}
+
+/**
+ * 翻到底触发 [onLoadMore] (对照 app 原版 OnScrollListener), Dialog 与 Screen 共用。
+ */
+@Composable
+internal fun ReviewListLoadMoreEffect(
+    listState: LazyListState,
+    reviews: List<Review>,
+    footerHasMore: Boolean,
+    footerLoading: Boolean,
+    onLoadMore: () -> Unit,
+) {
+    // rememberUpdatedState: LaunchedEffect 内读最新参数值, 避免捕获过期闭包
+    val reviewsRef = rememberUpdatedState(reviews)
+    val footerHasMoreRef = rememberUpdatedState(footerHasMore)
+    val footerLoadingRef = rememberUpdatedState(footerLoading)
+    val onLoadMoreRef = rememberUpdatedState(onLoadMore)
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            // 带 totalItemsCount: 追加一页后 footer 仍在视口时也要重新判定
+            val info = listState.layoutInfo
+            val atEnd = info.totalItemsCount > 0 &&
+                info.visibleItemsInfo.lastOrNull()?.index == info.totalItemsCount - 1
+            atEnd to info.totalItemsCount
+        }.collect { (atEnd, _) ->
+            if (atEnd && reviewsRef.value.isNotEmpty() &&
+                footerHasMoreRef.value && !footerLoadingRef.value
+            ) {
+                onLoadMoreRef.value()
+            }
+        }
+    }
+}
+
+/**
+ * 顶栏三段布局: 左右槽按内容宽度测量 (槽只受上界约束, 见下), 标题居中于整条栏并对称扣除
+ * 两侧槽宽 (取较宽的一侧), 故标题截断点一定落在两侧入口之前。
+ */
+@Composable
+private fun TitleBarRow(
+    modifier: Modifier = Modifier,
+    leading: @Composable () -> Unit,
+    trailing: @Composable () -> Unit,
+    title: @Composable () -> Unit,
+) {
+    Layout(
+        modifier = modifier,
+        content = {
+            leading()
+            title()
+            trailing()
+        },
+    ) { measurables, constraints ->
+        // 槽按 wrap 约束测量: 只给上界, 不给最小宽。外层 fillMaxWidth 传下来的
+        // minWidth = 整行宽会把槽内容 (关闭钮的 size / 排序入口的整块点击区) 强制撑满整行,
+        // 两槽各占整行后标题可用宽被夹成 0、居中落在关闭钮正中 (表现为排序跑最左、
+        // 关闭图标在画面中央、标题消失)。
+        // 最小高同理必须归零: 继承 48dp 顶栏最小高的文本会以 48dp 占位而字形画在盒顶, 只水平居中。
+        val slotConstraints = constraints.copy(minWidth = 0, minHeight = 0)
+        val leadingPlaceable = measurables[0].measure(slotConstraints)
+        val trailingPlaceable = measurables[2].measure(slotConstraints)
+        val slot = maxOf(leadingPlaceable.width, trailingPlaceable.width)
+        val titlePlaceable = measurables[1].measure(
+            constraints.copy(
+                minWidth = 0,
+                minHeight = 0,
+                maxWidth = (constraints.maxWidth - 2 * slot).coerceAtLeast(0),
+            )
+        )
+        val width = constraints.maxWidth
+        val height = maxOf(leadingPlaceable.height, trailingPlaceable.height, titlePlaceable.height)
+        layout(width, height) {
+            leadingPlaceable.place(0, (height - leadingPlaceable.height) / 2)
+            titlePlaceable.place((width - titlePlaceable.width) / 2, (height - titlePlaceable.height) / 2)
+            trailingPlaceable.place(width - trailingPlaceable.width, (height - trailingPlaceable.height) / 2)
+        }
+    }
+}
+
+/** 排序入口: 当前档位 + ▾ 点开菜单 (顶栏右侧, 评论列表模式专用; 回复模式无排序) */
+@Composable
+internal fun ReviewSortEntry(
+    sortState: Int,
+    onChangeSort: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    AppDropdownField(
+        options = listOf(
+            stringResource(Res.string.review_sort_hot),
+            stringResource(Res.string.review_sort_latest),
+        ),
+        selectedIndex = sortState,
+        onSelect = onChangeSort,
+        modifier = modifier,
+    )
+}
+
+/** 回复模式分隔条: 分割块 + "全部回复·N" */
+@Composable
+private fun RepliesHeader(repliesTitleText: String) {
+    Column(Modifier.fillMaxWidth()) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .background(rememberColor("divider"))
+        )
+        Text(
+            text = repliesTitleText,
+            color = rememberColor("primaryText"),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = DesignTokens.spacingLg, top = DesignTokens.spacingMd, end = DesignTokens.spacingLg, bottom = DesignTokens.spacingXs),
+        )
+    }
+}
+
+/** 单条评论; isParent = 回复详情页楼主原评论 (展开全文、无菜单/展开钮/回复入口) */
+@Composable
+internal fun ReviewItem(
+    item: Review,
+    isParent: Boolean,
+    expandedKeys: Set<String>,
+    votedIds: Set<String>,
+    votedDownIds: Set<String>,
+    onReviewClick: (Review) -> Unit,
+    onReviewLongClick: (Review) -> Unit,
+    onToggleExpand: (String) -> Unit,
+    onVoteUp: (Review) -> Unit,
+    onVoteDown: (Review) -> Unit,
+    onDeleteClick: (Review) -> Unit,
+    onOpenReplies: (Review) -> Unit,
+    onAvatarClick: (String?) -> Unit,
+    onImageClick: (String) -> Unit,
+    avatarSlot: @Composable (String?, Modifier) -> Unit,
+    imageSlot: @Composable (String, Modifier) -> Unit,
+) {
+    val expandKey = item.id ?: "#${item.content.hashCode()}"
+    val isExpanded = isParent || expandedKeys.contains(expandKey)
+    // 按 item 键控: 位置复用时不残留上一条的截断态
+    var truncated by remember(item) { mutableStateOf(false) }
+    val rowModifier = if (isParent) {
+        Modifier.fillMaxWidth()
+    } else {
+        // 整条空白区/正文点击 → 回复; 长按 → 复制内容
+        Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = { onReviewClick(item) },
+                onLongClick = { onReviewLongClick(item) },
+            )
+    }
+    Row(rowModifier.padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault)) {
+        avatarSlot(
+            item.avatar,
+            Modifier
+                .padding(top = DesignTokens.spacingXs, end = DesignTokens.spacingMd)
+                .size(36.dp)
+                .clip(CircleShape)
+                .clickable {
+                    item.avatar?.takeIf { it.isNotBlank() }?.let { onAvatarClick(it) }
+                },
+        )
+        Column(Modifier.weight(1f)) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(DesignTokens.viewHeightSmall),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = item.name.orEmpty(),
+                    color = rememberColor("secondaryText"),
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = item.extra.orEmpty(),
+                    color = rememberColor("secondaryText"),
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = DesignTokens.spacingDefault),
+                )
+                if (!isParent) {
+                    Box(contentAlignment = Alignment.Center) {
+                        var menuOpen by remember { mutableStateOf(false) }
+                        Icon(
+                            painter = painterResource(Res.drawable.ic_more_vert),
+                            contentDescription = stringResource(Res.string.menu),
+                            // 跟随夜间主题: 与相邻昵称/extra 同色
+                            tint = rememberColor("secondaryText"),
+                            modifier = Modifier
+                                .height(28.dp)
+                                .clickable { menuOpen = true },
+                        )
+                        AppDropdownMenu(
+                            expanded = menuOpen,
+                            onDismissRequest = { menuOpen = false },
+                        ) {
+                            // 显式复制入口: 桌面鼠标长按几乎不可触发 (mouse slop≈0.125px,
+                            // 按住期间 1px 微颤即被滚动/拖拽消费而取消长按), 菜单兜底
+                            DropdownMenuItem(
+                                onClick = {
+                                    menuOpen = false
+                                    PlatformCapabilityProviders.get()
+                                        .copyToClipboard(item.content)
+                                },
+                            ) {
+                                Text(
+                                    stringResource(Res.string.copy),
+                                    color = AppTheme.colors.primaryText,
+                                )
+                            }
+                            DropdownMenuItem(
+                                onClick = { menuOpen = false; onDeleteClick(item) },
+                            ) {
+                                Text(
+                                    stringResource(Res.string.delete),
+                                    color = AppTheme.colors.primaryText,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            Text(
+                text = item.content,
+                color = rememberColor("primaryText"),
+                fontSize = 15.sp,
+                maxLines = if (isExpanded) Int.MAX_VALUE else 6,
+                overflow = TextOverflow.Ellipsis,
+                onTextLayout = { truncated = it.hasVisualOverflow },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            // 折叠态下被截断或已展开时才显示按钮
+            if (!isParent && (isExpanded || truncated)) {
+                Text(
+                    text = rememberString(
+                        if (isExpanded) "review_collapse" else "review_expand"
+                    ),
+                    color = AppTheme.colors.accent,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onToggleExpand(expandKey) }
+                        .padding(vertical = 2.dp),
+                )
+            }
+            if (item.images.isNotEmpty()) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = DesignTokens.spacingXs)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(DesignTokens.spacingXs),
+                ) {
+                    item.images.forEach { url ->
+                        imageSlot(
+                            url,
+                            Modifier
+                                .size(120.dp)
+                                .clickable { onImageClick(url) },
+                        )
+                    }
+                }
+            }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = DesignTokens.spacingMd),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = item.postTime.orEmpty(),
+                    color = rememberColor("secondaryText"),
+                    fontSize = 12.sp,
+                    modifier = Modifier.weight(1f),
+                )
+                val id = item.id
+                val isVoted = id != null && votedIds.contains(id)
+                val isVotedDown = id != null && votedDownIds.contains(id)
+                val displayVoteCount = item.voteUpCount + if (isVoted) 1 else 0
+                Icon(
+                    painter = rememberPainter(
+                        if (isVoted) "ic_review_thumb_up_filled" else "ic_review_thumb_up"
+                    ),
+                    contentDescription = stringResource(Res.string.vote_up),
+                    // 跟随夜间主题: 已点赞=review_voted(与计数文本同色), 未点赞=secondaryText
+                    tint = if (isVoted) rememberColor("review_voted") else rememberColor("secondaryText"),
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clickable { onVoteUp(item) },
+                )
+                Box(
+                    Modifier
+                        .width(50.dp)
+                        .height(20.dp)
+                        .clickable { onVoteUp(item) }
+                        .padding(horizontal = DesignTokens.spacingDefault),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Text(
+                        text = if (displayVoteCount > 0) displayVoteCount.toString()
+                        else stringResource(Res.string.vote_up),
+                        color = if (isVoted) rememberColor("review_voted")
+                        else rememberColor("secondaryText"),
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                    )
+                }
+                Icon(
+                    painter = rememberPainter(
+                        if (isVotedDown) "ic_review_thumb_down_filled" else "ic_review_thumb_down"
+                    ),
+                    contentDescription = stringResource(Res.string.vote_down),
+                    // 跟随夜间主题: 已点踩=review_voted(与计数文本同色), 未点踩=secondaryText
+                    tint = if (isVotedDown) rememberColor("review_voted") else rememberColor("secondaryText"),
+                    modifier = Modifier
+                        .padding(end = DesignTokens.spacingDefault)
+                        .size(20.dp)
+                        .clickable { onVoteDown(item) },
+                )
+            }
+            if (!isParent && item.replyCount > 0) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = DesignTokens.spacingDefault)
+                        .height(DesignTokens.viewHeightLarge)
+                        .clip(DesignTokens.shapeDefault)
+                        .background(rememberColor("btn_bg"))
+                        .clickable { onOpenReplies(item) }
+                        .padding(start = DesignTokens.spacingLg),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Text(
+                        text = stringResource(Res.string.review_replies_count, item.replyCount),
+                        color = AppTheme.colors.accent,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun LoadMoreFooter(footerLoading: Boolean, footerHasMore: Boolean) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        when {
+            footerLoading -> CircularProgressIndicator(
+                color = AppTheme.colors.accent,
+                modifier = Modifier
+                    .padding(DesignTokens.spacingDefault)
+                    .size(36.dp),
+            )
+
+            !footerHasMore -> Text(
+                text = stringResource(Res.string.bottom_line),
+                color = rememberColor("secondaryText"),
+                fontSize = 14.sp,
+                maxLines = 1,
+                modifier = Modifier.padding(DesignTokens.spacingMd),
+            )
+        }
+    }
+}
+
+/** 底部"输入栏"只是个触发器, 点击后弹出输入面板; 回复详情页默认回复楼主 */
+@Composable
+internal fun InputBar(inputHint: String, onPostClick: () -> Unit) {
+    ReviewInputCapsule(
+        contentPadding = PaddingValues(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = DesignTokens.spacingDefault, vertical = DesignTokens.spacingDefault),
+        onClick = onPostClick,
+    ) {
+        ReviewInputHint(inputHint, maxLines = 1)
+    }
+}

@@ -4,13 +4,13 @@ import com.fleeksoft.ksoup.nodes.Element
 import com.fleeksoft.ksoup.nodes.Node
 import com.fleeksoft.ksoup.nodes.TextNode
 import com.fleeksoft.ksoup.select.Elements as KsElements
-import io.legado.app.exception.NoStackTraceException
-import io.legado.app.utils.scan.BalanceScan
+import com.langhuan.reader.exception.NoStackTraceException
+import com.langhuan.reader.utils.scan.BalanceScan
 import kotlin.reflect.KClass
 
 /**
  * Lightweight XPath evaluator for ksoup
- * Supports basic XPath 1.0 patterns used in legado book sources
+ * Supports basic XPath 1.0 patterns used in langhuan book sources
  */
 class XPathEvaluator {
 

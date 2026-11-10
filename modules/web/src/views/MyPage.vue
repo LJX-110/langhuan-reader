@@ -77,7 +77,7 @@
         </a>
         <div class="card-row">
           <div class="row-content">
-            <span class="row-label">Legado Web</span>
+            <span class="row-label">Langhuan Web</span>
             <span class="row-desc">轻量化跨平台开源阅读器</span>
           </div>
           <span class="row-value">v3.0</span>
@@ -146,7 +146,7 @@ const exportBackup = async () => {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `legado-backup-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '')}.zip`
+    a.download = `langhuan-backup-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '')}.zip`
     a.click()
     URL.revokeObjectURL(url)
     toast.success('备份已导出 (标准 zip 格式)')

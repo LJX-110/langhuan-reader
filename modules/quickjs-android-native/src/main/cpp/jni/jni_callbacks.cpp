@@ -6,7 +6,7 @@
 #include <pthread.h>
 
 // KP1.1 跨平台日志: Android 走 __android_log_print, 桌面 JVM 走 fprintf(stderr)
-#define TAG "legado_qjs"
+#define TAG "langhuan_qjs"
 #ifdef __ANDROID__
 
 #include <android/log.h>

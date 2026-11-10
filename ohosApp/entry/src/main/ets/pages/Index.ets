@@ -4,15 +4,15 @@ import { ArkUIViewController, Compose } from '@cpf-kmp-cmp/compose';
 import { registerComposeInteropBuilder } from '@cpf-kmp-cmp/compose/src/main/ets/compose/ArkUIView';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import webview from '@ohos.web.webview';
-import legado from 'liblegado_napi.so';
+import langhuan from 'liblanghuan_napi.so';
 import {
   initWebViewBridge,
   handlePageEnd,
   handleErrorReceive,
   handleInterceptRequest,
-  // 前台 Web (可见 Web 组件) 页面事件入口 —— 由 Index.ets 的 LegadoForegroundWeb 组件调用;
+  // 前台 Web (可见 Web 组件) 页面事件入口 —— 由 Index.ets 的 LanghuanForegroundWeb 组件调用;
   // 命令入口 handleForegroundWebRequest 不在此调用, 它是 EntryAbility 注册的 tsfn 回调实参
-  // (legado.registerWebControllerCallback), 见交付报告的「需在 EntryAbility 侧补的清单」。
+  // (langhuan.registerWebControllerCallback), 见交付报告的「需在 EntryAbility 侧补的清单」。
   initForegroundWebBridge,
   handleForegroundPageEnd,
   handleForegroundTitleReceive,
@@ -35,7 +35,7 @@ import { setVideoSurfaceId, setVideoPipSurfaceController, getVideoPixelSize, Siz
 
 const DOMAIN: number = 0x0000;
 
-// 视频画面 surface builder (K/N OhosVideoPlayPlatformProvider 的 ArkUIView2(name="legadoVideoSurface")
+// 视频画面 surface builder (K/N OhosVideoPlayPlatformProvider 的 ArkUIView2(name="langhuanVideoSurface")
 // 混排到 Compose 层级时由 CPF 调用)。
 // 纯 ArkTS XComponent 的 onLoad 不带 surfaceId (回调参数是 native 侧自定义 context), 故绑
 // XComponentController, onLoad 后经 getXComponentSurfaceId() 取 id 交给 MediaBridgeHandler
@@ -57,17 +57,17 @@ const videoSurfaceController: XComponentController = new XComponentController();
  * background/animation/gesture/clip/align 等, 不含 scale/offset。
  */
 @Component
-struct LegadoVideoSurface {
+struct LanghuanVideoSurface {
   // 键字面量必与 MediaBridgeHandler.ets 的 VIDEO_ZOOM_*_KEY 一致 (@StorageLink 的键要求字面量)
-  @StorageLink('legadoVideoZoomScale') zoomScale: number = 1;
-  @StorageLink('legadoVideoZoomPanX') panX: number = 0;
-  @StorageLink('legadoVideoZoomPanY') panY: number = 0;
+  @StorageLink('langhuanVideoZoomScale') zoomScale: number = 1;
+  @StorageLink('langhuanVideoZoomPanX') panX: number = 0;
+  @StorageLink('langhuanVideoZoomPanY') panY: number = 0;
   @State boxWidth: number = 0;
   @State boxHeight: number = 0;
 
   build() {
     Stack() {
-      XComponent({ id: 'legadoVideoSurface', type: XComponentType.SURFACE, controller: videoSurfaceController })
+      XComponent({ id: 'langhuanVideoSurface', type: XComponentType.SURFACE, controller: videoSurfaceController })
         .onLoad((): void => {
           setVideoSurfaceId(videoSurfaceController.getXComponentSurfaceId());
           // controller 一并注入画中画通道 (PiPWindow.create 的 componentController 复用本 XComponent 的 surface)
@@ -115,20 +115,20 @@ struct LegadoVideoSurface {
 }
 
 @Builder
-function LegadoVideoSurfaceBuilder(param: object) {
-  LegadoVideoSurface()
+function LanghuanVideoSurfaceBuilder(param: object) {
+  LanghuanVideoSurface()
 }
 
 // ===== Markdown 查看器 Web 组件 (interop builder) =====
-// K/N MarkdownContent 的 ArkUIView2(name="legadoMarkdownWeb") 混排到 Compose 层级时由 CPF 调用本
+// K/N MarkdownContent 的 ArkUIView2(name="langhuanMarkdownWeb") 混排到 Compose 层级时由 CPF 调用本
 // builder, 在 Compose 槽位内创建一个 Web 组件。页面内容不是 rawfile: 完整 viewer HTML 由 K/N
-// 运行时从 composeResources 直读模板 + marked/hljs/css 内联拼装 (legado.buildMarkdownViewerHtml),
+// 运行时从 composeResources 直读模板 + marked/hljs/css 内联拼装 (langhuan.buildMarkdownViewerHtml),
 // MarkdownBridgeHandler 在首个 onPageEnd 后 loadData 加载 (零拷贝零重复, 见 bridge/MarkdownBridgeHandler.ets)。
 // controller 为模块级单例, 与后台抓取 Web 实例相互独立。
 const markdownWebController: webview.WebviewController = new webview.WebviewController();
 
 @Builder
-function LegadoMarkdownWebBuilder(param: object) {
+function LanghuanMarkdownWebBuilder(param: object) {
   Web({ src: 'about:blank', controller: markdownWebController })
     .width('100%')
     .height('100%')
@@ -141,12 +141,12 @@ function LegadoMarkdownWebBuilder(param: object) {
       handleMarkdownPageEnd();
     })
     .onErrorReceive((event: OnErrorReceiveEvent): void => {
-      console.error('[LegadoMarkdown] page error: ' + event.error.getErrorInfo());
+      console.error('[LanghuanMarkdown] page error: ' + event.error.getErrorInfo());
     })
 }
 
 // ===== 前台 Web 组件 (interop builder) =====
-// K/N OhosWebViewSlot 的 ArkUIView2(name="legadoForegroundWeb") 混排到 Compose 层级时由 CPF
+// K/N OhosWebViewSlot 的 ArkUIView2(name="langhuanForegroundWeb") 混排到 Compose 层级时由 CPF
 // 调用本 builder, 在 Compose 槽位内创建**可见** Web 组件 (WebViewRoute/ReadRssRoute/登录 Overlay
 // 的承载; 与本文件底部那个隐藏 Web 组件的"后台抓取"链相互独立)。
 // 范式与视频 surface / Markdown 查看器完全相同 (ArkUIView2 + registerComposeInteropBuilder),
@@ -157,18 +157,18 @@ function LegadoMarkdownWebBuilder(param: object) {
 const foregroundWebController: webview.WebviewController = new webview.WebviewController();
 
 @Component
-struct LegadoForegroundWeb {
+struct LanghuanForegroundWeb {
   // 宽视口: metaViewport/overviewModeAccess 是 Web 组件的**静态属性** (只能 build 里设),
   // 而 show 命令里的 wideViewPort 是动态值, 故经 AppStorage 中转
   // (WebViewBridgeHandler.applyViewportSettings 写, 此处 @StorageLink 订阅 → 重渲染就地更新).
   // 键字面量必与 WebViewBridgeHandler.FOREGROUND_WIDE_VIEWPORT_KEY 一致 (@StorageLink 要求字面量)。
-  @StorageLink('legadoForegroundWebWideViewPort') wideViewPort: boolean = false;
+  @StorageLink('langhuanForegroundWebWideViewPort') wideViewPort: boolean = false;
 
   aboutToAppear(): void {
-    // controller 注入 + 结果/事件回送函数接线 (回送经 legado.webControllerCallback 到 KMP)。
+    // controller 注入 + 结果/事件回送函数接线 (回送经 langhuan.webControllerCallback 到 KMP)。
     // 注入时机晚于 tsfn 回调注册是安全的: 早到的 show 命令由 handler 缓存, 待本组件挂载后补执行。
     initForegroundWebBridge(foregroundWebController, (requestId: number, resultJson: string): void => {
-      legado.webControllerCallback(requestId, resultJson);
+      langhuan.webControllerCallback(requestId, resultJson);
     });
   }
 
@@ -220,12 +220,12 @@ struct LegadoForegroundWeb {
 }
 
 @Builder
-function LegadoForegroundWebBuilder(param: object) {
-  LegadoForegroundWeb()
+function LanghuanForegroundWebBuilder(param: object) {
+  LanghuanForegroundWeb()
 }
 
 /**
- * Legado 鸿蒙 Compose 入口。
+ * Langhuan 鸿蒙 Compose 入口。
  *
  * `@cpf-kmp-cmp/compose` 会依据 lib 中的 backend id 使用 FusionRendererCompose，
  * 把 Compose 绘制接入 ArkUI RenderNode；本页只负责控制器与完整生命周期转发。
@@ -235,8 +235,8 @@ function LegadoForegroundWebBuilder(param: object) {
  * 见 bridge/WebViewBridgeHandler.ets)。
  *
  * 前台 Web 组件: 用户可见的网页窗口承载 (书源登录/网页验证回传/RSS 网页阅读/内嵌浏览器),
- * 由 Kotlin OhosWebViewSlot 经 ArkUIView2(name="legadoForegroundWeb") 混排, 对应的 interop
- * builder (`LegadoForegroundWebBuilder`) 在本页注册; 组件本身在 Compose 槽位内创建。
+ * 由 Kotlin OhosWebViewSlot 经 ArkUIView2(name="langhuanForegroundWeb") 混排, 对应的 interop
+ * builder (`LanghuanForegroundWebBuilder`) 在本页注册; 组件本身在 Compose 槽位内创建。
  */
 @Entry
 @Component
@@ -254,24 +254,24 @@ struct Index {
       // 独立 try: 失败不应阻断 Compose 控制器创建 (仅 Markdown 内容不渲染)。
       try {
         initMarkdownBridge(markdownWebController, (eventJson: string): void => {
-          legado.markdownEvent(eventJson);
+          langhuan.markdownEvent(eventJson);
         });
       } catch (e) {
-        hilog.warn(DOMAIN, 'LegadoCompose', 'initMarkdownBridge failed: %{public}s', JSON.stringify(e));
+        hilog.warn(DOMAIN, 'LanghuanCompose', 'initMarkdownBridge failed: %{public}s', JSON.stringify(e));
       }
       // 软键盘桥: 注入 UIContext (setKeyboardAvoidMode 需要; hide/show 走 @ohos.inputMethod 不依赖)。
       // 独立 try: 失败不应阻断 Compose 控制器创建 (仅 setAvoidMode 不可用)。
       try {
         initKeyboardBridge(this.getUIContext());
       } catch (e) {
-        hilog.warn(DOMAIN, 'LegadoCompose', 'initKeyboardBridge failed (keyboard avoid mode unavailable): %{public}s', JSON.stringify(e));
+        hilog.warn(DOMAIN, 'LanghuanCompose', 'initKeyboardBridge failed (keyboard avoid mode unavailable): %{public}s', JSON.stringify(e));
       }
       // Toast 桥: 注入 UIContext (UIContext.getPromptAction().showToast 需要)。
       // 独立 try: 失败不应阻断 Compose 控制器创建 (仅 Toast 不可用)。
       try {
         initSystemBridgeUiContext(this.getUIContext());
       } catch (e) {
-        hilog.warn(DOMAIN, 'LegadoCompose', 'initSystemBridgeUiContext failed (toast unavailable): %{public}s', JSON.stringify(e));
+        hilog.warn(DOMAIN, 'LanghuanCompose', 'initSystemBridgeUiContext failed (toast unavailable): %{public}s', JSON.stringify(e));
       }
       // 对话框桥: 注入 UIContext (UIContext.getPromptAction().showDialog / openCustomDialog 需要), 供
       // 候选列表 / 是-否确认框 / 多字段输入框使用 (KMP 侧经 window tsfn 发请求, 见 SysDialogBridgeHandler)。
@@ -279,41 +279,41 @@ struct Index {
       try {
         initSysDialogBridgeUiContext(this.getUIContext());
       } catch (e) {
-        hilog.warn(DOMAIN, 'LegadoCompose', 'initSysDialogBridgeUiContext failed (dialog unavailable): %{public}s', JSON.stringify(e));
+        hilog.warn(DOMAIN, 'LanghuanCompose', 'initSysDialogBridgeUiContext failed (dialog unavailable): %{public}s', JSON.stringify(e));
       }
-      // 视频画面 surface builder 注册 (K/N ArkUIView2(name="legadoVideoSurface") 混排 XComponent 的入口;
+      // 视频画面 surface builder 注册 (K/N ArkUIView2(name="langhuanVideoSurface") 混排 XComponent 的入口;
       // 未注册时该 interop 节点为空, 视频只能出声。注册 key 与 OhosVideoPlayPlatformProvider.
       // ARKUI_BUILDER_VIDEO_SURFACE 字面量一致)。
       // 独立 try: 注册失败不应阻断 Compose 控制器创建 (视频退化为只能出声)。
       try {
-        registerComposeInteropBuilder('legadoVideoSurface', LegadoVideoSurfaceBuilder);
+        registerComposeInteropBuilder('langhuanVideoSurface', LanghuanVideoSurfaceBuilder);
       } catch (e) {
-        hilog.warn(DOMAIN, 'LegadoCompose', 'registerComposeInteropBuilder failed (video surface unavailable): %{public}s', JSON.stringify(e));
+        hilog.warn(DOMAIN, 'LanghuanCompose', 'registerComposeInteropBuilder failed (video surface unavailable): %{public}s', JSON.stringify(e));
       }
-      // Markdown 查看器 Web 组件 builder 注册 (K/N ArkUIView2(name="legadoMarkdownWeb") 混排入口;
+      // Markdown 查看器 Web 组件 builder 注册 (K/N ArkUIView2(name="langhuanMarkdownWeb") 混排入口;
       // 未注册时该 interop 节点为空, Markdown 内容不渲染)。
       // 注册 key 与 MarkdownContent.ohos.kt ARKUI_BUILDER_MARKDOWN_WEB 字面量一致。
       try {
-        registerComposeInteropBuilder('legadoMarkdownWeb', LegadoMarkdownWebBuilder);
+        registerComposeInteropBuilder('langhuanMarkdownWeb', LanghuanMarkdownWebBuilder);
       } catch (e) {
-        hilog.warn(DOMAIN, 'LegadoCompose', 'registerComposeInteropBuilder failed (markdown web unavailable): %{public}s', JSON.stringify(e));
+        hilog.warn(DOMAIN, 'LanghuanCompose', 'registerComposeInteropBuilder failed (markdown web unavailable): %{public}s', JSON.stringify(e));
       }
-      // 前台 Web 组件 builder 注册 (K/N OhosWebViewSlot 的 ArkUIView2(name="legadoForegroundWeb")
+      // 前台 Web 组件 builder 注册 (K/N OhosWebViewSlot 的 ArkUIView2(name="langhuanForegroundWeb")
       // 混排入口, 可见 Web 组件在 Compose 槽位内创建; 未注册时该 interop 节点为空, 前台网页窗口
       // (书源登录/验证回传/RSS 网页阅读/内嵌浏览器) 只显示 Kotlin 侧占位文本)。
       // 注册 key 与 OhosWebViewStub.kt ARKUI_BUILDER_FOREGROUND_WEB 字面量一致。
       try {
-        registerComposeInteropBuilder('legadoForegroundWeb', LegadoForegroundWebBuilder);
+        registerComposeInteropBuilder('langhuanForegroundWeb', LanghuanForegroundWebBuilder);
       } catch (e) {
-        hilog.warn(DOMAIN, 'LegadoCompose', 'registerComposeInteropBuilder failed (foreground web unavailable): %{public}s', JSON.stringify(e));
+        hilog.warn(DOMAIN, 'LanghuanCompose', 'registerComposeInteropBuilder failed (foreground web unavailable): %{public}s', JSON.stringify(e));
       }
-      this.controller = legado.MainArkUIViewController();
+      this.controller = langhuan.MainArkUIViewController();
       if (!this.controller) {
         this.errorMessage = 'Compose controller creation returned null';
       }
     } catch (e) {
       const detail = JSON.stringify(e);
-      hilog.error(DOMAIN, 'LegadoCompose', 'controller creation failed: %{public}s', detail);
+      hilog.error(DOMAIN, 'LanghuanCompose', 'controller creation failed: %{public}s', detail);
       this.errorMessage = 'Compose controller creation failed: ' + detail;
     }
   }
@@ -323,7 +323,7 @@ struct Index {
       if (this.controller) {
         Compose({
           controller: this.controller,
-          libraryName: 'legado_napi',
+          libraryName: 'langhuan_napi',
           onBackPressed: (): boolean => this.controller!.onBackPress()
         })
       } else {

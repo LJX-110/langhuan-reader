@@ -54,7 +54,7 @@
 </template>
 <script setup lang="ts">
 import type { Book, SeachBook } from '@/book'
-import { dateFormat, isLegadoUrl } from '../utils/utils'
+import { dateFormat, isLanghuanUrl } from '../utils/utils'
 import API from '@api'
 const props = defineProps<{
   books: Array<Book | SeachBook>
@@ -65,7 +65,7 @@ const emit = defineEmits(['bookClick'])
 const handleClick = (book: Book | SeachBook) => emit('bookClick', book)
 const getCover = ({ bookUrl, coverUrl }: Book | SeachBook) => {
   if (coverUrl === undefined) return API.getProxyCoverUrl(bookUrl)
-  return isLegadoUrl(coverUrl) ? API.getProxyCoverUrl(coverUrl) : coverUrl
+  return isLanghuanUrl(coverUrl) ? API.getProxyCoverUrl(coverUrl) : coverUrl
 }
 const proxyImage = (evt: Event) => {
   const target = evt.target as HTMLImageElement

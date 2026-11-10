@@ -10,7 +10,7 @@ import { BridgeRequest, BridgeResponse, dispatchBridgeRequest } from './BridgeDi
  * 接收 Kotlin OhosNativeBridge.invokePermissionSync 通过 tsfn dispatch 过来的权限查询/申请请求,
  * 调用 @ohos.abilityAccessCtrl.createAtManager() 的 checkAccessTokenSync / requestPermissionsFromUser
  * 执行真实权限检查 / 运行时申请 (user_grant 弹窗), 完成后通过
- * legado.permissionCallback(requestId, resultJson) 回送结果给 Kotlin。
+ * langhuan.permissionCallback(requestId, resultJson) 回送结果给 Kotlin。
  *
  * # JSON 协议 (与 OhosNativeBridge.kt PermissionBridgeRequest + OhosPlatformServices.kt 对齐)
  *
@@ -21,7 +21,7 @@ import { BridgeRequest, BridgeResponse, dispatchBridgeRequest } from './BridgeDi
  *   "payload": "{\"permission\":\"ohos.permission.XXX\"}"
  * }
  *
- * ## 响应 (ArkTS → Kotlin, 由 legado.permissionCallback 推送)
+ * ## 响应 (ArkTS → Kotlin, 由 langhuan.permissionCallback 推送)
  * - 成功: `{ ok: true, granted: <boolean> }` (granted 为最终授权态)
  * - 失败: `{ ok: false, error: "<string>" }`
  *
@@ -30,7 +30,7 @@ import { BridgeRequest, BridgeResponse, dispatchBridgeRequest } from './BridgeDi
  *   → OhosNativeBridge.invokePermissionSync("check"|"request", payload)
  *   → permissionTsfn → C++ ohos_permission_dispatch → napi_call_threadsafe_function → PermissionCallJs
  *   → [handlePermissionRequest] → atManager.checkAccessTokenSync / requestPermissionsFromUser
- *   → legado.permissionCallback(requestId, resultJson) → onPermissionResult → deferred.complete
+ *   → langhuan.permissionCallback(requestId, resultJson) → onPermissionResult → deferred.complete
  *
  * # 权限语义
  * - check: 同步查 tokenId (accessTokenId 取应用自身), 不弹窗。
@@ -38,7 +38,7 @@ import { BridgeRequest, BridgeResponse, dispatchBridgeRequest } from './BridgeDi
  *   (与 Kotlin PermissionService.requestPermission 的"返回值即最终是否授予"注释对齐)。
  */
 
-// 由 EntryAbility 注入的结果回送函数类型 (内部调 legado.permissionCallback)
+// 由 EntryAbility 注入的结果回送函数类型 (内部调 langhuan.permissionCallback)
 export type PermissionCallback = (requestId: number, resultJson: string) => void;
 
 // UIAbilityContext (requestPermissionsFromUser 需要; 由 EntryAbility 注入)
@@ -100,7 +100,7 @@ export async function ensurePermissionGranted(context: common.UIAbilityContext, 
  * 处理来自 Kotlin 的权限请求 (由 EntryAbility 注册的 tsfn 回调调用)。
  *
  * @param requestJson 请求 JSON 字符串 (含 requestId/action/payload)
- * @param callback 回送结果的函数 (EntryAbility 注入 legado.permissionCallback)
+ * @param callback 回送结果的函数 (EntryAbility 注入 langhuan.permissionCallback)
  */
 export function handlePermissionRequest(requestJson: string, callback: PermissionCallback): void {
   let requestId = -1;

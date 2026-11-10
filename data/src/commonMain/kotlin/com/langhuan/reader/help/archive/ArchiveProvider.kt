@@ -1,0 +1,92 @@
+package com.langhuan.reader.help.archive
+
+import kotlin.concurrent.Volatile
+
+/**
+ * 压缩文件解压跨平台接口 (commonMain)。
+ *
+ * 供 JsExtensions 的压缩方法 (unzipFile/un7zFile/unrarFile/unArchiveFile/
+ * getZip/Rar/7z StringContent/ByteArrayContent) 使用, 解耦对 app 端 ArchiveUtils/LibArchiveUtils
+ * (依赖 Android native libarchive + ParcelFileDescriptor) 的直接依赖。
+ *
+ * # 实现注册
+ * - **Android (app)**: AndroidArchiveProvider 委托 ArchiveUtils/LibArchiveUtils (libarchive 全格式),
+ *   在 App.onCreate 经 [ArchiveProviders.register] 注入。
+ * - **Desktop**: `DesktopArchiveProvider` (zip 走 JDK ZipInputStream; rar/7z 无 native 库仍缺)。
+ * - **iOS / 鸿蒙**: 共用 nativeMain `NativeArchiveProvider` (zip/cbz 走 NativeZipCodec;
+ *   rar/7z 抛明确异常)。
+ *
+ * 模式参考 [com.langhuan.reader.model.fileBook.BitmapProviders]。
+ */
+interface ArchiveProvider {
+
+    /** 临时解压目录名 (相对缓存目录), 与 app 端 ArchiveUtils.TEMP_FOLDER_NAME 对齐。 */
+    val tempFolderName: String
+
+    /**
+     * 解压 [archivePath] 到临时目录, 返回解压出的文件相对路径列表。
+     *
+     * 对应 app 端 [com.langhuan.reader.utils.ArchiveUtils.deCompress]。
+     *
+     * @param archivePath 压缩文件绝对路径
+     * @return 解压出的文件路径列表 (实现内部决定绝对/相对, 调用方 JsExtensions 只用副作用+tempFolderName 拼相对目录)
+     */
+    fun deCompress(archivePath: String): List<String>
+
+    /**
+     * 解压到本次请求独占的目录 (文件关联导入链用): 同名压缩包并发/先后导入互不覆盖。
+     *
+     * [workKey] 由调用方保证唯一; 调用方在不再读取解压结果后清理该目录。
+     * 无隔离能力的端默认回落到 [deCompress].
+     */
+    fun deCompressIsolated(archivePath: String, workKey: String): List<String> =
+        deCompress(archivePath)
+
+    /**
+     * 列举压缩包内条目名 (不含目录条目)。
+     *
+     * 对应 app 端 [com.langhuan.reader.utils.ArchiveUtils.getArchiveFilesName]。
+     *
+     * # 必须照原样保留的语义 (调用方依赖, 不是可自由发挥的接口)
+     * - **[filter] 为 null 时恒返回空列表**: 底层实现是 `if (filter != null && filter(name))`,
+     *   即没有过滤条件就一条都不返回。调用方一律传非 null 过滤条件, 不得为此改判据。
+     * - **后缀不是压缩包时抛异常, 不是返回空列表**: 原版 `ArchiveUtils.getArchiveFilesName` 第一行是
+     *   `checkArchive(fileDoc.name)`, 名字不匹配 archiveFileRegex 时抛
+     *   `IllegalArgumentException("Unexpected file suffix")`; `openReadPfd().getOrThrow()` 打不开也抛。
+     *   只有内层 libarchive 解码/遍历异常才被 `catch (e: Exception) { emptyList() }` 吞成空列表,
+     *   调用方据“空列表”弹“不支持的压缩包条目”提示 —— 别把两种失败口径混成一句"读失败返回空列表"。
+     *
+     * @param archivePath 压缩文件绝对路径
+     * @param filter 条目名过滤条件; null 时按上述语义返回空列表
+     * @return 命中 [filter] 的条目名列表
+     */
+    fun getFilesName(archivePath: String, filter: ((String) -> Boolean)?): List<String>
+
+    /**
+     * 从 [bytes] (压缩文件字节内容) 中读取指定 [path] 条目的字节。
+     *
+     * 对应 app 端 LibArchiveUtils.getByteArrayContent (libarchive 统一处理 zip/rar/7z)。
+     * JsExtensions 的 getZip/Rar/7zByteArrayContent 统一走本方法 (zip 不特殊化, 用户决策)。
+     *
+     * @param bytes 压缩文件字节内容
+     * @param path 压缩包内条目路径
+     * @return 条目字节内容; null 未找到或解码失败
+     */
+    fun getByteArrayContent(bytes: ByteArray, path: String): ByteArray?
+}
+
+/**
+ * [ArchiveProvider] provider 容器。宿主启动早期注册一次。
+ */
+object ArchiveProviders {
+    @Volatile
+    private var impl: ArchiveProvider? = null
+
+    /** 宿主启动早期注册一次 (任何 JsExtensions 压缩方法调用之前)。 */
+    fun register(impl: ArchiveProvider) {
+        this.impl = impl
+    }
+
+    /** 获取已注册实现, 未注册抛出 IllegalStateException。 */
+    fun get(): ArchiveProvider = impl ?: error("ArchiveProviders not registered")
+}

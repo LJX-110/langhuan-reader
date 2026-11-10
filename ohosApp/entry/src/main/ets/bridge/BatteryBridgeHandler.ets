@@ -6,7 +6,7 @@ import { BridgeRequest, BridgeResponse, dispatchBridgeRequestSync } from './Brid
  *
  * 接收 Kotlin OhosNativeBridge.invokeBatterySync 通过 tsfn dispatch 过来的电量查询请求,
  * 调用 @ohos.batteryInfo.batterySOC 读取当前电量百分比,
- * 完成后通过 legado.batteryCallback(requestId, resultJson) 回送结果给 Kotlin。
+ * 完成后通过 langhuan.batteryCallback(requestId, resultJson) 回送结果给 Kotlin。
  *
  * # JSON 协议 (与 OhosNativeBridge.kt BatteryBridgeRequest 对齐)
  *
@@ -16,7 +16,7 @@ import { BridgeRequest, BridgeResponse, dispatchBridgeRequestSync } from './Brid
  *   "action": "getLevel"
  * }
  *
- * ## 响应 (ArkTS → Kotlin, 由 legado.batteryCallback 推送)
+ * ## 响应 (ArkTS → Kotlin, 由 langhuan.batteryCallback 推送)
  * - 成功: `{ ok: true, level: <0-100> }`
  * - 失败: `{ ok: false, error: "<string>" }`
  *
@@ -24,11 +24,11 @@ import { BridgeRequest, BridgeResponse, dispatchBridgeRequestSync } from './Brid
  * KMP OhosReaderPlatformProvider.getBatteryLevel → OhosNativeBridge.invokeBatterySync("getLevel")
  *   → batteryTsfn → C++ ohos_battery_dispatch → napi_call_threadsafe_function → BatteryCallJs
  *   → [handleBatteryRequest] → batteryInfo.batterySOC
- *   → legado.batteryCallback(requestId, resultJson) → onBatteryResult → deferred.complete
+ *   → langhuan.batteryCallback(requestId, resultJson) → onBatteryResult → deferred.complete
  *   → getBatteryLevel 解析 level 返回 (失败/超时返回 -1 不显示)
  */
 
-// 由 EntryAbility 注入的结果回送函数类型 (内部调 legado.batteryCallback)
+// 由 EntryAbility 注入的结果回送函数类型 (内部调 langhuan.batteryCallback)
 export type BatteryCallback = (requestId: number, resultJson: string) => void;
 
 interface BatteryResponse extends BridgeResponse {
@@ -39,7 +39,7 @@ interface BatteryResponse extends BridgeResponse {
  * 处理来自 Kotlin 的电量查询请求 (由 EntryAbility 注册的 tsfn 回调调用)。
  *
  * @param requestJson 请求 JSON 字符串 (含 requestId/action)
- * @param callback 回送结果的函数 (EntryAbility 注入 legado.batteryCallback)
+ * @param callback 回送结果的函数 (EntryAbility 注入 langhuan.batteryCallback)
  */
 export function handleBatteryRequest(requestJson: string, callback: BatteryCallback): void {
   dispatchBridgeRequestSync(requestJson, 'BatteryBridge', handleAction, callback);

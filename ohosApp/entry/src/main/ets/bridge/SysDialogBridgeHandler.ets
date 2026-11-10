@@ -41,9 +41,9 @@ import { BridgeRequest, BridgeResponse, dispatchBridgeRequest } from './BridgeDi
  * # 为什么走 tsfn + 统一平台事件, 而不新加 napi 符号
  * 请求侧复用 window tsfn (OhosNativeBridge.WindowCommand action="showDialog",
  * 同 exitApplication 复用先例), 由 EntryAbility 的 window callback 转交本模块;
- * 结果侧经 legado.platformEvent (type="dialogResult", 同 colorMode 等后加事件先例) 回送。
- * 新建独立 tsfn + 回调符号需改 ohosApp/entry/src/main/cpp 下的 legado_napi.cpp 与
- * liblegado_napi/Index.d.ts, 二者不在本次改动的文件域内 (见 Kotlin 侧同段注释)。
+ * 结果侧经 langhuan.platformEvent (type="dialogResult", 同 colorMode 等后加事件先例) 回送。
+ * 新建独立 tsfn + 回调符号需改 ohosApp/entry/src/main/cpp 下的 langhuan_napi.cpp 与
+ * liblanghuan_napi/Index.d.ts, 二者不在本次改动的文件域内 (见 Kotlin 侧同段注释)。
  *
  * # 候选列表的按钮上限与 form 的自绘理由 (为什么不换更"专业"的菜单类 API)
  * 本机 SDK 里 ActionMenuOptions.buttons 是固定 6 元组 ("One to six buttons are supported"),
@@ -127,7 +127,7 @@ interface FormDialogState {
   settled: boolean;
 }
 
-// 由 EntryAbility 注入的结果回送函数类型 (内部调 legado.platformEvent type='dialogResult')
+// 由 EntryAbility 注入的结果回送函数类型 (内部调 langhuan.platformEvent type='dialogResult')
 export type DialogResultCallback = (requestId: number, resultJson: string) => void;
 
 /** 响应 (ArkTS → Kotlin, 与 Kotlin OhosDialogResult 对齐)。 */
@@ -164,7 +164,7 @@ export function initSysDialogBridgeUiContext(ctx: UIContext): void {
  * 处理来自 Kotlin 的对话框请求 (由 EntryAbility 的 window callback 转交)。
  *
  * @param requestJson 控制面请求 JSON 字符串 (含 requestId/action/payload)
- * @param callback 回送结果的函数 (EntryAbility 注入, 内部调 legado.platformEvent
+ * @param callback 回送结果的函数 (EntryAbility 注入, 内部调 langhuan.platformEvent
  *   type="dialogResult" 交还 Kotlin)
  */
 export function handleDialogRequest(

@@ -1,0 +1,959 @@
+package com.langhuan.reader.ui.main
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.res.Configuration
+import androidx.core.content.ContextCompat
+import android.graphics.Typeface
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.text.TextPaint
+import android.view.WindowManager
+import androidx.activity.addCallback
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.net.toUri
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.lifecycleScope
+import com.langhuan.reader.BuildConfig
+import com.langhuan.reader.base.BaseComposeActivity
+import com.langhuan.reader.constant.AppConst
+import com.langhuan.reader.constant.AppLog
+import com.langhuan.reader.constant.DirUsage
+import com.langhuan.reader.constant.IntentAction
+import com.langhuan.reader.constant.PreferKey
+import com.langhuan.reader.constant.appInfo
+import com.langhuan.reader.data.AppDbProviders
+import com.langhuan.reader.data.entities.Book
+import com.langhuan.reader.help.StartupMaintenanceShared
+import com.langhuan.reader.help.book.BookHelp
+import com.langhuan.reader.help.book.isImage
+import com.langhuan.reader.help.book.isLocal
+import com.langhuan.reader.help.config.AppConfig
+import com.langhuan.reader.help.config.LocalConfig
+import com.langhuan.reader.help.config.LocalReadConfigProviders
+import com.langhuan.reader.help.config.ReadConfigProviders
+import com.langhuan.reader.help.coroutine.Coroutine
+import com.langhuan.reader.help.i18n.androidAppString
+import com.langhuan.reader.help.image.registerReaderImageResolver
+import com.langhuan.reader.help.storage.Backup
+import com.langhuan.reader.model.ActiveReadBookRegistry
+import com.langhuan.reader.model.fileBook.FileBook
+import com.langhuan.reader.help.extension.AndroidMangaExtensionHost
+import com.langhuan.reader.help.extension.MangaExtensionHostProviders
+import com.langhuan.reader.help.extension.MangaExtensionManager
+import com.langhuan.reader.help.file.AndroidDirAuthorizations
+import com.langhuan.reader.model.manga.AndroidMangaExtensionPlatform
+import com.langhuan.reader.receiver.MediaButtonReceiver
+import com.langhuan.reader.service.BaseReadAloudService
+import com.langhuan.reader.service.ExportBookService
+import com.langhuan.reader.ui.about.UpVersionStore
+import com.langhuan.reader.ui.about.checkUpdateAndPrompt
+import com.langhuan.reader.ui.about.notifyAppCrash
+import com.langhuan.reader.ui.about.upVersion
+import com.langhuan.reader.ui.association.DeepLinkImportHost
+import com.langhuan.reader.ui.compose.theme.AppTheme
+import com.langhuan.reader.ui.association.LanghuanDeepLink
+import com.langhuan.reader.ui.association.LanghuanDeepLinkHandler
+import com.langhuan.reader.ui.book.audio.AudioPlayPlatformProviders
+import com.langhuan.reader.ui.book.audio.SharedAudioPlayPlatformProvider
+import com.langhuan.reader.ui.book.info.BookInfoBlurCoverBg
+import com.langhuan.reader.ui.book.info.BookInfoIntroImage
+import com.langhuan.reader.ui.book.info.LocalBlurCoverBgSlot
+import com.langhuan.reader.ui.book.info.LocalIntroImageSlot
+import com.langhuan.reader.ui.book.manga.AndroidMangaReaderPlatform
+import com.langhuan.reader.ui.book.manga.MangaReaderScreenModel
+import com.langhuan.reader.ui.book.manga.extension.MangaExtensionServiceProviders
+import com.langhuan.reader.ui.book.read.AndroidReaderPlatformProvider
+import com.langhuan.reader.ui.book.tvbox.JvmTvBoxPlatform
+import com.langhuan.reader.ui.book.tvbox.TvBoxServiceProviders
+import com.langhuan.reader.ui.book.read.ReaderPlatformProviders
+import com.langhuan.reader.ui.book.read.ReaderScreenModelRegistry
+import com.langhuan.reader.ui.book.read.page.provider.AndroidTextMeasurer
+import com.langhuan.reader.ui.book.read.page.provider.TextMeasurerProviders
+import com.langhuan.reader.ui.book.read.page.readerLayoutTypeface
+import com.langhuan.reader.ui.book.read.refreshReaderImage
+import com.langhuan.reader.ui.book.source.SourceUiEventBridgeHost
+import com.langhuan.reader.ui.book.video.AndroidVideoPlayPlatformProvider
+import com.langhuan.reader.ui.book.video.VideoPlayPlatformProviders
+import com.langhuan.reader.ui.browser.AndroidWebView
+import com.langhuan.reader.ui.browser.LocalWebViewSlot
+import com.langhuan.reader.ui.compose.dialogs.alert
+import com.langhuan.reader.ui.file.HandleFileContract
+import com.langhuan.reader.ui.file.HandleFileLauncher
+import com.langhuan.reader.ui.file.registerHandleFile
+import com.langhuan.reader.ui.reader.ReaderDictWord
+import com.langhuan.reader.ui.reader.ReaderImageActionMenu
+import com.langhuan.reader.ui.reader.ReaderImageActions
+import com.langhuan.reader.ui.reader.readerMenuAnchor
+import com.langhuan.reader.ui.root.AppForegroundState
+import com.langhuan.reader.ui.root.AppNavigator
+import com.langhuan.reader.ui.root.AppNavigatorProviders
+import com.langhuan.reader.ui.root.AppOverlay
+import com.langhuan.reader.ui.root.AppRoute
+import com.langhuan.reader.ui.root.LaunchRequest
+import com.langhuan.reader.ui.root.LaunchRequestBus
+import com.langhuan.reader.ui.root.LanghuanApp
+import com.langhuan.reader.ui.root.PlatformCapabilityProviders
+import com.langhuan.reader.ui.root.PlatformServiceProviders
+import com.langhuan.reader.ui.root.ShareTextTarget
+import com.langhuan.reader.ui.root.shareTextTarget
+import com.langhuan.reader.ui.widget.dialog.encodePhotoOverlayPayload
+import com.langhuan.reader.utils.ACache
+import com.langhuan.reader.utils.FileUtils
+import com.langhuan.reader.utils.keepScreenOn
+import com.langhuan.reader.utils.observeEvent
+import com.langhuan.reader.utils.registerForActivityResult
+import com.langhuan.reader.utils.startService
+import com.langhuan.reader.utils.sysScreenOffTime
+import com.langhuan.reader.utils.toastOnUi
+import com.langhuan.reader.web.utils.WebAssetSources
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.resume
+
+/**
+ * 主界面：零薄壳入口。Content 调用 shared [LanghuanApp]，由 shared RouteContent 统一渲染。
+ * 保留启动期逻辑（版本更新/本地密码/崩溃通知/备份同步）和平台专属回调（换封面/导入选目录）。
+ */
+class MainActivity : BaseComposeActivity(imageBg = false) {
+
+    val viewModel by viewModels<MainViewModel>()
+
+    /** 视频画中画 provider: PiP 模式切换回调由此转发到共享层渲染状态。 */
+    private var videoPlayProvider: AndroidVideoPlayPlatformProvider? = null
+
+    /** 画中画小窗内遥控 RemoteAction 的广播接收 (onCreate 注册, onDestroy 注销) */
+    private val pipControlReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != AndroidVideoPlayPlatformProvider.ACTION_MEDIA_CONTROL) return
+            videoPlayProvider?.onPipControl(
+                intent.getIntExtra(AndroidVideoPlayPlatformProvider.EXTRA_CONTROL_TYPE, 0)
+            )
+        }
+    }
+
+    /** 换封面源回调暂存: 由 [AndroidPlatformCapabilities.showChangeCoverDialog] 写入,
+     *  ChangeCoverDialog 触发 [coverChangeTo] 时消费。 */
+    var pendingCoverChangeCallback: ((String) -> Unit)? = null
+
+    /** 图片保存目录选择 (对照原版 selectImageDir.launch: SAF 选目录 → 写 ACache imagePathKey)。
+     * 待保存图片的来源随请求参数携带 (对照原版 value 契约), 取消只结束当次请求。 */
+    private lateinit var selectImageDir: HandleFileLauncher
+    private fun onSelectImageDir(result: HandleFileContract.Result) {
+        result.error?.let { e ->
+            toastOnUi(e.message ?: "选择图片保存目录失败")
+            AppLog.put("选择图片保存目录失败", e)
+            return
+        }
+        val uri = result.uri ?: return
+        ACache.get().put(AppConst.imagePathKey, uri.toString())
+        // 图片保存目录也可被本地书引用, 登记用途供书籍文件访问校验
+        AndroidDirAuthorizations.remember(uri.toString(), DirUsage.ImageSave)
+        val src = result.value ?: return
+        val book = result.book
+        if (book != null) {
+            saveImage(src, uri, book)
+            return
+        }
+        // 配置重建后回传: 按发起时的书籍地址取回快照, 不反查当前阅读书
+        val bookUrl = result.bookUrl ?: return
+        lifecycleScope.launch {
+            val restored = runCatching { AppDbProviders.get().bookDao.getBook(bookUrl) }.getOrNull()
+            if (restored != null) saveImage(src, uri, restored)
+        }
+    }
+
+    // 阅读页屏幕常亮管理 (对照原版 ReadBookEventHandler.upScreenTimeOut/screenOffTimerStart)
+    private val keepScreenOnHandler by lazy { Handler(Looper.getMainLooper()) }
+    private val screenOffRunnable = Runnable {
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+    private var readerWindowActive = false
+    private var readerScreenTimeOut = 0L
+
+    /**
+     * 自动翻页期间的强制常亮标记 (对照原版 autoPage() 里直写 screenTimeOut = -1L,
+     * autoPageStop() 里用 upScreenTimeOut() 恢复 keepLight 配置值)。
+     * 单独标记而不直接写 [readerScreenTimeOut]：常亮计时会被 keepLight 变更/
+     * 窗口策略重应用重算多次, 靠标记才能在重算后仍保住自动翻页的强制常亮。
+     */
+    private var readerAutoPageKeepScreenOn = false
+
+    // 平台能力与服务: onActivityCreated 同步创建并注册, 修复 LaunchedEffect 异步注册时序问题
+    private lateinit var capabilities: AndroidPlatformCapabilities
+
+    /** 阅读页平台桥: Content 需挂它的自绘文本操作菜单宿主 (见 TextSelectionHost)。 */
+    private lateinit var readerPlatform: AndroidReaderPlatformProvider
+    private lateinit var services: AndroidPlatformServices
+
+    /** 主界面导入宿主的 ViewModelStore (只恢复本 Activity 自己的会话) */
+    private val mainImportSessionHolder by viewModels<com.langhuan.reader.ui.association.DeepLinkImportSessionViewModel>()
+
+    /** 导入书籍: SAF 选根目录 (对照 ImportBookActivity.selectFolder: 写 pref 后重建 rootDoc 并读目录)。 */
+    private lateinit var importSelectFolder: HandleFileLauncher
+    private fun onImportSelectFolder(result: HandleFileContract.Result) {
+        result.error?.let { e ->
+            toastOnUi(e.message ?: "选择书籍目录失败")
+            AppLog.put("选择书籍目录失败", e)
+            // 失败也终结本次在途标记, 否则下次 launchImportFolderPicker 永久被 pending 挡住
+            capabilities.onImportFolderSelected(false)
+            return
+        }
+        if (result.uri != null) {
+            AppConfig.importBookPath = result.uri.toString()
+            // 导入根目录下的文件按本地书读入, 登记为书籍用途
+            AndroidDirAuthorizations.remember(result.uri.toString(), DirUsage.BookTree)
+        }
+        // 取消选择时不动当前 rootDoc (对照原版 selectFolder 回调 uri==null 直接 return)
+        capabilities.onImportFolderSelected(result.uri != null)
+    }
+
+    /** 暴露给 [AndroidPlatformCapabilities] 启动 SAF 选目录。 */
+    fun launchImportFolderPicker() = importSelectFolder.launch()
+
+    /** 启动 ExportBookService 批量导出 (对照 BookshelfManageActivity.startExport)。 */
+    internal fun startExportBooks(path: String, books: List<Book>) {
+        if (books.isEmpty()) {
+            toastOnUi(androidAppString("no_book"))
+            return
+        }
+        val defaultType = when (AppConfig.exportType) {
+            1 -> "epub"
+            else -> "txt"
+        }
+        books.forEach { book ->
+            val exportType = if (book.isImage) "cbz" else defaultType
+            startService<ExportBookService> {
+                action = IntentAction.start
+                putExtra("bookUrl", book.bookUrl)
+                putExtra("exportType", exportType)
+                putExtra("exportPath", path)
+            }
+        }
+    }
+
+    /** 自定义导出: 按章节范围/分卷大小导出为 epub (对照 configExportSection 的自定义分支)。 */
+    internal fun startExportBooksCustom(
+        path: String,
+        books: List<Book>,
+        epubSize: Int,
+        epubScope: String,
+    ) {
+        if (books.isEmpty()) {
+            toastOnUi(androidAppString("no_book"))
+            return
+        }
+        books.forEach { book ->
+            startService<ExportBookService> {
+                action = IntentAction.start
+                putExtra("bookUrl", book.bookUrl)
+                putExtra("exportType", "epub")
+                putExtra("exportPath", path)
+                putExtra("epubSize", epubSize)
+                putExtra("epubScope", epubScope)
+            }
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        initializePlatform()
+        super.onCreate(savedInstanceState)
+        // restoreFrom 之后才重绑: 在途"书籍保存位置"选择等待认领当前有效宿主
+        capabilities.rebindPendingBookTreePickers()
+        // 注册点保持 onCreate 内 (会话由宿主基类在 onCreate 建立, 任意时机注册均安全)
+        selectImageDir = registerHandleFile(::onSelectImageDir, key = "main.imageDir")
+        importSelectFolder = registerHandleFile(::onImportSelectFolder, key = "main.importFolder")
+    }
+
+    // FilePickerService 桥接: launcher 须在 Activity STARTED 前注册, 交给 AndroidFilePickerService 阻塞等待回调
+    private val openDocumentPicker =
+        registerForActivityResult(ActivityResultContracts.OpenDocument())
+    private val openDocumentsPicker =
+        registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments())
+    private val createDocumentPicker =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("*/*"))
+
+    // 选目录: SAF OpenDocumentTree (书籍保存位置用), 与 selectDocTree 同语义
+    private val openDocumentTreePicker =
+        registerForActivityResult(ActivityResultContracts.OpenDocumentTree())
+
+    private fun coverChangeTo(coverUrl: String) {
+        pendingCoverChangeCallback?.invoke(coverUrl)
+        pendingCoverChangeCallback = null
+    }
+
+    /**
+     * 收起图片操作浮动菜单（对照文本菜单 dismiss; 幂等：菜单未显示时无操作）。
+     */
+    fun dismissImageActionMenu() {
+        ReaderImageActionMenu.dismiss()
+    }
+
+    /**
+     * 图片长按菜单 (对照原版 ReadBookActivity.onImageLongPress: 查看/刷新/保存/选择目录),
+     * 自绘浮动菜单与文本长按菜单同款样式 (澎湃浮动菜单, 见 ReaderImageActionMenu)。
+     */
+    fun showImageActionMenu(src: String, x: Float, y: Float) {
+        ReaderImageActionMenu.show(
+            anchor = readerMenuAnchor(x, y),
+            actions = ReaderImageActions(
+                view = { viewImage(src) },
+                refresh = { refreshImage(src) },
+                save = {
+                    val path = ACache.get().getAsString(AppConst.imagePathKey)
+                    // 发起时绑定当前书籍: 选择目录/写盘期间切书或退出阅读页不影响本次保存
+                    val book = ActiveReadBookRegistry.current?.bookValue
+                    if (path.isNullOrEmpty()) {
+                        // 待保存来源与书籍随请求参数携带 (对照原版 selectImageDir.launch { value = src })
+                        selectImageDir.launch {
+                            mode = HandleFileContract.DIR_SYS
+                            value = src
+                            this.book = book
+                        }
+                    } else {
+                        saveImage(src, path.toUri(), book)
+                    }
+                },
+                selectDirectory = {
+                    selectImageDir.launch {
+                        mode = HandleFileContract.DIR_SYS
+                    }
+                },
+            ),
+        )
+    }
+
+    /**
+     * 查看大图 (对照原版 onImageLongPress 的 show → PhotoDialog): 走共享 "photo" overlay,
+     * 带章节索引 (优先查已落盘的章节图片缓存) 与书源身份 (防盗链 header / 解密), 口径同桌面端。
+     */
+    private fun viewImage(src: String) {
+        val book = ActiveReadBookRegistry.current?.bookValue
+        AppNavigatorProviders.get().showOverlay(
+            AppOverlay.Dialog(
+                key = "photo",
+                payload = encodePhotoOverlayPayload(
+                    src,
+                    ActiveReadBookRegistry.current?.durChapterIndexValue ?: -1,
+                ),
+                sourceOrigin = book?.origin?.takeIf { !book.isLocal && it.isNotBlank() },
+            )
+        )
+    }
+
+    /**
+     * 刷新图片: 删该图磁盘缓存文件 + 清共享内存缓存 + 重载当前章 (四端同一份,
+     * 见 shared [refreshReaderImage])。
+     */
+    private fun refreshImage(src: String) {
+        val screenModel = ReaderScreenModelRegistry.currentScreenModel
+        refreshReaderImage(screenModel?.currentBook, screenModel?.currentChapter, src)
+    }
+
+    /**
+     * 保存图片到用户目录 (对照原版 BaseReadViewModel.saveImage):
+     * 缓存文件存在 → 直接复制; 本地书 → 取原图流写入; 网络书缓存缺失 → 不处理 (原版行为)。
+     * 写入契约以 false 表示目标没有被写入, 只有 true 才提示保存成功。
+     */
+    private fun saveImage(src: String, uri: Uri, book: Book?) {
+        Coroutine.async(context = Dispatchers.IO) {
+            // 按发起时绑定的书籍处理: 不反查当前阅读书, 切书/退出阅读页后仍保存原图
+            val targetBook = book ?: return@async false
+            val image = BookHelp.getImage(targetBook, src)
+            when {
+                image.exists() -> FileUtils.saveImage(image, uri)
+                targetBook.isLocal -> FileBook.getImage(targetBook, src)?.use { input ->
+                    FileUtils.saveImage(input, uri, ".${BookHelp.getImageSuffix(src)}")
+                } ?: false
+                else -> false
+            }
+        }.onError {
+            AppLog.put("保存图片出错\n${it.localizedMessage}", it)
+            toastOnUi("保存图片出错\n${it.localizedMessage}")
+        }.onSuccess { saved ->
+            if (saved) {
+                toastOnUi("保存图片成功")
+            } else {
+                AppLog.put("保存图片失败: $src")
+                toastOnUi("保存图片出错")
+            }
+        }
+    }
+
+    fun enterReaderWindow() {
+        readerWindowActive = true
+        upScreenTimeOut()
+        upReaderSystemBars(menuVisible = false)
+    }
+
+    fun exitReaderWindow() {
+        readerWindowActive = false
+        // 退出阅读页一律清自动翻页常亮标记, 避免下次进阅读页残留强制常亮
+        readerAutoPageKeepScreenOn = false
+        keepScreenOnHandler.removeCallbacks(screenOffRunnable)
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        services.window.setSystemBars(com.langhuan.reader.ui.root.SystemBarsPolicy.Default)
+    }
+
+    /**
+     * 阅读页屏幕超时管理 (对照原版 upScreenTimeOut):
+     * AppConfig.keepLight 取值秒数 (0=跟随系统, 正数=常亮秒数, -1=永不熄屏)。
+     */
+    fun upScreenTimeOut() {
+        val keepLightPrefer = runCatching { (AppConfig.keepLight ?: "0").toInt() }.getOrDefault(0)
+        // 自动翻页期间永不熄屏 (对照原版 screenTimeOut = -1L), 否则按 keepLight 配置
+        readerScreenTimeOut = if (readerAutoPageKeepScreenOn) -1L else keepLightPrefer * 1000L
+        screenOffTimerStart()
+    }
+
+    /**
+     * 自动翻页开启/停止时切换强制常亮 (对照原版 autoPage() 的
+     * screenTimeOut = -1L + screenOffTimerStart, autoPageStop() 的 upScreenTimeOut)。
+     */
+    fun setReaderAutoPageKeepScreenOn(enabled: Boolean) {
+        if (readerAutoPageKeepScreenOn == enabled) return
+        readerAutoPageKeepScreenOn = enabled
+        upScreenTimeOut()
+    }
+
+    /**
+     * 窗口策略下发常亮的最终落点：阅读页活动时常亮由 [upScreenTimeOut] / [screenOffTimerStart]
+     * 全权管理（keepLight 计时），窗口策略值不再直接作用——避免 SYSTEM_UI 等策略重应用把
+     * 超时逻辑已清除/待清除的 FLAG_KEEP_SCREEN_ON 重新加回且不再计时（对照原版单一管理）。
+     */
+    fun applyWindowKeepScreenOn(enabled: Boolean) {
+        if (readerWindowActive) {
+            upScreenTimeOut()
+        } else {
+            keepScreenOn(enabled)
+        }
+    }
+
+    /**
+     * 重置阅读页常亮计时 (对照原版 screenOffTimerStart):
+     * 非阅读窗口守卫：退出阅读页后一律移除回调、清除常亮 Flag 并返回，杜绝主界面残留常亮。
+     * keepLight<0 恒常亮; keepLight 大于系统息屏时间时常亮并定时移除, 否则交还系统息屏。
+     */
+    fun screenOffTimerStart() {
+        keepScreenOnHandler.removeCallbacks(screenOffRunnable)
+        if (!readerWindowActive) {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            return
+        }
+        if (readerScreenTimeOut < 0) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            return
+        }
+        val t = readerScreenTimeOut - sysScreenOffTime
+        if (t > 0) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            keepScreenOnHandler.postDelayed(screenOffRunnable, readerScreenTimeOut)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        // 阅读页内触摸重置常亮计时 (对照原版 ReadView.onTouchEvent → callBack.screenOffTimerStart)
+        if (readerWindowActive) {
+            screenOffTimerStart()
+        }
+    }
+
+    /**
+     * 阅读页系统栏刷新：跟随 hideStatusBar/hideNavigationBar 配置与菜单显隐
+     * (对照原版 upSystemUiVisibility 的 toolBarHide 语义)。
+     */
+    fun upReaderSystemBars(menuVisible: Boolean) {
+        services.window.setSystemBars(
+            com.langhuan.reader.ui.root.readerSystemBarsPolicy(menuVisible)
+        )
+    }
+
+    @Composable
+    override fun Content() {
+        // rememberSaveable + AppNavigatorSaver: recreate()/进程重建后恢复导航栈
+        // (对照原版 FragmentManager 经 savedInstanceState 恢复 Fragment 栈,
+        // RECREATE 事件重建 Activity 后用户仍停在原页, 不会弹回主界面)
+        //
+        // 外部请求的**唯一**取件点: 与 LanghuanApp 里的 collect 同一个 Channel, 元素只交付一次。
+        // asRoot 的 OpenRoute 直接当初始路由 —— 书架不进导航栈 (对照 master 各页独立 Activity
+        // 直开, back 即退回调用方), 且没有"先渲染书架再滑入目标页"的闪帧。
+        val seeded = remember { LaunchRequestBus.tryReceive() }
+        val seedRoute = (seeded as? LaunchRequest.OpenRoute)?.takeIf { it.asRoot }?.route
+        val navigator = rememberSaveable(saver = AppNavigatorSaver) {
+            AppNavigator(initialRoute = seedRoute ?: AppRoute.Main())
+        }
+        // 取件后没被初始路由消费掉 (asRoot=false / 恢复栈忽略了 initialRoute) → 回队列,
+        // 交给唯一消费者按常规 push, 不静默丢失 (载荷在请求对象里, 回队列不会失真)
+        LaunchedEffect(Unit) {
+            seeded?.let { req ->
+                val consumed = seedRoute != null &&
+                    navigator.backStack.value.singleOrNull()?.route == seedRoute
+                if (!consumed) LaunchRequestBus.dispatch(req)
+            }
+        }
+        // 页面状态持有者挂真实 ViewModelStore: 配置重建保留 (同 entry 键取回同一模型),
+        // 真正退出时由 ViewModel.onCleared 统一清理; 组合销毁不再清理它
+        val screenModelStore = pageHost.store
+        val context = LocalContext.current
+
+        // 阅读器注入: ReaderRoute/ReaderDrawStyle 消费, 缺省值是 error() 会崩;
+        // 注入实例取全局注册的同一份, 与设置弹窗读写同一份配置
+        val readConfigProviders = remember { ReadConfigProviders() }
+
+        Box(Modifier.fillMaxSize()) {
+            // 封面渲染不再注入 app 端 View 实现, 各端统一走 shared 默认 SharedBookCover
+            CompositionLocalProvider(
+                LocalReadConfigProviders provides readConfigProviders,
+                // 注入 app 端 AndroidWebView 到 shared 路由 (Login/ReadRss/WebView), 覆盖 LocalWebViewSlot 兜底
+                LocalWebViewSlot provides { config, modifier, callbacks ->
+                    AndroidWebView(config, modifier, callbacks)
+                },
+                // 注入 app 端 BookInfoBlurCoverBg 到 shared 路由 (详情页模糊背景), 覆盖 LocalBlurCoverBgSlot 兜底
+                LocalBlurCoverBgSlot provides { book, coverTick, inBookshelf, isEInkMode, modifier, land ->
+                    BookInfoBlurCoverBg(book, coverTick, inBookshelf, isEInkMode, modifier, land)
+                },
+                // 注入 app 端 BookInfoIntroImage 到 shared 路由 (详情页简介图), 覆盖 LocalIntroImageSlot 兜底
+                LocalIntroImageSlot provides { src, onClick ->
+                    BookInfoIntroImage(src, onClick)
+                },
+            ) {
+                LanghuanApp(
+                    navigator = navigator,
+                    screenModelStore = screenModelStore,
+                    capabilities = capabilities,
+                    clearScreenModelStoreOnDispose = false,
+                )
+            }
+            // 书源 JS 弹窗/深链导入/查词等全局对话框宿主区:
+            // 统一包 AppTheme —— 这些宿主挂在 LanghuanApp 主题作用域外, 而宿主正文
+            // (AppAlertDialogContent 等) 直接读 AppTheme.colors, 不包则弹窗即抛
+            // AppColors not provided 崩溃
+            AppTheme {
+                // 书源 JS 弹窗事件桥宿主 (对照 desktop Main.kt / iOS MainViewController):
+                // 订阅 FlowBus(SOURCE_UI_REQUEST) 弹共享登录/源变量/验证码对话框
+                SourceUiEventBridgeHost()
+                // langhuan:// deep link 导入对话框宿主 (对照 iOS/鸿蒙 MainViewController 末尾挂载)。
+                // 宿主始终在组合中: 已接纳的请求在窗口暂停期间继续展示与执行;
+                // 仅新请求的接纳按前台 (RESUMED) 门控, 避免透明壳在前台时主窗口抢请求。
+                val lifecycleOwner = LocalLifecycleOwner.current
+                var hostCanAdopt by remember {
+                    mutableStateOf(
+                        lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                    )
+                }
+                DisposableEffect(lifecycleOwner) {
+                    val observer = LifecycleEventObserver { _, event ->
+                        hostCanAdopt = when (event) {
+                            Lifecycle.Event.ON_RESUME -> true
+                            Lifecycle.Event.ON_PAUSE -> false
+                            else -> hostCanAdopt
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                }
+                DeepLinkImportHost(
+                    canAdopt = hostCanAdopt,
+                    holder = mainImportSessionHolder,
+                    settleOnDispose = { !isChangingConfigurations },
+                )
+                // 阅读页长按文本的自绘浮动操作菜单 (对照桌面 DesktopReaderPlatformProvider.TextSelectionHost)
+                readerPlatform.TextSelectionHost()
+                // 阅读页长按图片的自绘浮动操作菜单 (与文本菜单同款样式, 见 ReaderImageActionMenu)
+                ReaderImageActionMenu.Host()
+                // 查词对话框 (选中词 → 词典查询, 本地/在线词典规则; 四端同一份, 见 shared ReaderDictWord)
+                ReaderDictWord.Host()
+            }
+        }
+    }
+
+    /** 页面状态与窗口宿主绑定: 由真实 ViewModelStore 持有, 配置重建保留同一份。 */
+    private val pageHost: PageScreenModelHost by lazy {
+        ViewModelProvider(this)[PageScreenModelHost::class.java]
+    }
+
+    private fun initializePlatform() {
+        // Content 在 BaseComposeActivity.onCreate 内首次组合，平台依赖必须先注册
+        capabilities = AndroidPlatformCapabilities(this)
+        services = AndroidPlatformServices(
+            this, capabilities,
+            openDocumentPicker, openDocumentsPicker, createDocumentPicker, openDocumentTreePicker,
+        )
+        PlatformCapabilityProviders.register(capabilities)
+        PlatformServiceProviders.register(services)
+        readerPlatform = AndroidReaderPlatformProvider(this)
+        ReaderPlatformProviders.register(readerPlatform)
+        AudioPlayPlatformProviders.register(SharedAudioPlayPlatformProvider)
+        MangaReaderScreenModel.Providers.register(AndroidMangaReaderPlatform)
+        // 漫画插件服务 (管理页/搜索筛选条; 状态组装已下沉 ui 层 SharedMangaExtensionPlatform,
+        // 平台面经 MangaExtensionHostProviders 注入 PackageManager 装载/安装/广播)
+        // 进程级单例 (只持 applicationContext): Activity 重建不得新建, 否则旧实例的
+        // 状态流收集器与进行中的安装任务会成为孤儿
+        MangaExtensionHostProviders.register(AndroidMangaExtensionHost.get(applicationContext))
+        MangaExtensionServiceProviders.register(AndroidMangaExtensionPlatform.get(applicationContext))
+        // 启动即装载扩展注册表 (后台异步): 虚拟行同步/登录标记/取数委派都依赖注册表内存态,
+        // 不能等首次进插件管理页才装载 (2026-10-05 用户拍板回归启动装载)
+        MangaExtensionManager.init()
+        // 影视源服务 (管理页; 桥接 TvBoxManager, jvmAndAndroidMain 实现 Android/桌面共用,
+        // 平台差异经 TvBoxPlatforms 钩子注入)
+        TvBoxServiceProviders.register(JvmTvBoxPlatform())
+        videoPlayProvider = AndroidVideoPlayPlatformProvider(this)
+            .also { VideoPlayPlatformProviders.register(it) }
+        // 小窗内播放/暂停钮的广播通道 (系统 RemoteAction 触发); setPackage 限定自身,
+        // 否则 NOT_EXPORTED receiver 收不到隐式广播
+        ContextCompat.registerReceiver(
+            this,
+            pipControlReceiver,
+            IntentFilter(AndroidVideoPlayPlatformProvider.ACTION_MEDIA_CONTROL),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        // 排版度量走真实字形（对照 TextStyleProvider.getPaints 的 contentPaint）
+        TextMeasurerProviders.register { textSizePx, letterSpacingPx, fontPath, weight ->
+            AndroidTextMeasurer(TextPaint().apply {
+                isAntiAlias = true
+                typeface = readerMeasureTypeface(fontPath, weight)
+                textSize = textSizePx
+                letterSpacing = if (textSizePx > 0f) letterSpacingPx / textSizePx else 0f
+            })
+        }
+        // 共享阅读器的内嵌图片 (排版取尺寸 + Canvas 取位图); app 端自绘阅读页仍走 ImageProvider
+        registerReaderImageResolver()
+    }
+
+    override fun onActivityCreated(savedInstanceState: Bundle?) {
+
+        // 返回键: navigator.pop 优先 (导航栈有内容时返回上一页), 失败后走双击退出兜底
+        // (兜底实现与"预测式返回开关打开时根层接管返回链"共用同一份, 见 PlatformCapabilities.onBackUnconsumed)
+        onBackPressedDispatcher.addCallback(this) {
+            if (AppNavigatorProviders.get().pop()) {
+                return@addCallback
+            }
+            PlatformCapabilityProviders.get().onBackUnconsumed()
+        }
+        // 仅冷启动解析启动 Intent: 界面重建不重投已接纳的请求 (导航栈由 AppNavigatorSaver 恢复)
+        if (savedInstanceState == null) {
+            handleExternalIntent(intent)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // warm launch: singleTask 复用已运行实例, 新 VIEW intent 经 onNewIntent 派发
+        handleExternalIntent(intent, isNewIntent = true)
+    }
+
+    // 进入/退出系统画中画 (API 26+, 仅在 PiP 模式变化时回调): 两参重载自 API 26 才有,
+    // 低版本永不触发, 无需版本门控。只转发平台态, 渲染分切换由共享层读 provider 状态完成。
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration,
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        videoPlayProvider?.onPipModeChanged(isInPictureInPictureMode)
+    }
+
+    /**
+     * 解析外部 Intent (DeepLink / 文件关联 / PROCESS_TEXT / 直达入口) 并投递到 shared:
+     * - langhuan:// / yuedu:// → [LanghuanDeepLinkHandler] → DeepLinkImportHost 弹导入对话框
+     * - file:// / content:// / app:// → [LaunchRequest.ImportFile] (消费侧直接交平台文件关联分发)
+     * - PROCESS_TEXT / SEND → [LaunchRequest.ProcessText] (空白什么都不做, 整段是一条 http(s) 地址
+     *   则交自动识别类型导入, 其余搜索)
+     * - search/explore-show alias → [LaunchRequest.OpenRoute] 直达 (书架不进导航栈)
+     *
+     * 一律投 [LaunchRequestBus] (无限队列, UI 未就绪自然排队), 不再有第二条通路。
+     *
+     * @param isNewIntent 来自 [onNewIntent] (UI 已在, 常规 push) 还是创建路径 (可当初始路由)
+     */
+    private fun handleExternalIntent(intent: Intent?, isNewIntent: Boolean = false) {
+        if (intent?.getStringExtra("action") == "readAloud") {
+            MediaButtonReceiver.readAloud(this, false)
+            return
+        }
+        val request = intent?.toLaunchRequest() ?: return
+        if (request is LaunchRequest.DeepLink) {
+            // langhuan 系: 走 shared 导入宿主; 缺 src 等非法格式静默丢弃 (对齐 app 端 finish)
+            if (LanghuanDeepLink.isDeepLink(request.url)) {
+                LanghuanDeepLinkHandler.handle(request.url)
+            } else {
+                // 非 langhuan 系: 回落 LaunchRequestBus (经 handleLaunchRequest → WebView 兜底)
+                LaunchRequestBus.dispatch(request)
+            }
+            return
+        }
+        // 能直接定出路由的 intent: 冷启动投 asRoot, 热投递按普通导航 push
+        val direct = directRouteFromIntent(intent)
+        LaunchRequestBus.dispatch(
+            when {
+                direct == null -> request
+                isNewIntent -> LaunchRequest.OpenRoute(direct, asRoot = false)
+                else -> LaunchRequest.OpenRoute(direct, asRoot = true)
+            }
+        )
+    }
+
+    /**
+     * Intent → 可直达的目标路由 (仅创建路径用, 见 [handleExternalIntent])。
+     *
+     * 去向判据只此一份 ([Intent.toLaunchRequest]): 这里只做"请求 → 冷启动直达路由"的映射。
+     * 要进导入/深链宿主的请求 (深链、通知路由) 不在此定路由, 由启动请求消费侧处置。
+     * 书籍类直达 (透明壳深链 / 文件关联打开书籍) 不在此: 它们的载荷是内存对象,
+     * 由投递方直接构造 [LaunchRequest.OpenRoute] 带引用进队列, 不经 Intent 与全局槽。
+     */
+    private fun directRouteFromIntent(intent: Intent?): AppRoute? =
+        when (val request = intent?.toLaunchRequest()) {
+            is LaunchRequest.SearchBook -> {
+                val key = request.key
+                when {
+                    // key 空: 直达搜索页聚焦输入框
+                    key.isNullOrBlank() -> AppRoute.Search(
+                        key = key,
+                        searchScope = request.searchScope,
+                        submit = request.submit,
+                    )
+                    // 整段是一条 http(s) 地址: 不当搜索词, 交启动请求消费侧走自动识别导入
+                    shareTextTarget(key) == ShareTextTarget.SEARCH -> AppRoute.Search(
+                        key = key,
+                        searchScope = request.searchScope,
+                        submit = request.submit,
+                    )
+
+                    else -> null
+                }
+            }
+
+            is LaunchRequest.ExploreShow -> AppRoute.ExploreShowByUrl(
+                sourceUrl = request.sourceUrl,
+                title = request.exploreName,
+                exploreUrl = request.exploreUrl,
+            )
+
+            is LaunchRequest.OpenRoute -> request.route
+            // 只有落搜索页的文本才在此定路由: 整段是一条链接的交自动识别链, 空白文本什么都不做
+            is LaunchRequest.ProcessText -> request.text
+                .takeIf { shareTextTarget(it) == ShareTextTarget.SEARCH }
+                ?.let { AppRoute.Search(key = it, submit = true) }
+
+            else -> null
+        }
+
+    override fun onStart() {
+        super.onStart()
+        viewModel.isActivityVisible = true
+        viewModel.updateUpdateNotification()
+    }
+
+    // app 前后台唯一置位点 (单 Activity 宿主): 各页经本页 Lifecycle 消费 (见 RouteLifecycle),
+    // 各页不再自挂生命周期监听 (对照原版各 Activity 的 onResume/onPause)
+    override fun onResume() {
+        super.onResume()
+        AppForegroundState.set(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // 按系统真实态校正画中画标志: 关闭小窗的 onPictureInPictureModeChanged(false)
+            // 在部分场景不送达/迟到, 残留 true 会让视频页停在“纯画面”渲染, 控制器全部不显示
+            videoPlayProvider?.onPipModeChanged(isInPictureInPictureMode)
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        AppForegroundState.set(false)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        viewModel.isActivityVisible = false
+        // 官方 PiP 指南钦定模式 (视频只在可见时播放): onStop 即暂停,
+        // 无需判断是否处于/离开画中画。
+        videoPlayProvider?.onActivityStopped()
+        if (isFinishing) {
+            // 退出应用时取消刷新任务, 避免弹出通知
+            viewModel.cancelRefreshJobs()
+        } else {
+            viewModel.updateUpdateNotification()
+        }
+    }
+
+    override fun onPostCreate(savedInstanceState: Bundle?) {
+        super.onPostCreate(savedInstanceState)
+        lifecycleScope.launch {
+            //隐私协议
+            if (!privacyPolicy()) return@launch
+            //版本更新 (首启弹帮助, 升级弹更新日志; versionCode 写回 LocalConfig
+            //供 DefaultData.upVersion 做默认数据版本推进判断)
+            upVersion(
+                AppConst.appInfo.versionCode,
+                BuildConfig.DEBUG,
+                object : UpVersionStore {
+                    override fun getSavedVersionCode(): Long = LocalConfig.versionCode
+
+                    override fun saveVersionCode(versionCode: Long) {
+                        LocalConfig.versionCode = versionCode
+                    }
+
+                    override fun consumeFirstOpen(): Boolean = LocalConfig.isFirstOpenApp
+                },
+            )
+            //设置本地密码
+            setLocalPassword()
+            // 崩溃后重启提示: 与其余三端同一份 shared 实现 (原版 MainActivity.notifyAppCrash 的
+            // 读标记/清标记/弹框语义与位置一致; appCrash 标记由 CrashHandler 落盘时置位)
+            notifyAppCrash(BuildConfig.DEBUG)
+            //备份同步
+            backupSync()
+            // 启动静默检查更新 (对照原版 AppUpdate.check(silent=true)): 无等待框无 toast,
+            // 有新版本才弹 updateDialog Overlay
+            if (AppConfig.autoCheckUpdate) {
+                checkUpdateAndPrompt(
+                    silent = true,
+                    latestText = androidAppString("is_latest_version"),
+                    failedLabel = androidAppString("check_update"),
+                )
+            }
+        }
+        viewModel.postLoad()
+    }
+
+    /**
+     * 用户隐私与协议 (对照原版 MainActivity.privacyPolicy):
+     * 未同意时弹隐私协议对话框, 同意则 [LocalConfig.privacyPolicyOk] 置 true, 拒绝则退出应用。
+     * 已同意直接返回 true (仅首启生效)。
+     */
+    private suspend fun privacyPolicy(): Boolean {
+        if (LocalConfig.privacyPolicyOk) return true
+        // privacyPolicy.md 统一存于 shared composeResources files/md (四端共享一份),
+        // 经 WebAssetSources 读 (四端同一 composeResources 取数路径, 与关于页文档弹窗同源)。
+        // 不吞读取异常: 该文件随包分发, 读不到只可能是打包/改名错 (构建期事实), 降级成空正文
+        // 会把构建错误伪装成"协议是空的"
+        val privacyPolicy = withContext(IO) {
+            WebAssetSources.get().read("md/privacyPolicy.md").decodeToString()
+        }
+        return suspendCancellableCoroutine sc@{ block ->
+            alert(androidAppString("privacy_policy"), privacyPolicy) {
+                positiveButton(androidAppString("agree")) {
+                    LocalConfig.privacyPolicyOk = true
+                    block.resume(true)
+                }
+                negativeButton(androidAppString("refuse")) {
+                    finish()
+                    block.resume(false)
+                }
+                // 取消/返回键视为未同意, 不 finish (finish 仅发生在明确点拒绝时)。
+                // 按钮点击后对话框同样会 dismiss, 此时 continuation 已被按钮 resume 过,
+                // 不加守卫会二次 resume 抛 IllegalStateException: Already resumed
+                onDismiss {
+                    if (block.isActive) block.resume(false)
+                }
+            }
+        }
+    }
+
+    /**
+     * 设置本地密码
+     */
+    private suspend fun setLocalPassword() = suspendCancellableCoroutine sc@{ block ->
+        if (LocalConfig.password != null) {
+            block.resume(null)
+            return@sc
+        }
+        alert(
+            androidAppString("set_local_password"),
+            androidAppString("set_local_password_summary")
+        ) {
+            val getText = editTextView(hint = "password")
+            onDismiss {
+                block.resume(null)
+            }
+            okButton {
+                LocalConfig.password = getText()
+            }
+            cancelButton {
+                LocalConfig.password = ""
+            }
+        }
+    }
+
+    /**
+     * 备份同步
+     */
+    private fun backupSync() {
+        lifecycleScope.launch {
+            // 判定与"已提示过的最新云端备份时间"回写已下沉 :data commonMain (StartupMaintenanceShared),
+            // 四端共用一份; 开关 autoCheckNewBackup 也在下沉件内判。lastBackUp 走网络,
+            // 下沉件自身不切线程, 故仍必须留在 IO
+            val result = withContext(IO) { StartupMaintenanceShared.checkNewWebDavBackup() }
+            if (result !is StartupMaintenanceShared.NewBackupCheckResult.NewBackup) {
+                return@launch
+            }
+            alert(androidAppString("restore"), androidAppString("webdav_after_local_restore_confirm")) {
+                cancelButton()
+                okButton {
+                    viewModel.restoreWebDav(result.name)
+                }
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterReceiver(pipControlReceiver)
+        if (!BuildConfig.DEBUG) {
+            Backup.autoBack(this)
+        }
+    }
+
+    override fun observeLiveBus() {
+        super.observeLiveBus()
+        observeEvent<String>(PreferKey.threadCount) {
+            viewModel.upPool()
+        }
+    }
+
+}
+
+/**
+ * 度量字体：[fontPath] = `ReadBookConfig.textFont`，与绘制侧 `loadReaderFontFamily`
+ * 同一份字体来源，取同一个字形对象：content 地址取同一份副本，读过文件的一侧登记的标识
+ * 未变时两侧都复用已建字形，度量侧不探测文件、不重读字体文件；
+ * 空路径 / 加载失败一并回落系统默认字体。
+ *
+ * [weight]（100..900，由 [ReaderFontWeights] 产出，标题与正文不同档）只作用于默认字体：
+ * 自定义字体在绘制侧只注册了一个 `Font`，`FontWeight` 对它不起作用，
+ * 故自定义字体成功加载时此处不合成粗体；回落默认字体的分支与绘制侧同字重，
+ * 否则「粗体绘制 / 常规度量」会让每行墨迹宽于列盒。
+ */
+private fun readerMeasureTypeface(fontPath: String, weight: Int): Typeface {
+    readerLayoutTypeface(fontPath)?.let { return it }
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        Typeface.create(Typeface.SANS_SERIF, weight, false)
+    } else {
+        Typeface.create(Typeface.SANS_SERIF, if (weight >= 700) Typeface.BOLD else Typeface.NORMAL)
+    }
+}

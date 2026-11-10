@@ -2,18 +2,18 @@
 
 package org.jsoup.internal
 
-import io.legado.app.help.http.KmpHttpClient
-import io.legado.app.help.http.KmpRequest
-import io.legado.app.help.http.KmpRequestBody
-import io.legado.app.help.http.KmpRequestBuilder
-import io.legado.app.help.http.KmpResponse
-import io.legado.app.help.http.toKmpMediaType
-import io.legado.app.help.http.toKmpRequestBody
-import io.legado.app.utils.InputStream
-import io.legado.app.utils.URL
-import io.legado.app.utils.randomUUIDString
-import io.legado.app.utils.textCharsetCodec
-import io.legado.app.utils.urlQuery
+import com.langhuan.reader.help.http.KmpHttpClient
+import com.langhuan.reader.help.http.KmpRequest
+import com.langhuan.reader.help.http.KmpRequestBody
+import com.langhuan.reader.help.http.KmpRequestBuilder
+import com.langhuan.reader.help.http.KmpResponse
+import com.langhuan.reader.help.http.toKmpMediaType
+import com.langhuan.reader.help.http.toKmpRequestBody
+import com.langhuan.reader.utils.InputStream
+import com.langhuan.reader.utils.URL
+import com.langhuan.reader.utils.randomUUIDString
+import com.langhuan.reader.utils.textCharsetCodec
+import com.langhuan.reader.utils.urlQuery
 import okio.Buffer
 import org.jsoup.Connection
 import org.jsoup.Connection.Method

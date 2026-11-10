@@ -18,7 +18,7 @@
 </template>
 
 <script setup lang="ts">
-import { isLegadoUrl } from '@/utils/utils'
+import { isLanghuanUrl } from '@/utils/utils'
 import API from '@api'
 import jump from '@/plugins/jump'
 import type { webReadConfig } from '@/web'
@@ -46,7 +46,7 @@ const replaceImage = (content: string) => {
       const absSrc = API.getProxyImageUrl(bookUrl.value, src)
       return match.replace(src, absSrc)
     }
-    if (props.hasImageDecode || isLegadoUrl(src)) {
+    if (props.hasImageDecode || isLanghuanUrl(src)) {
       const proxySrc = API.getProxyImageUrl(
         bookUrl.value,
         src,
@@ -65,7 +65,7 @@ const getImageSrc = (content: string) => {
   if (src.startsWith('/image?') || src.startsWith('image?')) {
     return API.getProxyImageUrl(bookUrl.value, src)
   }
-  if (props.hasImageDecode || isLegadoUrl(src))
+  if (props.hasImageDecode || isLanghuanUrl(src))
     return API.getProxyImageUrl(
       bookUrl.value,
       src,

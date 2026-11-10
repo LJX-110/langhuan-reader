@@ -1,4 +1,4 @@
-package io.legado.buildlogic
+package com.langhuan.buildlogic
 
 import org.gradle.api.GradleException
 import java.io.BufferedOutputStream
@@ -155,7 +155,7 @@ object ReleaseJarRewriter {
             )
         }
         report(
-            "[legado-desktop] release jar 重写完成: 保留 native 目录 $keep, " +
+            "[langhuan-desktop] release jar 重写完成: 保留 native 目录 $keep, " +
                 "重写 $rewritten 个 jar (其中剥离签名文件 $signatureStripped 个), 省 ${totalSaved / 1024} KB"
         )
     }

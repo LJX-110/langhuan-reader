@@ -1,5 +1,5 @@
 /*
- * legado_wndchrome —— Windows 窗口控制条 native 桥。契约与设计依据见 wndchrome.h。
+ * langhuan_wndchrome —— Windows 窗口控制条 native 桥。契约与设计依据见 wndchrome.h。
  *
  * 绘制策略 (与调研建议的偏离, 有意为之):
  *   调研推荐 GDI+ flat API + 预乘 alpha, 顾虑是"GDI 画 32bpp DIB 会把 alpha 清零"。
@@ -18,7 +18,7 @@
 #include <string.h>
 #include "wndchrome.h"
 
-#define STRIP_CLASS L"LegadoWndChromeStrip"
+#define STRIP_CLASS L"LanghuanWndChromeStrip"
 
 /* 线程纪律 (踩过的坑: 拖动时卡死+闪退):
  *   导出的 setter 由 EDT 调, 窗口消息由 AWT-Windows 线程处理。两边都直接画会撞 GDI 对象

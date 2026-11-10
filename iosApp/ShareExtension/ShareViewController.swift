@@ -7,24 +7,24 @@ import UniformTypeIdentifiers
 /// ⚠️ 必须与 `iosApp/iosApp.entitlements` / `ShareExtension/ShareExtension.entitlements`
 /// 的 `com.apple.security.application-groups` 值、以及 Kotlin 侧
 /// `ui/src/iosMain/.../IosShareInbox.kt` 的 `APP_GROUP_ID` 逐字一致 (改一处要四处同改)。
-private let legadoAppGroupId = "group.shutiao.reader"
+private let langhuanAppGroupId = "group.com.langhuan.reader"
 
 /// 容器内的收件目录名 —— Kotlin 侧 `IosShareInbox` 扫的就是它 (两边同一字面量)。
-private let legadoInboxDirName = "ShareInbox"
+private let langhuanInboxDirName = "ShareInbox"
 
 /// 容器内的文本槽目录名 —— Kotlin 侧 `IosShareInbox.TEXT_DIR_NAME` 扫的是它 (两边同一字面量)。
 ///
-/// 与 [legadoInboxDirName] 分开是因为语义不同: 收件目录里的东西会被宿主当成**文件**交给
+/// 与 [langhuanInboxDirName] 分开是因为语义不同: 收件目录里的东西会被宿主当成**文件**交给
 /// "导入本地书籍"链, 分享进来的文本 (一条链接、一段引文) 必须走文本分流 (搜索 / 自动识别导入),
 /// 落成 `.txt` 混进收件目录就等于把一段话当一本书导入。
-private let legadoTextDirName = "ShareText"
+private let langhuanTextDirName = "ShareText"
 
 /// 叫门 URL: 只负责把宿主带到前台, 载荷一律留在容器里。
 ///
-/// scheme 见 `iosApp/Info.plist` 的 `CFBundleURLTypes` (`legado` / `yuedu`)。宿主侧
-/// `LegadoDeepLink.parse` 对不带 `?src=` 的 URL 直接返回 null, 所以这条不会触发深链导入,
+/// scheme 见 `iosApp/Info.plist` 的 `CFBundleURLTypes` (`langhuan` / `yuedu`)。宿主侧
+/// `LanghuanDeepLink.parse` 对不带 `?src=` 的 URL 直接返回 null, 所以这条不会触发深链导入,
 /// 只是把进程带起来 —— 带起来之后由 `IosShareInbox` 的取件钩子读文本槽。
-private let legadoHostWakeURLString = "legado://share"
+private let langhuanHostWakeURLString = "langhuan://share"
 
 /// 收件目录拿不到的原因 (决定给用户看哪句说明)。
 private enum InboxUnavailable: Error {
@@ -38,9 +38,9 @@ private enum InboxUnavailable: Error {
         switch self {
         case .noSharedContainer:
             return """
-            当前安装包的签名不含共享容器（App Groups），无法把分享的内容交给 Legado。
-            可换用带该能力的签名安装，或先把文件存到「文件」App，再用 Legado 的「导入本地书籍」导入；
-            文本可先复制，再在 Legado 内搜索或粘贴地址导入。
+            当前安装包的签名不含共享容器（App Groups），无法把分享的内容交给 Langhuan。
+            可换用带该能力的签名安装，或先把文件存到「文件」App，再用 Langhuan 的「导入本地书籍」导入；
+            文本可先复制，再在 Langhuan 内搜索或粘贴地址导入。
             """
         case .cannotCreateInbox(let reason):
             return "无法创建接收目录：\(reason)"
@@ -194,13 +194,13 @@ final class ShareViewController: UIViewController {
         DispatchQueue.global(qos: .userInitiated).async { @Sendable in
             do {
                 let container = try self.containerURL()
-                let inbox = try self.legadoDirectory(in: container, legadoInboxDirName)
-                let textSlot = try self.legadoDirectory(in: container, legadoTextDirName)
+                let inbox = try self.langhuanDirectory(in: container, langhuanInboxDirName)
+                let textSlot = try self.langhuanDirectory(in: container, langhuanTextDirName)
                 Task { @MainActor in
                     self.loadAndDeliver(inbox: inbox, textSlot: textSlot)
                 }
             } catch {
-                NSLog("[Legado] share extension: container unavailable: %@", Self.unavailableMessage(of: error))
+                NSLog("[Langhuan] share extension: container unavailable: %@", Self.unavailableMessage(of: error))
                 Task { @MainActor in
                     self.finish([Self.unavailableMessage(of: error)])
                 }
@@ -236,19 +236,19 @@ final class ShareViewController: UIViewController {
     /// (纯文件原语, 不涉 UI 状态; nonisolated 供后台队列与加载回调直接调用。)
     private nonisolated func containerURL() throws -> URL {
         guard let container = FileManager.default.containerURL(
-            forSecurityApplicationGroupIdentifier: legadoAppGroupId
+            forSecurityApplicationGroupIdentifier: langhuanAppGroupId
         ) else { throw InboxUnavailable.noSharedContainer }
         return container
     }
 
-    /// 容器内的一个 Legado 目录 (不存在时创建); 建不出来抛错, 由调用方转成用户可见说明。
+    /// 容器内的一个 Langhuan 目录 (不存在时创建); 建不出来抛错, 由调用方转成用户可见说明。
     /// (纯文件原语, nonisolated 供后台队列直接调用。)
-    private nonisolated func legadoDirectory(in container: URL, _ name: String) throws -> URL {
+    private nonisolated func langhuanDirectory(in container: URL, _ name: String) throws -> URL {
         let dir = container.appendingPathComponent(name, isDirectory: true)
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         } catch {
-            NSLog("[Legado] share extension: create %@ failed: %@", name, error.localizedDescription)
+            NSLog("[Langhuan] share extension: create %@ failed: %@", name, error.localizedDescription)
             throw InboxUnavailable.cannotCreateInbox(error.localizedDescription)
         }
         return dir
@@ -266,7 +266,7 @@ final class ShareViewController: UIViewController {
         _ loaded: Any?, error: Error?, suggestedName: String?, inbox: URL
     ) -> LoadResult {
         if let error {
-            NSLog("[Legado] share extension loadItem failed: %@", error.localizedDescription)
+            NSLog("[Langhuan] share extension loadItem failed: %@", error.localizedDescription)
             return .failure("有一件文件没能接收：\(error.localizedDescription)")
         }
         guard let url = fileURL(from: loaded) else {
@@ -287,7 +287,7 @@ final class ShareViewController: UIViewController {
         _ itemURL: URL?, error: Error?, suggestedName: String?, inbox: URL
     ) -> LoadResult {
         if let error {
-            NSLog("[Legado] share extension loadFileRepresentation failed: %@", error.localizedDescription)
+            NSLog("[Langhuan] share extension loadFileRepresentation failed: %@", error.localizedDescription)
             return .failure("有一件文件没能接收：\(error.localizedDescription)")
         }
         guard let itemURL else {
@@ -319,7 +319,7 @@ final class ShareViewController: UIViewController {
     /// (纯文件原语, nonisolated 供加载回调直接调用。)
     private nonisolated static func deliverOneFile(_ source: URL, name: String?, inbox: URL) -> LoadResult {
         guard let name, !name.isEmpty, !name.hasPrefix("."), !name.contains("/") else {
-            NSLog("[Legado] share extension: attachment without usable file name dropped")
+            NSLog("[Langhuan] share extension: attachment without usable file name dropped")
             return .failure("有一件分享内容没有可用于接收的文件名，没有接收。")
         }
         let dest = inbox.appendingPathComponent(name)
@@ -329,10 +329,10 @@ final class ShareViewController: UIViewController {
             try? FileManager.default.removeItem(at: temp)
             try FileManager.default.copyItem(at: source, to: temp)
             try publish(temp: temp, to: dest)
-            NSLog("[Legado] share extension delivered file: %@", name)
+            NSLog("[Langhuan] share extension delivered file: %@", name)
             return .fileDelivered
         } catch {
-            NSLog("[Legado] share extension deliver failed (%@): %@", name, error.localizedDescription)
+            NSLog("[Langhuan] share extension deliver failed (%@): %@", name, error.localizedDescription)
             return .failure("「\(name)」没能接收：\(error.localizedDescription)")
         }
     }
@@ -351,9 +351,9 @@ final class ShareViewController: UIViewController {
                 try text.write(to: temp, atomically: false, encoding: .utf8)
                 try publish(temp: temp, to: dest)
                 delivered += 1
-                NSLog("[Legado] share extension delivered text: %@", name)
+                NSLog("[Langhuan] share extension delivered text: %@", name)
             } catch {
-                NSLog("[Legado] share extension deliver text failed (%@): %@", name, error.localizedDescription)
+                NSLog("[Langhuan] share extension deliver text failed (%@): %@", name, error.localizedDescription)
                 failures.append("第 \(index + 1) 条文本没能接收：\(error.localizedDescription)")
             }
         }
@@ -387,10 +387,10 @@ final class ShareViewController: UIViewController {
     /// 尽力把宿主带到前台: 沿 responder chain 找 `UIApplication` 调它未被禁的三参 `open`。
     ///
     /// 非文档化契约, 系统可能拒绝 (iOS 18 已把一参 `openURL:` 强制成 false), 所以这条**只负责
-    /// 少一次手动切回**: 找不到、被拒绝、或 `legado://` 没注册, 都静默按"用户下次回本应用再取件"
+    /// 少一次手动切回**: 找不到、被拒绝、或 `langhuan://` 没注册, 都静默按"用户下次回本应用再取件"
     /// 处理 —— 内容已经在容器里, 不会丢。
     private func wakeHost() {
-        guard let url = URL(string: legadoHostWakeURLString) else { return }
+        guard let url = URL(string: langhuanHostWakeURLString) else { return }
         var responder: UIResponder? = self
         while let current = responder {
             if let application = current as? UIApplication {
@@ -438,7 +438,7 @@ final class ShareViewController: UIViewController {
                 item.provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { loaded, error in
                     let result: LoadResult
                     if let error {
-                        NSLog("[Legado] share extension loadItem failed: %@", error.localizedDescription)
+                        NSLog("[Langhuan] share extension loadItem failed: %@", error.localizedDescription)
                         result = .failure("有一条网页链接没能接收：\(error.localizedDescription)")
                     } else if let text = Self.text(fromURLItem: loaded) {
                         result = .text(text)
@@ -453,7 +453,7 @@ final class ShareViewController: UIViewController {
                 item.provider.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { loaded, error in
                     let result: LoadResult
                     if let error {
-                        NSLog("[Legado] share extension loadItem failed: %@", error.localizedDescription)
+                        NSLog("[Langhuan] share extension loadItem failed: %@", error.localizedDescription)
                         result = .failure("有一条文本没能接收：\(error.localizedDescription)")
                     } else if let text = Self.text(fromTextItem: loaded) {
                         result = .text(text)
@@ -550,7 +550,7 @@ final class ShareViewController: UIViewController {
             return .url
         }
         if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) { return .text }
-        NSLog("[Legado] share extension got unsupported item: %@", String(describing: provider.registeredTypeIdentifiers))
+        NSLog("[Langhuan] share extension got unsupported item: %@", String(describing: provider.registeredTypeIdentifiers))
         return nil
     }
 

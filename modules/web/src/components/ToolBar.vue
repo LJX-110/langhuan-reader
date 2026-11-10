@@ -207,12 +207,12 @@ const bindHotKeys = () => {
   })
 }
 const saveHotkeysConfig = (config: string[][]) => {
-  localStorage.setItem('legado_web_hotkeys', JSON.stringify(config))
+  localStorage.setItem('langhuan_web_hotkeys', JSON.stringify(config))
 }
 
 function readHotkeysConfig() {
   try {
-    const localStorageConfig = localStorage.getItem('legado_web_hotkeys')
+    const localStorageConfig = localStorage.getItem('langhuan_web_hotkeys')
     if (localStorageConfig === null) return false
     const config = JSON.parse(localStorageConfig)
     if (!Array.isArray(config) || config.length == 0) return false
@@ -220,7 +220,7 @@ function readHotkeysConfig() {
     return true
   } catch {
     toast.error('快捷键配置错误')
-    localStorage.removeItem('legado_web_hotkeys')
+    localStorage.removeItem('langhuan_web_hotkeys')
   }
   return false
 }

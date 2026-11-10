@@ -9,7 +9,7 @@ import { base64ToUint8, uint8ToBase64 } from './BridgeCodec';
  *
  * 接收 Kotlin OhosNativeBridge.invokeCryptoSync 通过 tsfn dispatch 过来的 crypto 请求,
  * 调用 @ohos.security.cryptoFramework (createCipher/createSign/createVerify/createMd/createMac) 执行真实运算,
- * 完成后通过 legado.cryptoCallback(requestId, resultJson) 回送结果给 Kotlin。
+ * 完成后通过 langhuan.cryptoCallback(requestId, resultJson) 回送结果给 Kotlin。
  *
  * # JSON 协议 (与 NativeAsymmetricCryptoOps.ohos.kt / NativeSignOps.ohos.kt / OhosNativeBridge.kt 对齐)
  *
@@ -56,7 +56,7 @@ import { base64ToUint8, uint8ToBase64 } from './BridgeCodec';
 }
 // NoPadding 裸原语: padding 由 Kotlin 侧 SymPadding 处理, 桥侧恒 NoPadding
 
-## 响应 (ArkTS → Kotlin, 由 legado.cryptoCallback 推送)
+## 响应 (ArkTS → Kotlin, 由 langhuan.cryptoCallback 推送)
  * - encrypt/decrypt/sign 成功: `{ ok: true, data: "<base64>" }`
  * - verify 成功: `{ ok: true, result: true/false }` (result 表示验签是否通过, 不抛异常)
  * - 失败: `{ ok: false, error: "<string>" }`
@@ -154,14 +154,14 @@ interface SymPayload {
   data: string;                        // base64 编码的明文/密文
 }
 
-// 由 EntryAbility 注入的结果回送函数类型 (内部调 legado.cryptoCallback)
+// 由 EntryAbility 注入的结果回送函数类型 (内部调 langhuan.cryptoCallback)
 export type CryptoCallback = (requestId: number, resultJson: string) => void;
 
 /**
  * 处理来自 Kotlin 的 crypto 操作请求 (由 EntryAbility 注册的 tsfn 回调调用)。
  *
  * @param requestJson 请求 JSON 字符串 (含 requestId/action/payload)
- * @param callback 回送结果的函数 (EntryAbility 注入 legado.cryptoCallback)
+ * @param callback 回送结果的函数 (EntryAbility 注入 langhuan.cryptoCallback)
  */
 export function handleCryptoRequest(requestJson: string, callback: CryptoCallback): void {
   dispatchBridgeRequest(requestJson, 'CryptoBridge', handleAction, callback);

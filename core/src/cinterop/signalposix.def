@@ -1,4 +1,4 @@
-package = io.legado.app.signalposix
+package = com.langhuan.reader.signalposix
 
 // 信号处理器可用的 POSIX 文件打开面。
 //

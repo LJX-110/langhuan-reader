@@ -1,7 +1,7 @@
 package com.script.quickjs
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import io.legado.jshost.MapParamReceiver
+import com.langhuan.reader.jshost.MapParamReceiver
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertThrows

@@ -986,13 +986,13 @@
     <string name="keep_original_name">保留原名</string>
     <string name="keep_group">保留分组</string>
     <string name="keep_enable">保留启用状态</string>
-    <string name="deep_link_type_not_supported">该 legado:// 导入类型暂未支持: %1$s</string>
+    <string name="deep_link_type_not_supported">该导入链接类型暂未支持：%1$s</string>
     <string name="rule_sub_load_failed">规则订阅界面获取数据失败
 %1$s</string>
     <string name="input_valid_url">请输入有效的 URL</string>
     <string name="check_update_failed">检查更新失败
 %1$s</string>
-    <string name="desktop_install_mode_not_portable">[legado-desktop] install mode = %1$s (portable.root not set, 下游走 portable.txt 标记/系统数据目录)</string>
+    <string name="desktop_install_mode_not_portable">[langhuan-desktop] install mode = %1$s (portable.root not set, 下游走 portable.txt 标记/系统数据目录)</string>
     <string name="image_decode_failed_bytes">image.decode: 无法解码图片字节(%1$s bytes)</string>
     <string name="image_encode_unsupported_format">image.encode: 不支持的格式 %1$s，仅 png/jpg/webp</string>
     <string name="image_encode_write_failed">image.encode: ImageIO.write 失败 format=%1$s</string>
@@ -1322,7 +1322,7 @@ Windows: winget install shinchiro.mpv 或 scoop install mpv,
     <string name="delete_book_file">删除源文件</string>
     <string name="cloud_progress_exceeds_current">云端进度超过当前进度，是否同步？</string>
     <string name="reply_review_to">回复: %1$s</string>
-    <string name="about_description">这是一款使用 Kotlin 全新开发的开源的阅读软件，欢迎您的加入。</string>
+    <string name="about_description">这是一款使用 Kotlin 全新开发的开源读书应用，欢迎您的加入。</string>
     <string name="add_group">添加分组</string>
     <string name="add_to_group">加入分组</string>
     <string name="all_bookmark">所有书签</string>

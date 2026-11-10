@@ -1,5 +1,5 @@
 plugins {
-    id 'legado.kmp.library'
+    id 'langhuan.kmp.library'
     alias libs.plugins.ksp
 }
 
@@ -94,12 +94,12 @@ def localSdkDir = {
 // 错误 CMakeCache。
 def quickjsBuildDirRoot = layout.buildDirectory.get().asFile
 
-def nativeToolchain = providers.of(io.legado.buildlogic.NativeToolchainValueSource) { valueSourceSpec ->
+def nativeToolchain = providers.of(com.langhuan.buildlogic.NativeToolchainValueSource) { valueSourceSpec ->
     // 显式 p. 前缀引用 Params 属性, 避免与脚本同名局部变量 (isWindowsHost) 的 Groovy 解析冲突
     def p = valueSourceSpec.parameters
     p.windowsHost.set(isWindowsHost)
-    p.cmakeProp.set(providers.gradleProperty("legado.cmake.path"))
-    p.mingwProp.set(providers.gradleProperty("legado.mingw.path"))
+    p.cmakeProp.set(providers.gradleProperty("langhuan.cmake.path"))
+    p.mingwProp.set(providers.gradleProperty("langhuan.mingw.path"))
     p.sdkDir.set(localSdkDir)
     p.userHome.set(System.getProperty("user.home"))
     p.envCc.set(System.getenv("CC"))
@@ -118,17 +118,17 @@ static String normalizeJvmNativeArch(String rawArch) {
 static String nativeLibName() {
     String osName = System.getProperty("os.name").toLowerCase()
     if (osName.contains("windows")) {
-        return "legado_quickjs.dll"
+        return "langhuan_quickjs.dll"
     } else if (osName.contains("mac") || osName.contains("darwin")) {
-        return "liblegado_quickjs.dylib"
+        return "liblanghuan_quickjs.dylib"
     } else {
-        return "liblegado_quickjs.so"
+        return "liblanghuan_quickjs.so"
     }
 }
 
 tasks.register("buildJvmNativeLib") {
     group = "native"
-    description = "Build legado_quickjs native library for desktop JVM"
+    description = "Build langhuan_quickjs native library for desktop JVM"
     def libFileName = nativeLibName()
     // 输出路径为静态值, 配置期定死为 File, 不经 Provider 闭包 (CC 下转换闭包 delegate 是 task,
     // 脚本方法/变量不可分发, 见 quickjsBuildDirRoot 同款处理)

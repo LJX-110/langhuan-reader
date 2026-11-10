@@ -126,7 +126,7 @@ var local = {
     }
 };
 
-/** 宿主日志 (落 legado AppLog/Logcat)。 */
+/** 宿主日志 (落 langhuan AppLog/Logcat)。 */
 var console = {
     log: function () {
         __M.jsonCall('log', Array.prototype.slice.call(arguments).map(String).join(' '));

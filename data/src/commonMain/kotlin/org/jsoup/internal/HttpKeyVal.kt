@@ -1,6 +1,6 @@
 package org.jsoup.internal
 
-import io.legado.app.utils.InputStream
+import com.langhuan.reader.utils.InputStream
 import org.jsoup.Connection
 
 /** [Connection.KeyVal] 的简单可变实现,用于表单字段或文件上传 */

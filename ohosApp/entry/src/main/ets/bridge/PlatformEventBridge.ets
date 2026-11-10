@@ -2,7 +2,7 @@
  * ArkTS 侧统一平台事件回送 (ArkTS → Kotlin, 单通道复用)。
  *
  * 与 mediaEvent/ttsEvent 同方向 (ArkTS → Kotlin 单向推送): 本模块持有事件回送回调
- * (EntryAbility 注入 legado.platformEvent), 各功能模块 (HttpBridgeHandler 的 HTTP 下载
+ * (EntryAbility 注入 langhuan.platformEvent), 各功能模块 (HttpBridgeHandler 的 HTTP 下载
  * 进度 / EntryAbility 的应用生命周期) 调 [emitHttpProgress] / [emitAppLifecycle] 推送统一
  * JSON 事件; Kotlin 侧 OhosPlatformEventChannel (OhosPlatformEvents.kt) 按 type 分发到
  * OhosDownloadProgressEvents / OhosAppLifecycle。
@@ -25,7 +25,7 @@
  * 回调未注入时打 warn 降级 (事件丢失, 不把异常抛给调用方)。
  */
 
-/** 平台事件回送函数类型 (由 EntryAbility 注入, 内部调 legado.platformEvent)。 */
+/** 平台事件回送函数类型 (由 EntryAbility 注入, 内部调 langhuan.platformEvent)。 */
 export type PlatformEventCallback = (eventJson: string) => void;
 
 // 事件回送回调 (EntryAbility onCreate 注册后注入; 未注入时事件丢弃 + warn 日志)
@@ -34,7 +34,7 @@ let eventCallback: PlatformEventCallback | null = null;
 /**
  * 初始化平台事件回送 (由 EntryAbility.onCreate 调用)。
  *
- * @param callback 事件回送函数 (EntryAbility 注入 legado.platformEvent)
+ * @param callback 事件回送函数 (EntryAbility 注入 langhuan.platformEvent)
  */
 export function initPlatformEvent(callback: PlatformEventCallback): void {
   eventCallback = callback;

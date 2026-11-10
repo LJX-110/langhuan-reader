@@ -1,0 +1,247 @@
+package com.langhuan.reader.ui.route
+
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import com.langhuan.reader.help.FileUtilsCommon
+import com.langhuan.reader.help.coroutine.IoDispatcher
+import com.langhuan.reader.help.toast.Toasters
+import com.langhuan.reader.help.update.AppUpdateManager
+import com.langhuan.reader.help.writeBytesAtomically
+import com.langhuan.reader.ui.about.AboutHeaderCard
+import com.langhuan.reader.ui.about.AboutScreen
+import com.langhuan.reader.ui.about.AboutScreenModel
+import com.langhuan.reader.ui.about.AboutUiActions
+import com.langhuan.reader.ui.about.AboutUiState
+import com.langhuan.reader.ui.compose.component.AppTitleBar
+import com.langhuan.reader.ui.compose.theme.AppTheme
+import com.langhuan.reader.ui.root.AppNavigator
+import com.langhuan.reader.ui.root.AppOverlay
+import com.langhuan.reader.ui.root.PlatformCapabilityProviders
+import com.langhuan.reader.ui.root.PlatformServiceProviders
+import com.langhuan.reader.ui.root.RouteEntry
+import com.langhuan.reader.ui.root.ScreenModelStore
+import com.langhuan.reader.ui.widget.dialog.TextDialog
+import com.langhuan.reader.ui.widget.dialog.WaitDialog
+import com.langhuan.reader.ui.widget.dialog.rememberBuiltInDocContent
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import com.langhuan.reader.ui.generated.resources.Res
+import com.langhuan.reader.ui.generated.resources.about
+import com.langhuan.reader.ui.generated.resources.app_share_description
+import com.langhuan.reader.ui.generated.resources.check_update
+import com.langhuan.reader.ui.generated.resources.contributors_url
+import com.langhuan.reader.ui.generated.resources.donate_qrcode
+import com.langhuan.reader.ui.generated.resources.donate_thanks
+import com.langhuan.reader.ui.generated.resources.ic_share
+import com.langhuan.reader.ui.generated.resources.is_latest_version
+import com.langhuan.reader.ui.generated.resources.share
+import com.langhuan.reader.ui.generated.resources.telegram_group_url
+import com.langhuan.reader.ui.generated.resources.version
+import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.stringResource
+
+/**
+ * 关于页 shared 路由入口 (四端唯一实现; app 端原 AboutActivity/AboutFragment 已删)。
+ * 通过 [ScreenModelStore] 复用 [AboutScreenModel], 渲染 [AboutScreen]。
+ *
+ * 检查更新与内置文档 (许可证/免责声明/隐私政策) 四端同一条链, 无平台分支:
+ * 前者 [AboutScreenModel.checkUpdate] → AppUpdateManager, 后者读 composeResources 后
+ * 交 [TextDialog] 渲染。真正平台专属的只剩崩溃日志/保存日志/堆转储, 经
+ * [PlatformCapabilityProviders] 委托各端实现。
+ *
+ * 页面外壳对照原版 activity_about.xml 自上而下: TitleBar (menu_share_it → 分享按钮)
+ * + ll_about ([AboutHeaderCard]) + 条目列表 ([AboutScreen], 迁 about.xml)。
+ * 版本号/URL 在 LaunchedEffect 内由 [PlatformCapabilityProviders.getAppVersionName]
+ * + 资源字符串拼出后推入 [AboutScreenModel.updateState]。
+ */
+@Composable
+fun AboutRoute(
+    entry: RouteEntry,
+    navigator: AppNavigator,
+    screenModelStore: ScreenModelStore,
+) {
+    val screenModel = screenModelStore.getOrCreateTyped(entry) { AboutScreenModel() }
+    val state by screenModel.state.collectAsState()
+
+    // 平台资源 (版本号/URL) 在 shared 层无法直读 R.string / AppConst.appInfo,
+    // 由平台能力拼装后推入 ScreenModel
+    // (当前版本条目 summary 对照原版 AboutFragment.onCreatePreferences 里的 "${version} ${versionName}")
+    val strVersion = stringResource(Res.string.version)
+    val strContributorsUrl = stringResource(Res.string.contributors_url)
+    val strTelegramGroupUrl = stringResource(Res.string.telegram_group_url)
+    val strAbout = stringResource(Res.string.about)
+    val strShare = stringResource(Res.string.share)
+    val strAppShareDescription = stringResource(Res.string.app_share_description)
+    // 对照原版 AppUpdate.check 的两条 toast: R.string.is_latest_version 与
+    // getString(R.string.check_update) + 换行 + 异常信息
+    val strLatestVersion = stringResource(Res.string.is_latest_version)
+    val strCheckFailed = stringResource(Res.string.check_update)
+    val strDonateThanks = stringResource(Res.string.donate_thanks)
+    val strDonateQr = stringResource(Res.string.donate_qrcode)
+    LaunchedEffect(Unit) {
+        val versionName = PlatformCapabilityProviders.get().getAppVersionName().orEmpty()
+        screenModel.updateState(
+            AboutUiState(
+                versionSummary = if (versionName.isEmpty()) "" else "$strVersion $versionName",
+                appVersion = versionName,
+                contributorsUrl = strContributorsUrl,
+                telegramGroupUrl = strTelegramGroupUrl,
+                // 入口 gate: 已注册 AppUpdateEnvironment 的端才显示 (当前 Android + desktop;
+                // iOS/鸿蒙未注册, 与原版一致 —— 原版也只有 Android 有这个入口)
+                showCheckUpdate = AppUpdateManager.isAvailable(),
+                // 堆转储入口: 只有存在 JVM 堆的平台才有该能力 (iOS/鸿蒙隐藏)
+                showCreateHeapDump = PlatformCapabilityProviders.get().createHeapDumpSupported,
+            )
+        )
+    }
+
+    val scope = rememberCoroutineScope()
+    // 待显示的内置文档 (标题 to composeResources files/ 下相对路径)
+    var mdDoc by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val actions = object : AboutUiActions {
+        // 外链统一走平台 BrowserService
+        override fun onOpenUrl(url: String) {
+            PlatformServiceProviders.get().browser.openUrl(url)
+        }
+
+        // 分享关于页: 内容与 app 端 share(app_share_description, app_name) 一致 (subject 由平台 share 自行处理)
+        override fun onShare() {
+            PlatformServiceProviders.get().sharing.shareText(strAppShareDescription)
+        }
+
+        // 复制当前版本号 (反馈与失败处理均由各端复制能力负责, 与全仓其余复制调用一致)
+        override fun onCopyVersion() {
+            PlatformCapabilityProviders.get().copyToClipboard(state.appVersion)
+        }
+
+        // 检查更新: 四端同一条 shared 链路 (AppUpdateManager 检测 → updateDialog Overlay),
+        // 进行中置灰入口 (代替原版 AppUpdate.check 的 WaitDialog)
+        override fun onCheckUpdate() {
+            scope.launch { screenModel.checkUpdate(strLatestVersion, strCheckFailed) }
+        }
+
+        // 显示崩溃日志: 委托平台能力 (app: CrashLogsDialog Fragment; desktop: 共享 CrashLogsDialog)
+        override fun onShowCrashLogs() {
+            PlatformCapabilityProviders.get().showCrashLogs()
+        }
+
+        // 保存日志到书籍保存位置: 委托平台能力 (app: copyLogs+copyHeapDump; desktop: 文件选择器导出)
+        override fun onSaveLog() {
+            PlatformCapabilityProviders.get().saveLog()
+        }
+
+        // 创建堆转储: 委托平台能力 (app: CrashHandler.doHeapDump; desktop: HotSpotDiagnosticMXBean)
+        override fun onCreateHeapDump() {
+            PlatformCapabilityProviders.get().createHeapDump()
+        }
+
+        // 显示 MD 文件: 四端同一条通道 (内置文档在 shared composeResources files/,
+        // 经 rememberBuiltInDocContent 读取后交 TextDialog 渲染)
+        override fun onShowMdFile(title: String, fileName: String) {
+            mdDoc = title to fileName
+        }
+
+        // 捐赠二维码: 成功写入并回读校验后才弹全屏大图和感谢；失败明确提示。
+        override fun onShowDonateQr() {
+            scope.launch {
+                runCatching { withContext(IoDispatcher) { donateQrFilePath() } }
+                    .onSuccess { path ->
+                        navigator.showOverlay(AppOverlay.Dialog(key = "photo", payload = path))
+                        Toasters.get().toast(strDonateThanks)
+                    }
+                    .onFailure { error ->
+                        Toasters.get().toast("$strDonateQr: ${error.message.orEmpty()}")
+                    }
+            }
+        }
+    }
+
+    // 页面外壳对照原版 activity_about.xml: TitleBar (分享按钮 = menu_share_it) + ll_about + 条目列表
+    Column(Modifier.fillMaxSize()) {
+        AppTitleBar(
+            title = strAbout,
+            onBack = { navigator.pop() },
+            actions = {
+                IconButton(onClick = { actions.onShare() }) {
+                    Icon(
+                        painter = painterResource(Res.drawable.ic_share),
+                        contentDescription = strShare,
+                        tint = AppTheme.colors.primaryText,
+                    )
+                }
+            },
+        )
+        AboutHeaderCard(onHeaderClick = screenModel::onHeaderClick)
+        AboutScreen(state = state, actions = actions)
+    }
+
+    // 检查更新等待框 (对照原版 AppUpdate.check 的 WaitDialog.from(activity).show() +
+    // onFinally dismissSafe): 转圈期间不响应返回键与点击外部, 检测协程跑完自行消失
+    // (原版 WaitDialog 只在设了 onCancelListener 的场景才可取消, 检查更新没设)
+    WaitDialog(visible = state.checkingUpdate, onDismissRequest = {})
+
+    // 隐私政策/许可证/免责声明 (对照原版 AboutFragment.showMdFile: 读内置 md 后弹 MD 对话框)
+    mdDoc?.let { (title, path) ->
+        TextDialog(
+            title = title,
+            content = rememberBuiltInDocContent(path),
+            onDismiss = { mdDoc = null },
+            markdown = true,
+            showActionBar = false,
+        )
+    }
+}
+
+/** 内置捐赠二维码在 composeResources 里的路径 (与 drawable 文件名一致)。 */
+private const val DONATE_QR_RES_PATH = "drawable/image_donate_qrcode.jpg"
+
+/** 缓存文件名前缀 (后缀拼内容摘要, 见 [donateQrFilePath])。 */
+private const val DONATE_QR_CACHE_PREFIX = "donate_qrcode_"
+
+/** 连点/重复打开时防两个协程同时写同一文件。 */
+private val donateQrWriteLock = Mutex()
+
+/**
+ * 把内置捐赠二维码按原始字节塞进普通缓存目录, 返回可直接喂给大图查看器的绝对路径。
+ *
+ * 大图查看器 ([com.langhuan.reader.ui.widget.dialog.PhotoDialogContent]) 的加载链只认
+ * http(s):// / file:// / 绝对路径 / data URI 四种形态, 内置 drawable 不属于其中任何一种;
+ * 落成缓存文件后走绝对路径分支, 四端 ImageBitmapLoader 都已支持。
+ *
+ * 目录取 [FileUtilsCommon.getCachePath] (Android externalCacheDir, 其余端 cacheDir):
+ * 这张图只是"点开看一眼"的临时载体, 不需要用户找得到、也不需要跨启动存活, 系统随时可回收。
+ * 文件名带内容摘要, 换图后自然指向新文件, 不会因相同字节数读到旧缓存; 同名即同内容, 文件在
+ * 即直接用, 不再回读比对。
+ * 不放 `image_cache` —— 那是 [com.langhuan.reader.help.image.ImageBytesCache] 的私有目录,
+ * 它的清理逻辑会扫整个目录。
+ *
+ * 落盘整份归位 (同目录临时件 + 改名就位): 直接覆盖写会在写完之前把目标截断, 此时按该路径
+ * 直读的大图查看器拿到的是半张图。写盘失败直接抛出, 不静默回退。
+ */
+private suspend fun donateQrFilePath(): String = donateQrWriteLock.withLock {
+    val bytes = Res.readBytes(DONATE_QR_RES_PATH)
+    check(bytes.isNotEmpty()) { "捐赠二维码资源为空" }
+    val digest = bytes.fold(0xcbf29ce484222325UL) { hash, byte ->
+        (hash xor byte.toUByte().toULong()) * 0x100000001b3UL
+    }.toString(16)
+    val path = FileUtilsCommon.getPath(
+        FileUtilsCommon.getCachePath(), "$DONATE_QR_CACHE_PREFIX$digest.jpg"
+    )
+    if (!FileUtilsCommon.exist(path) && !writeBytesAtomically(path, bytes)) {
+        error("捐赠二维码落盘失败: $path")
+    }
+    path
+}

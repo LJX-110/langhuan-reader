@@ -1,0 +1,145 @@
+package com.langhuan.reader.ui.route
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import com.langhuan.reader.help.book.BookStorageProviders
+import com.langhuan.reader.help.coroutine.IoDispatcher
+import com.langhuan.reader.help.toast.Toasters
+import com.langhuan.reader.model.ActiveReadBookRegistry
+import com.langhuan.reader.ui.book.changecover.CoverStorageServiceProviders
+import com.langhuan.reader.ui.book.info.edit.BookInfoEditScreen
+import com.langhuan.reader.ui.book.info.edit.BookInfoEditScreenModel
+import com.langhuan.reader.ui.book.info.edit.BookInfoEditUiActions
+import com.langhuan.reader.ui.book.info.edit.BookInfoEditUiEvent
+import com.langhuan.reader.ui.book.info.edit.BookInfoEditViewModelShared
+import com.langhuan.reader.ui.bookshelf.CoverSlotRatio
+import com.langhuan.reader.ui.bookshelf.LocalBookCoverSlot
+import com.langhuan.reader.ui.root.AppNavigator
+import com.langhuan.reader.ui.root.AppRoute
+import com.langhuan.reader.ui.root.FileFilter
+import com.langhuan.reader.ui.root.PlatformCapabilityProviders
+import com.langhuan.reader.ui.root.PlatformServiceProviders
+import com.langhuan.reader.ui.root.RouteEntry
+import com.langhuan.reader.ui.root.RouteResultPayload
+import com.langhuan.reader.ui.root.ScreenModelStore
+import com.langhuan.reader.ui.root.asBook
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/**
+ * 书籍信息编辑页 shared 路由入口。
+ * 通过 [ScreenModelStore] 复用 [BookInfoEditScreenModel], 渲染 [BookInfoEditScreen]。
+ *
+ * 选图走 [PlatformServiceProviders] 文件选择器; 换封面源弹窗走 [PlatformCapabilityProviders];
+ * 封面渲染走 [LocalBookCoverSlot] (默认 SharedBookCover, 各端统一)。
+ */
+@Composable
+fun BookInfoEditRoute(
+    entry: RouteEntry,
+    navigator: AppNavigator,
+    screenModelStore: ScreenModelStore,
+) {
+    val route = entry.route as AppRoute.BookInfoEdit
+    val bookUrl = route.book.bookUrl
+    val scope = rememberCoroutineScope()
+
+    val screenModel = screenModelStore.getOrCreateTyped(entry) {
+        BookInfoEditScreenModel(
+            shared = BookInfoEditViewModelShared(
+                scope = scope,
+                readBookUpdater = ActiveReadBookRegistry::updateIfCurrent,
+            ),
+            updateCacheFolder = { oldBook, newBook ->
+                BookStorageProviders.get().updateCacheFolder(oldBook, newBook)
+            },
+        )
+    }
+
+    LaunchedEffect(bookUrl) {
+        screenModel.loadBook(route.book.asBook())
+    }
+
+    val state by screenModel.state.collectAsState()
+
+    val actions = object : BookInfoEditUiActions {
+        override fun onBack() {
+            navigator.pop()
+        }
+
+        override fun onSave() {
+            screenModel.dispatch(BookInfoEditUiEvent.Save {
+                // 对齐原版 saveData 末尾 IntentData.book = book; finish(): 回传编辑后的同一对象,
+                // 详情页只替换内存对象驱动 UI, 不网络重拉不写 DB (避免顶掉 customCoverUrl)
+                screenModel.book?.let { navigator.pop(RouteResultPayload.BookEdited(it)) }
+            })
+        }
+
+        // 本地选图: 平台文件选择器 (对照 app 端 HandleFileContract)
+        // 选择器实现是阻塞式的 (Android 端 runBlocking 等 SAF 回调), 必须切到 IO 再调
+        // 选中后经封面图集持久化, 存图集内部相对引用 (跨机/跨端恢复后仍有效);
+        // 持久化失败如实提示并保持原封面, 不把选图临时副本写进封面键
+        override fun onSelectCover() {
+            scope.launch {
+                val picked = withContext(IoDispatcher) {
+                    PlatformServiceProviders.get().files.pickFile(FileFilter.Images)
+                } ?: return@launch
+                val ref = withContext(IoDispatcher) {
+                    CoverStorageServiceProviders.get().persistCover(
+                        picked,
+                        picked.substringAfterLast('/').substringAfterLast('\\'),
+                    )
+                }
+                if (ref == null) {
+                    Toasters.get().toast("保存封面失败")
+                    return@launch
+                }
+                screenModel.dispatch(BookInfoEditUiEvent.CoverChangeTo(ref))
+            }
+        }
+
+        // 换封面源弹窗 (对照 app 端 ChangeCoverDialog)
+        override fun onChangeCoverSource() {
+            screenModel.book?.let { book ->
+                PlatformCapabilityProviders.get().showChangeCoverDialog(book) { coverUrl ->
+                    screenModel.dispatch(BookInfoEditUiEvent.CoverChangeTo(coverUrl))
+                }
+            }
+        }
+
+        override fun onRefreshCover() {
+            screenModel.dispatch(BookInfoEditUiEvent.RefreshCover)
+        }
+
+        override fun onNameChange(value: String) =
+            screenModel.dispatch(BookInfoEditUiEvent.NameChange(value))
+
+        override fun onAuthorChange(value: String) =
+            screenModel.dispatch(BookInfoEditUiEvent.AuthorChange(value))
+
+        override fun onTypeChange(index: Int) =
+            screenModel.dispatch(BookInfoEditUiEvent.TypeChange(index))
+
+        override fun onCoverUrlChange(value: String) =
+            screenModel.dispatch(BookInfoEditUiEvent.CoverUrlChange(value))
+
+        override fun onIntroChange(value: String) =
+            screenModel.dispatch(BookInfoEditUiEvent.IntroChange(value))
+
+        override fun onBookUrlChange(value: String) =
+            screenModel.dispatch(BookInfoEditUiEvent.BookUrlChange(value))
+    }
+
+    val bookCoverSlot = LocalBookCoverSlot.current
+
+    BookInfoEditScreen(
+        state = state,
+        actions = actions,
+        coverSlot = { book, modifier ->
+            // coverTick 递增 (选图/刷新) 时驱动封面组件重载 (SharedBookCover tick)
+            book?.let { bookCoverSlot(it, modifier, CoverSlotRatio.NOVEL, state.coverTick) }
+        },
+    )
+}

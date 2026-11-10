@@ -2,7 +2,7 @@
 package eu.kanade.tachiyomi
 
 import android.os.Build
-import io.legado.app.App
+import com.langhuan.reader.App
 
 object AppInfo {
 

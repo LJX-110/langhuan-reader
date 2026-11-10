@@ -4,7 +4,7 @@ export const isNullOrBlank = (string: string | null | undefined | number) =>
   (string as string).length === 0 ||
   /^\s+$/.test(string as string)
 
-export const isLegadoUrl = (/** @type {string} */ url: string) =>
+export const isLanghuanUrl = (/** @type {string} */ url: string) =>
   /,\s*\{/.test(url) ||
   !(
     url.startsWith('http') ||

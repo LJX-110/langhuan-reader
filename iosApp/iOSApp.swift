@@ -2,7 +2,7 @@
 //  iOSApp.swift
 //  iosApp
 //
-//  legado KMP iOS 宿主入口 (SwiftUI App 生命周期)。
+//  langhuan KMP iOS 宿主入口 (SwiftUI App 生命周期)。
 //  本文件 + ContentView.swift + Info.plist 构成最小 Xcode 工程骨架,
 //  在 macOS 上用 Xcode 打开 iosApp.xcodeproj 即可编译运行。
 //
@@ -59,20 +59,20 @@ import shared  // Kotlin Multiplatform shared framework (Kotlin 侧入口与 pro
 /// shared 侧外部请求约定 (Swift 侧入口共用一份字面量, 避免拼错):
 /// `IosLaunchRequests` 只把 `route:` 前缀的 uri 当路由, 而快捷项 userInfo 里存的是
 /// 裸 routeName (与 app 端 intent extra `route` 同名), 前缀在 Swift 侧补。
-private let legadoRouteUriPrefix = "route:"
+private let langhuanRouteUriPrefix = "route:"
 /// 快捷项 userInfo 里承载裸 routeName 的键 (与 app 端 intent extra 同名)。
 /// 通知那条链的 userInfo 键由 Kotlin `IosNotificationRouteKey` 独占, Swift 不再参与。
-private let legadoRouteUserInfoKey = "route"
+private let langhuanRouteUserInfoKey = "route"
 
 /// 外部 URI 投递闸门 (deep link / 文档打开 的全部系统投递入口都汇到 `handle`)。
 ///
 /// # 为什么要闸门
 ///
-/// 「把外部东西交给 legado」在 iOS 上有两个官方投递点, 且本仓环境无法实测
+/// 「把外部东西交给 langhuan」在 iOS 上有两个官方投递点, 且本仓环境无法实测
 /// (无 macOS/Xcode):
-/// - SwiftUI `View.onOpenURL` —— 现有 legado:// 深链已经跑在这条路上
+/// - SwiftUI `View.onOpenURL` —— 现有 langhuan:// 深链已经跑在这条路上
 /// - `UISceneDelegate.scene(_:openURLContexts:)` (冷启动经 `scene(_:willConnectTo:options:)`
-///   的 `connectionOptions.urlContexts`) —— 见 [LegadoSceneDelegate]
+///   的 `connectionOptions.urlContexts`) —— 见 [LanghuanSceneDelegate]
 ///
 /// `AppDelegate.application(_:open:options:)` 是被官方废弃的第三条通道: Apple 文档页
 /// 标注 Deprecated iOS 9.0-26.0, 替代说明即 "Use UIScene lifecycle and
@@ -80,10 +80,10 @@ private let legadoRouteUserInfoKey = "route"
 /// 打开也不经它, 本壳不接它。
 ///
 /// 两口到底"只走一条"还是"都发"无官方条文, 所以**都接**。同一次打开被两条通道各投一次时
-/// 由共享层确定性去重: 导入框在入队时按类型+内容结构相等合并 (LegadoDeepLinkHandler
-/// enqueue), 阅读类由 `LegadoApp.pushIfNeeded` 比对栈顶路由与来路是否结构性相等, 相等
+/// 由共享层确定性去重: 导入框在入队时按类型+内容结构相等合并 (LanghuanDeepLinkHandler
+/// enqueue), 阅读类由 `LanghuanApp.pushIfNeeded` 比对栈顶路由与来路是否结构性相等, 相等
 /// 即不再叠第二层。这里**不做时间窗抑制** —— 时间窗会把"退出后立刻
-/// 再开同一个文件"与"8 秒内重点同一个 legado:// 深链"一起吞掉 (表现为什么也不会发生),
+/// 再开同一个文件"与"8 秒内重点同一个 langhuan:// 深链"一起吞掉 (表现为什么也不会发生),
 /// 拿时间窗解"同一载荷到了两次"是兜底而不是方案。
 /// ⚠️ 未查证: 两个点是否真会重复投, 真机上以 `external URI arrived again` 日志行为准;
 ///
@@ -116,7 +116,7 @@ private enum ExternalUriIngress {
         lastKey = key
         lastAt = now
         if gap >= 0 {
-            NSLog("[Legado] external URI arrived again after %.3fs: %@", gap, key)
+            NSLog("[Langhuan] external URI arrived again after %.3fs: %@", gap, key)
         }
         route(url, uri: url.absoluteString)
     }
@@ -130,9 +130,9 @@ private enum ExternalUriIngress {
     /// 按 scheme 分流到 shared 的两个入口。
     private static func route(_ url: Foundation.URL, uri: String) {
         let scheme = url.scheme?.lowercased() ?? ""
-        if scheme == "legado" || scheme == "yuedu" {
-            // 既有深链导入链 (commonMain LegadoDeepLinkHandler), 行为零变更
-            _ = LegadoDeepLinkIosKt.handleLegadoDeepLink(url: uri)
+        if scheme == "langhuan" || scheme == "legado" || scheme == "yuedu" {
+            // 既有深链导入链 (commonMain LanghuanDeepLinkHandler), 行为零变更
+            _ = LanghuanDeepLinkIosKt.handleLanghuanDeepLink(url: uri)
             return
         }
         if url.isFileURL {
@@ -185,7 +185,7 @@ private enum ShortcutIngress {
         if coldStart {
             let payload = shortcutItem.type + "|" + (route ?? "")
             if payload == lastColdStartPayload {
-                NSLog("[Legado] cold-start shortcut arrived again, dropped: %@", payload)
+                NSLog("[Langhuan] cold-start shortcut arrived again, dropped: %@", payload)
                 return true
             }
             lastColdStartPayload = payload
@@ -194,21 +194,21 @@ private enum ShortcutIngress {
             // 书架项: 打开 App 即完成, 不需要导航
             return true
         }
-        _ = IosPlatformServicesKt.handleIosLaunchRequest(uri: legadoRouteUriPrefix + route)
+        _ = IosPlatformServicesKt.handleIosLaunchRequest(uri: langhuanRouteUriPrefix + route)
         return true
     }
 
     /// 快捷项里携带的路由串: 静态项取 `UIApplicationShortcutItemUserInfo` 的
     /// route 键 (与 app 端 intent extra 同名)。
     private static func routeOf(_ shortcutItem: UIApplicationShortcutItem) -> String? {
-        shortcutItem.userInfo?[legadoRouteUserInfoKey] as? String
+        shortcutItem.userInfo?[langhuanRouteUserInfoKey] as? String
     }
 }
 
 /// UIWindowSceneDelegate 适配器: 只补 SwiftUI 生命周期没有等价入口的两件事
 /// (主屏快捷项 + 场景 URL 投递), 场景本体仍由 SwiftUI 托管。
 /// 由 [AppDelegate.application(_:configurationForConnecting:options:)] 关联。
-final class LegadoSceneDelegate: NSObject, UIWindowSceneDelegate {
+final class LanghuanSceneDelegate: NSObject, UIWindowSceneDelegate {
 
     /// 新场景连接 (冷启动): 快捷项与 URL 都随 `connectionOptions` 到来。
     func scene(
@@ -268,7 +268,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         return true
     }
 
-    /// 关联 [LegadoSceneDelegate]: 只填 `delegateClass` (不填 sceneClass/storyboard),
+    /// 关联 [LanghuanSceneDelegate]: 只填 `delegateClass` (不填 sceneClass/storyboard),
     /// 场景本体仍由 SwiftUI 托管 (Apple `UIApplicationDelegateAdaptor` 文档的官方写法)。
     ///
     /// 未查证项: 若设备上存着上一版本 (无自定义 scene delegate) 的 `UISceneSession`,
@@ -284,7 +284,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             sessionRole: connectingSceneSession.role
         )
         if connectingSceneSession.role == .windowApplication {
-            configuration.delegateClass = LegadoSceneDelegate.self
+            configuration.delegateClass = LanghuanSceneDelegate.self
         }
         // 冷启动走快捷项时这里也能拿到同一枚项 (与 scene(_:willConnectTo:options:) 二取一,
         // 两处都接、由 ShortcutIngress 按载荷抹掉重复)
@@ -304,7 +304,7 @@ struct iOSApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     /// 状态栏显隐: 阅读页 hideStatusBar 配置 / 全屏路由由 Kotlin 侧 IosWindowController.setSystemBars
-    /// 经 NSNotificationCenter 桥接驱动 (Kotlin 常量: IosStatusBarHiddenNotification = "legado.statusBarHidden",
+    /// 经 NSNotificationCenter 桥接驱动 (Kotlin 常量: IosStatusBarHiddenNotification = "langhuan.statusBarHidden",
     /// userInfo key "hidden" = Bool)。SwiftUI 宿主下 VC 的 prefersStatusBarHidden 不生效,
     /// .statusBarHidden modifier 是唯一可靠的显隐控制方式 (iOS 13+)。
     /// 图标明暗不走这里: 它由 Compose 根容器的 preferredStatusBarStyle 控制 (见 ContentView.swift)。
@@ -324,22 +324,22 @@ struct iOSApp: App {
                 .statusBarHidden(statusBarHidden)
                 .onReceive(
                     NotificationCenter.default.publisher(
-                        for: Notification.Name("legado.statusBarHidden")
+                        for: Notification.Name("langhuan.statusBarHidden")
                     )
                 ) { note in
                     statusBarHidden = note.userInfo?["hidden"] as? Bool ?? false
                 }
-                // 外部 URI 入口之一 (另一处见 LegadoSceneDelegate.scene(_:openURLContexts:),
+                // 外部 URI 入口之一 (另一处见 LanghuanSceneDelegate.scene(_:openURLContexts:),
                 // 冷启动经 willConnectTo 的 connectionOptions.urlContexts, 共两处):
                 // 两处都接不是为了重复处理, 而是官方未条文"两口是否互斥";
                 // 同载荷重复到达由共享层确定性去重承接 (导入框入队时按类型+内容合并 /
-                // LegadoApp.pushIfNeeded 比回栈顶路由; 时间窗会把"退出后立刻再开同一个文件"
-                // 与"随时重点同一个 legado:// 深链"一起吞掉)。已废弃的 AppDelegate 打开回调通道不接
+                // LanghuanApp.pushIfNeeded 比回栈顶路由; 时间窗会把"退出后立刻再开同一个文件"
+                // 与"随时重点同一个 langhuan:// 深链"一起吞掉)。已废弃的 AppDelegate 打开回调通道不接
                 // (Apple 文档页标注 Deprecated iOS 9.0-26.0, 官方指定 scene 通道替代)。
-                // 分流: legado:// 与 yuedu:// → 既有深链导入链 (行为零变更);
+                // 分流: langhuan:// 与 yuedu:// → 既有深链导入链 (行为零变更);
                 // 其余 (含 CFBundleDocumentTypes 命中的 file:// 文档打开) → shared 启动请求解析器
                 // IosLaunchRequests.parse: file|content|app → LaunchRequest.ImportFile,
-                // 由 LegadoApp.handleLaunchRequest 交平台文件关联分发 (视频直推播放页,
+                // 由 LanghuanApp.handleLaunchRequest 交平台文件关联分发 (视频直推播放页,
                 // JSON 弹导入框, 书籍文件开阅读; 不查书/不落进度/不写书签)。
                 .onOpenURL { url in
                     ExternalUriIngress.handle(url)

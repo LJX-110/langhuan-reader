@@ -1,0 +1,306 @@
+package com.langhuan.reader.ui.association
+
+import kotlinx.atomicfu.atomic
+import com.langhuan.reader.constant.AppConst
+import com.langhuan.reader.constant.AppLog
+import com.langhuan.reader.constant.AppPattern
+import com.langhuan.reader.data.AppDbProviders
+import com.langhuan.reader.data.entities.ReplaceRule
+import com.langhuan.reader.exception.NoStackTraceException
+import com.langhuan.reader.help.ReplaceAnalyzer
+import com.langhuan.reader.help.coroutine.Coroutine
+import com.langhuan.reader.help.coroutine.IoDispatcher
+import com.langhuan.reader.help.http.OkHttpClientProviders
+import com.langhuan.reader.help.http.decompressed
+import com.langhuan.reader.help.http.newCallResponseBody
+import com.langhuan.reader.help.http.text
+import com.langhuan.reader.ui.readImportPayload
+import com.langhuan.reader.utils.isAbsUrl
+import com.langhuan.reader.utils.isJsonArray
+import com.langhuan.reader.utils.isJsonObject
+import com.langhuan.reader.utils.splitNotBlank
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withContext
+
+/**
+ * 导入替换规则 VM 共享核心 (commonMain)。
+ *
+ * 对照 app 端 `ImportReplaceRuleViewModel(app) : BaseViewModel(app)`: 2 个公开方法
+ * (importSelect/import) + importAwait/importUrl/comparisonSource, 仅依赖 DAO + 协程 +
+ * okHttpClient + ReplaceAnalyzer + AppPattern, 可下沉多端复用。DAO 走
+ * [AppDbProviders.get].replaceRuleDao; `execute{...}` 链式回调下沉为直接调 [Coroutine.async]。
+ * 方法行为与 app 端一致: importSelect 按 [groupName]/[isAddGroup] 处理分组覆盖/追加
+ * (linkedSetOf 去重); importAwait 分支 isAbsUrl/isJsonArray/isJsonObject;
+ * URL 以 `#requestWithoutUA` 结尾时截断并设 `User-Agent: null` 头。
+ *
+ * Android 专属依赖替换: file:// 载荷读取由本类入口 import 内部处理 (读文本后递归);
+ * okHttpClient → [OkHttpClientProviders.get]; ReplaceAnalyzer/AppPattern 已下沉直接复用;
+ * MutableLiveData → [MutableSharedFlow] (replay=1)。
+ *
+ * 设计: 组合委托 (BaseViewModel 是 AndroidViewModel 不能继承), app 端持有本类实例,
+ * errorLiveData/successLiveData 在 init 块桥接 [errorState]/[successState];
+ * isAddGroup/groupName 通过 var getter/setter 委托。
+ *
+ * @param scope 协程作用域 (Android = viewModelScope / 桌面 = 应用主作用域)
+ */
+class ImportReplaceRuleViewModelShared(
+    val scope: CoroutineScope,
+) {
+    /** 提交态归 VM: 对话框重建/重组后也不能重复提交同一批。 */
+    private val submitSession = ImportSubmitSession()
+
+    /** 提交态 (Writing/Committed/Failed) 归 VM: 重建对话框仍可读。 */
+    val submitState: StateFlow<ImportSubmitState> = submitSession.state
+
+    private data class FrozenSubmit(
+        val checked: List<Boolean>,
+        val rules: List<ReplaceRule>,
+        val groupName: String?,
+        val isAddGroup: Boolean,
+    )
+
+    private var frozenSubmit: FrozenSubmit? = null
+
+    fun beginSubmit(checked: List<Boolean>): Boolean {
+        if (!submitSession.begin()) return false
+        frozenSubmit = FrozenSubmit(
+            checked = checked.toList(),
+            rules = allRules.map { it.copy() },
+            groupName = groupName,
+            isAddGroup = isAddGroup,
+        )
+        return true
+    }
+
+    fun endSubmit() {
+        submitSession.end()
+        frozenSubmit = null
+    }
+
+    fun recordSubmitResult(result: ImportSubmitResult) = submitSession.record(result)
+
+
+    /** DAO 容器 (宿主启动时由 app 端注册 AppDbAccessorImpl)。 */
+    private val appDb get() = AppDbProviders.get()
+
+    /** 是否将分组追加到原有分组 (false=覆盖), 由 app 端 UI 设置。 */
+    var isAddGroup = false
+
+    /** 自定义分组名 (null/空 表示不修改分组), 由 app 端 UI 设置。 */
+    var groupName: String? = null
+
+    /**
+     * 事件流工厂: replay=1 + DROP_OLDEST, 语义对齐 LiveData.postValue。
+     *
+     * 不能用 StateFlow: 按值去重会吞掉重复投递 (同一个错误串重试后再次失败),
+     * 导入弹窗的加载态就永远停在转圈。
+     */
+    private fun <T> signalFlow() = MutableSharedFlow<T>(
+        replay = 1,
+        extraBufferCapacity = 8,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
+    /**
+     * 导入错误信息流 (对照原 `errorLiveData: MutableLiveData<String>`)。
+     *
+     * 事件流 (replay=1): 每次失败都投递, 重复的相同错误串也不会被吞。
+     * 值格式 `"ImportError:${localizedMessage}"`, 与 app 端原 `errorLiveData.postValue(...)` 一致。
+     */
+    private val _errorState = signalFlow<String>()
+    val errorState: SharedFlow<String> = _errorState.asSharedFlow()
+
+    /**
+     * 导入成功信号流 (对照原 `successLiveData: MutableLiveData<Int>`)。
+     *
+     * 值为 allRules.size (导入的替换规则总数), 0 表示解析无结果。
+     * 事件流 (replay=1): 每次解析完成都投递, 数量与上次相同也不会被吞。
+     */
+    private val _successState = signalFlow<Int>()
+    val successState: SharedFlow<Int> = _successState.asSharedFlow()
+
+    /** 解析出的待导入替换规则列表 (importAwait 累积, comparisonSource 比对, importSelect 写入)。 */
+    val allRules = arrayListOf<ReplaceRule>()
+
+    /** 已有替换规则 (用于 comparisonSource 比对), null=新增。 */
+    val checkRules = arrayListOf<ReplaceRule?>()
+
+    /** 解析时算出的默认勾选 (默认新增选中)。勾选状态本身归 UI 层, 这里只提供初值。 */
+    val defaultChecked = arrayListOf<Boolean>()
+
+    /**
+     * 导入选中的替换规则, 写入成功返回, 失败抛异常 (确认协议的唯一写入入口, 区分成功/错误)。
+     *
+     * # 实现细节保持
+     *
+     * - 取 [groupName] trim, 遍历 [checked], 选中的项走分组覆盖/追加逻辑;
+     * - 若 [groupName] 非空:
+     *   - isAddGroup=true 时追加到原分组 (linkedSetOf 去重 + splitNotBlank 拆原分组),
+     *     与 [ImportBookSourceViewModelShared.importSelectAwait] 中 bookSourceGroup 处理逻辑同构;
+     *   - isAddGroup=false 时直接覆盖 `rule.group = group`;
+     * - `appDb.replaceRuleDao.insert(*selectRules.toTypedArray())` 批量写入。
+     *
+     * 业务在 IO 上执行。
+     */
+    suspend fun importSelectAwait(checked: List<Boolean>) = withContext(IoDispatcher) {
+        val frozen = frozenSubmit
+        val checkedList = frozen?.checked ?: checked
+        val rules = frozen?.rules ?: allRules
+        val group = (if (frozen != null) frozen.groupName else groupName)?.trim()
+        val selectRules = arrayListOf<ReplaceRule>()
+        checkedList.forEachIndexed { index, b ->
+            if (b) {
+                val rule = rules[index]
+                if (!group.isNullOrEmpty()) {
+                    if (frozen?.let { it.isAddGroup } ?: isAddGroup) {
+                        val groups = linkedSetOf<String>()
+                        rule.group?.splitNotBlank(AppPattern.splitGroupRegex)?.let {
+                            groups.addAll(it)
+                        }
+                        groups.add(group)
+                        rule.group = groups.joinToString(",")
+                    } else {
+                        rule.group = group
+                    }
+                }
+                selectRules.add(rule)
+            }
+        }
+        appDb.runInTransactionSuspending(
+            onCommitted = { submitSession.committed(selectRules.size) },
+        ) {
+            appDb.replaceRuleDao.insert(*selectRules.toTypedArray())
+        }
+    }
+
+    /**
+     * 回调式导入入口 (与原版 `importSelect(finally)` 同形状): 成功/失败都回调 [finally],
+     * 失败仅落日志, 结果由 [importSelectAwait] 的返回/异常区分。
+     */
+    /**
+     * 导入替换规则, 对应 app 端 `import(text)`。
+     *
+     * # 实现细节保持
+     *
+     * - **输入契约**: source 必须是纯 URL 或 JSON 文本; file:// 地址载荷由
+     *   [DeepLinkImportTarget.startImport] 读出文本后传入, 本类不做 Uri 解析。
+     * - 解析与比对在 [preImportAwait] 内完成, 比对结果经 [successState] 投递;
+     * - `onError`: 推送 `_errorState.tryEmit("ImportError:${localizedMessage}")`
+     *   + `AppLog.put(...)` (替代 `errorLiveData.postValue(...)`, 行为等价)。
+     *
+     * 业务在 IO 跑, 回调在 mainDispatcher 跑 (与 BaseViewModel.execute 默认值一致)。
+     *
+     * @param text 纯文本 (URL / JSON) 或 file:// 载荷 (由本类入口读成文本)
+     */
+    fun import(text: String) {
+        Coroutine.async(scope = scope) {
+            preImportAwait(text)
+        }.onError {
+            _errorState.tryEmit("ImportError:${it.message}")
+            AppLog.put("ImportError:${it.message}", it)
+        }
+    }
+
+    /**
+     * 解析载荷 → 与本地库比对, 算好 [defaultChecked] 并投递 [successState]。
+     *
+     * 手动导入 ([import]) 与规则订阅的每日自动更新共用这一段, 两处走同一份解析与同一份
+     * "需要导入"判据。载荷无法解析时抛异常 (调用方决定记日志还是提示)。
+     *
+     * @param text 纯文本 (URL / JSON) 或 file:// 载荷 (由本类入口读成文本)
+     */
+    suspend fun preImportAwait(text: String) {
+        importAwait(readImportPayload(text).trim())
+        comparisonSource()
+    }
+
+    /**
+     * 解析文本为 ReplaceRule 并累积到 [allRules], 对应 app 端 `private suspend fun importAwait(text)`。
+     *
+     * # 实现细节保持
+     *
+     * - isAbsUrl: 走 [importUrl] 网络请求 (OkHttpClientProviders + newCallResponseBody),
+     *   下载的 JSON 文本递归调 [importAwait];
+     * - isJsonArray: 用 `ReplaceAnalyzer.jsonToReplaceRules(text).getOrThrow()` 解析数组;
+     * - isJsonObject: 用 `ReplaceAnalyzer.jsonToReplaceRule(text).getOrThrow()` 解析单对象;
+     * - else: 抛 `NoStackTraceException("格式不对")` (与 app 端原逻辑完全一致)。
+     *
+     * 注: 与其他 ImportXxxViewModelShared 用 GSON.fromJsonObject / fromJsonArray 不同,
+     * 替换规则走 [ReplaceAnalyzer] (内部处理替换规则的字段兼容性, 如旧版 isRegex / order
+     * 等字段映射), 与 app 端原逻辑完全一致, 不"偷懒"简化。
+     *
+     * file:// 载荷在本类入口读成本地文本后递归 (对齐原 app 端 `text.isUri()` 分支语义),
+     * 读取失败按 `NoStackTraceException` 上抛, 不静默降级。
+     */
+    private suspend fun importAwait(text: String) {
+        when {
+            text.isAbsUrl() -> importUrl(text)
+            text.isJsonArray() -> {
+                val rules = ReplaceAnalyzer.jsonToReplaceRules(text).getOrThrow()
+                allRules.addAll(rules)
+            }
+
+            text.isJsonObject() -> {
+                val rule = ReplaceAnalyzer.jsonToReplaceRule(text).getOrThrow()
+                allRules.add(rule)
+            }
+
+            else -> throw NoStackTraceException("格式不对")
+        }
+    }
+
+    /**
+     * 从 URL 下载替换规则 JSON, 对应 app 端 `private suspend fun importUrl(url)`。
+     *
+     * # 实现细节保持
+     *
+     * - `OkHttpClientProviders.get().okHttpClient` 替代 app 端 `okHttpClient` 单例;
+     * - URL 以 `#requestWithoutUA` 结尾: 截断并设置 `User-Agent: null` 头
+     *   (与 app 端原逻辑完全一致, 不"偷懒"省略);
+     * - `newCallResponseBody { ... }.decompressed().text("utf-8")` 走 commonMain 的
+     *   KmpHttpClient 扩展 (jvmAndAndroidMain 经 typealias 等价 okhttp3.*, 行为零 diff);
+     * - 下载的文本递归调 [importAwait] (与 app 端 `importAwait(it)` 一致)。
+     *
+     * 注: app 端原版用 `text("utf-8")` 显式指定编码, 本类保留 (与
+     * [ImportSourceFilterRuleViewModelShared] 的 `text("utf-8")` 一致)。
+     */
+    private suspend fun importUrl(url: String) {
+        OkHttpClientProviders.get().okHttpClient.newCallResponseBody {
+            if (url.endsWith("#requestWithoutUA")) {
+                url(url.substringBeforeLast("#requestWithoutUA"))
+                header(AppConst.UA_NAME, "null")
+            } else {
+                url(url)
+            }
+        }.decompressed().text("utf-8").let {
+            importAwait(it)
+        }
+    }
+
+    /**
+     * 比对本地已有替换规则, 对应 app 端 `private fun comparisonSource()`。
+     *
+     * # 实现细节保持
+     *
+     * - 遍历 [allRules], 调 `appDb.replaceRuleDao.findById(it.id)` 查本地;
+     * - defaultChecked: 本地不存在, 或本地已有但 [replaceRuleChanged] 判为有变化 (新增与更新都默认选);
+     * - 推送 `_successState.tryEmit(allRules.size)` (与 app 端
+     *   `onSuccess { successLiveData.postValue(allRules.size) }` 一致)。
+     *
+     * 由 [preImportAwait] 在 IO 上下文内调用 (DAO 查询必须 IO)。
+     */
+    private suspend fun comparisonSource() {
+        allRules.forEach {
+            val rule = appDb.replaceRuleDao.findById(it.id)
+            checkRules.add(rule)
+            // 本地已有且实质内容变了才算"需要导入"; 无变化的不默认勾选, 免得覆盖用户改过的同 id 规则
+            defaultChecked.add(rule == null || replaceRuleChanged(it, rule))
+        }
+        _successState.tryEmit(allRules.size)
+    }
+}

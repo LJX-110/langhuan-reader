@@ -3,7 +3,7 @@
 // 职责: 纯工具与零业务依赖的移植库 (utils/exception/constant/format/lib)。
 // 不含 Room/Compose/网络抽象; org/jsoup 移植因依赖 help/http 的网络抽象归 :data。
 plugins {
-    id("legado.kmp.library")
+    id("langhuan.kmp.library")
     alias(libs.plugins.kotlin.serialization)
 }
 
@@ -19,7 +19,7 @@ kotlin {
     jvm()
 
     android {
-        namespace = "io.legado.foundation"
+        namespace = "com.langhuan.reader.foundation"
         compileSdk = 37
         minSdk = 24
     }
@@ -31,7 +31,7 @@ kotlin {
 
     // ohosArm64 只存在于 CPF 分支 KGP, 交给 build-logic 的约定插件声明 (与 :shared 同款)。
     if (enableOhosTarget) {
-        pluginManager.apply("legado.kmp.ohos")
+        pluginManager.apply("langhuan.kmp.ohos")
     }
 
     sourceSets {

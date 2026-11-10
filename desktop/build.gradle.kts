@@ -1,6 +1,6 @@
-import io.legado.buildlogic.NativePlatformOs
-import io.legado.buildlogic.NativeToolchainValueSource
-import io.legado.buildlogic.ReleaseJarRewriter
+import com.langhuan.buildlogic.NativePlatformOs
+import com.langhuan.buildlogic.NativeToolchainValueSource
+import com.langhuan.buildlogic.ReleaseJarRewriter
 import org.gradle.internal.os.OperatingSystem
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import java.time.LocalDate
@@ -8,11 +8,11 @@ import java.util.Properties
 import java.util.zip.ZipFile
 
 plugins {
-    id("legado.jvm.application")
+    id("langhuan.jvm.application")
     // shared 模块 @Serializable 类 (Book/BookSource 等) 在桌面端展示需要序列化插件
     alias(libs.plugins.kotlin.serialization)
     // Compose Multiplatform 桌面端 (plan 附录J: desktop/jvm 走 CMP 桌面官方 JVM)
-    id("legado.compose")
+    id("langhuan.compose")
 }
 
 // QuickJS native 目录架构契约（生产者/desktop/runtime 必须一致）：
@@ -61,15 +61,15 @@ configurations.configureEach {
 }
 
 // KP6+: 安装类型由编译期参数控制 (用户裁决: 不靠 runtime/ 目录嗅探, 改 BuildConfig)
-// gradle property: -Plegado.installType=portable|installed|dev (默认 dev 保护开发流程)
+// gradle property: -Planghuan.installType=portable|installed|dev (默认 dev 保护开发流程)
 //   portable  = 数据存 exe 同级 dataDir (便携版, 拷贝即迁移)
 //   installed = 数据存系统推荐应用数据目录 (MSI 安装版)
 //   dev       = 数据存项目工作目录 (开发期 :desktop:run)
-val installType = (project.findProperty("legado.installType") as String?)
+val installType = (project.findProperty("langhuan.installType") as String?)
     ?.takeIf { it in setOf("portable", "installed", "dev") }
     ?: "dev"
 
-val installTypeDir = file("build/generated/installType/kotlin/io/legado/desktop/")
+val installTypeDir = file("build/generated/installType/kotlin/com/langhuan/reader/desktop/")
 val generateInstallType = tasks.register("generateInstallType") {
     outputs.dir(installTypeDir)
     // 配置缓存约束: doLast 不得引用脚本级对象或 Project, 同 generateMediaRuntimeConfig
@@ -78,10 +78,10 @@ val generateInstallType = tasks.register("generateInstallType") {
         val outputDir = outputs.files.singleFile
         outputDir.mkdirs()
         outputDir.resolve("InstallType.kt").writeText(
-            """package io.legado.desktop
+            """package com.langhuan.reader.desktop
 
 /**
- * 安装类型 (编译期由 gradle property `legado.installType` 决定)。
+ * 安装类型 (编译期由 gradle property `langhuan.installType` 决定)。
  *
  * 用户裁决: 不靠运行时嗅探 runtime/ 目录 (用户可能安装到非指定目录导致误判),
  * 改由打包时传入 installType 控制 dataDir 定位:
@@ -138,7 +138,7 @@ val mediaRuntimeSha1 = mediaRuntimeSha1ByRelease[mediaRuntimeVersion]
             "(来源: https://repo1.maven.org/maven2/org/openani/mediamp/<artifact>/<version>/...jar.sha1)"
     )
 
-val mediaRuntimeDir = file("build/generated/mediaRuntime/kotlin/io/legado/desktop/media/")
+val mediaRuntimeDir = file("build/generated/mediaRuntime/kotlin/com/langhuan/reader/desktop/media/")
 val generateMediaRuntimeConfig = tasks.register("generateMediaRuntimeConfig") {
     outputs.dir(mediaRuntimeDir)
     // 配置缓存约束: doLast 不得引用脚本级对象或 Project —— 版本/校验值在配置期捕获为
@@ -151,7 +151,7 @@ val generateMediaRuntimeConfig = tasks.register("generateMediaRuntimeConfig") {
         val entries = sha1ByPlatform.entries.sortedBy { it.key }
             .joinToString(",\n        ") { "\"${it.key}\" to \"${it.value}\"" }
         outputDir.resolve("MediaRuntimeConfig.kt").writeText(
-            """package io.legado.desktop.media
+            """package com.langhuan.reader.desktop.media
 
 /**
  * 媒体播放组件按需下载参数 (由 :desktop:generateMediaRuntimeConfig 生成, 勿手改)。
@@ -300,17 +300,17 @@ dependencies {
 // 测试 JVM 读的是自身的系统属性: 命令行 -D / 环境变量只到 Gradle 进程, 不转发则测试里
 // 一律读到默认值 (TestNetwork 联网闸门静默 skip, 扫测参数静默失效)。需转发的键集中登记。
 val forwardedTestProps = listOf(
-    "legado.networkTests",
-    "legado.debug",
-    "legado.desktop.debug",
-    "legado.tvbox.sweep.configUrl",
-    "legado.tvbox.sweep.sites",
-    "legado.tvbox.sweep.parallelism",
-    "legado.tvbox.sweep.timeoutMs",
-    "legado.tvbox.sweep.searchKeys",
+    "langhuan.networkTests",
+    "langhuan.debug",
+    "langhuan.desktop.debug",
+    "langhuan.tvbox.sweep.configUrl",
+    "langhuan.tvbox.sweep.sites",
+    "langhuan.tvbox.sweep.parallelism",
+    "langhuan.tvbox.sweep.timeoutMs",
+    "langhuan.tvbox.sweep.searchKeys",
 )
 
-/** `legado.networkTests` → `LEGADO_NETWORK_TESTS` (与环境变量形式的闸门开关同名)。 */
+/** `langhuan.networkTests` → `LANGHUAN_NETWORK_TESTS` (与环境变量形式的闸门开关同名)。 */
 fun envNameOfProperty(key: String): String = key
     .replace('.', '_')
     .replace(Regex("([a-z0-9])([A-Z])"), "$1_$2")
@@ -397,9 +397,9 @@ tasks.matching { it.name == "createRuntimeImage" }.configureEach {
             ?: error("RuntimeCompressionLevel.ZIP not found")
         // Property<*> 的 set 签名是 set(Nothing?) 无法传值, 按运行期擦除 cast 为 Property<Any>
         prop.set(zip)
-        logger.lifecycle("[legado-desktop] jlink --compress=2 (zip) 已启用")
+        logger.lifecycle("[langhuan-desktop] jlink --compress=2 (zip) 已启用")
     }.onFailure {
-        logger.warn("[legado-desktop] jlink --compress 设置失败(插件版本差异), 跳过: ${it.message}")
+        logger.warn("[langhuan-desktop] jlink --compress 设置失败(插件版本差异), 跳过: ${it.message}")
     }
 
     // CDS 前置条件: jlink 必须保留 bin/java.exe。
@@ -421,18 +421,18 @@ tasks.matching { it.name == "createRuntimeImage" }.configureEach {
         val stripProp = getter.invoke(this) as Property<Any>
         stripProp.set(false)
         logger.lifecycle(
-            "[legado-desktop] jlink --strip-native-commands=false 已启用 (为 CDS 归档保留 bin/java)"
+            "[langhuan-desktop] jlink --strip-native-commands=false 已启用 (为 CDS 归档保留 bin/java)"
         )
     }
 }
 
-// KP6: 把 legado_quickjs native 库纳入 jpackage 产物 (便携版 / MSI 安装版)
+// KP6: 把 langhuan_quickjs native 库纳入 jpackage 产物 (便携版 / MSI 安装版)
 // 背景: jpackage 默认只把 classpath jar 打进 app 目录, 不会纳入 -Djava.library.path 指向的
-// 外部 native 库; 打包后 System.load 找不到 legado_quickjs.dll, JS 引擎初始化失败。
+// 外部 native 库; 打包后 System.load 找不到 langhuan_quickjs.dll, JS 引擎初始化失败。
 // 方案: 用 appResourcesRootDir 声明资源根目录, copyQuickjsNativeToResources task 把
-// modules/quickjs 构建产物 (legado_quickjs.dll/.so/.dylib) 复制进去, jpackage 会把该目录
+// modules/quickjs 构建产物 (langhuan_quickjs.dll/.so/.dylib) 复制进去, jpackage 会把该目录
 // 内容复制到 app/{packageName}/ 下; Main.kt 通过 compose.application.resources.dir
-// 系统属性定位并设置 legado.quickjs.lib, quickjs 模块 Platform.kt 属性1逻辑 System.load 加载。
+// 系统属性定位并设置 langhuan.quickjs.lib, quickjs 模块 Platform.kt 属性1逻辑 System.load 加载。
 val quickjsPlatformId = buildString {
     val osName = when {
         OperatingSystem.current().isWindows -> "windows"
@@ -448,7 +448,7 @@ val quickjsNativeDir =
 val composeResourcesDir = file("build/compose-resources")
 
 val copyQuickjsNativeToResources = tasks.register<Copy>("copyQuickjsNativeToResources") {
-    // 先触发 native 库构建 (cmake 编译 legado_quickjs.dll), 再复制到 appResourcesRootDir
+    // 先触发 native 库构建 (cmake 编译 langhuan_quickjs.dll), 再复制到 appResourcesRootDir
     dependsOn(project(":modules:quickjs").tasks.named("buildJvmNativeLib"))
     from(quickjsNativeDir)
     // Compose Desktop 只纳入 appResourcesRootDir 下的子目录 (common/<OS>/[<OS>-<ARCH>]),
@@ -489,8 +489,8 @@ private val localSdkDir: String? = run {
 val desktopNativeToolchain = providers.of(NativeToolchainValueSource::class.java) {
     val p = parameters
     p.windowsHost.set(OperatingSystem.current().isWindows)
-    p.cmakeProp.set(providers.gradleProperty("legado.cmake.path"))
-    p.mingwProp.set(providers.gradleProperty("legado.mingw.path"))
+    p.cmakeProp.set(providers.gradleProperty("langhuan.cmake.path"))
+    p.mingwProp.set(providers.gradleProperty("langhuan.mingw.path"))
     p.sdkDir.set(localSdkDir)
     p.userHome.set(System.getProperty("user.home"))
     p.envCc.set(System.getenv("CC"))
@@ -600,7 +600,7 @@ val buildSmtcNative = registerNativeBridgeTask(
     taskName = "buildSmtcNative",
     tag = "smtc",
     cppDir = File(desktopNativeCppRoot, "smtc"),
-    libFileName = "legado_smtc.dll",
+    libFileName = "langhuan_smtc.dll",
 )
 
 val copySmtcNativeToResources = tasks.register<Copy>("copySmtcNativeToResources") {
@@ -615,7 +615,7 @@ val buildWndChromeNative = registerNativeBridgeTask(
     taskName = "buildWndChromeNative",
     tag = "wndchrome",
     cppDir = File(desktopNativeCppRoot, "wndchrome"),
-    libFileName = "legado_wndchrome.dll",
+    libFileName = "langhuan_wndchrome.dll",
 )
 
 val copyWndChromeNativeToResources = tasks.register<Copy>("copyWndChromeNativeToResources") {
@@ -749,7 +749,7 @@ val mergeDependencyProguardRules = tasks.register("mergeDependencyProguardRules"
             }
         }
         logger.lifecycle(
-            "[legado-desktop] 依赖 consumer 规则已合成: 服务实现类 ${serviceClasses.size} 个 → $out"
+            "[langhuan-desktop] 依赖 consumer 规则已合成: 服务实现类 ${serviceClasses.size} 个 → $out"
         )
     }
 }
@@ -792,7 +792,7 @@ private fun currentNativePlatformOs(): NativePlatformOs = when {
 
 compose.desktop {
     application {
-        mainClass = "io.legado.desktop.MainKt"
+        mainClass = "com.langhuan.reader.desktop.MainKt"
         // 官方 ProGuard 集成 (Compose Desktop 1.10+ 自带, 替代下方自研 proguardDesktop 任务):
         // - release buildType 默认启用 (default 保持不启用, 开发期 :desktop:run 不受影响)
         // - joinOutputJars 默认 false: 每个输入 jar 单独 shrunk 输出, 各 jar 的 META-INF/services
@@ -830,8 +830,8 @@ compose.desktop {
         // ClassNotFoundException: ative。且该路径是开发机绝对路径, 打包后在用户机器
         // 上根本不存在, 无意义。
         // native 库加载改走: appResourcesRootDir 纳入产物 + Main.kt 设
-        // legado.quickjs.lib 系统属性 + Platform.kt 候选1 System.load 加载。
-        // 开发期 :desktop:run 通过 legado.quickjs.lib 指向按 os-arch 分层的 native 输出。
+        // langhuan.quickjs.lib 系统属性 + Platform.kt 候选1 System.load 加载。
+        // 开发期 :desktop:run 通过 langhuan.quickjs.lib 指向按 os-arch 分层的 native 输出。
         jvmArgs += listOf(
             // 堆上限护栏: Xmx 只是上限不预占, 零常驻代价, 作用是防止长时运行堆无界膨胀
             "-Xmx768m",
@@ -864,8 +864,8 @@ compose.desktop {
             // 声明目标格式, 由 CI 在对应 runner 上分别打包 (Windows→msi, Linux→deb/rpm, macOS→dmg)
             targetFormats(TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.Dmg)
             // KP6: 资源根目录, 内容会被 jpackage 复制到 app/{packageName}/ 下
-            // copyQuickjsNativeToResources task 把 legado_quickjs.dll/.so/.dylib 复制进来,
-            // Main.kt 通过 compose.application.resources.dir 定位并设置 legado.quickjs.lib 加载
+            // copyQuickjsNativeToResources task 把 langhuan_quickjs.dll/.so/.dylib 复制进来,
+            // Main.kt 通过 compose.application.resources.dir 定位并设置 langhuan.quickjs.lib 加载
             appResourcesRootDir = composeResourcesDir
             // 方案 A: jlink 精简 JRE - 补充 jpackage 自动检测 (jdeps) 可能遗漏的 JDK 模块
             // 这些模块通过反射或服务加载, jdeps 静态分析检测不到, 运行时需要:
@@ -884,13 +884,13 @@ compose.desktop {
                 "jdk.zipfs",
                 "jdk.management",
             )
-            // CI 传 -PappVersion 注入实际版本 (与 Android 同源); 本地构建回落 1.0.0
-            packageVersion = providers.gradleProperty("appVersion").orNull ?: "1.0.0"
+            // CI 传 -PappVersion 注入实际版本 (与 Android 同源); 本地构建回落 2.0.0
+            packageVersion = providers.gradleProperty("appVersion").orNull ?: "2.0.0"
             // 应用元数据 (从 shared 模块继承项目名, 这里给桌面端独立 packageName)
-            packageName = "legado"
-            description = "Legado desktop reader (Compose Multiplatform)"
-            vendor = "gedoor"
-            // 文件关联 (jpackage --file-associations): 双击书籍文件用 legado 打开, 参数经 argv
+            packageName = "langhuan"
+            description = "Langhuan desktop reader (Compose Multiplatform)"
+            vendor = "LJX-110"
+            // 文件关联 (jpackage --file-associations): 双击书籍文件用 langhuan 打开, 参数经 argv
             // (macOS 经 Apple Event OpenFilesHandler) 送到 Main.kt 的 pendingAssociationFiles。
             // 扩展名只取 AppPattern.bookFileRegex 的四种正文格式 —— 关联在 Windows 上是抢默认
             // 打开方式, .json/.zip 不抢 (仍可从"打开方式"手动选, 分发链照样处理)
@@ -905,14 +905,14 @@ compose.desktop {
             fileAssociation("application/epub+zip", "epub", "EPUB Book")
             fileAssociation("application/pdf", "pdf", "PDF Document")
             fileAssociation("application/vnd.comicbook+zip", "cbz", "CBZ Comic")
-            // 视频文件关联 (让"打开方式"能把视频直接交给 legado 开播): 扩展名与 shared
+            // 视频文件关联 (让"打开方式"能把视频直接交给 langhuan 开播): 扩展名与 shared
             // AppPattern.videoFileRegex 逐一对应, 少一个就会出现"系统交给我们、自己不认"。
             // 交给 Main.kt 的文件关联链 → shared FileAssociationDispatch 在 JSON/书籍正则之前
             // 先判视频 (VideoDirect) → 直接 push 播放页直投态, 不建书不查书源。
             // MIME 用各扩展名的规范值: .ts 是 MPEG-TS 传输流 (video/mp2t),
             // .m3u8 是 HLS 清单 (application/vnd.apple.mpegurl) —— 不是猜的字符串,
             // Linux 的 .desktop MimeType 与 macOS UTI 换算都按它匹配。
-            // 已知代价: .ts 同时是 TypeScript 源码扩展名, 装上后 Windows 会把它抢给 legado;
+            // 已知代价: .ts 同时是 TypeScript 源码扩展名, 装上后 Windows 会把它抢给 langhuan;
             // 与 videoFileRegex 保持一致优先于避开歧义 (要改就得两边同时改)。
             // 描述一律 ASCII-only, 同上方 MSI 代码页 1252 硬约束。
             fileAssociation("video/mp4", "mp4", "MP4 Video")
@@ -926,12 +926,12 @@ compose.desktop {
             // 应用图标 (从 Android ic_launcher 高清图转换生成): Windows ICO, Linux PNG
             // Windows MSI 专属配置
             windows {
-                iconFile = file("src/main/resources/icons/legado.ico")
+                iconFile = file("src/main/resources/icons/langhuan.ico")
                 menu = true
                 dirChooser = true
-                // 创建桌面快捷方式 + 开始菜单分组 (Legado)
+                // 创建桌面快捷方式 + 开始菜单分组 (Langhuan)
                 shortcut = true
-                menuGroup = "Legado"
+                menuGroup = "Langhuan"
                 // perMachine 默认 false → 安装到 %LOCALAPPDATA%, 不需要管理员权限
                 // (当前 Compose 版本无显式 perMachine setter, 默认行为即为 per-user)
                 // 升级时由 MSI 自身 UUID 识别, packageVersion 必须递增
@@ -944,12 +944,12 @@ compose.desktop {
             }
             // Linux deb/rpm 专属配置
             linux {
-                iconFile = file("src/main/resources/icons/legado.png")
+                iconFile = file("src/main/resources/icons/langhuan.png")
                 // deb 包名必须小写, 走 packageName
-                packageName = "legado"
+                packageName = "langhuan"
                 menuGroup = "Office"
                 // deb 包 Maintainer 字段 (维护者邮箱)
-                debMaintainer = "gedoor <gedoor@users.noreply.github.com>"
+                debMaintainer = "LJX-110 <LJX-110@users.noreply.github.com>"
                 // .desktop 文件 Categories 字段 (freedesktop.org 应用类别)
                 appCategory = "Office"
                 // RPM License 字段 (deb 无对应字段, 走 copyright 文件)
@@ -960,7 +960,7 @@ compose.desktop {
             }
             // macOS dmg 专属配置
             macOS {
-                // legado:// / yuedu:// deep link: 把 CFBundleURLTypes 注入 .app Info.plist
+                // langhuan:// / yuedu:// deep link: 把 CFBundleURLTypes 注入 .app Info.plist
                 // (对照 iosApp/project.yml 的 CFBundleURLTypes 与 app 端 intent-filter)。
                 // CMP DSL 无 jpackage --mac-url-scheme 等价项, 用 infoPlist.extraKeysRawXml
                 // 在 </dict> 前追加原始 XML; LaunchServices 安装/启动 .app 后即把两 scheme
@@ -972,9 +972,10 @@ compose.desktop {
                         <array>
                             <dict>
                                 <key>CFBundleURLName</key>
-                                <string>io.legado.deeplink</string>
+                                <string>com.langhuan.reader.deeplink</string>
                                 <key>CFBundleURLSchemes</key>
                                 <array>
+                                    <string>langhuan</string>
                                     <string>legado</string>
                                     <string>yuedu</string>
                                 </array>
@@ -1011,18 +1012,18 @@ afterEvaluate {
         // BuildConfig.DEBUG 语义 (仅开发打栈); 打包产物不带该属性 = 静默
         if (this is JavaExec) {
             val quickjsLibraryName = when {
-                OperatingSystem.current().isWindows -> "legado_quickjs.dll"
-                OperatingSystem.current().isMacOsX -> "liblegado_quickjs.dylib"
-                else -> "liblegado_quickjs.so"
+                OperatingSystem.current().isWindows -> "langhuan_quickjs.dll"
+                OperatingSystem.current().isMacOsX -> "liblanghuan_quickjs.dylib"
+                else -> "liblanghuan_quickjs.so"
             }
             systemProperty(
-                "legado.quickjs.lib",
+                "langhuan.quickjs.lib",
                 quickjsNativeDir.resolve(quickjsLibraryName).absolutePath
             )
-            systemProperty("legado.debug", "true")
+            systemProperty("langhuan.debug", "true")
             // AppLog 的 write/debugPrint 走 desktopDebug 门控 (registerDesktopAppLogHost),
             // 开发期 run 一并打开, 否则 shared/desktop 的 AppLog.put 全部静默 (排查时误判"无异常")
-            systemProperty("legado.desktop.debug", "true")
+            systemProperty("langhuan.desktop.debug", "true")
         }
     }
     // KP6: 打包 task 必须依赖 copyQuickjsNativeToResources, 确保 native 库先复制到
@@ -1073,7 +1074,7 @@ afterEvaluate {
 // 【为何写在 jlink 输出目录而不是 app image 里】(2026-09 修正): 插件的 createRuntimeImage
 // 不带 buildType 后缀 (所有 buildType 共用 tmp/main/runtime), createReleaseDistributable 和
 // packageReleaseMsi 的 --runtime-image 全部指向它 (见两份 .args.txt 实测) —— 旧实现把归档
-// 写进已生成的 app/legado/runtime, 只对便携 zip 有效, MSI 那条链永远拿不到。现写回 jlink 输出,
+// 写进已生成的 app/langhuan/runtime, 只对便携 zip 有效, MSI 那条链永远拿不到。现写回 jlink 输出,
 // 两条链共享。
 //
 // 【为何失败必须响】: 旧实现只 logger.warn 不 fail, 而 jlink 默认 --strip-native-commands=true
@@ -1143,7 +1144,7 @@ val dumpCdsArchive = tasks.register("dumpCdsArchive") {
             )
         }
         logger.lifecycle(
-            "[legado-desktop] CDS 归档已生成: ${baseArchive.name} (${baseArchive.length() / 1024} KB)"
+            "[langhuan-desktop] CDS 归档已生成: ${baseArchive.name} (${baseArchive.length() / 1024} KB)"
         )
     }
 }
@@ -1162,7 +1163,7 @@ tasks.matching {
 }
 
 // Compose 的 deb/rpm 打包 task 不依赖 app image (jpackage 能自 --input 直接构建), 而
-// QuickJS native 经 appResourcesRootDir 只落进 app/legado/, CI 校验步骤也是查这棵树。
+// QuickJS native 经 appResourcesRootDir 只落进 app/langhuan/, CI 校验步骤也是查这棵树。
 // Windows 有 packagePortableZip 的 dependsOn 顺带拉起 app image, macOS 的 dmg 由 jpackage
 // 自身要求 app image, 只剩 Linux 两端没人拉 → 按各自 buildType 显式补上。
 tasks.matching { it.name in listOf("packageDeb", "packageRpm") }.configureEach {
@@ -1177,9 +1178,9 @@ tasks.matching { it.name in listOf("packageReleaseDeb", "packageReleaseRpm") }.c
 // ============================================================
 // 背景: jpackage 默认产物是 MSI/Exe 安装包 (需安装), 无法满足"拷贝即用"便携场景。
 // 本 task 在 createReleaseDistributable (jpackage app-image, release 链含 ProGuard 瘦身) 后,
-// 把 legado.exe + runtime/ + app/ + data/
+// 把 langhuan.exe + runtime/ + app/ + data/
 // + portable.txt 打成 zip, 用户解压即用; 便携模式由运行时检测 portable.txt 标记启用
-// (DesktopAppPaths), 不依赖编译期 -Plegado.installType (CI 与 MSI 共享同一 app image)。
+// (DesktopAppPaths), 不依赖编译期 -Planghuan.installType (CI 与 MSI 共享同一 app image)。
 
 // data/ 目录占位 (空目录无法直接打 zip, 用 README 占位)
 val portableDataPlaceholderDir =
@@ -1217,7 +1218,7 @@ val packagePortableZip = tasks.register<Zip>("packagePortableZip") {
     onlyIf { OperatingSystem.current().isWindows }
 
     // 依赖 jpackage app image 生成 task (createReleaseDistributable 是 packageReleaseMsi/Exe 的上游,
-    // 产物含 legado.exe + runtime/ + app/; release 链含官方 ProGuard 瘦身, 便携版与 MSI 同源同瘦身)
+    // 产物含 langhuan.exe + runtime/ + app/; release 链含官方 ProGuard 瘦身, 便携版与 MSI 同源同瘦身)
     dependsOn(
         "createReleaseDistributable",
         dumpCdsArchive,
@@ -1228,7 +1229,7 @@ val packagePortableZip = tasks.register<Zip>("packagePortableZip") {
     // app image 输出路径 (compose desktop createReleaseDistributable 产物, 路径:
     // build/compose/binaries/{buildType}/app/{packageName}/; 官方 DSL 启用 release buildType 后
     // 目录名带 classifier 后缀 main-release, 2026-08-18 实测)
-    val appImageDir = layout.buildDirectory.dir("compose/binaries/main-release/app/legado")
+    val appImageDir = layout.buildDirectory.dir("compose/binaries/main-release/app/langhuan")
         .get().asFile
 
     // 路径不存在时给清晰错误 (避免 Zip task 静默跳过)
@@ -1244,16 +1245,16 @@ val packagePortableZip = tasks.register<Zip>("packagePortableZip") {
 
     // 排除 app image 内运行时数据, 由 placeholder task 注入干净 data/
     from(appImageDir) {
-        into("legado-portable-windows-x64")
+        into("langhuan-portable-windows-x64")
         exclude("data/**")
     }
-    from(portableDataPlaceholderDir) { into("legado-portable-windows-x64/data") }
-    // 便携标记落 zip 根 (exe 同级), 运行时据此启用便携模式 (无需编译期 -Plegado.installType)
-    from(portableMarkerDir) { into("legado-portable-windows-x64") }
+    from(portableDataPlaceholderDir) { into("langhuan-portable-windows-x64/data") }
+    // 便携标记落 zip 根 (exe 同级), 运行时据此启用便携模式 (无需编译期 -Planghuan.installType)
+    from(portableMarkerDir) { into("langhuan-portable-windows-x64") }
 
     // 从 nativeDistributions 读 packageVersion (CI 传 -PappVersion 注入), 拼到 zip 文件名
     val version = compose.desktop.application.nativeDistributions.packageVersion ?: "1.0.0"
-    archiveFileName.set("legado-portable-windows-x64-${version}.zip")
+    archiveFileName.set("langhuan-portable-windows-x64-${version}.zip")
     // 独立输出目录, 避免与 jpackage 产物 (build/compose/binaries/) 及 Gradle 默认 distributions 目录混淆
     destinationDirectory.set(layout.buildDirectory.dir("outputs/portable"))
 }

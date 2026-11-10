@@ -4,6 +4,6 @@
 // (DesktopCloudflareInterceptor): 无引擎注册时直通。
 package eu.kanade.tachiyomi.network.interceptor
 
-import io.legado.desktop.http.DesktopCloudflareInterceptor
+import com.langhuan.reader.desktop.http.DesktopCloudflareInterceptor
 
 class CloudflareInterceptor : DesktopCloudflareInterceptor()

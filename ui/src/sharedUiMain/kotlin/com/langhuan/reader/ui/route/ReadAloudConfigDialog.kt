@@ -1,0 +1,203 @@
+package com.langhuan.reader.ui.route
+
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.dp
+import com.langhuan.reader.constant.PreferKey
+import com.langhuan.reader.data.AppDbProviders
+import com.langhuan.reader.data.entities.HttpTTS
+import com.langhuan.reader.help.DefaultDataShared
+import com.langhuan.reader.help.config.AppConfigProviders
+import com.langhuan.reader.help.config.PreferenceProviders
+import com.langhuan.reader.help.coroutine.IoDispatcher
+import com.langhuan.reader.help.storage.BackupFileOps
+import com.langhuan.reader.help.tts.OneShotTts
+import com.langhuan.reader.ui.book.read.config.ReadAloudConfigScreen
+import com.langhuan.reader.ui.book.read.config.SpeakEngineDialog
+import com.langhuan.reader.ui.compose.component.AppDialogScaffold
+import com.langhuan.reader.ui.compose.component.AppDialogSizes
+import com.langhuan.reader.ui.root.FileFilter
+import com.langhuan.reader.ui.root.PlatformCapabilityProviders
+import com.langhuan.reader.ui.root.PlatformServiceProviders
+import com.langhuan.reader.ui.root.pushExportDispatch
+import com.langhuan.reader.ui.association.DeepLinkImportRequest
+import com.langhuan.reader.ui.association.DeepLinkImportType
+import com.langhuan.reader.ui.association.LanghuanDeepLinkHandler
+import com.langhuan.reader.ui.widget.dialog.OnlineImportUrlDialog
+import com.langhuan.reader.utils.GSON
+import com.langhuan.reader.utils.toJson
+import com.langhuan.reader.utils.isAbsUrl
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import com.langhuan.reader.ui.generated.resources.Res
+import com.langhuan.reader.ui.generated.resources.aloud_config
+import com.langhuan.reader.ui.generated.resources.system_tts
+import org.jetbrains.compose.resources.stringResource
+
+/**
+ * 朗读设置对话框形态 (公共对话框基类: 0.9 宽居中 + fillet 底色 + shapeDefault 8dp 圆角 +
+ * 标准顶栏; 2026-10-11 用户拍板偏离原版 BasePrefDialogFragment 的
+ * 无圆角/无标题形态, 对齐其他对话框)。由朗读控制面板"设置"按钮弹起。
+ *
+ * 顶栏进标准壳体 ([AppDialogScaffold] 的 title), 无底栏; 正文 = 设置条目列表。
+ *
+ * 暂无对应 ScreenModel, 电话暂停开关/朗读引擎摘要等状态用 remember { mutableStateOf } 暂存,
+ * 待宿主下沉后替换为 ScreenModel 统一管理。
+ *
+ * onTtsEngine 弹出共享 [SpeakEngineDialog] (引擎列表来自 httpTTSDao.flowAll),
+ * onSysTtsConfig 调用 [PlatformCapabilityProviders.get].openTtsSettings 跳转系统 TTS 设置。
+ */
+@Composable
+fun ReadAloudConfigDialogHost(
+    onDismiss: () -> Unit,
+) {
+    AppDialogScaffold(
+        onDismissRequest = onDismiss,
+        title = stringResource(Res.string.aloud_config),
+        properties = AppDialogSizes.properties(),
+        contentPadding = PaddingValues(0.dp),
+    ) {
+        ReadAloudConfigContent(
+            onSysTtsConfig = { PlatformCapabilityProviders.get().openTtsSettings() },
+        )
+    }
+}
+
+/** 朗读设置正文 (Screen + 内嵌对话框), 路由/弹窗两形态共用 */
+@Composable
+private fun ReadAloudConfigContent(
+    onSysTtsConfig: () -> Unit,
+) {
+    // 对照 app 端 pausePhoneCallsEnabled = AppConfig.ignoreAudioFocus
+    val pref = PreferenceProviders.get()
+    val pausePhoneCallsEnabled = remember { pref.getBoolean(PreferKey.ignoreAudioFocus) }
+
+    val appConfig = remember { AppConfigProviders.get() }
+    val appDb = remember { AppDbProviders.get() }
+    val scope = rememberCoroutineScope()
+
+    // 朗读引擎列表 (对照 app 端 SpeakEngineDialog.LaunchedEffect { flowAll().collect })
+    var engines by remember { mutableStateOf(emptyList<HttpTTS>()) }
+    LaunchedEffect(Unit) {
+        appDb.httpTTSDao.flowAll()
+            .catch { /* 对照 app 端 catch 记日志, 此处静默 */ }
+            .flowOn(IoDispatcher)
+            .conflate()
+            .collect { engines = it }
+    }
+
+    // 当前选中的 TTS 引擎 id 字符串 (null=系统默认)
+    var selectedEngineUrl by remember {
+        mutableStateOf(appConfig.ttsEngine.ifBlank { null })
+    }
+    var showSpeakEngineDialog by remember { mutableStateOf(false) }
+    var showTtsUrlInput by remember { mutableStateOf(false) }
+
+    // 朗读试听器 (行/编辑器测试共用; 关闭对话框时停声)
+    // 一次性朗读器 (行/编辑器试听共用, 强制指定引擎不走配置; 关闭对话框时停声)
+    val oneShotTts = remember { OneShotTts() }
+    DisposableEffect(Unit) {
+        onDispose { oneShotTts.stop() }
+    }
+    // 试听文本 = 固定双语探针 (中文+英文, 先中文, 不随应用语言)
+    val testSpeakText = OneShotTts.TEST_TEXT
+
+    // 统一 TTS 源导入入口: 文本/URL 交共享勾选导入对话框 (深链导入同一条链)
+    fun showTtsImport(sourceText: String) {
+        LanghuanDeepLinkHandler.enqueue(DeepLinkImportRequest(DeepLinkImportType.HTTP_TTS, sourceText))
+    }
+
+    val systemTtsStr = stringResource(Res.string.system_tts)
+    // 朗读引擎摘要 (对照 app 端 ReadAloudConfigDialog.speakEngineSummary)
+    val speakEngineSummary = remember(engines, selectedEngineUrl, systemTtsStr) {
+        val url = selectedEngineUrl
+        when {
+            url.isNullOrBlank() -> systemTtsStr
+            // 对照 app 端 StringUtils.isNumeric(ttsEngine) → appDb.httpTTSDao.getName(id)
+            url.toLongOrNull() != null ->
+                engines.firstOrNull { it.id.toString() == url }?.name ?: systemTtsStr
+            // 对照 app 端 GSON.fromJsonObject<SelectItem<String>>(ttsEngine).getOrNull()?.title
+            else -> try {
+                Json.parseToJsonElement(url).jsonObject["title"]?.jsonPrimitive?.content
+                    ?: systemTtsStr
+            } catch (e: Exception) {
+                systemTtsStr
+            }
+        }
+    }
+
+    ReadAloudConfigScreen(
+        pausePhoneCallsEnabled = pausePhoneCallsEnabled,
+        speakEngineSummary = speakEngineSummary,
+        onTtsEngine = { showSpeakEngineDialog = true },
+        onSysTtsConfig = onSysTtsConfig,
+    )
+
+    if (showSpeakEngineDialog) {
+        SpeakEngineDialog(
+            engines = engines,
+            selectedEngineUrl = selectedEngineUrl,
+            onSelectEngine = { url ->
+                selectedEngineUrl = url
+                appConfig.setTtsEngine(url)
+            },
+            // 新增/编辑引擎走平台能力 (app 端 HttpTtsEditDialog, engine=null 新增)
+            onEditEngines = { engine ->
+                PlatformCapabilityProviders.get().showHttpTtsEditDialog(engine)
+            },
+            onDeleteEngine = { httpTTS ->
+                scope.launch(IoDispatcher) {
+                    appDb.httpTTSDao.delete(httpTTS)
+                }
+            },
+            // 统一登录入口: URL 登录直开 WebView, 表单登录弹登录表单 (与 TTS 编辑器同一条链)
+            onLogin = { engine -> engine.showLoginDialog() },
+            onTestSpeak = { engine -> oneShotTts.speakWith(engine, testSpeakText) },
+            onImportLocal = {
+                scope.launch {
+                    val path = withContext(IoDispatcher) {
+                        PlatformServiceProviders.get().files.pickFile(FileFilter.Text)
+                    } ?: return@launch
+                    val text = withContext(IoDispatcher) { BackupFileOps.readText(path) }
+                    showTtsImport(text)
+                }
+            },
+            onImportOnline = { showTtsUrlInput = true },
+            onImportDefault = {
+                scope.launch(IoDispatcher) {
+                    DefaultDataShared.importDefaultHttpTTS()
+                }
+            },
+            onExport = {
+                // 与其余导出入口同形制: 交共享导出分发框 (上传 URL / 保存到文件 → 导出成功框)
+                pushExportDispatch("httpTts.json", GSON.toJson(engines), "application/json")
+            },
+            onDismiss = { showSpeakEngineDialog = false },
+        )
+    }
+
+    // 在线导入 URL 输入 (历史记录键对照原版 ttsUrlKey)
+    if (showTtsUrlInput) {
+        OnlineImportUrlDialog(
+            recordKey = "ttsUrlKey",
+            onConfirm = { url ->
+                showTtsUrlInput = false
+                if (url.isAbsUrl()) showTtsImport(url)
+            },
+            onDismiss = { showTtsUrlInput = false },
+        )
+    }
+}

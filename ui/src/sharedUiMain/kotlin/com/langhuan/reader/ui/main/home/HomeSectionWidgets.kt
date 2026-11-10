@@ -1,0 +1,217 @@
+package com.langhuan.reader.ui.main.home
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.langhuan.reader.data.entities.SearchBook
+import com.langhuan.reader.ui.bookshelf.BookshelfBadge
+import com.langhuan.reader.ui.bookshelf.CoverSlotRatio
+import com.langhuan.reader.ui.bookshelf.ShelfVideoItem
+import com.langhuan.reader.ui.bookshelf.toCoverBook
+import com.langhuan.reader.ui.compose.component.horizontalMouseWheel
+import com.langhuan.reader.ui.compose.component.listItemFocus
+import com.langhuan.reader.ui.compose.theme.AppTheme
+import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
+import com.langhuan.reader.ui.bookshelf.LocalBookCoverSlot
+import com.langhuan.reader.ui.root.LocalSharedCoverBinding
+import com.langhuan.reader.ui.root.rememberSharedCoverSourceBinding
+import org.jetbrains.compose.resources.stringResource
+import com.langhuan.reader.ui.generated.resources.Res
+import com.langhuan.reader.ui.generated.resources.home_more
+import androidx.compose.material.Icon
+import androidx.compose.foundation.layout.size
+import org.jetbrains.compose.resources.painterResource
+import com.langhuan.reader.ui.generated.resources.ic_arrow_right
+
+/**
+ * 展示项标题行 (对照 view_home_section_title.xml: 高 36dp, paddingStart 16 / paddingEnd 8,
+ * 标题 16sp 加粗 + "更多" 13sp 摘要色 + 16dp 右箭头, 整行可点)。
+ *
+ * 主页展示项区块与搜索"按源分类"源区块共用 (整行点击进下一级)。
+ */
+@Composable
+fun SectionTitleRow(title: String, onMoreClick: () -> Unit) {
+    val colors = AppTheme.colors
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(36.dp)
+            .clickable(onClick = onMoreClick)
+            .padding(start = DesignTokens.spacingLg, end = DesignTokens.spacingDefault),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            color = colors.primaryText,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        // 对照 view_home_section_title.xml 的 tv_more + iv_arrow (13sp 摘要色 + 16dp 箭头)
+        Text(
+            text = stringResource(Res.string.home_more),
+            color = colors.secondaryText,
+            fontSize = 13.sp,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = DesignTokens.spacingDefault, vertical = DesignTokens.spacingXs),
+        )
+        Icon(
+            painter = painterResource(Res.drawable.ic_arrow_right),
+            contentDescription = stringResource(Res.string.home_more),
+            tint = colors.secondaryText,
+            modifier = Modifier.size(16.dp),
+        )
+    }
+}
+
+/**
+ * 横向封面行 (对照 CoverCardAdapter): 封面 + 书名, 横向滚动。
+ *
+ * 主页展示项 (COVER_ROW 样式) 与搜索"按源分类"源区块共用。
+ *
+ * isVideoStyle=true 时对照原版 CoverCardAdapter 的
+ * VideoCoverCardVH: 复用 item_explore_video 视频卡 (shared [ShelfVideoItem]),
+ * 卡片宽 220dp (原版把 match_parent 根布局改为固定 220dp 才能在横向滚动里排布),
+ * 封面按 VIDEO(16:9) 比例由宽度反推高度, 加粗标题 + 分类 + 作者。
+ *
+ * @param inBookshelf 书架标记提供方: null = 不显示 (主页展示项区块, 对照原版
+ *   `bindVideoCard(isInBookshelf=false, showBookshelfBadge=false)` 与 CoverCardVH 无徽标);
+ *   搜索按源分类结果区传该书真实书架态, 与聚簇搜索结果标记一致。
+ */
+@Composable
+fun SectionCoverRow(
+    books: List<SearchBook>,
+    onBookClick: (SearchBook, String?) -> Unit,
+    onBookLongClick: (SearchBook, String?) -> Unit,
+    isVideoStyle: Boolean,
+    blockId: String,
+    coverSlot: (@Composable (SearchBook, Modifier, CoverSlotRatio) -> Unit)? = null,
+    inBookshelf: ((SearchBook) -> Boolean)? = null,
+) {
+    val listState = rememberLazyListState()
+    val colors = AppTheme.colors
+    // 惰性横向列表: 一次只组合可见卡片。原 Row + horizontalScroll 会把整段结果
+    // (搜索结果单源可达上千条) 全部组合并逐条解码封面, 是进程位图内存暴涨的直接来源。
+    LazyRow(
+        state = listState,
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalMouseWheel(listState),
+        contentPadding = PaddingValues(horizontal = DesignTokens.spacingDefault),
+    ) {
+        if (isVideoStyle) {
+            // 对照原 VideoCoverCardVH.bind: bindVideoCard(coverRatio=VIDEO); 封面走 LocalBookCoverSlot
+            // (与书架/探索页一致); 书架标记由调用方提供 (null = 主页区块不显示)
+            items(books, key = { it.bookUrl }) { book ->
+                // 共享配对身份按条目下发 (被点的封面 = 出发端, token 由页面+区块+条目派生)
+                val binding = rememberSharedCoverSourceBinding(book.bookUrl, blockId)
+                CompositionLocalProvider(LocalSharedCoverBinding provides binding) {
+                    ShelfVideoItem(
+                        book = book.toCoverBook(),
+                        coverReloadTick = 0,
+                        onClick = { onBookClick(book, binding.pageToken) },
+                        onLongClick = { onBookLongClick(book, binding.pageToken) },
+                        modifier = Modifier.width(220.dp),
+                        inBookshelf = inBookshelf?.invoke(book),
+                        coverSlot = { b, m, coverRatio, tick ->
+                            coverSlot?.invoke(book, m, coverRatio)
+                                ?: LocalBookCoverSlot.current(b, m, coverRatio, tick)
+                        },
+                    )
+                }
+            }
+        } else {
+            // 对照 item_home_cover_card.xml + CoverCardVH.bind: 封面 120×160dp (高 160dp 由
+            // 封面组件按 NOVEL 3:4 反推宽 120dp), item 总宽 128 = 120 + 两侧 4dp padding
+            items(books, key = { it.bookUrl }) { book ->
+                // 共享配对身份按条目下发 (同上)
+                val binding = rememberSharedCoverSourceBinding(book.bookUrl, blockId)
+                CompositionLocalProvider(LocalSharedCoverBinding provides binding) {
+                    Column(
+                        Modifier
+                            .listItemFocus()
+                            .width(128.dp)
+                            .padding(DesignTokens.spacingXs)
+                            .combinedClickable(
+                                onClick = { onBookClick(book, binding.pageToken) },
+                                onLongClick = { onBookLongClick(book, binding.pageToken) },
+                            ),
+                    ) {
+                        // 封面: 外部 slot 优先 (搜索端按书架命中分流缓存区), 否则默认
+                        // toCoverBook() 补 notShelf 标记 (与书架/探索页一致)
+                        Box {
+                            if (coverSlot != null) {
+                                coverSlot(
+                                    book,
+                                    Modifier
+                                        .width(120.dp)
+                                        .height(160.dp),
+                                    CoverSlotRatio.NOVEL,
+                                )
+                            } else {
+                                LocalBookCoverSlot.current(
+                                    book.toCoverBook(),
+                                    Modifier
+                                        .width(120.dp)
+                                        .height(160.dp),
+                                    CoverSlotRatio.NOVEL,
+                                    0,
+                                )
+                            }
+                            // 书架标记 (对照 item_bookshelf_grid 的 0.22 比例书签, 贴封面左上)
+                            if (inBookshelf?.invoke(book) == true) {
+                                BookshelfBadge(
+                                    Modifier
+                                        .align(Alignment.TopStart)
+                                        .fillMaxWidth(0.22f)
+                                        .aspectRatio(1f),
+                                )
+                            }
+                        }
+                        // 对照 XML tv_name: 12sp 最多 2 行 (minLines=2 保持卡片等高)
+                        Text(
+                            text = book.name,
+                            color = colors.primaryText,
+                            fontSize = 12.sp,
+                            maxLines = 2,
+                            minLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth().padding(top = DesignTokens.spacingXs),
+                        )
+                        // 对照 XML tv_author: 10sp 摘要色, 最多 1 行, marginTop 2dp
+                        Text(
+                            text = book.getRealAuthor(),
+                            color = colors.secondaryText,
+                            fontSize = 10.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}

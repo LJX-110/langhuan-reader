@@ -2,8 +2,8 @@ package org.jsoup.select
 
 import com.fleeksoft.ksoup.Ksoup
 import com.fleeksoft.ksoup.nodes.Element
-import io.legado.app.exception.NoStackTraceException
-import io.legado.app.model.analyzeRule.AnalyzeByXPath
+import com.langhuan.reader.exception.NoStackTraceException
+import com.langhuan.reader.model.analyzeRule.AnalyzeByXPath
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.assertEquals

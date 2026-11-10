@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Legado</string>
-    <string name="app_name_a">Legado·A</string>
-    <string name="receiving_shared_label">Legado·search</string>
-    <string name="tip_perm_request_storage">Legado needs storage access to find and read books. please go "App Settings" to allow "Storage permission".</string>
+    <string name="app_name">Langhuan</string>
+    <string name="app_name_a">Langhuan·A</string>
+    <string name="receiving_shared_label">Langhuan·search</string>
+    <string name="tip_perm_request_storage">Langhuan needs storage access to find and read books. please go "App Settings" to allow "Storage permission".</string>
     <string name="dialog_title">Prompt</string>
     <string name="dialog_cancel">Cancel</string>
     <string name="dialog_setting">Go to Settings</string>
@@ -30,7 +30,7 @@
     <string name="custom_export_section">カスタムEPUBエクスポートの章</string>
     <string name="last_read">Last reading</string>
     <string name="current_version">現在のバージョン</string>
-    <string name="bookshelf_empty">The bookshelf is still empty. Search for books or add them from discovery! \n if you use it for the first time, please open legado.top get help!</string>
+    <string name="bookshelf_empty">The bookshelf is still empty. Search for books or add them from discovery! \n if you use it for the first time, please open langhuan.top get help!</string>
     <string name="action_download">Download</string>
     <string name="layout_list">List</string>
     <string name="fixed_width_mode">固定幅モード</string>
@@ -63,7 +63,7 @@
     <string name="offline_cache">Offline cache</string>
     <string name="change_origin">Change Origin</string>
     <string name="about_description">This is an open source reading software newly developed by Kotlin, welcome to join us.</string>
-    <string name="app_share_description">Legado (YueDu 3.0) download link：https://github.com/gedoor/legado/releases</string>
+    <string name="app_share_description">Langhuan download link：https://github.com/LJX-110/langhuan-reader/releases</string>
     <string name="pt_auto_refresh">Auto-refresh</string>
     <string name="ps_auto_refresh">Update books automatically when opening the software</string>
     <string name="backup_restore">Backup and restore</string>
@@ -392,7 +392,7 @@
     <string name="sys_folder_picker">System folder picker</string>
     <string name="app_folder_picker">App folder picker</string>
     <string name="app_file_picker">App file picker</string>
-    <string name="add_to_text_context_menu_s">Long tap to display Legado·Search in the operation menu</string>
+    <string name="add_to_text_context_menu_s">Long tap to display Langhuan·Search in the operation menu</string>
     <string name="add_to_text_context_menu_t">Text operation display Search</string>
     <string name="record_log">Record log</string>
     <string name="log">Log</string>

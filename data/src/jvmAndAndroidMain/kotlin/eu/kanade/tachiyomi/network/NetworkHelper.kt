@@ -2,8 +2,8 @@
 package eu.kanade.tachiyomi.network
 
 import android.content.Context
-import io.legado.app.help.UserAgentProviders
-import io.legado.app.help.http.okHttpClient
+import com.langhuan.reader.help.UserAgentProviders
+import com.langhuan.reader.help.http.okHttpClient
 import okhttp3.OkHttpClient
 import uy.kohesive.injekt.injectLazy
 import java.util.concurrent.TimeUnit

@@ -250,7 +250,7 @@ const saveHotKeys = () => {
   shortcutActions.value.forEach(({ hotKeys }) => {
     hotKeysConfig.push(hotKeys)
   })
-  localStorage.setItem('legado_web_editor_hotkeys', JSON.stringify(hotKeysConfig))
+  localStorage.setItem('langhuan_web_editor_hotkeys', JSON.stringify(hotKeysConfig))
   hotkeysDialogVisible.value = false
   bindHotKeys()
   toast.success('快捷键设置已保存')
@@ -275,7 +275,7 @@ const bindHotKeys = () => {
 
 function readHotkeysConfig() {
   try {
-    const raw = localStorage.getItem('legado_web_editor_hotkeys')
+    const raw = localStorage.getItem('langhuan_web_editor_hotkeys')
     if (!raw) return false
     const config = JSON.parse(raw)
     if (!Array.isArray(config) || config.length === 0) return false
@@ -284,7 +284,7 @@ function readHotkeysConfig() {
     })
     return true
   } catch {
-    localStorage.removeItem('legado_web_editor_hotkeys')
+    localStorage.removeItem('langhuan_web_editor_hotkeys')
   }
   return false
 }

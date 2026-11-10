@@ -10,10 +10,10 @@ import org.gradle.api.tasks.Sync
 // 其余三端继续用上游官方变体: :ui 的 sharedUiMain 声明 api(libs.reorderable),
 // OhosTargetConventionPlugin 只在 ohos 配置上把该坐标替换为本模块。
 plugins {
-    id("legado.kmp.native.library")
+    id("langhuan.kmp.native.library")
 }
 
-// @Composable 源码需要 Compose 编译器插件; 本模块无资源/无 jvm/android 目标, 不用 legado.compose
+// @Composable 源码需要 Compose 编译器插件; 本模块无资源/无 jvm/android 目标, 不用 langhuan.compose
 // 约定插件 (它会额外应用 CMP 插件)。
 pluginManager.apply("org.jetbrains.kotlin.plugin.compose")
 

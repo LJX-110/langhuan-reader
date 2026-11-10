@@ -13,7 +13,7 @@
 ## 改动边界
 
 - 外观与交互改造只允许落在：
-  - `ui/src/sharedUiMain/kotlin/io/legado/app/ui/**`（Compose 界面层）
+  - `ui/src/sharedUiMain/kotlin/com/langhuan/reader/ui/**`（Compose 界面层）
   - `ui/src/commonMain/composeResources/values*`（文案与资源）
   - `app/src/main/res/**`（Android 资源、图标、应用名）
   - `app/build.gradle.kts`（包名、版本、签名）

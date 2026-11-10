@@ -7,10 +7,10 @@ import java.io.File
  * 用 System.load(absolutePath) 替代 System.loadLibrary。
  *
  * native 库搜索顺序:
- * 1. 系统属性 `legado.quickjs.lib` 指定的绝对路径 (生产部署 / 测试场景手动指定)
- * 2. 环境变量 `LEGADO_QUICKJS_LIB` 指定的绝对路径
- * 3. 当前平台构建产物 `build/libs/jvm/native/<os>-<arch>/{legado_quickjs.dll|liblegado_quickjs.so|liblegado_quickjs.dylib}`
- * 4. 项目根目录 `legado_quickjs.dll` (兼容本地脚本调试)
+ * 1. 系统属性 `langhuan.quickjs.lib` 指定的绝对路径 (生产部署 / 测试场景手动指定)
+ * 2. 环境变量 `LANGHUAN_QUICKJS_LIB` 指定的绝对路径
+ * 3. 当前平台构建产物 `build/libs/jvm/native/<os>-<arch>/{langhuan_quickjs.dll|liblanghuan_quickjs.so|liblanghuan_quickjs.dylib}`
+ * 4. 项目根目录 `langhuan_quickjs.dll` (兼容本地脚本调试)
  *
  * 任一路径存在则加载, 全部不存在时抛 [UnsatisfiedLinkError] 让调用方感知。
  * 桌面端 native 库构建脚本 (build.gradle `buildJvmNativeLib` task) 负责产出 .dll/.so/.dylib。
@@ -25,18 +25,18 @@ actual fun logQuickJsWarn(tag: String, msg: String, e: Throwable?) {
     e?.printStackTrace(System.err)
 }
 
-actual fun loadLegadoQuickJsNative() {
+actual fun loadLanghuanQuickJsNative() {
     val libName = jvmNativeLibName()
 
     // 1. 系统属性
-    val propPath = System.getProperty("legado.quickjs.lib")
+    val propPath = System.getProperty("langhuan.quickjs.lib")
     if (!propPath.isNullOrEmpty() && File(propPath).isFile) {
         System.load(File(propPath).absolutePath)
         return
     }
 
     // 2. 环境变量
-    val envPath = System.getenv("LEGADO_QUICKJS_LIB")
+    val envPath = System.getenv("LANGHUAN_QUICKJS_LIB")
     if (!envPath.isNullOrEmpty() && File(envPath).isFile) {
         System.load(File(envPath).absolutePath)
         return
@@ -68,9 +68,9 @@ actual fun loadLegadoQuickJsNative() {
     }
 
     throw UnsatisfiedLinkError(
-        "legado_quickjs native library not found: $libName. " +
+        "langhuan_quickjs native library not found: $libName. " +
             "Run `./gradlew :modules:quickjs:buildJvmNativeLib` to build it, " +
-            "or set -Dlegado.quickjs.lib=<path> / LEGADO_QUICKJS_LIB env var."
+            "or set -Dlanghuan.quickjs.lib=<path> / LANGHUAN_QUICKJS_LIB env var."
     )
 }
 
@@ -86,9 +86,9 @@ actual fun platformCancelAllTimerWakes(tm: JsTimerManager) = Unit
 private fun jvmNativeLibName(): String {
     val osName = System.getProperty("os.name").lowercase()
     return when {
-        osName.contains("windows") -> "legado_quickjs.dll"
-        osName.contains("mac") || osName.contains("darwin") -> "liblegado_quickjs.dylib"
-        else -> "liblegado_quickjs.so"
+        osName.contains("windows") -> "langhuan_quickjs.dll"
+        osName.contains("mac") || osName.contains("darwin") -> "liblanghuan_quickjs.dylib"
+        else -> "liblanghuan_quickjs.so"
     }
 }
 

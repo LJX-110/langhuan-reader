@@ -6,7 +6,7 @@
 // 依赖面只有 kotlinx-serialization-json, 且用 api 暴露 —— 消费方 (:foundation 的
 // JsonExtensions.shared.kt 等) 的公开签名里直接出现 JsonElement, 必须随本模块传递可见。
 plugins {
-    id("legado.kmp.library")
+    id("langhuan.kmp.library")
 }
 
 val isMacHost = System.getProperty("os.name").startsWith("Mac", ignoreCase = true)
@@ -28,7 +28,7 @@ kotlin {
     }
 
     if (enableOhosTarget) {
-        pluginManager.apply("legado.kmp.ohos")
+        pluginManager.apply("langhuan.kmp.ohos")
     }
 
     sourceSets {

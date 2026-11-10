@@ -1,0 +1,48 @@
+package com.langhuan.reader.help
+
+import com.langhuan.reader.help.file.AppFilesDirs
+import com.langhuan.reader.utils.GSON
+import com.langhuan.reader.utils.fromJsonArray
+import com.langhuan.reader.utils.toJson
+import com.langhuan.reader.utils.File
+
+/**
+ * nativeMain: 直链上传配置的 iOS/鸿蒙共用实现 (对照 desktop DesktopDirectLinkUpload)。
+ * 配置落 `{AppFilesDirs.filesDir}/{ruleFileName}` 单文件; 默认规则经
+ * [DefaultDataResourceProviders] 读 composeResources files/defaultData/directLinkUpload.json。
+ */
+object NativeDirectLinkUpload : DirectLinkUploadStoreProvider, DirectLinkUploadDefaultsProvider {
+
+    private val configPath: String
+        get() = "${AppFilesDirs.get().filesDir}/$ruleFileName"
+
+    // 命名 defaultRulesCache 避免与 override getDefaultRules() 签名冲突 (与 desktop/app 一致)
+    private val defaultRulesCache: List<DirectLinkUploadRule> by lazy {
+        val json = DefaultDataResourceProviders.get().readResource("directLinkUpload.json")
+        GSON.fromJsonArray<DirectLinkUploadRule>(json).getOrThrow()
+    }
+
+    override fun getConfig(): DirectLinkUploadRule? {
+        val file = File(configPath)
+        if (!file.exists()) return null
+        return parseDirectLinkUploadRule(file.readBytes().decodeToString())
+    }
+
+    override fun putConfig(rule: DirectLinkUploadRule) {
+        // 整份落盘: 覆盖写被中断会在盘上留下无法解析的 JSON, 读方按解析失败回落到默认规则
+        // (自定义直链规则静默丢失); 写失败时盘上仍是上一份完整配置
+        writeTextAtomically(configPath, GSON.toJson(rule))
+    }
+
+    override fun getDefaultRules(): List<DirectLinkUploadRule> = defaultRulesCache
+}
+
+/**
+ * 注册 [DirectLinkUploadStoreProviders] + [DirectLinkUploadDefaultsProviders]
+ * (iOS/鸿蒙共用, 在 AppFilesDirs + DefaultDataResourceProvider 之后)。
+ * 未注册时备份/恢复静默跳过 directLinkUploadRule.json。
+ */
+fun registerNativeDirectLinkUploadProviders() {
+    DirectLinkUploadStoreProviders.register(NativeDirectLinkUpload)
+    DirectLinkUploadDefaultsProviders.register(NativeDirectLinkUpload)
+}

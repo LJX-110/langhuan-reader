@@ -6,7 +6,7 @@ import { emitHttpProgress } from './PlatformEventBridge';
  *
  * 接收 Kotlin OhosNativeBridge.invokeHttpSync 通过 tsfn dispatch 过来的 HTTP 请求,
  * 调用 @ohos.net.http (createHttp + requestInStream, 流式接收) 执行真实请求,
- * 完成后通过 legado.httpCallback(requestId, resultJson, body?) 回送结果给 Kotlin。
+ * 完成后通过 langhuan.httpCallback(requestId, resultJson, body?) 回送结果给 Kotlin。
  *
  * # 混合协议 (与 KmpHttpTypes.ohos.kt 对齐, 同 WebView 桥思路: 大字节面走 napi 裸参数)
  *
@@ -33,7 +33,7 @@ import { emitHttpProgress } from './PlatformEventBridge';
  *   "readTimeoutMs": <number>?        // readTimeout, 0/缺省时回退用 timeoutMs
  * }
  *
- * ## 响应 (ArkTS → Kotlin, 由 legado.httpCallback 推送)
+ * ## 响应 (ArkTS → Kotlin, 由 langhuan.httpCallback 推送)
  * ```
  * httpCallback(requestId, resultJson, bodyArrayBuffer)
  * ```
@@ -56,8 +56,8 @@ import { emitHttpProgress } from './PlatformEventBridge';
  * # 流式接收 (requestInStream) 与下载进度
  * 本端用 requestInStream + on('dataReceive') 分段接收响应体 (一次性 request() 无进度回调),
  * 同时保证 invokeHttpSync 的“请求-响应”接口不变: 分段字节在 ArkTS 侧拼装成完整 body 后
- * 经 legado.httpCallback 原样回送 Kotlin (与 request() 一次性返回语义一致); 进度事件另走
- * [emitHttpProgress] (统一平台事件通道 legado.platformEvent → Kotlin
+ * 经 langhuan.httpCallback 原样回送 Kotlin (与 request() 一次性返回语义一致); 进度事件另走
+ * [emitHttpProgress] (统一平台事件通道 langhuan.platformEvent → Kotlin
  * OhosDownloadProgressEvents, 按 url 关联 bytesReceived/totalBytes)。
  *
  * # 重定向限制 (@ohos.net.http 不暴露重定向链)
@@ -105,7 +105,7 @@ interface HttpResponse {
   error?: string;
 }
 
-// 由 EntryAbility 注入的结果回送函数类型 (内部调 legado.httpCallback; body 为数据面裸字节 ArrayBuffer)
+// 由 EntryAbility 注入的结果回送函数类型 (内部调 langhuan.httpCallback; body 为数据面裸字节 ArrayBuffer)
 export type HttpCallback = (requestId: number, resultJson: string, body: ArrayBuffer | undefined) => void;
 
 // 活跃的 httpRequest 对象 Map<requestId, http.HttpRequest>, 供 cancel action 使用
@@ -119,7 +119,7 @@ const streamingUrls = new Map<number, string>();
  *
  * @param requestJson 请求 JSON 字符串 (含 requestId/action/payload 控制面)
  * @param body 请求体裸字节 ArrayBuffer (tsfn 第二参数; 无 body 时为 undefined)
- * @param callback 回送结果的函数 (EntryAbility 注入 legado.httpCallback)
+ * @param callback 回送结果的函数 (EntryAbility 注入 langhuan.httpCallback)
  */
 export function handleHttpRequest(requestJson: string, body: ArrayBuffer | undefined, callback: HttpCallback): void {
   let req: HttpBridgeRequest;

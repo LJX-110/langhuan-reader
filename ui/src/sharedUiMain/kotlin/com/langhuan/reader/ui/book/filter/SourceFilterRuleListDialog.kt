@@ -1,0 +1,221 @@
+package com.langhuan.reader.ui.book.filter
+
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.DropdownMenuItem
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
+import androidx.compose.material.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.langhuan.reader.data.entities.SourceFilterRule
+import com.langhuan.reader.help.coroutine.IoDispatcher
+import com.langhuan.reader.help.source.SearchBookFilter
+import com.langhuan.reader.ui.compose.component.AlertButton
+import com.langhuan.reader.ui.compose.component.AppAlertDialog
+import com.langhuan.reader.ui.compose.component.AppDialogScaffold
+import com.langhuan.reader.ui.compose.component.AppDialogSizes
+import com.langhuan.reader.ui.compose.component.AppDropdownMenu
+import com.langhuan.reader.ui.compose.component.AppSwitch
+import com.langhuan.reader.ui.compose.component.AppTextButton
+import com.langhuan.reader.ui.compose.component.RuleManageScaffold
+import com.langhuan.reader.ui.compose.theme.AppTheme
+import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.langhuan.reader.ui.generated.resources.Res
+import com.langhuan.reader.ui.generated.resources.add
+import com.langhuan.reader.ui.generated.resources.cancel
+import com.langhuan.reader.ui.generated.resources.close
+import com.langhuan.reader.ui.generated.resources.delete
+import com.langhuan.reader.ui.generated.resources.draw
+import com.langhuan.reader.ui.generated.resources.edit
+import com.langhuan.reader.ui.generated.resources.ic_add
+import com.langhuan.reader.ui.generated.resources.ic_edit
+import com.langhuan.reader.ui.generated.resources.ic_more_vert
+import com.langhuan.reader.ui.generated.resources.more_menu
+import com.langhuan.reader.ui.generated.resources.ok
+import com.langhuan.reader.ui.generated.resources.source_filter_rule
+import com.langhuan.reader.ui.generated.resources.source_filter_rule_manage
+import com.langhuan.reader.ui.generated.resources.source_filter_rule_no_match
+import com.langhuan.reader.ui.generated.resources.sure_del
+import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.stringResource
+
+/**
+ * 展示当前 scope 下命中 (已启用且范围覆盖) 的筛选规则, 对照 app 端同名 DialogFragment 下沉。
+ * 点击编辑 → 弹 [SourceFilterEditDialog]; 底部"管理全部" → [onManageAll] 跳规则管理页。
+ *
+ * @param scope SearchScope 字符串 (null/空 = 全部书源)
+ */
+@Composable
+fun SourceFilterRuleListDialog(
+    scope: String?,
+    onManageAll: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = AppTheme.colors
+    val coroutineScope = rememberCoroutineScope()
+    var rules by remember { mutableStateOf<List<SourceFilterRule>>(emptyList()) }
+    // null=不显示编辑框; Pair(rule, isNew) 中 rule 为 null 表示新增
+    var editing by remember { mutableStateOf<SourceFilterRule?>(null) }
+    var addingNew by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<SourceFilterRule?>(null) }
+
+    fun loadRules() {
+        coroutineScope.launch {
+            rules = withContext(IoDispatcher) { SearchBookFilter.rulesInScope(scope) }
+        }
+    }
+    LaunchedEffect(scope) { loadRules() }
+
+    // 对照 app 端 onSourceFilterRuleSave: 落库后重新拉取列表
+    fun saveRule(rule: SourceFilterRule, isNew: Boolean) {
+        coroutineScope.launch {
+            withContext(IoDispatcher) { SearchBookFilter.save(rule, isNew) }
+            loadRules()
+        }
+    }
+
+    AppDialogScaffold(
+        onDismissRequest = onDismiss,
+        title = stringResource(Res.string.source_filter_rule),
+        properties = AppDialogSizes.properties(),
+        titleActions = {
+            IconButton(onClick = { addingNew = true }) {
+                Icon(
+                    painter = painterResource(Res.drawable.ic_add),
+                    contentDescription = stringResource(Res.string.add),
+                    tint = colors.primaryText,
+                )
+            }
+        },
+        contentPadding = PaddingValues(0.dp),
+        // 原版 isFullHeight = true, 高度固定 0.8 屏高
+        fullHeight = true,
+        bottomBar = {
+            AppTextButton(
+                text = stringResource(Res.string.close),
+                color = colors.secondaryText,
+            ) { onDismiss() }
+            AppTextButton(
+                text = stringResource(Res.string.source_filter_rule_manage),
+            ) { onManageAll() }
+        },
+    ) {
+        RuleManageScaffold(
+            items = rules,
+            itemKey = { it.id },
+            onMove = { _, _ -> },
+            emptyText = stringResource(Res.string.source_filter_rule_no_match),
+        ) { item ->
+            SourceFilterRuleListItem(
+                item = item,
+                onToggleEnabled = { enabled ->
+                    item.enabled = enabled
+                    coroutineScope.launch(IoDispatcher) {
+                        SearchBookFilter.save(item, isNew = false)
+                    }
+                },
+                onEdit = { editing = item },
+                onDelete = { pendingDelete = item },
+            )
+        }
+    }
+
+    if (addingNew || editing != null) {
+        SourceFilterEditDialog(
+            rule = editing,
+            onConfirm = { rule -> saveRule(rule, isNew = editing == null) },
+            onDismiss = {
+                addingNew = false
+                editing = null
+            },
+            // 对照 app 端 SourceFilterEditDialog(existing = null, defaultScope = scope)
+            defaultScope = scope,
+        )
+    }
+
+    pendingDelete?.let { rule ->
+        AppAlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = stringResource(Res.string.draw),
+            message = stringResource(Res.string.sure_del) + "\n" + rule.name.ifEmpty { rule.pattern },
+            okButton = AlertButton(stringResource(Res.string.ok)) {
+                coroutineScope.launch {
+                    withContext(IoDispatcher) { SearchBookFilter.delete(rule) }
+                    loadRules()
+                }
+            },
+            cancelButton = AlertButton(stringResource(Res.string.cancel)) {},
+        )
+    }
+}
+
+/** 单条规则: 名称(为空回退 pattern) + 启用开关 + 编辑按钮 + 更多菜单(删除)。 */
+@Composable
+private fun SourceFilterRuleListItem(
+    item: SourceFilterRule,
+    onToggleEnabled: (Boolean) -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val colors = AppTheme.colors
+    var showMenu by remember { mutableStateOf(false) }
+    // 列表项是实体对象, 原地改 enabled 不触发重组, 用本地态驱动开关显示
+    var enabled by remember(item.id) { mutableStateOf(item.enabled) }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = item.name.ifEmpty { item.pattern },
+            color = colors.primaryText,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        AppSwitch(
+            checked = enabled,
+            onCheckedChange = {
+                enabled = it
+                onToggleEnabled(it)
+            },
+        )
+        Spacer(Modifier.width(DesignTokens.spacingDefault))
+        IconButton(onClick = onEdit) {
+            Icon(
+                painter = painterResource(Res.drawable.ic_edit),
+                contentDescription = stringResource(Res.string.edit),
+                tint = colors.primaryText,
+            )
+        }
+        IconButton(onClick = { showMenu = true }) {
+            Icon(
+                painter = painterResource(Res.drawable.ic_more_vert),
+                contentDescription = stringResource(Res.string.more_menu),
+                tint = colors.primaryText,
+            )
+        }
+        AppDropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+            DropdownMenuItem(onClick = { showMenu = false; onDelete() }) {
+                Text(stringResource(Res.string.delete), color = colors.primaryText)
+            }
+        }
+    }
+}

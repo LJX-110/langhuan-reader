@@ -1,0 +1,68 @@
+package com.langhuan.reader.ui.book.import.local
+
+import android.app.Application
+import com.langhuan.reader.base.BaseViewModel
+import com.langhuan.reader.constant.AppLog
+import com.langhuan.reader.exception.InvalidBooksDirException
+import com.langhuan.reader.model.fileBook.FileBook
+import com.langhuan.reader.model.fileBook.importLocalFile
+import com.langhuan.reader.utils.toastOnUi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CoroutineScope
+
+/**
+ * 导入本地书籍的 Android ViewModel。
+ *
+ * 目录状态机 (目录栈/面包屑/过滤/排序/扫描/空态) 在 data/commonMain [ImportBookShared]
+ * (四端一份, 目录列举经 [com.langhuan.reader.ui.book.import.ImportBookDirHost] 注入);
+ * 本类只保留上架编排 (导入失败 toast 需要 Context)。
+ */
+class ImportBookViewModel(application: Application) : BaseViewModel(application) {
+
+    /**
+     * 上架选中条目。
+     *
+     * [onNeedBooksDir] 供"压缩包导入需要书籍保存位置而尚未设置"的场景接到"书籍保存位置"
+     * 出口 (与"其它设置 → 书籍保存位置"同一选择器/同一偏好键), 返回 true 再重试该条导入;
+     * 返回 false (用户取消) 或传 null 时按导入出错处理。普通书文件导入不经它。
+     */
+    fun addToBookshelf(
+        bookList: HashSet<ImportBook>,
+        scope: CoroutineScope? = null,
+        onNeedBooksDir: (suspend () -> Boolean)? = null,
+        finally: () -> Unit
+    ) {
+        // scope = 实际页面请求的持有 scope (ScreenModel/页面 Job): 传入即由它持有本次导入
+        // (重建只重绑、真退出撤未提交工作); null 时回退 viewModelScope (跨重建存活)
+        execute(scope = scope ?: viewModelScope) {
+            bookList.forEach { importBook ->
+                importBookToBookshelf(importBook, onNeedBooksDir)
+            }
+        }.onError {
+            AppLog.put("导入出错\n${it.localizedMessage}", it)
+            context.toastOnUi("导入出错\n${it.localizedMessage}")
+        }.onFinally {
+            finally.invoke()
+        }
+    }
+
+    /** 导入单本; 保存位置未设置时先选目录再重试一次 (其余导入异常照旧上抛)。 */
+    private suspend fun importBookToBookshelf(
+        importBook: ImportBook,
+        onNeedBooksDir: (suspend () -> Boolean)?
+    ) {
+        // 导入工作挂在 execute 的真实协程上 (viewModelScope 跨重建存活, 真退出随撤):
+        // parent 贯通到 accessor, 不再落 null → 独立 runBlocking
+        val parent = currentCoroutineContext()[Job]
+        try {
+            FileBook.importLocalFile(importBook.file, parent)
+        } catch (e: InvalidBooksDirException) {
+            if (onNeedBooksDir?.invoke() != true) throw e
+            FileBook.importLocalFile(importBook.file, parent)
+        }
+        importBook.isOnBookShelf = true
+    }
+
+}

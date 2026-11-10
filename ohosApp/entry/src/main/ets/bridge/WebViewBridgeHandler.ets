@@ -5,7 +5,7 @@ import webview from '@ohos.web.webview';
  *
  * 接收 Kotlin OhosNativeBridge.invokeWebViewSync 通过 tsfn dispatch 过来的后台抓取请求
  * (书源 webView / webViewGetSource 规则), 用隐藏 Web 组件 (Index.ets 挂载) 加载页面,
- * onPageEnd 后 runJavaScript 执行 JS 取源码, 完成后通过 legado.webViewCallback(requestId, resultJson, bodyRaw)
+ * onPageEnd 后 runJavaScript 执行 JS 取源码, 完成后通过 langhuan.webViewCallback(requestId, resultJson, bodyRaw)
  * 回送结果给 Kotlin。
  *
  * # 混合协议 (与 OhosNativeBridge.kt 对齐)
@@ -36,7 +36,7 @@ import webview from '@ohos.web.webview';
  *   "cookie": "<string>?"             // 加载前注入的业务层 cookie ("k1=v1; k2=v2")
  * }
  *
- * ## 响应 (ArkTS → Kotlin, 由 legado.webViewCallback 三参数推送)
+ * ## 响应 (ArkTS → Kotlin, 由 langhuan.webViewCallback 三参数推送)
  * - 参数 1 (resultJson, JSON 控制面):
  *   - 成功: `{ ok: true, url: "<finalUrl>", cookie: "<k=v; ...>" }`
  *   - 命中嗅探: `{ ok: true, url: "<原始url>" }`
@@ -91,7 +91,7 @@ interface PendingRequest {
   htmlRaw: string;
 }
 
-// 由 EntryAbility 注入的结果回送函数类型 (内部调 legado.webViewCallback, 混合协议三参数)
+// 由 EntryAbility 注入的结果回送函数类型 (内部调 langhuan.webViewCallback, 混合协议三参数)
 export type WebViewCallback = (requestId: number, resultJson: string, bodyRaw: string) => void;
 
 // ===== 模块级状态 (隐藏 Web 组件单实例, 请求串行) =====
@@ -140,7 +140,7 @@ export function initWebViewBridge(controller: webview.WebviewController): void {
  *
  * @param requestJson 控制面请求 JSON 字符串 (含 requestId/action/payload, payload 不含 html)
  * @param htmlRaw 数据面裸 HTML 字符串 (html 入参, 空串=无)
- * @param callback 回送结果的函数 (EntryAbility 注入 legado.webViewCallback)
+ * @param callback 回送结果的函数 (EntryAbility 注入 langhuan.webViewCallback)
  */
 export function handleWebViewRequest(requestJson: string, htmlRaw: string, callback: WebViewCallback): void {
   let req: WebViewBridgeRequest;
@@ -448,11 +448,11 @@ function clearJsRetryTimer(): void {
 // =====================================================================================
 //
 // 上方是**后台抓取**链 (书源 webView/webViewGetSource 规则): 隐藏 Web 组件 + 混合协议
-// (控制面 JSON + 数据面裸 HTML) + legado.webViewCallback 三参数回送。
+// (控制面 JSON + 数据面裸 HTML) + langhuan.webViewCallback 三参数回送。
 // 本节是**前台 Web**链: Compose 槽位 (WebViewRoute/ReadRssRoute/登录 Overlay) 内由
-// Index.ets 的 interop builder ('legadoForegroundWeb', 复用仓库既有 ArkUIView2 +
+// Index.ets 的 interop builder ('langhuanForegroundWeb', 复用仓库既有 ArkUIView2 +
 // registerComposeInteropBuilder 范式) 创建**可见** Web 组件, 单 JSON 字符串协议 +
-// legado.webControllerCallback(requestId, resultJson) 两参数回送。两条链各有独立 Web
+// langhuan.webControllerCallback(requestId, resultJson) 两参数回送。两条链各有独立 Web
 // 实例与 tsfn, 互不抢占 (后台链的状态机/队列完全不受本节点影响)。
 //
 // # JSON 协议 (与 OhosWebViewControllerBridge.kt 逐字段对齐)
@@ -472,7 +472,7 @@ function clearJsRetryTimer(): void {
 // - runJavaScript: OhosWebScriptPayload { script }
 // - goBack/reload/exitFullScreen/getUrl/canGoBack: 空对象 {}
 //
-// ## 响应/事件 (ArkTS → Kotlin, 由 legado.webControllerCallback 两参数推送)
+// ## 响应/事件 (ArkTS → Kotlin, 由 langhuan.webControllerCallback 两参数推送)
 // 字段与 Kotlin OhosWebControllerResult 同名同义:
 // { ok, result?, cookie?, canGoBack?, url?, error?, event?, title?, progress? }
 // - requestId > 0: 命令响应 (回 Kotlin 下发的同值)
@@ -530,7 +530,7 @@ interface ForegroundWebResult {
   progress?: number;
 }
 
-/** 前台 Web 结果/事件回送函数类型 (EntryAbility 侧传 legado.webControllerCallback)。 */
+/** 前台 Web 结果/事件回送函数类型 (EntryAbility 侧传 langhuan.webControllerCallback)。 */
 export type WebControllerCallback = (requestId: number, resultJson: string) => void;
 
 /**
@@ -538,17 +538,17 @@ export type WebControllerCallback = (requestId: number, resultJson: string) => v
  *
  * `metaViewport`/`overviewModeAccess` 是 Web 组件的**静态属性** (只能在 build 里设),
  * 而宽视口开关随 show 命令动态变化, 故经 AppStorage 中转: 本模块写, Index.ets 的
- * `LegadoForegroundWeb` 组件以 @StorageLink 订阅并重新渲染, 由 ArkUI 就地更新属性
+ * `LanghuanForegroundWeb` 组件以 @StorageLink 订阅并重新渲染, 由 ArkUI 就地更新属性
  * (与视频 surface 用 AppStorage 传缩放/平移、再靠 @StorageLink 驱动重渲染同一范式)。
  */
-export const FOREGROUND_WIDE_VIEWPORT_KEY: string = 'legadoForegroundWebWideViewPort';
+export const FOREGROUND_WIDE_VIEWPORT_KEY: string = 'langhuanForegroundWebWideViewPort';
 
 // ===== 模块级状态 (前台可见 Web 单实例; 与后台链的 queue/active 完全独立) =====
 
-/** 可见 Web 组件控制器 (Index.ets 的 LegadoForegroundWeb 组件 aboutToAppear 注入)。 */
+/** 可见 Web 组件控制器 (Index.ets 的 LanghuanForegroundWeb 组件 aboutToAppear 注入)。 */
 let foregroundController: webview.WebviewController | undefined;
 
-/** 结果/事件回送函数 (Index.ets 注入, 内部调 legado.webControllerCallback)。 */
+/** 结果/事件回送函数 (Index.ets 注入, 内部调 langhuan.webControllerCallback)。 */
 let foregroundEventCallback: WebControllerCallback | undefined;
 
 /** 待执行的 show 配置 (加载配置的权威来源; null = 无待加载配置)。 */
@@ -564,10 +564,10 @@ let foregroundContentLoaded = false;
 let foregroundFullScreenHandler: FullScreenExitHandler | undefined;
 
 /**
- * 初始化前台 Web 桥 (由 Index.ets 的 LegadoForegroundWeb 组件 aboutToAppear 调用)。
+ * 初始化前台 Web 桥 (由 Index.ets 的 LanghuanForegroundWeb 组件 aboutToAppear 调用)。
  *
  * @param controller 可见 Web 组件的 WebviewController (与 interop builder 的 Web 组件绑定)
- * @param eventCallback 结果/事件回送函数 (内部调 legado.webControllerCallback; 页面事件用 requestId=0)
+ * @param eventCallback 结果/事件回送函数 (内部调 langhuan.webControllerCallback; 页面事件用 requestId=0)
  */
 export function initForegroundWebBridge(
   controller: webview.WebviewController,
@@ -586,7 +586,7 @@ export function initForegroundWebBridge(
  * 处理来自 Kotlin 的前台 Web 命令 (由 EntryAbility 注册的 tsfn 回调调用)。
  *
  * @param requestJson 请求 JSON 字符串 (含 requestId/action/payload)
- * @param callback 回送命令响应的函数 (EntryAbility 注入 legado.webControllerCallback)
+ * @param callback 回送命令响应的函数 (EntryAbility 注入 langhuan.webControllerCallback)
  */
 export function handleForegroundWebRequest(requestJson: string, callback: WebControllerCallback): void {
   let req: WebViewBridgeRequest;
@@ -917,7 +917,7 @@ function applyRunJavaScript(requestId: number, payloadJson: string, callback: We
     // 可见 Web 组件未挂载: 明确错误而非静默失败 (Kotlin 侧 evaluateJavascript 收到 null)
     callback(requestId, JSON.stringify({
       ok: false,
-      error: '鸿蒙端前台WebView不可用: 可见 Web 组件未挂载 (Index.ets 未注册 legadoForegroundWeb builder)'
+      error: '鸿蒙端前台WebView不可用: 可见 Web 组件未挂载 (Index.ets 未注册 langhuanForegroundWeb builder)'
     } as ForegroundWebResult));
     return;
   }

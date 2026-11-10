@@ -1,0 +1,185 @@
+package com.langhuan.reader.model.fileBook
+
+import kotlinx.coroutines.Job
+
+import com.langhuan.reader.constant.AppLog
+import com.langhuan.reader.constant.AppPattern
+import com.langhuan.reader.data.entities.Book
+import com.langhuan.reader.data.entities.BookChapter
+import com.langhuan.reader.exception.TocEmptyException
+import com.langhuan.reader.help.book.ContentProcessorProviders
+import com.langhuan.reader.help.i18n.AppStringKey
+import com.langhuan.reader.help.i18n.appString
+import com.langhuan.reader.lib.webdav.WebDav
+import com.langhuan.reader.model.fileBook.FileBook.analyzeNameAuthor
+import com.langhuan.reader.model.fileBook.FileBook.deleteBook
+import com.langhuan.reader.model.fileBook.FileBook.downloadRemoteBook
+import com.langhuan.reader.model.fileBook.FileBook.getChapterList
+import com.langhuan.reader.model.fileBook.FileBook.getContent
+import com.langhuan.reader.model.fileBook.FileBook.getCoverPath
+import com.langhuan.reader.model.fileBook.FileBook.getHandler
+import com.langhuan.reader.model.fileBook.FileBook.getImage
+import com.langhuan.reader.model.fileBook.FileBook.importFromArchive
+import com.langhuan.reader.model.fileBook.FileBook.importLocalFile
+import com.langhuan.reader.model.fileBook.FileBook.isBookFile
+import com.langhuan.reader.model.fileBook.FileBook.mergeBook
+import com.langhuan.reader.model.fileBook.FileBook.upBookInfo
+import com.langhuan.reader.utils.systemCurrentTimeMillis
+
+/**
+ * 书籍文件导入 目录正文解析
+ * 支持在线文件(txt epub 压缩文件 本地文件
+ *
+ * # KMP 化说明
+ *
+ * 原 app 端 FileBook object 重 Android 依赖 (android.net.Uri / DocumentFile / FileDoc /
+ * ArchiveUtils / AnalyzeUrl / WebDav / RemoteBook / GSON / BookHelp.formatBookAuthor /
+ * appCtx / FileUtils 等), 本 commonMain 版仅保留纯逻辑:
+ * - **纯逻辑 (本类直接实现)**: [isBookFile] / [getChapterList] / [getContent] /
+ *   [upBookInfo] / [getImage] / [WebFile] / [clear]
+ * - **平台专属 (委托 [FileBookProviders])**: [getHandler] / [importFromArchive] /
+ *   [importLocalFile] / [deleteBook] / [saveBookFile] / [normalizeBookRef] /
+ *   [getCoverPath] / [analyzeNameAuthor] / [getUrlSuffix]
+ * - **跨端编排 (委托 [FileBookRemoteImportShared])**: [importRemoteBook] / [mergeBook] /
+ *   [downloadRemoteBook] —— 四端共用一份判型/阈值/解包/落库/合并/远端下载, 各端只注入
+ *   文件读写原语 (保存目录与引用形式), 不经 accessor 二次分发
+ *
+ * 原 Uri 参数/返回值改用 String (Uri.toString()); app 端 [com.langhuan.reader.model.fileBook.FileBookAccessorImpl]
+ * 内部 String↔Uri 转换, 行为与下沉前一致。app 端调用方通过扩展函数
+ * (FileBookExtensions.kt) 保留原 Uri 重载签名, 调用方零改动。
+ *
+ * System.currentTimeMillis() → [systemCurrentTimeMillis] (expect/actual);
+ * ContentProcessor.get(book) → [ContentProcessorProviders.get].getTitleReplaceRules(book);
+ * appDb → [AppDbProviders.get] (仅 importBook 内部用, 已委托 accessor)。
+ *
+ * TextFile/EpubFile/CbzFile/PdfFileShared 下沉到同包, 引用路径不变。
+ */
+object FileBook : BaseFileBook {
+
+    /** [getContent] 失败时的兜底文本前缀; 缓存写入方据此排除, 错误文本不得固化进章节缓存。 */
+    const val CONTENT_ERROR_PREFIX = "获取本地书籍内容失败"
+
+    private val accessor get() = FileBookProviders.get()
+
+    fun Book.getHandler(): BaseFileBook = accessor.getHandler(this)
+
+    fun isBookFile(fileName: String): Boolean = AppPattern.bookFileRegex.matches(fileName)
+
+    // 注: Kotlin/Native 要求 override 与父声明的 @Throws 过滤器一致,
+    // BaseFileBook.getChapterList 无 @Throws, 故此处不能单独标注 (仍会抛 TocEmptyException)。
+    override fun getChapterList(book: Book): ArrayList<BookChapter> {
+        val chapters = book.getHandler().getChapterList(book)
+        if (chapters.isEmpty()) {
+            throw TocEmptyException(appString(AppStringKey.chapter_list_empty))
+        }
+        // 去重按 url 判身份 (BookChapter 已改结构相等, LinkedHashSet 会漏折叠同 url 的重复章节)
+        val list = ArrayList(chapters.distinctBy { it.url })
+        val replaceRules = ContentProcessorProviders.get().getTitleReplaceRules(book)
+        val useReplaceRule = book.getUseReplaceRule()
+        list.forEachIndexed { index, bookChapter ->
+            bookChapter.index = index
+            if (bookChapter.title.isEmpty()) {
+                bookChapter.title = "无标题章节"
+            }
+        }
+        book.durChapterTitle = list.getOrElse(book.durChapterIndex) { list.last() }
+            .getDisplayTitle(replaceRules, useReplaceRule)
+        book.latestChapterTitle = list.last().getDisplayTitle(replaceRules, useReplaceRule)
+        book.totalChapterNum = list.size
+        book.latestChapterTime = systemCurrentTimeMillis()
+        return list
+    }
+
+    override fun getContent(book: Book, chapter: BookChapter): String? {
+        return try {
+            book.getHandler().getContent(book, chapter)
+        } catch (e: Exception) {
+            "$CONTENT_ERROR_PREFIX\n${e.message}".also { AppLog.put(it, e) }
+        }
+    }
+
+    override fun upBookInfo(book: Book) = book.getHandler().upBookInfo(book)
+    override fun getImage(book: Book, href: String) = book.getHandler().getImage(book, href)
+
+    /* 导入压缩包内的书籍 */
+    fun importFromArchive(
+        archiveFileUri: String, saveFileName: String? = null, filter: ((String) -> Boolean)? = null
+    ): List<Book> = accessor.importFromArchive(archiveFileUri, saveFileName, filter)
+
+    fun importFromArchiveWithParent(
+        archiveFileUri: String,
+        saveFileName: String?,
+        parent: Job?,
+        filter: ((String) -> Boolean)?,
+    ): List<Book> = accessor.importFromArchive(archiveFileUri, saveFileName, parent, filter)
+
+    fun importLocalFile(uriStr: String, parent: Job? = null): Book =
+        accessor.importLocalFile(uriStr, parent)
+
+    fun deleteBook(book: Book, deleteOriginal: Boolean) =
+        accessor.deleteBook(book, deleteOriginal)
+
+    //文件类书源 合并在线书籍信息 在线 > 本地
+    suspend fun mergeBook(localBook: Book, onLineBook: Book?): Book =
+        FileBookRemoteImportShared.mergeBook(localBook, onLineBook)
+
+    /**
+     * 下载 book 对应的远程文件并更新 Book。
+     *
+     * 原先包在 `runBlockingInScope(EmptyCoroutineContext)` 里: 自建作用域, 下载 Job 与发起它的请求
+     * 无父子关系, 页面退出/请求撤销都停不下来 (调用方外层套页面 scope 也没用)。
+     * 现在本方法就是挂起函数, 直接复用共享层的挂起实现, 取消/失败/成功都随本请求贯通。
+     *
+     * 只有"返回 InputStream 的同步叶子" (见 [FileBookAccessor.getBookInputStream] 的文件失效回退)
+     * 需要阻塞等待, 由各端自己在叶子内带真实父门阻塞, 不在这里造第二条无父通道。
+     */
+    suspend fun downloadRemoteBook(book: Book): Boolean =
+        FileBookRemoteImportShared.downloadRemoteBook(book)
+
+    /**
+     * 导入远程书籍 (对应原 `FileBook.importRemoteBook`)。
+     *
+     * 原 RemoteBook 参数拍平为 name/path/size/lastModify 基本类型
+     * (RemoteBook 依赖 appDb 构造, 未下沉 commonMain)。
+     * app 端扩展 [com.langhuan.reader.model.fileBook.FileBookExtensions.importRemoteBook]
+     * 保留原 RemoteBook 重载签名, 调用方零改动。
+     */
+    suspend fun importRemoteBook(
+        webDav: WebDav,
+        serverID: Long?,
+        name: String,
+        path: String,
+        size: Long,
+        lastModify: Long,
+        downloadFile: Boolean = false
+    ): Book = FileBookRemoteImportShared.importRemoteBook(
+        webDav, serverID, name, path, size, lastModify, downloadFile
+    )
+
+    fun getCoverPath(bookUrl: String): String = accessor.getCoverPath(bookUrl)
+
+    /**
+     * 从文件分析书籍必要信息（书名 作者等）。
+     *
+     * 纯逻辑已下沉 [BookNameAuthorAnalyzer], 各端 accessor 仅负责传入平台配置
+     * (app: `AppConfig.bookImportFileName`; 其余端读同一偏好键 [com.langhuan.reader.constant.PreferKey.bookImportFileName])。
+     */
+    fun analyzeNameAuthor(fileName: String): Pair<String, String> =
+        accessor.analyzeNameAuthor(fileName)
+
+    data class WebFile(
+        val url: String,
+        val name: String,
+    ) {
+        override fun toString(): String = name
+
+        // 原 app 端为构造期赋值 (val suffix = UrlUtil.getSuffix(name)), 保持一次性计算语义
+        val suffix: String = FileBookProviders.get().getUrlSuffix(name)
+
+        val isSupported: Boolean = AppPattern.bookFileRegex.matches(name)
+
+        val isSupportDecompress: Boolean = AppPattern.archiveFileRegex.matches(name)
+
+    }
+
+}

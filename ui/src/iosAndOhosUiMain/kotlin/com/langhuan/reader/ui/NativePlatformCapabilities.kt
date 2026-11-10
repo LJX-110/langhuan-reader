@@ -1,0 +1,250 @@
+package com.langhuan.reader.ui
+
+import com.langhuan.reader.constant.AppLog
+import com.langhuan.reader.constant.DirUsage
+import com.langhuan.reader.constant.PreferKey
+import com.langhuan.reader.data.entities.Book
+import com.langhuan.reader.data.entities.BookSourcePart
+import com.langhuan.reader.data.entities.HttpTTS
+import com.langhuan.reader.exception.InvalidBooksDirException
+import com.langhuan.reader.help.AppWebDavShared
+import com.langhuan.reader.help.DirectLinkUploadNativePrimitives
+import com.langhuan.reader.help.DirectLinkUploadRule
+import com.langhuan.reader.help.config.LocalConfigKeys
+import com.langhuan.reader.help.config.PreferenceProviders
+import com.langhuan.reader.help.coroutine.IoDispatcher
+import com.langhuan.reader.help.coroutine.mainDispatcher
+import com.langhuan.reader.help.file.AppFilesDirs
+import com.langhuan.reader.help.storage.BackupFileOps
+import com.langhuan.reader.help.toast.Toasters
+import com.langhuan.reader.help.upLoadToDirectLink
+import com.langhuan.reader.model.fileBook.FileBook
+import com.langhuan.reader.ui.book.source.BookSourceSort
+import com.langhuan.reader.ui.book.source.manage.selectedSourcesJson
+import com.langhuan.reader.ui.config.MODE_EDIT_CONFIG
+import com.langhuan.reader.ui.config.MODE_EDIT_PREFS
+import com.langhuan.reader.ui.config.MODE_NEW_CONFIG
+import com.langhuan.reader.ui.root.AppNavigatorProviders
+import com.langhuan.reader.ui.root.AppOverlay
+import com.langhuan.reader.ui.root.AppRoute
+import com.langhuan.reader.ui.root.PlatformCapabilityProviders
+import com.langhuan.reader.ui.root.reselectBookSaveDir
+import com.langhuan.reader.ui.root.PlatformServiceProviders
+import com.langhuan.reader.ui.root.SharedPlatformCapabilities
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okio.FileSystem
+import okio.Path.Companion.toPath
+
+/**
+ * iOS 与鸿蒙实现逐字相同、但与桌面不同的那部分 [SharedPlatformCapabilities]。
+ *
+ * 桌面这几项各有自己的形态 (系统浏览器 / 文件选择器 / 无内嵌 WebView 路由), 故不放
+ * [SharedPlatformCapabilities]; 两端一行委托到叶子源集函数的 (openURL / 剪贴板 /
+ * NativeImportBook) 留在各端 —— 那些是平台边界, 且 nativeMain 与本源集互不可见。
+ */
+interface NativePlatformCapabilities : SharedPlatformCapabilities {
+
+    /** 移动端保留内嵌 WebViewRoute 路由语义 (对话框内嵌)。 */
+    override fun openWebView(url: String, sourceKey: String, sourceName: String) {
+        AppNavigatorProviders.get().push(AppRoute.WebView(url, sourceKey, sourceName))
+    }
+
+    override fun enableCustomExport(): Boolean =
+        PreferenceProviders.get().getBoolean(PreferKey.enableCustomExport, false)
+
+    // 对照 ReadAloudConfigDialog 的"+"按钮/行编辑: showDialogFragment(HttpTtsEditDialog)
+    // 迁 Compose Overlay: shared OverlayContentHost 的 "httpTtsEdit" key 接管
+    // (payload = 引擎 id, null 表新增)
+    override fun showHttpTtsEditDialog(engine: HttpTTS?) {
+        AppNavigatorProviders.get().showOverlay(
+            AppOverlay.Dialog(
+                "httpTtsEdit",
+                payload = engine?.id?.toString(),
+                // 表单登录 → push WebView 路由盖住本窗口时保留 Overlay, 由内容自管挂起/恢复
+                // (对照原版 DialogFragment 被新 Activity 盖住仍存活, 返回后表单原样)
+                keepOnPush = true,
+            )
+        )
+    }
+
+    /**
+     * 创建堆转储: iOS/鸿蒙无 JVM, 也就没有堆转储概念 —— 不提供该入口 (隐藏), 而不是弹
+     * "暂不支持" 的假对话框。
+     */
+    override val createHeapDumpSupported: Boolean get() = false
+
+    // 直链上传规则页的"测试"按钮: 用表单里尚未保存的规则跑一次真实上传
+    override fun testDirectLinkUpload(
+        rule: DirectLinkUploadRule,
+        onSuccess: (String) -> Unit,
+        onError: (String) -> Unit,
+    ) {
+        capabilityScope.launch {
+            runCatching {
+                upLoadToDirectLink(
+                    DirectLinkUploadNativePrimitives, "test.json", "{}", "application/json", rule,
+                )
+            }
+                .onSuccess { result -> withContext(mainDispatcher) { onSuccess(result) } }
+                .onFailure { error ->
+                    withContext(mainDispatcher) {
+                        onError(error.message ?: error.toString())
+                    }
+                }
+        }
+    }
+
+    // 对照 BookInfoViewModel.uploadBook: 上传本地书籍文件到 WebDav books/ 子目录
+    override fun uploadBook(book: Book, success: (() -> Unit)?) {
+        capabilityScope.launch {
+            runCatching {
+                // 与 AppWebDavShared.exportWebDav 同款惰性认证: native 端无 AppWebDav init 块
+                if (AppWebDavShared.authorization == null) AppWebDavShared.upConfig()
+                withContext(IoDispatcher) { AppWebDavShared.uploadBook(book) }
+            }.onSuccess {
+                withContext(mainDispatcher) {
+                    Toasters.get().toast("上传成功")
+                    success?.invoke()
+                }
+            }.onFailure { error ->
+                withContext(mainDispatcher) { Toasters.get().toast(error.message ?: error.toString()) }
+            }
+        }
+    }
+
+    // 对照 BookInfoViewModel.downloadToLocal
+    override fun downloadBookToLocal(
+        book: Book,
+        scope: CoroutineScope,
+        success: (() -> Unit)?,
+    ) {
+        // 归本页请求 (原先挂能力作用域: 页面真退仍在跑)
+        scope.launch {
+            try {
+                withContext(IoDispatcher) { FileBook.downloadRemoteBook(book) }
+                withContext(mainDispatcher) {
+                    Toasters.get().toast("下载成功")
+                    success?.invoke()
+                }
+            } catch (e: CancellationException) {
+                // 真实取消原样传播, 不记假失败
+                throw e
+            } catch (e: Throwable) {
+                if (e !is InvalidBooksDirException) {
+                    AppLog.put("下载远程书籍<${book.name}>失败", e, true)
+                    return@launch
+                }
+                // 保存位置未设置: 挂起等用户真选定
+                if (!reselectBookSaveDir(currentCoroutineContext()[Job])) {
+                    // 用户在选目录时取消 = 本次正常终结 (不是失败, 不记日志)
+                    return@launch
+                }
+                // 已选定: 重试一次; 每一层取消都原样抛出, 真失败照旧记一次
+                try {
+                    withContext(IoDispatcher) { FileBook.downloadRemoteBook(book) }
+                    withContext(mainDispatcher) {
+                        Toasters.get().toast("下载成功")
+                        success?.invoke()
+                    }
+                } catch (retryCancel: CancellationException) {
+                    throw retryCancel
+                } catch (retry: Throwable) {
+                    AppLog.put("下载远程书籍<${book.name}>失败", retry, true)
+                }
+            }
+        }
+    }
+
+    override fun getDeleteBookOriginal(): Boolean =
+        PreferenceProviders.get().getBoolean(LocalConfigKeys.deleteBookOriginal, false)
+
+    override fun showThemeCustomizeDialog(configIndex: Int?, isNight: Boolean) {
+        val mode = if (configIndex == null) MODE_NEW_CONFIG else MODE_EDIT_CONFIG
+        AppNavigatorProviders.get().showOverlay(
+            AppOverlay.Dialog("theme_customize", payload = "$mode,${configIndex ?: -1},$isNight")
+        )
+    }
+
+    override fun showCustomizeDayThemeDialog() {
+        AppNavigatorProviders.get().showOverlay(
+            AppOverlay.Dialog("theme_customize", payload = "$MODE_EDIT_PREFS,-1,false")
+        )
+    }
+
+    override fun showCustomizeNightThemeDialog() {
+        AppNavigatorProviders.get().showOverlay(
+            AppOverlay.Dialog("theme_customize", payload = "$MODE_EDIT_PREFS,-1,true")
+        )
+    }
+
+    /** 分享选中书源 (导出前强制关闭危险 API 开关, 见 [selectedSourcesJson])。 */
+    override fun shareBookSourceSelection(
+        selection: List<BookSourcePart>,
+        allCount: Int,
+        sortAscending: Boolean,
+        sort: BookSourceSort
+    ) {
+        capabilityScope.launch {
+            val json = selectedSourcesJson(selection, allCount, sortAscending, sort) ?: return@launch
+            // 与安卓/桌面同形制: 先落一份 JSON 文件, 再分享该文件 (接收方拿到文件而非一段文本)
+            val path = withContext(IoDispatcher) {
+                runCatching {
+                    val file = AppFilesDirs.get().filesDir + "/shareBookSource.json"
+                    BackupFileOps.writeText(file, json)
+                    file
+                }.onFailure {
+                    AppLog.put("分享书源失败\n${it.message}", it)
+                    Toasters.get().toast("分享失败\n${it.message}")
+                }.getOrNull()
+            } ?: return@launch
+            // 分享面板是界面动作, 回主线程; 能力作用域是 IO。
+            withContext(mainDispatcher) {
+                PlatformServiceProviders.get().sharing.shareFile(path, "application/json")
+            }
+        }
+    }
+
+    override fun pickBookTreeUri(parent: Job?, onSelected: (String?, Throwable?) -> Unit) {
+        // 有 parent 时选择工作挂原等待 Job (真退出随撤); 无 parent 的一次性入口用能力 scope
+        val launchScope = parent?.let { CoroutineScope(it + mainDispatcher) } ?: capabilityScope
+        launchScope.launch {
+            // 阻塞桥把父取消折成 null: 消费点核当前请求资格, 已取消不交付 (null 只留给真实用户取消);
+            // 平台结果/失败先确定, onSelected 只交一次, 其自身异常不属于平台失败
+            val selection = try {
+                val dir = PlatformServiceProviders.get().files.pickDirectory(DirUsage.BookTree)
+                currentCoroutineContext().ensureActive()
+                dir to null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                null to e
+            }
+            onSelected(selection.first, selection.second)
+        }
+    }
+
+    // iOS/鸿蒙的选目录返回沙箱路径 (普通路径, 非 Android 的 SAF 树 URI)。
+    // native 端的 com.langhuan.reader.utils.File 无文件操作能力, 目录列举走 okio FileSystem
+    // (与 foundation 的 native File actual 同一实现)。
+    // 返回格式必须与 importBook 写入的 bookUrl 一致 ("file://" + 绝对路径), 否则
+    // NativeFileBookAccessor.resolveLocalFile 解析不到。
+    override fun findBookFileInDir(dirUri: String, fileName: String): String? {
+        val fs = FileSystem.SYSTEM
+        val dir = dirUri.toPath()
+        if (fs.metadataOrNull(dir)?.isDirectory != true) return null
+        val direct = dir / fileName
+        if (fs.metadataOrNull(direct)?.isRegularFile == true) return "file://${direct}"
+        return fs.listOrNull(dir)
+            ?.filter { fs.metadataOrNull(it)?.isDirectory == true }
+            ?.firstNotNullOfOrNull { sub ->
+                (sub / fileName).takeIf { fs.metadataOrNull(it)?.isRegularFile == true }
+            }
+            ?.let { "file://$it" }
+    }
+}

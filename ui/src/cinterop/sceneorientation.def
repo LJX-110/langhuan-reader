@@ -1,4 +1,4 @@
-package = io.legado.app.platform.sceneorientation
+package = com.langhuan.reader.platform.sceneorientation
 language = Objective-C
 ---
 #import <UIKit/UIKit.h>

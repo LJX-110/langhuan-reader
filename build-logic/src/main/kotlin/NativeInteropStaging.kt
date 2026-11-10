@@ -1,4 +1,4 @@
-package io.legado.buildlogic
+package com.langhuan.buildlogic
 
 import java.io.File
 
@@ -11,14 +11,14 @@ import java.io.File
  */
 fun generateCNamesAliases(outputRoot: File) {
     val quickJsAliases = outputRoot.resolve(
-        "io/legado/app/napi/quickjs/CNamesAliases.kt"
+        "com/langhuan/reader/napi/quickjs/CNamesAliases.kt"
     )
     quickJsAliases.parentFile.mkdirs()
     quickJsAliases.writeText(
         """
         @file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 
-        package io.legado.app.napi.quickjs
+        package com.langhuan.reader.napi.quickjs
 
         typealias JSContext = cnames.structs.JSContext
         typealias JSRuntime = cnames.structs.JSRuntime

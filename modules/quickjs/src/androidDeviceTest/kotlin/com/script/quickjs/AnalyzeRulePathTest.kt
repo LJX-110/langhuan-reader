@@ -9,7 +9,7 @@ import org.junit.runner.RunWith
 /**
  * AnalyzeRule.evalJS 路径集成测试。
  *
- * 测试 AnalyzeRule.evalJS (app/src/main/java/io/legado/app/model/analyzeRule/AnalyzeRule.kt:799)
+ * 测试 AnalyzeRule.evalJS (app/src/main/java/com/langhuan/reader/model/analyzeRule/AnalyzeRule.kt:799)
  * 的关键调用链路, 不依赖业务层 (BookSource/Book/CookieStore 等), 用简单 Java 对象模拟 bindings。
  *
  * 覆盖 AnalyzeRule 适配 quickjs 的关键修改点:
@@ -80,7 +80,7 @@ class AnalyzeRulePathTest {
             bindings["nextChapterUrl"] = nextChapterUrl
             // dangerousApi=true: 测试 mock 类 (MockAnalyzeRule) 在 com.script 包下,
             // 被 JsSecurityPolicy 的 "com.script" 前缀保护名单拦截, 需绕过安全名单。
-            // 真实 AnalyzeRule 在 io.legado.app.model 包下, 不受此限制, dangerousApi 由书源控制。
+            // 真实 AnalyzeRule 在 com.langhuan.reader.model 包下, 不受此限制, dangerousApi 由书源控制。
             bindings.dangerousApi = dangerousApi
         }
     }

@@ -42,7 +42,7 @@
 ############################
 -keep,allowoptimization @androidx.annotation.Keep class * { *; }
 # AnalyzeRuleCore 下沉 commonMain 后无法用 androidx @Keep (无 common 变体), 按类名 keep (JS 反射调用其方法)
--keep,allowoptimization class io.legado.app.model.analyzeRule.AnalyzeRuleCore { *; }
+-keep,allowoptimization class com.langhuan.reader.model.analyzeRule.AnalyzeRuleCore { *; }
 
 # JS 反射 keep 规则随 :shared 删除已按类归属迁至 core/data/foundation 各自
 # consumer-rules.pro（按类归属拆到 core/data/foundation 三者）；AGP KMP
@@ -65,14 +65,14 @@
 # JS 桥经 JavaObjectBridge 按方法名反射调用 (collectMethods 走 clazz.methods, 含接口默认实现
 # 桥方法), 不 keep 时未被 Kotlin 直接调用的成员会被当死代码删除。
 # 注: JS 侧拿到的是运行时实例 (evalJS 绑 this), 类本身由 Kotlin 构造点可达, 故只需保成员。
--keep class * implements io.legado.app.help.JsExtensionsCommon { *; }
+-keep class * implements com.langhuan.reader.help.JsExtensionsCommon { *; }
 
 ############################
 # 业务：数据实体（Gson 反射 + Room + JS 访问）
 ############################
 -keep class **.data.entities.** { *; }
--keep class io.legado.app.model.fileBook.ZipEntry { *; }
--keep class io.legado.app.model.fileBook.ZipImageCache { *; }
+-keep class com.langhuan.reader.model.fileBook.ZipEntry { *; }
+-keep class com.langhuan.reader.model.fileBook.ZipImageCache { *; }
 
 ############################
 # 业务：TVBox spider jar 运行时类路径供给
@@ -204,8 +204,8 @@
 ############################
 # @file:JvmName 合成类跨模块引用加固（顶级 Kotlin 函数宿主类）
 ############################
--keep class io.legado.app.utils.GsonStreamExtensions { *; }
--keep class io.legado.app.utils.EventBusObserveExtensions { *; }
--keep class io.legado.app.utils.ConvertExtensionsAndroid { *; }
--keep class io.legado.app.help.IntentDataAndroid { *; }
--keep class io.legado.app.help.storage.BackupAESAndroid { *; }
+-keep class com.langhuan.reader.utils.GsonStreamExtensions { *; }
+-keep class com.langhuan.reader.utils.EventBusObserveExtensions { *; }
+-keep class com.langhuan.reader.utils.ConvertExtensionsAndroid { *; }
+-keep class com.langhuan.reader.help.IntentDataAndroid { *; }
+-keep class com.langhuan.reader.help.storage.BackupAESAndroid { *; }

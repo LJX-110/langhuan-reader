@@ -22,7 +22,7 @@
 #   1. 能访问 maven.eazytec-cloud.com (CPF fork 的 kotlin/compose/room3/sqlite 构件)
 #   2. JDK 21 (与 CI 一致)
 # 产物:
-#   ohosApp/entry/libs/arm64-v8a/liblegado_shared.so
+#   ohosApp/entry/libs/arm64-v8a/liblanghuan_shared.so
 #   ohosApp/entry/src/main/cpp/include/arm64-v8a/*.h
 #   (源: ui/build/bin/ohosArm64/<buildType>Shared/)
 #
@@ -109,8 +109,8 @@ echo "======================================================================"
 
 verify_staged() {
     local missing=0
-    if [ ! -f "$LIB_DIR/liblegado_shared.so" ]; then
-        echo "[ohos-native] MISSING: $LIB_DIR/liblegado_shared.so" >&2
+    if [ ! -f "$LIB_DIR/liblanghuan_shared.so" ]; then
+        echo "[ohos-native] MISSING: $LIB_DIR/liblanghuan_shared.so" >&2
         missing=1
     fi
     if ! compgen -G "$INCLUDE_DIR/*.h" >/dev/null; then
@@ -127,7 +127,7 @@ if [ "$VERIFY_ONLY" -eq 1 ]; then
         exit 1
     fi
     echo "[ohos-native] 校验通过"
-    ls -lh "$LIB_DIR/liblegado_shared.so"
+    ls -lh "$LIB_DIR/liblanghuan_shared.so"
     ls -lh "$INCLUDE_DIR"/*.h
     exit 0
 fi
@@ -156,7 +156,7 @@ fi
 
 echo "======================================================================"
 echo "[ohos-native] 完成。shared 库与头文件已就位:"
-ls -lh "$LIB_DIR/liblegado_shared.so"
+ls -lh "$LIB_DIR/liblanghuan_shared.so"
 ls -lh "$INCLUDE_DIR"/*.h
 echo "[ohos-native] 下一步 (需 HarmonyOS SDK API 24): 在 ohosApp/ 下用 DevEco 的 hvigorw"
 echo "[ohos-native]   hvigorw assembleHap --mode module -p product=default --no-daemon"

@@ -1,0 +1,626 @@
+package com.langhuan.reader.ui.route
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import com.langhuan.reader.constant.AppLog
+import com.langhuan.reader.constant.BookType
+import com.langhuan.reader.constant.PreferKey
+import com.langhuan.reader.data.AppDbProviders
+import com.langhuan.reader.data.entities.Bookmark
+import com.langhuan.reader.help.IntentData
+import com.langhuan.reader.help.book.delBookCore
+import com.langhuan.reader.help.book.isLocal
+import com.langhuan.reader.help.book.removeType
+import com.langhuan.reader.help.config.AppConfigProviders
+import com.langhuan.reader.help.config.PreferenceProviders
+import com.langhuan.reader.help.coroutine.IoDispatcher
+import com.langhuan.reader.help.showSourceLogin
+import com.langhuan.reader.model.AudioPlayShared
+import com.langhuan.reader.model.audioCoverFallback
+import com.langhuan.reader.ui.about.AppLogDialog
+import com.langhuan.reader.ui.book.audio.AudioPlayOverflowActions
+import com.langhuan.reader.ui.book.audio.AudioPlayPlatformProviders
+import com.langhuan.reader.ui.book.audio.AudioPlayScreenModel
+import com.langhuan.reader.ui.book.audio.AudioPlaySidePanelKind
+import com.langhuan.reader.ui.book.audio.AudioPlayUiEvent
+import com.langhuan.reader.ui.book.bookmark.BookmarkDialog
+import com.langhuan.reader.ui.book.manage.ShelfDeleteConfirmDialog
+import com.langhuan.reader.ui.book.manage.ShelfDeleteRequest
+import com.langhuan.reader.ui.book.manage.confirmShelfDelete
+import com.langhuan.reader.ui.book.manage.startShelfDelete
+import com.langhuan.reader.ui.compose.component.AlertButton
+import com.langhuan.reader.ui.compose.component.AppAlertDialog
+import com.langhuan.reader.ui.compose.platform.AppShortcutHandler
+import com.langhuan.reader.ui.compose.platform.MediaKeyLongPressState
+import com.langhuan.reader.ui.compose.platform.hasActiveBackLayer
+import com.langhuan.reader.ui.compose.platform.mediaPlaybackKeys
+import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
+import com.langhuan.reader.ui.root.AppNavigator
+import com.langhuan.reader.ui.root.AppOverlay
+import com.langhuan.reader.ui.root.AppRoute
+import com.langhuan.reader.ui.root.toRouteRef
+import com.langhuan.reader.ui.root.LocalSharedCoverBinding
+import com.langhuan.reader.ui.root.PlatformCapabilityProviders
+import com.langhuan.reader.ui.root.RouteEntry
+import com.langhuan.reader.ui.root.OnRouteLifecycle
+import com.langhuan.reader.ui.root.PageSystemBarAppearance
+import com.langhuan.reader.ui.root.PageSystemBarAppearanceEffect
+import com.langhuan.reader.ui.root.RouteResultPayload
+import com.langhuan.reader.ui.root.RouteResults
+import com.langhuan.reader.ui.root.ScreenModelStore
+import com.langhuan.reader.ui.root.asBook
+import com.langhuan.reader.ui.root.rememberSharedCoverDestinationBinding
+import com.langhuan.reader.utils.toDurationTime
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.langhuan.reader.ui.generated.resources.Res
+import com.langhuan.reader.ui.generated.resources.add_to_bookshelf
+import com.langhuan.reader.ui.generated.resources.check_add_bookshelf
+import com.langhuan.reader.ui.generated.resources.no
+import com.langhuan.reader.ui.generated.resources.yes
+import org.jetbrains.compose.resources.stringResource
+
+/**
+ * 音频播放页 shared 路由入口。
+ *
+ * 通过 [ScreenModelStore] 复用 [AudioPlayScreenModel]；播放状态和命令由 shared 托管，
+ * 封面、模糊背景、歌词、定时/倍速弹层等平台渲染通过 AudioPlayPlatformProvider 注入。
+ *
+ * 对照 app 端 [com.langhuan.reader.ui.book.audio.AudioPlayActivity]:
+ * - onActivityCreated viewModel.initData → Init 事件
+ * - openChapterList → 宽屏右侧面板 / 窄屏 TocDialogHost 全高底部弹窗 (对照原版 push Toc 带 resultKey)
+ * - showLogin / copyAudioUrl / showSourceVariable / showBookVariable / editSource / addBookmark / showAppLog →
+ *   构造 [AudioPlayOverflowActions] 交由 shared [com.langhuan.reader.ui.book.audio.AudioPlayScreenContent] 渲染溢出菜单
+ * - finish: !inBookshelf 时弹加书架确认 (对照 Activity.finish alert)
+ */
+@Composable
+fun AudioPlayRoute(
+    entry: RouteEntry,
+    navigator: AppNavigator,
+    screenModelStore: ScreenModelStore,
+) {
+    val route = entry.route as AppRoute.AudioPlay
+    // asBook() 对搜索书每次新建实例, remember(route) 让同一路由内保持同一份
+    val book = remember(route) { route.book.asBook() }
+
+    val screenModel = screenModelStore.getOrCreateTyped(entry) { AudioPlayScreenModel() }
+    val state by screenModel.state.collectAsState()
+    val platform = AudioPlayPlatformProviders.getOrNull()
+    val scope = rememberCoroutineScope()
+
+    // 状态栏图标明暗 (对照原版 AudioPlayActivity 的 toolBarTheme = Theme.Dark): 本页恒为
+    // 浅色图标 —— 页顶是模糊封面背景叠压暗蒙层, 图标必须与背景保持对比
+    PageSystemBarAppearanceEffect(
+        appearance = { PageSystemBarAppearance(lightStatusBarIcons = false) },
+    )
+
+    // 音频页键盘快捷键 (方向键/空格): 走共享 AppShortcutHandler 快捷键栈分发。
+    // 对照 ReaderRoute 阅读页 / MangaReaderScreenContent 漫画页方向键模式 —— 快捷键栈在
+    // 桌面 Window onKeyEvent (Main.kt) / Android Activity dispatchKeyEvent
+    // (BaseComposeActivity) 层无条件收键, 不依赖 Compose 焦点链; 而原 handleMediaKeys
+    // 依赖焦点 (onPreviewKeyEvent), 桌面端未持焦时按键完全无响应
+    // (2026-08 用户实测: 视频页正常、音频页无反应), 已收拢到快捷键栈。
+    // 键位 (对照原 handleMediaKeys 语义):
+    //   ←/→ = 进度 ∓10s (← TRIGGER 按住连续后退; → 短按松开 seek +10s / 长按 当前倍速×2
+    //   松手恢复, 长短按由 MediaKeyLongPressState 判定, 恢复原 handleMediaKeys 完整语义)
+    //   ↑/↓ = 上/下一章 (受 prevEnabled/nextEnabled 门控); Space = 播放/暂停
+    // 媒体键 preemptive=true 捕获阶段抢占: 与 Compose 焦点系统单一所有者 (点 ⋯ 后按空格
+    // 不再弹菜单+暂停双触发); 弹层打开时 hasActiveBackLayer() 让位 (弹层方向键导航优先)。
+    val backStack by navigator.backStack.collectAsState()
+    val isTopEntry = backStack.lastOrNull()?.id == entry.id
+    // 右方向键长短按状态 (页面组合存活, 计时协程挂页面 scope)
+    val keyLongPress = remember { MediaKeyLongPressState() }
+    // 长按前倍速 (界面内临时捕获): 长按激活时记录, 松手恢复, 不覆盖用户已设倍速
+    val prePressSpeed = remember { mutableStateOf(1f) }
+    // 长短按阈值取平台 ViewConfiguration (与全应用 clickable 键盘长按手感一致)
+    val longPressTimeoutMs = LocalViewConfiguration.current.longPressTimeoutMillis
+    AppShortcutHandler(
+        shortcuts = mediaPlaybackKeys,
+        // 媒体键捕获阶段抢占 (preemptive=true), 弹层打开时让位 (菜单/对话框方向键导航优先)
+        enabled = { isTopEntry && !hasActiveBackLayer() },
+        onKeyUp = { shortcut ->
+            // 右方向键: 长按松开恢复倍速 / 窗口内松开执行短按 seek (KeyUp 判定)
+            if (shortcut.key == Key.DirectionRight) {
+                keyLongPress.onRelease(
+                    onShortPress = {
+                        val p = screenModel.progress.value
+                        screenModel.dispatch(
+                            AudioPlayUiEvent.Seek((p.progressMs + 10_000).coerceAtMost(p.durationMs))
+                        )
+                    },
+                    onLongPressRelease = {
+                        screenModel.dispatch(AudioPlayUiEvent.SetSpeed(prePressSpeed.value))
+                    },
+                )
+            }
+        },
+    ) { shortcut ->
+        when (shortcut.key) {
+            Key.Spacebar -> screenModel.dispatch(AudioPlayUiEvent.TogglePlay)
+            Key.DirectionLeft -> screenModel.dispatch(
+                AudioPlayUiEvent.Seek(
+                    (screenModel.progress.value.progressMs - 10_000).coerceAtLeast(0),
+                )
+            )
+            Key.DirectionRight -> keyLongPress.onPress(scope, longPressTimeoutMs) {
+                // 长按激活: 记录长按前倍速, 切 当前倍速×2 (与视频页长按语义一致, 不加配置项)
+                prePressSpeed.value = screenModel.state.value.speed
+                screenModel.dispatch(AudioPlayUiEvent.SetSpeed(prePressSpeed.value * 2f))
+            }
+            Key.DirectionUp -> if (state.prevEnabled) screenModel.dispatch(AudioPlayUiEvent.Prev)
+            Key.DirectionDown -> if (state.nextEnabled) screenModel.dispatch(AudioPlayUiEvent.Next)
+        }
+    }
+
+    // 初始化标题 (对照 viewModel.initData 中 titleData.postValue(book.name) + applyBookmarkPosition)
+    // 只按书的身份重启: 同一页面被单例复用只换章节时不得重发 Init (Init 会重新拉目录)
+    LaunchedEffect(route.book) {
+        screenModel.dispatch(
+            AudioPlayUiEvent.Init(route.book, route.chapterIndex, route.chapterPos)
+        )
+    }
+
+    // 单例页复用: 同一页面被再次打开时路由参数会变 (对照原版 singleTask + onNewIntent)。
+    // 换书交给上面的 Init 全量重载; 只换章节时按原版 applyBookmarkPosition 轻量定位。
+    val appliedTarget = remember {
+        mutableStateOf(route.book to (route.chapterIndex to route.chapterPos))
+    }
+    LaunchedEffect(route.book, route.chapterIndex, route.chapterPos) {
+        val target = route.book to (route.chapterIndex to route.chapterPos)
+        if (target == appliedTarget.value) return@LaunchedEffect
+        val previous = appliedTarget.value
+        appliedTarget.value = target
+        if (previous.first != target.first) return@LaunchedEffect
+        val index = target.second.first ?: return@LaunchedEffect
+        val pos = target.second.second ?: 0
+        when {
+            index != previous.second.first -> AudioPlayShared.skipTo(index, pos)
+            pos != (previous.second.second ?: 0) -> AudioPlayShared.adjustProgress(pos)
+        }
+    }
+
+    // 退出音频页: 落库进度 + 通知书架刷新 (对齐阅读器/视频/漫画行为, 回归 2026-08)。
+    // 挂本页 Lifecycle 的"在栈期间" (STARTED): 出栈才落库, 被压栈 (进书源编辑等) 不落。
+    // saveRead 内部会发 UP_BOOKSHELF 让书架重启分组流强制重查 durChapterTime
+    OnRouteLifecycle(onLeave = { AudioPlayShared.saveRead() })
+
+    // 可见性入账: 本页 RESUMED (栈顶且 app 在前台) 才需要 PCM 供光效使用; 被盖住/退后台
+    // 即开 offload 省电。不用单个布尔: 换书时旧页退场与新页进场同帧发生, 按页 id 记账后
+    // 结果与回调顺序无关。
+    OnRouteLifecycle(
+        minState = Lifecycle.State.RESUMED,
+        onEnter = { AudioPlayShared.setAudioPageResumed(entry.id.value, true) },
+        onLeave = { AudioPlayShared.setAudioPageResumed(entry.id.value, false) },
+    )
+
+    // 订阅子页结果回填 (对照 VideoPlayRoute navigator.resultsFor(entry.id).collect)
+    LaunchedEffect(Unit) {
+        navigator.resultsFor(entry.id).collect { result ->
+            when (result.key) {
+                RouteResults.BOOK_INFO -> when (result.payload) {
+                    is RouteResultPayload.Deleted -> {
+                        // 详情里删了这本书: 停止播放并退出音频页 (对齐视频页的删除透传)
+                        AudioPlayShared.stop()
+                        navigator.pop(RouteResultPayload.Deleted)
+                    }
+
+                    else -> {
+                        // 改名/换源后返回: 用库里最新快照刷新标题与书源入口, 不重启动装载
+                        val bookUrl = AudioPlayShared.book?.bookUrl ?: return@collect
+                        val fresh = withContext(IoDispatcher) {
+                            AppDbProviders.get().bookDao.getBook(bookUrl)
+                        } ?: return@collect
+                        AudioPlayShared.book = fresh
+                        AudioPlayShared.bookSource = AudioPlayShared.bookSourceOf(fresh)
+                        screenModel.dispatch(AudioPlayUiEvent.UpdateBook(fresh))
+                    }
+                }
+
+                RouteResults.BOOK_SOURCE_EDIT -> {
+                    // 书源编辑后直接采用回传的已保存对象 (不再按 origin 查库) + 刷新评论入口显隐
+                    val source =
+                        (result.payload as? RouteResultPayload.BookSourceEdit)?.source
+                            ?: return@collect
+                    AudioPlayShared.bookSource = source
+                    screenModel.dispatch(
+                        AudioPlayUiEvent.UpdateInShelf(AudioPlayShared.inBookshelf)
+                    )
+                }
+            }
+        }
+    }
+
+    if (platform == null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Audio platform is unavailable", color = Color.White)
+        }
+        return
+    }
+
+    // 平台对话框状态 (对照 VideoPlayRoute showLogDialog / pendingBookmark)
+    var showLogDialog by remember { mutableStateOf(false) }
+    var pendingBookmark by remember { mutableStateOf<Bookmark?>(null) }
+    // 目录弹窗显示开关 (窄屏目录入口, 对照阅读页 ReaderDialogEvent.Toc → TocDialogHost)
+    var showTocDialog by remember { mutableStateOf(false) }
+
+    // 退出加书架确认弹窗 (对照 Activity.finish: !inBookshelf 时弹确认)
+    var showAddToShelfDialog by remember { mutableStateOf(false) }
+    // 不放入书架时的移出确认 (本地书带"删除源文件"勾选, 与详情页下架共用同一套)
+    var shelfDeleteRequest by remember { mutableStateOf<ShelfDeleteRequest?>(null) }
+    // 移出完成: 退出音频页 (完成之后才出栈)
+    val exitAfterRemove: (Boolean?) -> Unit = {
+        AudioPlayShared.inBookshelf = false
+        navigator.pop()
+    }
+    // 未入架临时书清理: 只移出记录, 不碰源文件
+    val removeSilentlyAndExit: () -> Unit = {
+        scope.launch(IoDispatcher) {
+            runCatching { AudioPlayShared.book?.delBookCore() }
+                .onFailure { AppLog.put("移出书架失败\n${it.message}", it) }
+            exitAfterRemove(null)
+        }
+    }
+    // 不放入书架: 本地书先按需选是否删源文件再移出; 网文没有源文件可选, 直接移出记录
+    val removeFromShelfAndExit: () -> Unit = {
+        val target = AudioPlayShared.book
+        if (target != null && target.isLocal) {
+            shelfDeleteRequest = startShelfDelete(target, exitAfterRemove)
+        } else {
+            removeSilentlyAndExit()
+        }
+    }
+
+    // 宽屏右侧面板 (评论/目录共用, 互斥显示): 窗口宽 ≥DesignTokens.wideScreenMinWidth 启用
+    // (官方 Compact/Medium 分界, 与主界面 NavRail/音频页并排同源);
+    // 面板宽 = 容器宽 × 0.35, 上限 DesignTokens.sidePanelMaxWidth; 窄屏保持原版交互 (弹窗/全屏页)
+    val windowInfo = LocalWindowInfo.current
+    val density = LocalDensity.current
+    val sidePanelWidth by remember(windowInfo, density) {
+        derivedStateOf {
+            val windowWidth = with(density) { windowInfo.containerSize.width.toDp() }
+            if (windowWidth >= DesignTokens.wideScreenMinWidth) {
+                (windowWidth * 0.35f).coerceAtMost(DesignTokens.sidePanelMaxWidth)
+            } else {
+                0.dp
+            }
+        }
+    }
+    var panelKind by remember { mutableStateOf<AudioPlaySidePanelKind?>(null) }
+    // 窗口缩回窄屏时清理面板状态 (防残留: 再放大时面板内容层已销毁, panelKind 非空会白屏)
+    LaunchedEffect(sidePanelWidth) {
+        if (sidePanelWidth <= 0.dp) panelKind = null
+    }
+
+    // 退出处理 (对照 Activity.finish); 面板打开时先关面板 (Esc/返回/标题栏返回统一路径)
+    val onBack: () -> Unit = {
+        if (panelKind != null) {
+            panelKind = null
+        } else if (state.inShelf) {
+            navigator.pop()
+        } else if (!AppConfigProviders.get().showAddToShelfAlert) {
+            // 不弹确认, 直接移出并退出
+            removeSilentlyAndExit()
+        } else {
+            showAddToShelfDialog = true
+        }
+    }
+
+    // 构造溢出菜单动作 (对照 app 端 AudioOverflowMenu)
+    // 各项显隐取自页面状态; 依赖书源的动作在点击时取当前书源 (对照原版菜单展开/选中时求值)
+    val pref = PreferenceProviders.get()
+    var glowEnabled by remember {
+        mutableStateOf(pref.getBoolean(PreferKey.audioEnergyGlow, PreferKey.audioGlowDefault))
+    }
+    var edgeGlowEnabled by remember {
+        mutableStateOf(pref.getBoolean(PreferKey.audioEdgeGlow, PreferKey.audioGlowDefault))
+    }
+    val overflowActions = AudioPlayOverflowActions(
+        hasLogin = state.hasLogin,
+        showGlowToggle = PlatformCapabilityProviders.get().audioEnergyGlowSupported,
+        glowEnabled = glowEnabled,
+        onToggleGlow = {
+            glowEnabled = !glowEnabled
+            pref.putBoolean(PreferKey.audioEnergyGlow, glowEnabled)
+            // 采样旁路常挂, offload 由播放侧按开关即时切换, 不需要重起播
+            AudioPlayShared.syncAudioOffload()
+        },
+        edgeGlowEnabled = edgeGlowEnabled,
+        onToggleEdgeGlow = {
+            edgeGlowEnabled = !edgeGlowEnabled
+            pref.putBoolean(PreferKey.audioEdgeGlow, edgeGlowEnabled)
+            AudioPlayShared.syncAudioOffload()
+        },
+        onLogin = {
+            // 统一登录入口: URL 登录桌面端直开登录窗口 (2026-08-07);
+            // 表单登录弹 Overlay, 带上书与当前章 (对照原版 menu_login 预置 IntentData.book/chapter)
+            AudioPlayShared.bookSource?.let {
+                showSourceLogin(
+                    it.bookSourceUrl,
+                    it,
+                    AudioPlayShared.book,
+                    AudioPlayShared.durChapter
+                )
+            }
+        },
+        onCopyAudioUrl = {
+            val url = AudioPlayShared.durPlayUrl
+            if (url.isNotEmpty()) {
+                PlatformCapabilityProviders.get().copyToClipboard(url)
+            }
+        },
+        onSetSourceVariable = {
+            AudioPlayShared.bookSource?.let {
+                PlatformCapabilityProviders.get().showBookSourceVariableDialog(it)
+            }
+        },
+        onSetBookVariable = {
+            AudioPlayShared.book?.let { b ->
+                PlatformCapabilityProviders.get().showBookVariableDialog(b)
+            }
+        },
+        onEditBookSource = {
+            AudioPlayShared.bookSource?.bookSourceUrl?.let { url ->
+                navigator.push(
+                    AppRoute.BookSourceEdit(url),
+                    resultKey = RouteResults.BOOK_SOURCE_EDIT,
+                )
+            }
+        },
+        onAddBookmark = {
+            // 对照 Activity.addBookmark: 构造 Bookmark 弹 BookmarkDialog
+            val b = AudioPlayShared.book ?: return@AudioPlayOverflowActions
+            val chapter = AudioPlayShared.durChapter
+            val pos = AudioPlayShared.durChapterPos
+            val total = screenModel.progress.value.durationMs
+            val bookmark = Bookmark(bookName = b.name, bookAuthor = b.author).apply {
+                chapterIndex = AudioPlayShared.durChapterIndex
+                chapterPos = pos
+                chapterName = chapter?.title ?: b.durChapterTitle ?: ""
+                bookText =
+                    "${pos.toDurationTime()} / ${if (total > 0) total.toDurationTime() else "未知"}"
+            }
+            pendingBookmark = bookmark
+        },
+        onShowAppLog = { showLogDialog = true },
+    )
+
+    // 本页封面端点的共享身份: 页转场 token 来自发起方 (被点的卡片) 经导航带过来的 entry.sharedToken,
+    // 大图 token 由本页自签 (见 [LocalSharedCoverBinding] 的说明)
+    val coverBinding = rememberSharedCoverDestinationBinding(entry.id.value, entry.sharedToken)
+
+    // 状态里的封面地址由异步初始化写入, 为空时回落到本次进入携带的书籍快照封面:
+    // 共享封面端点以"封面非空"为建立条件, 端点晚建会把共享转场推迟到封面地址到达之后
+    val fallbackCover = book.audioCoverFallback()
+    val pageState = if (state.coverUrl.isNullOrBlank() && fallbackCover != null) {
+        state.copy(coverUrl = fallbackCover)
+    } else {
+        state
+    }
+
+    CompositionLocalProvider(LocalSharedCoverBinding provides coverBinding) {
+    platform.Content(
+        state = pageState,
+        progress = screenModel.progress,
+        onBack = onBack,
+        // 点顶栏标题进书籍详情 (对照 app 端 AudioPlayActivity 的顶栏标题点击)
+        onOpenBookInfo = {
+            navigator.push(
+                AppRoute.BookInfo(book.toRouteRef()),
+                resultKey = RouteResults.BOOK_INFO,
+            )
+        },
+        onOpenToc = {
+            // 对照 app 端 AudioPlayActivity.openChapterList: 未加书架的书目录不落库, 走内存传递。
+            // 宽屏面板与窄屏弹窗共用同一数据源 (IntentData.chapterList), 两个分支都要传,
+            // 否则 TocScreenModel 只能读 DB (未加书架书目录不在 DB) → 目录空白。
+            val openToc = {
+                IntentData.chapterList = AudioPlayShared.chapterList
+                if (sidePanelWidth > 0.dp) {
+                    // 宽屏: 右侧面板 (互斥: 直接覆盖评论面板)
+                    panelKind = AudioPlaySidePanelKind.TOC
+                } else {
+                    // 窄屏: 全高底部弹窗 (对照阅读页 ReaderDialogEvent.Toc → TocDialogHost;
+                    // 原 push Toc 全屏路由, 迁移后选章经 onOpenChapter 直接处理, 不再走 RouteResults.TOC 回传)
+                    showTocDialog = true
+                }
+            }
+            if (AudioPlayShared.chapterList.isNullOrEmpty()) {
+                // 首次点目录可能早于 Init 异步目录加载完成 (对照原版 initData 的 upBook
+                // 挂起语义: 打开目录前目录必已就绪) → 先等目录齐 (内存→DB→回源) 再开面板/弹窗,
+                // 否则未入架书目录空白 (且回源失败时仍可读 DB 兜底)
+                scope.launch {
+                    screenModel.ensureChapterList(book)
+                    openToc()
+                }
+            } else {
+                openToc()
+            }
+        },
+        onOpenBookSourceEdit = { sourceUrl ->
+            navigator.push(
+                AppRoute.BookSourceEdit(sourceUrl),
+                resultKey = RouteResults.BOOK_SOURCE_EDIT
+            )
+        },
+        onOpenReview = openReview@{
+            // 目录未加载 (chapter 空) 时静默无反应
+            val chapter = AudioPlayShared.durChapter ?: return@openReview
+            if (sidePanelWidth > 0.dp) {
+                // 宽屏: 右侧面板 (互斥: 直接覆盖目录面板)
+                panelKind = AudioPlaySidePanelKind.REVIEW
+            } else {
+                PlatformCapabilityProviders.get().showReviewListDialog(book, chapter, 0)
+            }
+        },
+        onOpenCover = {
+            // 与显示同源: 采用兜底封面时来源取本次进入的书 (此时播放侧可能还残留上一本)
+            val cover = pageState.coverUrl
+            if (!cover.isNullOrBlank()) {
+                val sourceBook = if (state.coverUrl.isNullOrBlank()) {
+                    book
+                } else {
+                    AudioPlayShared.book ?: book
+                }
+                navigator.showOverlay(
+                    AppOverlay.Dialog(
+                        key = "photo",
+                        payload = cover,
+                        sourceOrigin = sourceBook.origin
+                            .takeIf { !sourceBook.isLocal && it.isNotBlank() },
+                        // 本页圆形封面自签的大图 token: 查看器拿同一个值当自己的 key
+                        photoToken = coverBinding.photoToken,
+                    )
+                )
+            }
+        },
+        overflowActions = overflowActions,
+        onEvent = screenModel::dispatch,
+        sidePanelWidth = sidePanelWidth,
+        sidePanelVisible = panelKind != null,
+        sidePanelKind = panelKind,
+        // 点击左侧内容区空白处关闭面板 (对话框语义, 用户拍板 2026-08)
+        onTapOutsideSidePanel = { if (panelKind != null) panelKind = null },
+        sidePanelSlot = { kind ->
+            when (kind) {
+                AudioPlaySidePanelKind.TOC -> TocContent(
+                    // 播放器现行书籍优先 (同换源弹窗口径): 换源后 route 快照的 bookUrl 已被删行,
+                    // 按它查库只会空白; 进度/totalChapterNum 也停在进页时的旧值 (目录会被截断)
+                    book = AudioPlayShared.book ?: book,
+                    navigator = navigator,
+                    onBack = { panelKind = null },
+                    onOpenChapter = { index, _, _ ->
+                        // 对照 RouteResults.TOC 回传三态分支 (目录面板 pos 恒 0):
+                        // 章节变 → skipTo(index, 0); 同章 → skipTo 重开
+                        // 越界 (如模拟追读锁定章节) 时保持面板打开允许重选
+                        // (对照原版 TocActivity 返回后用户仍停留在目录页可重选)
+                        if (index in 0..<AudioPlayShared.simulatedChapterSize) {
+                            panelKind = null
+                            AudioPlayShared.skipTo(index, 0)
+                        }
+                    },
+                )
+
+                AudioPlaySidePanelKind.REVIEW -> {
+                    // 目录未加载 (durChapter 空) 时面板留空 (入口处已拦, 双保险)
+                    val chapter = AudioPlayShared.durChapter
+                    if (chapter != null) {
+                        ReviewListContent(
+                            book = book,
+                            chapter = chapter,
+                            paragraphIndex = 0,
+                            onDismiss = { panelKind = null },
+                        )
+                    }
+                }
+            }
+        },
+    )
+    } // CompositionLocalProvider(封面共享身份)
+
+    // 日志对话框 (对照 VideoPlayRoute AppLogDialog)
+    if (showLogDialog) {
+        AppLogDialog(onDismiss = { showLogDialog = false })
+    }
+
+    // 书签编辑对话框 (对照 VideoPlayRoute BookmarkDialog + app addBookmark)
+    pendingBookmark?.let { bookmark ->
+        BookmarkDialog(
+            bookmark = bookmark,
+            showDelete = false,
+            onConfirm = { updated ->
+                scope.launch { AppDbProviders.get().bookmarkDao.insert(updated) }
+                pendingBookmark = null
+            },
+            onDismiss = { pendingBookmark = null },
+        )
+    }
+
+    // 退出加书架确认弹窗 (对照 Activity.finish alert)
+    if (showAddToShelfDialog) {
+        val bookName = AudioPlayShared.book?.name ?: ""
+        AppAlertDialog(
+            onDismissRequest = { showAddToShelfDialog = false },
+            title = stringResource(Res.string.add_to_bookshelf),
+            message = stringResource(Res.string.check_add_bookshelf, bookName),
+            okButton = AlertButton(text = stringResource(Res.string.yes)) {
+                // 放入书架: save book + insert chapters + set inBookshelf (对照 Activity okButton)
+                scope.launch(IoDispatcher) {
+                    AudioPlayShared.book?.let { b ->
+                        b.removeType(BookType.notShelf)
+                        val bookDao = AppDbProviders.get().bookDao
+                        if (bookDao.has(b.bookUrl)) {
+                            bookDao.update(b)
+                        } else {
+                            bookDao.insert(b)
+                        }
+                        AudioPlayShared.chapterList?.let { chapters ->
+                            AppDbProviders.get().bookChapterDao.insert(*chapters.toTypedArray())
+                        }
+                        AudioPlayShared.inBookshelf = true
+                    }
+                    navigator.pop(RouteResultPayload.Ok)
+                }
+            },
+            cancelButton = AlertButton(text = stringResource(Res.string.no)) {
+                // 不放入书架: 移出并退出 (对照 Activity noButton)
+                removeFromShelfAndExit()
+            },
+        )
+    }
+
+    // 移出书架确认框 (本地书带"删除源文件"勾选)
+    ShelfDeleteConfirmDialog(
+        request = shelfDeleteRequest,
+        onConfirm = { target, deleteOriginal ->
+            shelfDeleteRequest = null
+            // 勾选值已定: 交平台移出记录 + 按勾选删源文件, 完成后退出音频页
+            confirmShelfDelete(target, deleteOriginal, exitAfterRemove)
+        },
+        onDismiss = { shelfDeleteRequest = null },
+    )
+
+    // 目录弹窗 (对照阅读页 ReaderDialogEvent.Toc → TocDialogHost 全高底部弹窗;
+    // 选章三态跳转对齐原 RouteResults.TOC 回传消费 (章节变 → skipTo; 同章不同 pos>0 →
+    // adjustProgress; pos=0 → skipTo 重开), 关闭由宿主回调处理)
+    if (showTocDialog) {
+        TocDialogHost(
+            // 同上: 播放器现行书籍优先, 不用进页时的 route 快照
+            book = AudioPlayShared.book ?: book,
+            navigator = navigator,
+            onOpenChapter = { index, pos ->
+                showTocDialog = false
+                when {
+                    index != AudioPlayShared.durChapterIndex ->
+                        AudioPlayShared.skipTo(index, pos)
+
+                    pos > 0 && pos != AudioPlayShared.durChapterPos ->
+                        AudioPlayShared.adjustProgress(pos)
+
+                    pos == 0 -> AudioPlayShared.skipTo(index)
+                }
+            },
+            onDismiss = { showTocDialog = false },
+        )
+    }
+}
+

@@ -1,5 +1,5 @@
-/** https://github.com/gedoor/legado/tree/master/app/src/main/java/io/legado/app/api */
-/** https://github.com/gedoor/legado/tree/master/app/src/main/java/io/legado/app/web */
+/**  */
+/**  */
 
 import type { webReadConfig } from '@/web'
 import ajax from './axios'
@@ -12,8 +12,8 @@ export type LeagdoApiResponse<T> = {
   data: T
 }
 
-export let legado_http_entry_point = ''
-export let legado_webSocket_entry_point = ''
+export let langhuan_http_entry_point = ''
+export let langhuan_webSocket_entry_point = ''
 
 let wsOnError: typeof WebSocket.prototype.onerror = () => {}
 let wsOnMessage: typeof WebSocket.prototype.onmessage = () => {}
@@ -27,13 +27,13 @@ export const setApiEntryPoint = (
   http_entry_point: string,
   webSocket_entry_point: string,
 ) => {
-  legado_http_entry_point = new URL(http_entry_point).toString()
-  legado_webSocket_entry_point = new URL(webSocket_entry_point).toString()
-  ajax.defaults.baseURL = legado_http_entry_point
+  langhuan_http_entry_point = new URL(http_entry_point).toString()
+  langhuan_webSocket_entry_point = new URL(webSocket_entry_point).toString()
+  ajax.defaults.baseURL = langhuan_http_entry_point
 }
 
 // 书架API
-const getReadConfig = async (http_url = legado_http_entry_point) => {
+const getReadConfig = async (http_url = langhuan_http_entry_point) => {
   const { data } = await ajax.get<LeagdoApiResponse<string>>('getReadConfig', {
     baseURL: http_url.toString(),
   })
@@ -52,7 +52,7 @@ const saveBookProgress = (bookProgress: BookProgress) =>
 const saveBookProgressWithBeacon = (bookProgress: BookProgress) => {
   if (!bookProgress) return
   navigator.sendBeacon(
-    new URL('saveBookProgress', legado_http_entry_point),
+    new URL('saveBookProgress', langhuan_http_entry_point),
     JSON.stringify(bookProgress),
   )
 }
@@ -126,7 +126,7 @@ const search = (
   scope?: string,
 ) => {
   const socket = new WebSocket(
-    new URL('searchBook', legado_webSocket_entry_point),
+    new URL('searchBook', langhuan_webSocket_entry_point),
   )
   let finished = false
   const finishOnce = () => {
@@ -197,7 +197,7 @@ const getSource = (url: string) =>
 
 /** 下载全端标准备份 zip (BackupShared 管线); 失败抛 Error(errorMsg) */
 const getBackupZip = async (): Promise<Blob> => {
-  const base = legado_http_entry_point || location.origin
+  const base = langhuan_http_entry_point || location.origin
   const resp = await fetch(new URL('getBackupZip', base).toString())
   if ((resp.headers.get('content-type') || '').includes('application/json')) {
     const env = (await resp.json()) as LeagdoApiResponse<unknown>
@@ -208,7 +208,7 @@ const getBackupZip = async (): Promise<Blob> => {
 
 /** 上传备份 zip 恢复 (multipart, 全端标准格式) */
 const restoreBackup = async (file: File): Promise<LeagdoApiResponse<unknown>> => {
-  const base = legado_http_entry_point || location.origin
+  const base = langhuan_http_entry_point || location.origin
   const fd = new FormData()
   fd.append('fileData', file, file.name)
   const resp = await fetch(new URL('restoreBackup', base).toString(), {
@@ -230,7 +230,7 @@ const restoreBackup = async (file: File): Promise<LeagdoApiResponse<unknown>> =>
 
 /** 上传本地书 (multipart, 支持 txt/epub/zip/cbz) */
 const addLocalBook = async (file: File): Promise<LeagdoApiResponse<unknown>> => {
-  const base = legado_http_entry_point || location.origin
+  const base = langhuan_http_entry_point || location.origin
   const fd = new FormData()
   fd.append('fileData', file, file.name)
   const resp = await fetch(
@@ -267,7 +267,7 @@ const debug = (
 ) => {
   const url = new URL(
     'bookSourceDebug',
-    legado_webSocket_entry_point,
+    langhuan_webSocket_entry_point,
   )
 
   const socket = new WebSocket(url)
@@ -290,17 +290,17 @@ const toAbsoluteUrl = (path: string): string => {
   if (/^https?:\/\//i.test(path) || path.startsWith('data:') || path.startsWith('blob:')) {
     return path
   }
-  const base = legado_http_entry_point || (typeof location !== 'undefined' ? location.origin : '')
+  const base = langhuan_http_entry_point || (typeof location !== 'undefined' ? location.origin : '')
   if (!base) return path
   const relative = path.startsWith('/') ? path.slice(1) : path
   return new URL(relative, base).toString()
 }
 
 const getProxyCoverUrl = (coverUrl: string) => {
-  if (coverUrl.startsWith(legado_http_entry_point)) return coverUrl
+  if (coverUrl.startsWith(langhuan_http_entry_point)) return coverUrl
   return new URL(
     'cover?path=' + encodeURIComponent(coverUrl),
-    legado_http_entry_point,
+    langhuan_http_entry_point,
   ).toString()
 }
 
@@ -309,7 +309,7 @@ const getProxyImageUrl = (
   src: string,
   _width?: number | `${number}`,
 ) => {
-  if (legado_http_entry_point && src.startsWith(legado_http_entry_point)) return src
+  if (langhuan_http_entry_point && src.startsWith(langhuan_http_entry_point)) return src
   if (src.startsWith('/image?') || src.startsWith('image?')) {
     return toAbsoluteUrl(src)
   }
@@ -318,7 +318,7 @@ const getProxyImageUrl = (
       encodeURIComponent(src) +
       '&url=' +
       encodeURIComponent(bookUrl),
-    legado_http_entry_point,
+    langhuan_http_entry_point,
   ).toString()
 }
 
@@ -345,8 +345,8 @@ const getExploreBooks = (url: string, exploreUrl: string, page: number = 1) =>
   )
 
 export default {
-  get legado_http_entry_point() {
-    return legado_http_entry_point
+  get langhuan_http_entry_point() {
+    return langhuan_http_entry_point
   },
   getReadConfig,
   saveReadConfig,

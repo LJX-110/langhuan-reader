@@ -10,7 +10,7 @@
   重签) 或正式签名且 App ID 勾上 App Groups 后才真正生效。
 
   ⚠️ 本文件与 ShareExtension/ShareExtension.entitlements 必须声明**同一个** App Group 值,
-  且与 ShareExtension/ShareViewController.swift 的 legadoAppGroupId、
+  且与 ShareExtension/ShareViewController.swift 的 langhuanAppGroupId、
   ui/src/iosMain/.../IosShareInbox.kt 的 APP_GROUP_ID 逐字一致 (改一处要四处同改)。
 
   iCloud 容器键 (com.apple.developer.icloud-*) 尚未加: iCloud 另有三样前提, 见 project.yml
@@ -20,7 +20,7 @@
 <dict>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.shutiao.reader</string>
+		<string>group.com.langhuan.reader</string>
 	</array>
 </dict>
 </plist>

@@ -1,6 +1,6 @@
 package org.jsoup.internal
 
-import io.legado.app.utils.URL
+import com.langhuan.reader.utils.URL
 import org.jsoup.Connection
 import org.jsoup.Connection.Method
 

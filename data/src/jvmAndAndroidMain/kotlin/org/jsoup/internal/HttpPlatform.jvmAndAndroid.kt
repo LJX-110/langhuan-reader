@@ -1,7 +1,7 @@
 package org.jsoup.internal
 
-import io.legado.app.help.http.KmpHttpClient
-import io.legado.app.help.http.KmpRequestBody
+import com.langhuan.reader.help.http.KmpHttpClient
+import com.langhuan.reader.help.http.KmpRequestBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient

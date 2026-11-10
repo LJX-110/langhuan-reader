@@ -38,7 +38,7 @@ import kotlin.math.sin
 @RunWith(AndroidJUnit4::class)
 class ImageOpsAliasTest {
 
-    /** 镜像 io.legado.app.help.image.ImageOps 的函数面, ImageRef 用内部句柄类。 */
+    /** 镜像 com.langhuan.reader.help.image.ImageOps 的函数面, ImageRef 用内部句柄类。 */
     @Suppress("unused")
     class TestImageOps {
 
@@ -178,7 +178,7 @@ class ImageOpsAliasTest {
      * 模拟 app 侧 JsBindings 注入 (JsEngine.kt JsBindings.init):
      * platform 纯 String + image 单例。
      * dangerousApi=true: 测试类在 com.script 包下被安全名单拦截, 真实
-     * BitmapImageOps 在 io.legado.app.help.image 下不受此限制 (对齐 AnalyzeRulePathTest)。
+     * BitmapImageOps 在 com.langhuan.reader.help.image 下不受此限制 (对齐 AnalyzeRulePathTest)。
      */
     private fun evalWithImageAlias(js: String, result: Any? = null): Any? {
         val bindings = buildScriptBindings { b ->

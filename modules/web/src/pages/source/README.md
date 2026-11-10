@@ -1,4 +1,4 @@
-# legado_web_editor
+# langhuan_web_editor
 
 ## 🚧开发注意
 

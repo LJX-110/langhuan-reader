@@ -1,0 +1,9 @@
+package com.langhuan.reader.lib.webdav
+
+actual open class WebDavException actual constructor(msg: String) : Exception(msg) {
+
+    override fun fillInStackTrace(): Throwable {
+        return this
+    }
+
+}

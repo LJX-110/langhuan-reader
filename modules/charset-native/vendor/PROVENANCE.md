@@ -21,9 +21,9 @@
 
 ## UTF-32 编解码
 
-`src/nativeMain/kotlin/com/legado/charset/Utf32Coder.kt` 为
+`src/nativeMain/kotlin/com/langhuan/charset/Utf32Coder.kt` 为
 `com.fleeksoft.charset:charset:0.0.8` sources 中
-`nonJvmMain/com/fleeksoft/charset/cs/utf/UTF_32Coder.kt` 的承载副本: 换包 `com.legado.charset`
+`nonJvmMain/com/fleeksoft/charset/cs/utf/UTF_32Coder.kt` 的承载副本: 换包 `com.langhuan.charset`
 并将对象改名 `Utf32Coder` (避免与依赖 klib 同包重类), 算法唯一改动是解码对代理区/超范围
 码点返回 malformed(4), 其余逐行同上游; 不在本目录重复存放原版副本, 原版以 Maven 构件坐标
 + 版本溯源。

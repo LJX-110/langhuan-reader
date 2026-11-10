@@ -1,6 +1,6 @@
-# iosApp - legado KMP iOS 宿主工程
+# iosApp - langhuan KMP iOS 宿主工程
 
-legado iOS 端的 Xcode 工程骨架, 用 SwiftUI App 生命周期 (`@main`) + `UIViewControllerRepresentable`
+langhuan iOS 端的 Xcode 工程骨架, 用 SwiftUI App 生命周期 (`@main`) + `UIViewControllerRepresentable`
 包装 shared 模块的 `MainViewController()` (Compose Multiplatform `ComposeUIViewController`)。
 
 ## 工程结构
@@ -36,12 +36,12 @@ Kotlin 侧改动不属本工程 (见各条说明):
 
 | 能力 | 宿主侧已做的事 | Kotlin 侧还需什么 |
 | --- | --- | --- |
-| 通知点击跳转 | `AppDelegate` 兼 `UNUserNotificationCenterDelegate`, `didReceive` 认 `legadoRoute`/`route`/`uri` 三种 userInfo 键并交 `handleIosLaunchRequest(uri:)` | **冲突待拍板**: Kotlin `IosNotificationPublisher.installDelegate()` 写的是同一个 `UNUserNotificationCenter.delegate` 槽位且后执行, 当前生效的是 Kotlin 那份; 要留宿主侧这份需删掉 Kotlin 的 `installDelegate()` 调用 (理由见 `iOSApp.swift` 注释) |
-| 主屏快捷项 | `Info.plist` 静态三项 (bookshelf/lastRead/readAloud) + `LegadoSceneDelegate` 接住 | readAloud 类型上到宿主后的落地动作 |
-| iCloud | `NSUbiquitousContainers` (容器 `iCloud.io.legado.app.ios`) | `IosICloud.enable()` 注册调用 + entitlements/付费账号 |
+| 通知点击跳转 | `AppDelegate` 兼 `UNUserNotificationCenterDelegate`, `didReceive` 认 `langhuanRoute`/`route`/`uri` 三种 userInfo 键并交 `handleIosLaunchRequest(uri:)` | **冲突待拍板**: Kotlin `IosNotificationPublisher.installDelegate()` 写的是同一个 `UNUserNotificationCenter.delegate` 槽位且后执行, 当前生效的是 Kotlin 那份; 要留宿主侧这份需删掉 Kotlin 的 `installDelegate()` 调用 (理由见 `iOSApp.swift` 注释) |
+| 主屏快捷项 | `Info.plist` 静态三项 (bookshelf/lastRead/readAloud) + `LanghuanSceneDelegate` 接住 | readAloud 类型上到宿主后的落地动作 |
+| iCloud | `NSUbiquitousContainers` (容器 `iCloud.com.langhuan.reader.ios`) | `IosICloud.enable()` 注册调用 + entitlements/付费账号 |
 | 本地网络 | `NSLocalNetworkUsageDescription` | 无 |
 
-`LegadoSceneDelegate` 是 `UIWindowSceneDelegate`, 只为了接 SwiftUI 生命周期没有入口的
+`LanghuanSceneDelegate` 是 `UIWindowSceneDelegate`, 只为了接 SwiftUI 生命周期没有入口的
 两件事 (主屏快捷项 + 场景 URL); 场景本体仍由 SwiftUI 托管 (Apple `UIApplicationDelegateAdaptor`
 文档的官方写法: 在 `configurationForConnecting` 里只填 `delegateClass`)。
 
@@ -53,7 +53,7 @@ iOS 的 App 名以各 `<lang>.lproj/InfoPlist.strings` 的 `CFBundleDisplayName`
 
 | .lproj | 显示名 | 对照 Android |
 | --- | --- | --- |
-| `en` | Legado | `res/values/strings.xml` |
+| `en` | Langhuan | `res/values/strings.xml` |
 | `zh-Hans` | 阅读 | `res/values-zh/strings.xml` |
 | `zh-Hant` | 閱讀 | `res/values-zh-rTW/strings.xml` |
 | `zh-Hant-HK` | 閲讀 | `res/values-zh-rHK/strings.xml` |
@@ -68,7 +68,7 @@ iOSApp (SwiftUI App)
   └── ContentView (UIViewControllerRepresentable)
         └── MainViewControllerKt.MainViewController()  [shared framework, Kotlin]
               └── ComposeUIViewController
-                    └── AppTheme { LegadoApp(navigator, screenModelStore) }
+                    └── AppTheme { LanghuanApp(navigator, screenModelStore) }
                           └── shared RouteContent 统一分发 53 路由
 ```
 
@@ -130,9 +130,9 @@ iOS 端代码改动 (iosMain/) 在 Windows 上无法编译验证, 但 IDE (Andro
 
 ## Bundle ID
 
-- App: `shutiao.reader`（Debug 构建 `shutiao.reader.debug`，Release 构建 `shutiao.reader.release`，与安卓
+- App: `com.langhuan.reader`（Debug 构建 `com.langhuan.reader.debug`，Release 构建 `com.langhuan.reader.release`，与安卓
   applicationId 对齐）
-- 共享 framework: `io.legado.shared` (:ui 模块 iOS framework baseName)
+- 共享 framework: `com.langhuan.reader.shared` (:ui 模块 iOS framework baseName)
 
 ## 签名
 
@@ -143,7 +143,7 @@ iOS 端代码改动 (iosMain/) 在 Windows 上无法编译验证, 但 IDE (Andro
 
 ## iOS 端零薄壳架构
 
-iOS 端零薄壳架构: `MainViewController.kt` 直接调用 shared `LegadoApp`, 53 路由由 shared
+iOS 端零薄壳架构: `MainViewController.kt` 直接调用 shared `LanghuanApp`, 53 路由由 shared
 `RouteContent` 统一分发, 不再维护 `IosNavHost` / `IosBookshelfScreen` / `IosReaderScreen` /
 `IosSearchScreen` / `IosBookInfoScreen` / `IosBookSourceScreen` 等平台薄壳 Composable。
 
@@ -154,17 +154,17 @@ ComposeUIViewController
   └── AppTheme
         ├── 顶部 48dp 着色条 (themeStoreProvider.accentColor)
         ├── Box (ESC/BackSpace 触发 navigator.pop())
-        │     └── LegadoApp(navigator, screenModelStore)  [shared]
+        │     └── LanghuanApp(navigator, screenModelStore)  [shared]
         │           └── RouteContent  [shared]  按 AppRoute 类型分发 53 路由
         ├── SourceUiEventBridgeHost()  (订阅 SOURCE_UI_REQUEST, 承接 JS 弹窗)
-        └── DeepLinkImportHost()  (legado:// deep link 导入)
+        └── DeepLinkImportHost()  (langhuan:// deep link 导入)
 ```
 
 ### iOS 平台能力 actual 实现 (ui/src/iosMain/)
 
 | 模块                  | 实现                                                                                                            |
 |---------------------|---------------------------------------------------------------------------------------------------------------|
-| UI 入口               | `MainViewController.kt` (ComposeUIViewController + shared LegadoApp)                                          |
+| UI 入口               | `MainViewController.kt` (ComposeUIViewController + shared LanghuanApp)                                          |
 | 平台能力聚合              | `IosPlatformCapabilities.kt` + `IosProviderRegistry.kt` (与 desktop Main.kt 对齐)                                |
 | Compose 平台 Provider | `IosProviders.kt` (ThemeStore / AppConfig / EventBus / PreferenceStore 4 个 Provider)                          |
 | 数据库                 | `IosDatabaseDriver.kt` (Room KMP + BundledSQLiteDriver) + `IosAppDbAccessor.kt`                               |

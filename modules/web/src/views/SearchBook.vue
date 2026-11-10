@@ -280,7 +280,7 @@ import { useBookStore } from '@/store'
 import API from '@api'
 import type { SeachBook, BaseBook, Book } from '@/book'
 import type { WebBookSourcePart } from '@api'
-import { isLegadoUrl } from '@/utils/utils'
+import { isLanghuanUrl } from '@/utils/utils'
 import { toast } from '@/utils/toast'
 
 const router = useRouter()
@@ -336,7 +336,7 @@ const showScopeModal = ref(false)
 const scopeTab = ref<'source' | 'group'>('source')
 const sourceFilterText = ref('')
 
-const SCOPE_STORAGE_KEY = 'legado_web_search_scope'
+const SCOPE_STORAGE_KEY = 'langhuan_web_search_scope'
 
 interface SavedScope {
   type: 'all' | 'source' | 'group'
@@ -498,7 +498,7 @@ const resetScope = () => {
   }
 }
 
-const HISTORY_KEY = 'legado_web_search_history'
+const HISTORY_KEY = 'langhuan_web_search_history'
 
 const historyList = ref<string[]>([])
 
@@ -616,7 +616,7 @@ const quickSearch = (word: string) => {
 
 const getCover = ({ bookUrl, coverUrl }: { bookUrl: string; coverUrl?: string }) => {
   if (!coverUrl) return API.getProxyCoverUrl(bookUrl)
-  return isLegadoUrl(coverUrl) ? API.getProxyCoverUrl(coverUrl) : coverUrl
+  return isLanghuanUrl(coverUrl) ? API.getProxyCoverUrl(coverUrl) : coverUrl
 }
 
 const proxyImage = (evt: Event) => {

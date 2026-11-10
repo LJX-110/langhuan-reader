@@ -10,7 +10,7 @@ plugins {
     alias(libs.plugins.room) apply false
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.serialization) apply false
-    // 不声明 compose-multiplatform 插件: 该插件由 build-logic 的 legado.compose 约定插件
+    // 不声明 compose-multiplatform 插件: 该插件由 build-logic 的 langhuan.compose 约定插件
     // 从自己的 classpath apply。在此声明会让 pluginManagement 把未修补的 fork 插件也挂上
     // 根 buildscript classpath, 抢先于 ohos 模式下的字节码补丁 jar (见
     // scripts/patch-cmp-plugin-for-agp9.sh), 使补丁失效并抛 NoSuchMethodError。
@@ -110,10 +110,10 @@ require(ohosAbis.isNotEmpty() && ohosAbis.all { it == "arm64-v8a" }) {
     "ohosAbis must be 'arm64-v8a' (x86_64 target 已移除), but was: $ohosAbis"
 }
 val ohosBuildTypeCapitalized = ohosBuildType.replaceFirstChar { it.titlecase() }
-// :shared 已拆分为 foundation/data/core/ui, liblegado_shared.so 由出口模块 :ui 产出
+// :shared 已拆分为 foundation/data/core/ui, liblanghuan_shared.so 由出口模块 :ui 产出
 val ohosSharedOutputDir =
     layout.projectDirectory.dir("ui/build/bin/ohosArm64/${ohosBuildType}Shared").asFile
-val ohosSharedLibrary = ohosSharedOutputDir.resolve("liblegado_shared.so")
+val ohosSharedLibrary = ohosSharedOutputDir.resolve("liblanghuan_shared.so")
 val ohosAppDir = layout.projectDirectory.dir("ohosApp").asFile
 // 任务动作只允许引用可序列化的局部量 (File/String/Set), 不得引用脚本级 val 或 Project
 val stageAbis = ohosAbis
@@ -171,7 +171,7 @@ val verifyOhosNativeLibraries = tasks.register("verifyOhosNativeLibraries") {
     doLast {
         val missing = buildList {
             if ("arm64-v8a" in abis) {
-                if (!File(libDir, "liblegado_shared.so").isFile) add(libDir)
+                if (!File(libDir, "liblanghuan_shared.so").isFile) add(libDir)
                 if (includeDir.listFiles { f -> f.extension == "h" }.orEmpty().isEmpty()) {
                     add(includeDir)
                 }

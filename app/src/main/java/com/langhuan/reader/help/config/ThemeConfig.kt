@@ -1,0 +1,423 @@
+package com.langhuan.reader.help.config
+
+import android.content.Context
+import android.content.res.Configuration
+import android.graphics.Bitmap
+import android.graphics.Color
+import android.util.DisplayMetrics
+import androidx.annotation.ColorRes
+import androidx.annotation.Keep
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.graphics.toColorInt
+import com.langhuan.reader.App
+import com.langhuan.reader.R
+import com.langhuan.reader.constant.AppLog
+import com.langhuan.reader.constant.EventBus
+import com.langhuan.reader.constant.PreferKey
+import com.langhuan.reader.constant.Theme
+import com.langhuan.reader.help.i18n.androidAppString
+import com.langhuan.reader.lib.theme.MonetColorExtract
+import com.langhuan.reader.lib.theme.ThemeStore
+import com.langhuan.reader.utils.BitmapUtils
+import com.langhuan.reader.utils.ColorUtils
+import com.langhuan.reader.utils.GSON
+import com.langhuan.reader.utils.fromJsonObject
+import com.langhuan.reader.utils.getCompatColor
+import com.langhuan.reader.utils.getPrefInt
+import com.langhuan.reader.utils.getPrefString
+import com.langhuan.reader.utils.hexString
+import com.langhuan.reader.utils.postEvent
+import com.langhuan.reader.utils.putPrefInt
+import com.langhuan.reader.utils.removePref
+import com.langhuan.reader.utils.toJson
+import kotlinx.serialization.Serializable
+import java.io.File
+
+@Keep
+object ThemeConfig {
+    const val configFileName = ThemeConfigStore.configFileName
+
+    /** 与 shared 同一路径实现, 保证四端 themeConfig.json 互读 */
+    val configFilePath: String get() = ThemeConfigStore.configFilePath
+
+    /** 贴边亮度采样: 解码宽度上限与采样带高度 (系统栏量级) */
+    private const val EDGE_SAMPLE_WIDTH = 64
+    private const val EDGE_SAMPLE_DP = 48f
+
+    // 存档库：仅存储用户自定义/导入的主题; 对外只暴露锁内快照, 可变副本仅本对象持有
+    private val configListStore: ArrayList<Config> by lazy {
+        ArrayList(getConfigsFromDisk())
+    }
+
+    val configList: List<Config>
+        get() = ThemeConfigStore.withLock { configListStore.toList() }
+
+
+    fun getTheme() = when {
+        AppConfig.isEInkMode -> Theme.EInk
+        AppConfig.isNightTheme -> Theme.Dark
+        else -> Theme.Light
+    }
+
+    /** 当前日/夜模式的背景图路径,未设置为 null (pref 存相对引用, 读取时解析为绝对, 见 resolveImagePath) */
+    val curBgImagePath: String?
+        get() = resolveImagePath(
+            App.instance.getPrefString(
+                if (AppConfig.isNightTheme) PreferKey.bgImageN else PreferKey.bgImage
+            )
+        )
+
+    fun applyDayNight(context: Context) {
+        initNightMode()
+        applyTheme(context)
+        // 图集昼夜切换: 列表由 BookCoverShared 记忆化缓存按 isNightTheme 惰性取, 无需手动刷
+        postEvent(EventBus.RECREATE, "")
+    }
+
+    fun applyDayNightInit(context: Context) {
+        initNightMode()
+        applyTheme(context)
+    }
+
+    private fun initNightMode(): Boolean {
+        val targetMode = if (AppConfig.isNightTheme) {
+            AppCompatDelegate.MODE_NIGHT_YES
+        } else {
+            AppCompatDelegate.MODE_NIGHT_NO
+        }
+        if (AppCompatDelegate.getDefaultNightMode() != targetMode) {
+            AppCompatDelegate.setDefaultNightMode(targetMode)
+            return true
+        }
+        return false
+    }
+
+    /**
+     * pref 全 0 时按 XML 值实时读取，用户改过就用用户的。不写回 pref。
+     */
+    fun applyTheme(context: Context) = with(context) {
+        if (AppConfig.isEInkMode) {
+            ThemeStore.saveTheme(Color.WHITE, Color.BLACK, Color.WHITE, Color.WHITE)
+            return@with
+        }
+
+        val isNight = AppConfig.isNightTheme
+        val accentKey = if (isNight) PreferKey.cNAccent else PreferKey.cAccent
+        val bgKey = if (isNight) PreferKey.cNBackground else PreferKey.cBackground
+        val bbgKey = if (isNight) PreferKey.cNBBackground else PreferKey.cBBackground
+
+        val (defAccent, defBg, defBbg) = readDefaultColors(context, isNight)
+        val accent = getPrefInt(accentKey).let { if (it == 0) defAccent else it }
+        val background = getPrefInt(bgKey).let { if (it == 0) defBg else it }
+        val bBackground = getPrefInt(bbgKey).let { if (it == 0) defBbg else it }
+
+        ThemeStore.saveTheme(background, accent, background, bBackground)
+    }
+
+    /**
+     * 实时读取 arco 默认色，供内置主题条目、对话框种子色、applyTheme 复用
+     */
+    fun readDefaultColors(context: Context, isNight: Boolean): Triple<Int, Int, Int> =
+        with(context) {
+            Triple(
+                getCompatColorForMode(R.color.arco_default_accent, isNight),
+                getCompatColorForMode(R.color.arco_default_bg, isNight),
+                getCompatColorForMode(R.color.arco_default_bbg, isNight)
+            )
+        }
+
+    /**
+     * 前置到主题列表最前的两个虚拟条目，不写盘、不进 configListStore
+     */
+    fun getBuiltinConfigs(context: Context): List<Config> {
+        val (dayAccent, dayBg, dayBbg) = readDefaultColors(context, false)
+        val (nightAccent, nightBg, nightBbg) = readDefaultColors(context, true)
+        return listOf(
+            Config(
+                themeName = androidAppString("default_day_theme"),
+                isNightTheme = false,
+                primaryColor = "#${dayBg.hexString}",
+                accentColor = "#${dayAccent.hexString}",
+                backgroundColor = "#${dayBg.hexString}",
+                bottomBackground = "#${dayBbg.hexString}"
+            ).apply { isBuiltin = true },
+            Config(
+                themeName = androidAppString("default_night_theme"),
+                isNightTheme = true,
+                primaryColor = "#${nightBg.hexString}",
+                accentColor = "#${nightAccent.hexString}",
+                backgroundColor = "#${nightBg.hexString}",
+                bottomBackground = "#${nightBbg.hexString}"
+            ).apply { isBuiltin = true }
+        )
+    }
+
+    /**
+     * 应用内置默认主题：清 6 个 pref → applyTheme 走 XML 实时读取
+     */
+    fun applyBuiltin(context: Context, isNight: Boolean) {
+        // 选预设接管:拆莫奈跟随机关 (残留壁纸回调不得拽回壁纸色)
+        MonetColorExtract.abandonFollowIfActive(context)
+        if (isNight) {
+            context.removePref(PreferKey.cNAccent)
+            context.removePref(PreferKey.cNBackground)
+            context.removePref(PreferKey.cNBBackground)
+            context.removePref(PreferKey.cNPrimary)
+            context.removePref(PreferKey.bgImageN)
+            context.removePref(PreferKey.bgImageNBlurring)
+        } else {
+            context.removePref(PreferKey.cAccent)
+            context.removePref(PreferKey.cBackground)
+            context.removePref(PreferKey.cBBackground)
+            context.removePref(PreferKey.cPrimary)
+            context.removePref(PreferKey.bgImage)
+            context.removePref(PreferKey.bgImageBlurring)
+        }
+        AppConfig.isNightTheme = isNight
+        applyDayNight(context)
+    }
+
+    /**
+     * 核心：强制从指定模式的资源中提取色值
+     */
+    private fun Context.getCompatColorForMode(@ColorRes id: Int, isNight: Boolean): Int {
+        val configuration = Configuration(resources.configuration)
+        configuration.uiMode = if (isNight) {
+            (configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or Configuration.UI_MODE_NIGHT_YES
+        } else {
+            (configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or Configuration.UI_MODE_NIGHT_NO
+        }
+        return createConfigurationContext(configuration).getCompatColor(id)
+    }
+
+    /**
+     * 壁纸贴边亮度缓存: key = 路径-mtime-窗口宽-窗口高-是否顶边。
+     *
+     * 换背景图天然换键 (路径与 mtime 都变), 旧条目只是本进程内存里的残留, 无需显式清空;
+     * 条目量以"用过的背景图 × 用过的窗口尺寸 (含顶/底边)"为界, 不随使用时长增长。
+     */
+    private val bgEdgeLightCache = HashMap<String, Boolean>()
+
+    /**
+     * 壁纸贴边那一条带 (状态栏/导航栏覆盖区) 是否浅色底, 供系统栏图标明暗判定。
+     *
+     * 壁纸页的系统栏底色是透明的, 直接拿透明色去 `isColorLight` 会恒判深色底
+     * (透明的 RGB 是纯黑) → 图标恒为白, 浅色壁纸上看不见。这里按**显示出来的像素**采样:
+     * 显示端是 ContentScale.Crop, 先按窗口比例反推可见区, 再取贴边 48dp 折算的行带算平均亮度。
+     *
+     * @param metrics 窗口尺寸 (widthPixels/heightPixels, 见 windowSize)
+     * @param top true 取顶边 (状态栏), false 取底边 (导航栏)
+     * @return 无背景图/解码失败返回 null, 调用方回落主题色判定
+     */
+    fun curBgEdgeIsLight(metrics: DisplayMetrics, top: Boolean): Boolean? {
+        val path = curBgImagePath?.takeIf { it.isNotBlank() } ?: return null
+        val key = "$path-${File(path).lastModified()}-" +
+            "${metrics.widthPixels}-${metrics.heightPixels}-$top"
+        bgEdgeLightCache[key]?.let { return it }
+        return runCatching {
+            // 只判一条带的平均亮度, 降采样到 64px 宽够用 (2 的幂采样保持比例, 裁切换算照旧成立)
+            val bitmap = BitmapUtils.decodeBitmap(path, EDGE_SAMPLE_WIDTH) ?: return@runCatching null
+            try {
+                bitmap.edgeIsLight(metrics, top).also { bgEdgeLightCache[key] = it }
+            } finally {
+                bitmap.recycle()
+            }
+        }.onFailure {
+            AppLog.put("采样背景图亮度出错\n${it.localizedMessage}", it)
+        }.getOrNull()
+    }
+
+    private fun Bitmap.edgeIsLight(metrics: DisplayMetrics, top: Boolean): Boolean {
+        val winW = metrics.widthPixels.coerceAtLeast(1)
+        val winH = metrics.heightPixels.coerceAtLeast(1)
+        // Crop: 按 max 比例铺满后居中裁切, 只有裁切后仍可见的那部分才会出现在系统栏后面
+        val scale = maxOf(winW.toFloat() / width, winH.toFloat() / height)
+        val visibleH = (winH / scale).coerceAtMost(height.toFloat())
+        val startY = ((height - visibleH) / 2f).coerceAtLeast(0f)
+        // 采样带 = 系统栏高度量级 (48dp) 折算回图片像素, 至少 1 行
+        val density = App.instance.resources.displayMetrics.density
+        val bandPx = (EDGE_SAMPLE_DP * density / scale).coerceAtLeast(1f)
+        val y0 = if (top) {
+            startY.toInt()
+        } else {
+            (startY + visibleH - bandPx).toInt()
+        }.coerceIn(0, height - 1)
+        val rows = bandPx.toInt().coerceIn(1, height - y0)
+        val pixels = IntArray(width * rows)
+        getPixels(pixels, 0, width, 0, y0, width, rows)
+        var sum = 0.0
+        for (pixel in pixels) {
+            sum += ColorUtils.calculateLuminance(pixel)
+        }
+        return sum / pixels.size >= 0.5
+    }
+
+    fun save() {
+        ThemeConfigStore.withLock {
+            ThemeConfigStore.saveOrThrowUnlocked(configListStore.map { it.toThemeConfigData() })
+        }
+    }
+
+    /**
+     * 整批校验并一次保存: 全部有效才合并并原子写入, 写入成功后更新内存列表;
+     * 任一配置无效或写入失败抛异常, 内存列表保持原状。
+     */
+    fun addConfigs(newConfigs: List<Config>) {
+        newConfigs.forEach {
+            require(validateConfig(it)) { "无效的主题配置" }
+        }
+        ThemeConfigStore.withLock {
+            val merged = ArrayList(configListStore)
+            newConfigs.forEach { newConfig ->
+                val index = merged.indexOfFirst { it.themeName == newConfig.themeName }
+                if (index >= 0) merged[index] = newConfig else merged.add(newConfig)
+            }
+            ThemeConfigStore.saveOrThrowUnlocked(merged.map { it.toThemeConfigData() })
+            configListStore.clear()
+            configListStore.addAll(merged)
+        }
+    }
+
+    fun delConfig(index: Int) {
+        ThemeConfigStore.withLock {
+            if (index !in configListStore.indices) return@withLock
+            val merged = configListStore.toMutableList().apply { removeAt(index) }
+            ThemeConfigStore.saveOrThrowUnlocked(merged.map { it.toThemeConfigData() })
+            configListStore.clear()
+            configListStore.addAll(merged)
+        }
+        applyTheme(App.instance)
+    }
+
+    fun upConfig() {
+        ThemeConfigStore.withLock {
+            configListStore.clear()
+            configListStore.addAll(ThemeConfigStore.loadUnlocked().map { it.toConfig() })
+        }
+    }
+
+    fun addConfig(json: String): Boolean {
+        GSON.fromJsonObject<Config>(json.trim { it < ' ' }).getOrNull()
+            ?.let {
+                if (validateConfig(it)) {
+                    addConfig(it)
+                    return true
+                }
+            }
+        return false
+    }
+
+    fun addConfig(newConfig: Config) {
+        if (!validateConfig(newConfig)) {
+            return
+        }
+        ThemeConfigStore.withLock {
+            val merged = configListStore.toMutableList()
+            val index = merged.indexOfFirst { it.themeName == newConfig.themeName }
+            if (index >= 0) merged[index] = newConfig else merged.add(newConfig)
+            ThemeConfigStore.saveOrThrowUnlocked(merged.map { it.toThemeConfigData() })
+            configListStore.clear()
+            configListStore.addAll(merged)
+        }
+    }
+
+    /** 按索引替换 + 完整保存 + 发布 (与 add/del 同一锁内合同) */
+    fun replaceConfig(index: Int, config: Config) {
+        ThemeConfigStore.withLock {
+            if (index !in configListStore.indices) return@withLock
+            val merged = configListStore.toMutableList().apply { set(index, config) }
+            ThemeConfigStore.saveOrThrowUnlocked(merged.map { it.toThemeConfigData() })
+            configListStore.clear()
+            configListStore.addAll(merged)
+        }
+    }
+
+    /** 保留 androidx toColorInt (支持颜色名), 不走 shared 的纯 hex 解析, 避免收窄已有主题的可用范围 */
+    private fun validateConfig(config: Config): Boolean {
+        try {
+            config.primaryColor.toColorInt()
+            config.accentColor.toColorInt()
+            config.backgroundColor.toColorInt()
+            config.bottomBackground.toColorInt()
+            return true
+        } catch (_: Exception) {
+            return false
+        }
+    }
+
+    private fun getConfigsFromDisk(): List<Config> =
+        ThemeConfigStore.loadUnlocked().map { it.toConfig() }
+
+    /** Config ↔ ThemeConfigData 字段一一对应, 仅用于走 shared 的读写实现 */
+    private fun Config.toThemeConfigData() = ThemeConfigData(
+        themeName, isNightTheme, primaryColor, accentColor, backgroundColor, bottomBackground
+    )
+
+    private fun ThemeConfigData.toConfig() = Config(
+        themeName, isNightTheme, primaryColor, accentColor, backgroundColor, bottomBackground
+    )
+
+    private fun applyConfigToPrefs(context: Context, config: Config) {
+        val accent = config.accentColor.toColorInt()
+        val background = config.backgroundColor.toColorInt()
+        val bBackground = config.bottomBackground.toColorInt()
+        if (config.isNightTheme) {
+            context.putPrefInt(PreferKey.cNPrimary, background)
+            context.putPrefInt(PreferKey.cNAccent, accent)
+            context.putPrefInt(PreferKey.cNBackground, background)
+            context.putPrefInt(PreferKey.cNBBackground, bBackground)
+        } else {
+            context.putPrefInt(PreferKey.cPrimary, background)
+            context.putPrefInt(PreferKey.cAccent, accent)
+            context.putPrefInt(PreferKey.cBackground, background)
+            context.putPrefInt(PreferKey.cBBackground, bBackground)
+        }
+    }
+
+    fun applyConfig(context: Context, config: Config) {
+        // 选预设接管:拆莫奈跟随机关 (残留壁纸回调不得拽回壁纸色)
+        MonetColorExtract.abandonFollowIfActive(context)
+        try {
+            applyConfigToPrefs(context, config)
+            AppConfig.isNightTheme = config.isNightTheme
+            applyDayNight(context)
+        } catch (e: Exception) {
+            AppLog.put("设置主题出错\n$e", e, true)
+        }
+    }
+
+    @Keep
+    @Serializable
+    data class Config(
+        var themeName: String,
+        var isNightTheme: Boolean,
+        var primaryColor: String,
+        var accentColor: String,
+        var backgroundColor: String,
+        var bottomBackground: String
+    ) {
+
+        @Transient
+        @kotlinx.serialization.Transient
+        var isBuiltin: Boolean = false
+
+        override fun hashCode(): Int {
+            return GSON.toJson(this).hashCode()
+        }
+
+        override fun equals(other: Any?): Boolean {
+            other ?: return false
+            if (other is Config) {
+                return other.themeName == themeName
+                        && other.isNightTheme == isNightTheme
+                        && other.primaryColor == primaryColor
+                        && other.accentColor == accentColor
+                        && other.backgroundColor == backgroundColor
+                        && other.bottomBackground == bottomBackground
+            }
+            return false
+        }
+
+    }
+
+}

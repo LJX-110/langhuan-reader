@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Legado</string>
-    <string name="app_name_a">Legado·A</string>
-    <string name="receiving_shared_label">Legado·pesquisa</string>
-    <string name="tip_perm_request_storage">Legado precisa de acesso ao armazenamento para encontrar e ler livros. Por favor, vá às "Configurações do App" para conceder "Permissão de armazenamento".</string>
+    <string name="app_name">Langhuan</string>
+    <string name="app_name_a">Langhuan·A</string>
+    <string name="receiving_shared_label">Langhuan·pesquisa</string>
+    <string name="tip_perm_request_storage">Langhuan precisa de acesso ao armazenamento para encontrar e ler livros. Por favor, vá às "Configurações do App" para conceder "Permissão de armazenamento".</string>
     <string name="dialog_title">Aviso</string>
     <string name="dialog_cancel">Cancelar</string>
     <string name="dialog_setting">Vá até às Configurações</string>
@@ -63,7 +63,7 @@
     <string name="offline_cache">Cache off-line</string>
     <string name="change_origin">Alterar a origem</string>
     <string name="about_description">Este é um App de leitura de software livre, desenvolvido em Kotlin, você é bem-vindo a participar em projeto.</string>
-    <string name="app_share_description">Legado (YueDu 3.0) link de download：https://github.com/gedoor/legado/releases</string>
+    <string name="app_share_description">Langhuan link de download：https://github.com/LJX-110/langhuan-reader/releases</string>
     <string name="pt_auto_refresh">Atualização automática</string>
     <string name="ps_auto_refresh">Atualizar os livros automaticamente ao abrir o App</string>
     <string name="backup_restore">Backup e restauração</string>
@@ -71,7 +71,7 @@
     <string name="backup_no_destination">Não há local para guardar o backup: defina um local para salvar livros ou verifique a configuração do WebDav</string>
     <string name="backup_dir_unwritable">O local de salvamento de livros não permite escrita: este backup vai apenas para o WebDav, sem cópia local</string>
     <string name="web_dav_set">Configurações de WebDav</string>
-    <string name="web_dav_set_import_old">Configurações/importação WebDav de dados Legado </string>
+    <string name="web_dav_set_import_old">Configurações/importação WebDav de dados Langhuan </string>
     <string name="backup">Fazer Backup</string>
     <string name="restore">Restaurar</string>
     <string name="ok">OK</string>
@@ -390,7 +390,7 @@
     <string name="sys_folder_picker">Seletor de pastas do sistema</string>
     <string name="app_folder_picker">Seletor de pastas do App</string>
     <string name="app_file_picker">Seletor de arquivos do App</string>
-    <string name="add_to_text_context_menu_s">Clique longo para exibir o Legado·Pesquisa no menu de operação</string>
+    <string name="add_to_text_context_menu_s">Clique longo para exibir o Langhuan·Pesquisa no menu de operação</string>
     <string name="add_to_text_context_menu_t">Visualização da operação de texto na Pesquisa</string>
     <string name="record_log">Record log</string>
     <string name="log">Log</string>

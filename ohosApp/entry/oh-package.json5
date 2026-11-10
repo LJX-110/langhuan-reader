@@ -1,12 +1,12 @@
 {
   "name": "entry",
   "version": "1.0.0",
-  "description": "Legado HarmonyOS entry with CPF-KMP-CMP fusion renderer",
+  "description": "Langhuan HarmonyOS entry with CPF-KMP-CMP fusion renderer",
   "main": "",
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "liblegado_napi.so": "file:./src/main/cpp/types/liblegado_napi",
+    "liblanghuan_napi.so": "file:./src/main/cpp/types/liblanghuan_napi",
     "@cpf-kmp-cmp/compose": "1.9.2-0.5.0-10"
   },
   "devDependencies": {

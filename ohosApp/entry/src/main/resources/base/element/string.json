@@ -1,8 +1,8 @@
 {
   "string": [
-    { "name": "module_desc", "value": "Legado 阅读器 entry 模块" },
-    { "name": "EntryAbility_desc", "value": "Legado" },
-    { "name": "EntryAbility_label", "value": "Legado" },
+    { "name": "module_desc", "value": "琅嬛阁 entry 模块" },
+    { "name": "EntryAbility_desc", "value": "琅嬛阁" },
+    { "name": "EntryAbility_label", "value": "琅嬛阁" },
     { "name": "bookshelf_title", "value": "书架" },
     { "name": "reader_title", "value": "阅读" },
     { "name": "kmp_interop_title", "value": "KMP 互操作测试" },

@@ -24,10 +24,10 @@ object QuickJsNative {
 
     init {
         // 加载 native 库
-        // 库名 legado_quickjs 对应 CMakeLists.txt 中的 add_library(legado_quickjs SHARED ...)
-        // Android: System.loadLibrary("legado_quickjs") 从 APK lib/ 加载
+        // 库名 langhuan_quickjs 对应 CMakeLists.txt 中的 add_library(langhuan_quickjs SHARED ...)
+        // Android: System.loadLibrary("langhuan_quickjs") 从 APK lib/ 加载
         // 桌面 JVM: System.load(absolutePath) 从 build/libs/jvm/native/ 加载
-        loadLegadoQuickJsNative()
+        loadLanghuanQuickJsNative()
     }
 
     // ============ Runtime / Context 生命周期 ============

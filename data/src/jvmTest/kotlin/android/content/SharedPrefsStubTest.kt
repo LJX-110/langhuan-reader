@@ -2,7 +2,7 @@
 // 依赖 AppFilesDirs 桌面注册 (FilesJsonStore 落 filesDir); 偏好文件名带测试前缀避免污染运行数据。
 package android.content
 
-import io.legado.app.help.file.registerDesktopAppFilesDir
+import com.langhuan.reader.help.file.registerDesktopAppFilesDir
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue

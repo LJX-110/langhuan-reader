@@ -1,5 +1,5 @@
 plugins {
-    id("legado.kmp.library")
+    id("langhuan.kmp.library")
 }
 
 kotlin {

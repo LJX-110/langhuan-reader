@@ -2,7 +2,7 @@
 // 仅存在于 :data 的 jvm 变体 (data/src/jvmMain), :app (android 变体) 编译与打包不接触本目录。
 package android.os
 
-import io.legado.app.help.file.AppFilesDirs
+import com.langhuan.reader.help.file.AppFilesDirs
 import java.io.File
 
 /**

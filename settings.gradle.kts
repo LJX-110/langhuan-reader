@@ -56,7 +56,7 @@ private fun tomlVersionOf(toml: String, key: String): String {
         ?: error("gradle/libs.versions.toml 缺少版本键: $key")
     return match.groupValues[1]
 }
-rootProject.name = "legado"
+rootProject.name = "langhuan"
 
 include(":app")
 // Android Baseline Profile 生成模块 (com.android.test + androidx.baselineprofile, 仅 Android)

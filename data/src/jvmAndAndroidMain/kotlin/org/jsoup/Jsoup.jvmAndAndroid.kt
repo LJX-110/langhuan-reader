@@ -2,9 +2,9 @@
 
 package org.jsoup
 
-import io.legado.app.help.http.KmpHttpClient
-import io.legado.app.utils.InputStream
-import io.legado.app.utils.URL
+import com.langhuan.reader.help.http.KmpHttpClient
+import com.langhuan.reader.utils.InputStream
+import com.langhuan.reader.utils.URL
 import org.jsoup.internal.HttpConnection
 import org.jsoup.nodes.Document
 import org.jsoup.parser.Parser

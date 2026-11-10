@@ -1,4 +1,4 @@
-package io.legado.buildlogic
+package com.langhuan.buildlogic
 
 import com.android.build.api.dsl.ApplicationExtension
 import org.gradle.api.Plugin

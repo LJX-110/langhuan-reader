@@ -10,7 +10,7 @@
     <!-- 显示名的真值在各 <lang>.lproj/InfoPlist.strings (CFBundleDisplayName);
          本值只是缺本地化资源时的兜底, 对照 app 端 res/values/strings.xml 的 app_name。 -->
     <key>CFBundleDisplayName</key>
-    <string>Legado</string>
+    <string>Langhuan</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -37,7 +37,7 @@
     <key>CADisableMinimumFrameDurationOnPhone</key>
     <true/>
 
-    <!-- 屏幕方向: legado 是阅读类 App, 支持竖屏 + 横屏 + 翻转 -->
+    <!-- 屏幕方向: langhuan 是阅读类 App, 支持竖屏 + 横屏 + 翻转 -->
     <key>UISupportedInterfaceOrientations</key>
     <array>
         <string>UIInterfaceOrientationPortrait</string>
@@ -95,7 +95,7 @@
          但 Kotlin 侧 CACHE_BOOK_TASK_ID 是编译期常量, 两边必须逐字一致, 对不上 register 直接崩。 -->
     <key>BGTaskSchedulerPermittedIdentifiers</key>
     <array>
-        <string>shutiao.reader.cachebook</string>
+        <string>com.langhuan.reader.cachebook</string>
     </array>
 
     <!-- 文件共享: 沙盒 Documents 在"文件"App 与 Finder/iTunes 可见 (导出/另存为落地点) -->
@@ -115,14 +115,14 @@
          ⚠️ 本文件与 project.yml 双写: xcodegen generate 会用 project.yml 重写本文件 -->
     <key>NSUbiquitousContainers</key>
     <dict>
-        <key>iCloud.io.legado.app.ios</key>
+        <key>iCloud.com.langhuan.reader.ios</key>
         <dict>
             <key>NSUbiquitousContainerIsDocumentScopePublic</key>
             <true/>
             <key>NSUbiquitousContainerSupportedFolderLevels</key>
             <string>Any</string>
             <key>NSUbiquitousContainerName</key>
-            <string>legado</string>
+            <string>langhuan</string>
         </dict>
     </dict>
 
@@ -136,18 +136,19 @@
          没有说明文案 (Apple: "Any app that uses the local network, directly or
          indirectly, should include this description")。 -->
     <key>NSLocalNetworkUsageDescription</key>
-    <string>局域网内的设备访问本机的 legado Web 服务需要本地网络权限</string>
+    <string>局域网内的设备访问本机的琅嬛阁 Web 服务需要本地网络权限</string>
 
-    <!-- legado:// / yuedu:// deep link (对照 app 端 AssociationActivity intent-filter) -->
+    <!-- langhuan:// / yuedu:// deep link (对照 app 端 AssociationActivity intent-filter) -->
     <key>CFBundleURLTypes</key>
     <array>
         <dict>
             <key>CFBundleURLName</key>
-            <string>io.legado.app.deeplink</string>
+            <string>com.langhuan.reader.deeplink</string>
             <key>CFBundleTypeRole</key>
             <string>Viewer</string>
             <key>CFBundleURLSchemes</key>
             <array>
+                <string>langhuan</string>
                 <string>legado</string>
                 <string>yuedu</string>
             </array>
@@ -155,7 +156,7 @@
     </array>
 
     <!-- 文档类型投递入口 (对照 Android AssociationActivity 的 VIEW intent-filter):
-         让 legado 出现在"用其他应用打开 / 分享到"候选里。
+         让 langhuan 出现在"用其他应用打开 / 分享到"候选里。
          entry 1 视频: 可确证的公开 UTI (public.movie 总类 + 4 个具体电影类);
          entry 2 视频: CFBundleTypeExtensions 兜底 mkv/webm/flv/m3u8 等查不到可确证公开 UTI 的扩展名;
          entry 3/4 文档: 同理 —— txt/json/epub 走公开 UTI (public.plain-text / public.json /
@@ -271,7 +272,7 @@
          标题只是缺本地化资源时的兜底: 真值在各 <lang>.lproj/InfoPlist.strings
          (Apple: "You can, optionally, internationalize a quick action title by employing
          your app's InfoPlist.strings file", 键名 = 这里写的占位串)。
-         三项的 route 均对应 shared 已有的 NavigateTo 分支 (LegadoApp.handleLaunchRequest:
+         三项的 route 均对应 shared 已有的 NavigateTo 分支 (LanghuanApp.handleLaunchRequest:
          "last_read" 开最近阅读, "read_aloud" 直接朗读; 书架项不带 route, 开 App 即完成)。
          只能静态声明: iOS 端无 Android 那样的"带 extra 的快捷方式 intent", 故 readAloud 的
          action=readAloud 语义用 route 表达 (与 app 端 intent 的 route extra 同一形制),
@@ -285,7 +286,7 @@
             <key>UIApplicationShortcutItemIconType</key>
             <string>UIApplicationShortcutIconTypeBookmark</string>
             <key>UIApplicationShortcutItemTitle</key>
-            <string>legado.shortcut.bookshelf</string>
+            <string>langhuan.shortcut.bookshelf</string>
         </dict>
         <dict>
             <key>UIApplicationShortcutItemType</key>
@@ -293,7 +294,7 @@
             <key>UIApplicationShortcutItemIconType</key>
             <string>UIApplicationShortcutIconTypeTime</string>
             <key>UIApplicationShortcutItemTitle</key>
-            <string>legado.shortcut.last_read</string>
+            <string>langhuan.shortcut.last_read</string>
             <key>UIApplicationShortcutItemUserInfo</key>
             <dict>
                 <key>route</key>
@@ -306,7 +307,7 @@
             <key>UIApplicationShortcutItemIconType</key>
             <string>UIApplicationShortcutIconTypeAudio</string>
             <key>UIApplicationShortcutItemTitle</key>
-            <string>legado.shortcut.read_aloud</string>
+            <string>langhuan.shortcut.read_aloud</string>
             <key>UIApplicationShortcutItemUserInfo</key>
             <dict>
                 <key>route</key>

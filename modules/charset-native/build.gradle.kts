@@ -14,14 +14,14 @@ import org.gradle.api.tasks.Sync
 // - GB18030: charset-ext-big 尚未发布到 Maven, vendor 上游固定提交源文件
 //   (见 vendor/PROVENANCE.md, 不得手抄映射表);
 // - UTF-32: 上游解码放行代理区码点 (isBmpCodePoint 不排除代理区, 与 JDK 同源), 本仓约束
-//   非法码点→U+FFFD, 由 com.legado.charset.Utf32Coder 换包小改承载 (依赖 klib 已含原类,
+//   非法码点→U+FFFD, 由 com.langhuan.charset.Utf32Coder 换包小改承载 (依赖 klib 已含原类,
 //   同包会重类冲突)。
 //
 // 源码全部在 nativeMain (nonJvm API 依赖 Unicode/DoubleByte 等不在 common 元数据内,
 // 与 ksoup-ohos 挂 ohosMain 同理不进 commonMain); 仅 native 目标, foundation 只在
 // nativeMain 依赖本模块, Android/JVM 产物不含。
 plugins {
-    id("legado.kmp.native.library")
+    id("langhuan.kmp.native.library")
 }
 
 val isMacHost = System.getProperty("os.name").startsWith("Mac", ignoreCase = true)
@@ -72,7 +72,7 @@ kotlin {
 
     // ohosArm64 target 注册 + 鸿蒙配置的坐标替换 (charset/io-core → :modules:ksoup-ohos)
     if (enableOhosTarget) {
-        pluginManager.apply("legado.kmp.ohos")
+        pluginManager.apply("langhuan.kmp.ohos")
     }
 
     sourceSets {

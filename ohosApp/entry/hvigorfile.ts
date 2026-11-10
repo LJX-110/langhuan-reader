@@ -10,12 +10,12 @@ const execFileAsync = util.promisify(childProcess.execFile);
 const projectRoot = path.resolve(__dirname, '..', '..');
 const gradleWrapper = path.resolve(projectRoot, 'gradlew.bat');
 
-function legadoNativeLibrariesPlugin(): HvigorPlugin {
+function langhuanNativeLibrariesPlugin(): HvigorPlugin {
   return {
-    pluginId: 'legado-native-libraries',
+    pluginId: 'langhuan-native-libraries',
     apply(pluginContext: HvigorNode) {
       pluginContext.registerTask({
-        name: 'stageLegadoNativeLibraries',
+        name: 'stageLanghuanNativeLibraries',
         run: async () => {
           // 不再用“产物已存在”跳过: Gradle 的 stageOhosNativeLibraries 是增量 Copy,
           // 源 .so/API 头更新时会自动覆盖; 旧逻辑会让 HAP 一直打包上一次的 .so。
@@ -54,5 +54,5 @@ function legadoNativeLibrariesPlugin(): HvigorPlugin {
 
 export default {
   system: hapTasks,
-  plugins: [legadoNativeLibrariesPlugin()]
+  plugins: [langhuanNativeLibrariesPlugin()]
 }

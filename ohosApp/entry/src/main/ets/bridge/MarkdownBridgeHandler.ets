@@ -1,5 +1,5 @@
 import webview from '@ohos.web.webview';
-import legado from 'liblegado_napi.so';
+import langhuan from 'liblanghuan_napi.so';
 
 /**
  * Markdown 查看器桥 (KMP MarkdownContent → 鸿蒙 Web 组件渲染, composeResources 单一数据源)。
@@ -12,11 +12,11 @@ import legado from 'liblegado_napi.so';
  *
  * # 页面来源 (零拷贝零重复)
  * 完整 viewer HTML 由 K/N 运行时从 composeResources 直读模板 + marked/highlight/
- * github-markdown 亮暗 css 内联拼装 (legado.buildMarkdownViewerHtml, 进程内缓存),
+ * github-markdown 亮暗 css 内联拼装 (langhuan.buildMarkdownViewerHtml, 进程内缓存),
  * 本处理器经 WebviewController.loadData 交给 Web 组件 —— 仓库与 HAP 均无资源副本。
  *
  * # 生命周期状态机
- * Web 组件由 Index.ets 的 registerComposeInteropBuilder('legadoMarkdownWeb') 创建,
+ * Web 组件由 Index.ets 的 registerComposeInteropBuilder('langhuanMarkdownWeb') 创建,
  * 初始 src=about:blank, 仅当 KMP ArkUIView2 节点组合时才存在。每次加载完成 (onPageEnd):
  *   1. 未加载过 viewer → loadData(viewerHtml) (从 about:blank 切到 viewer);
  *   2. javaScriptProxy 未注册 → registerJavaScriptProxy + 重新 loadData
@@ -25,8 +25,8 @@ import legado from 'liblegado_napi.so';
  * Web 组件销毁重建 (对话框关闭重开) 时 onPageBegin 复位去重键, 重载后重新渲染。
  *
  * # 链接回送
- * viewer 页面内 <a> 点击经 javaScriptProxy (legadoMarkdownBridge.openLink) 调回本处理器,
- * 再经 EntryAbility 注入的 eventCallback (legado.markdownEvent) 回推 KMP,
+ * viewer 页面内 <a> 点击经 javaScriptProxy (langhuanMarkdownBridge.openLink) 调回本处理器,
+ * 再经 EntryAbility 注入的 eventCallback (langhuan.markdownEvent) 回推 KMP,
  * 由 KMP 调 OpenUrlProviders 走系统浏览器打开 (决策: Markdown 链接一律系统浏览器)。
  */
 
@@ -49,7 +49,7 @@ let latest: MarkdownRenderPayload | null = null;
 /** 查看器 Web 组件控制器 (Index.ets 注入, 与后台抓取 Web 实例相互独立)。 */
 let webController: webview.WebviewController | undefined;
 
-/** ArkTS → KMP 事件回送函数 (EntryAbility 注入, 内部调 legado.markdownEvent)。 */
+/** ArkTS → KMP 事件回送函数 (EntryAbility 注入, 内部调 langhuan.markdownEvent)。 */
 let eventCallback: ((json: string) => void) | null = null;
 
 /** 完整 viewer HTML (K/N composeResources 直读内联, initMarkdownBridge 时预构建, 进程内缓存)。 */
@@ -67,7 +67,7 @@ let pageReady = false;
 /** 已注入参数的去重键 (页面重载时由 handlePageBegin 复位)。 */
 let lastInjected: string = '';
 
-/** javaScriptProxy 对象: viewer 页面内 `legadoMarkdownBridge.openLink(url)` 调用。 */
+/** javaScriptProxy 对象: viewer 页面内 `langhuanMarkdownBridge.openLink(url)` 调用。 */
 class MarkdownJsProxy {
   openLink(url: string): void {
     if (url == null || url.length === 0) {
@@ -86,14 +86,14 @@ const jsProxy = new MarkdownJsProxy();
  * 初始化 Markdown 查看器桥 (Index.ets aboutToAppear 调用)。
  *
  * @param controller 查看器 Web 组件的 WebviewController (与 Index.ets interop builder 绑定)
- * @param onEvent ArkTS → KMP 事件回送函数 (EntryAbility 注入 legado.markdownEvent)
+ * @param onEvent ArkTS → KMP 事件回送函数 (EntryAbility 注入 langhuan.markdownEvent)
  */
 export function initMarkdownBridge(controller: webview.WebviewController, onEvent: (json: string) => void): void {
   webController = controller;
   eventCallback = onEvent;
   // 预构建 viewer HTML (composeResources 直读内联, 纯内存读取, 主线程同步安全; 进程内缓存)
   try {
-    viewerHtml = legado.buildMarkdownViewerHtml();
+    viewerHtml = langhuan.buildMarkdownViewerHtml();
     console.info('[MarkdownBridge] viewer html built, length=' + viewerHtml.length);
   } catch (e) {
     console.error('[MarkdownBridge] buildMarkdownViewerHtml failed: ' + JSON.stringify(e));
@@ -144,7 +144,7 @@ export function handlePageEnd(): void {
   // 2. javaScriptProxy 未注册: 注册后重新 loadData (proxy 对后续加载的页面生效)
   if (!proxyRegistered) {
     try {
-      webController?.registerJavaScriptProxy(jsProxy, 'legadoMarkdownBridge', ['openLink']);
+      webController?.registerJavaScriptProxy(jsProxy, 'langhuanMarkdownBridge', ['openLink']);
       proxyRegistered = true;
       console.info('[MarkdownBridge] js proxy registered, reload viewer to apply');
       if (viewerHtml.length > 0) {

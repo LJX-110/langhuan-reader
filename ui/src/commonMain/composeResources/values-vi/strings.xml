@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Legado</string>
-    <string name="app_name_a">Legado·A</string>
-    <string name="receiving_shared_label">Legado·Tìm kiếm</string>
-    <string name="tip_perm_request_storage">Legado cần quyền truy cập bộ nhớ để tìm và đọc sách. Vui lòng vào "Cài đặt ứng dụng" để cấp "Quyền truy cập bộ nhớ".</string>
+    <string name="app_name">Langhuan</string>
+    <string name="app_name_a">Langhuan·A</string>
+    <string name="receiving_shared_label">Langhuan·Tìm kiếm</string>
+    <string name="tip_perm_request_storage">Langhuan cần quyền truy cập bộ nhớ để tìm và đọc sách. Vui lòng vào "Cài đặt ứng dụng" để cấp "Quyền truy cập bộ nhớ".</string>
     <string name="dialog_title">Thông báo</string>
     <string name="dialog_cancel">Hủy</string>
     <string name="dialog_setting">Đến cài đặt</string>
@@ -62,7 +62,7 @@
     <string name="offline_cache">Bộ đệm ngoại tuyến</string>
     <string name="change_origin">Đổi nguồn</string>
     <string name="about_description">Đây là một phần mềm đọc mã nguồn mở được phát triển mới bằng Kotlin, chào mừng bạn tham gia.</string>
-    <string name="app_share_description">Link tải Legado (YueDu 3.0):https://github.com/gedoor/legado/releases</string>
+    <string name="app_share_description">Link tải Langhuan:https://github.com/LJX-110/langhuan-reader/releases</string>
     <string name="pt_auto_refresh">Tự động làm mới</string>
     <string name="ps_auto_refresh">Tự động cập nhật sách khi mở phần mềm</string>
     <string name="backup_restore">Sao lưu và khôi phục</string>
@@ -392,7 +392,7 @@
     <string name="sys_folder_picker">Bộ chọn thư mục hệ thống</string>
     <string name="app_folder_picker">Bộ chọn thư mục ứng dụng</string>
     <string name="app_file_picker">Bộ chọn tệp ứng dụng</string>
-    <string name="add_to_text_context_menu_s">Nhấn giữ để hiển thị Legado·Tìm kiếm trong menu thao tác</string>
+    <string name="add_to_text_context_menu_s">Nhấn giữ để hiển thị Langhuan·Tìm kiếm trong menu thao tác</string>
     <string name="add_to_text_context_menu_t">Thao tác văn bản hiển thị Tìm kiếm</string>
     <string name="record_log">Ghi nhật ký</string>
     <string name="log">Nhật ký</string>

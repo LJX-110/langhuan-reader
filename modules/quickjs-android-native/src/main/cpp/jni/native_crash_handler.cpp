@@ -51,7 +51,7 @@
 #include <android/log.h>
 
 // 本文件是独立 TU, jni_bridge.cpp 里的 LOGI 宏不可见, 就地定义
-#define TAG_CRASH "legado_crash"
+#define TAG_CRASH "langhuan_crash"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG_CRASH, __VA_ARGS__)
 
 namespace {

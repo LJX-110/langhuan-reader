@@ -1,7 +1,7 @@
 {
   "modelVersion": "6.1.1",
   "model": "5.0.0-Release",
-  "description": "Legado HarmonyOS host for CPF-KMP-CMP fusion renderer",
+  "description": "Langhuan HarmonyOS host for CPF-KMP-CMP fusion renderer",
   "dependencies": {
     "@cpf-kmp-cmp/compose": "1.9.2-0.5.0-10"
   },

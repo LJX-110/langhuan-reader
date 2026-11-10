@@ -24,8 +24,8 @@ export default defineConfig(({ mode }) => {
     base: mode === "development" ? "/" : "./",
     server: {
       port: 8080,
-      // 开发期代理: npm run dev 直连本机命令行模式后端 (:desktop:run -Plegado.cli, 默认端口 1122)。
-      // 代理所有 legado WebApi 路径 (get*/save*/delete*/cover/image/WS/restoreBackup/addLocalBook等),
+      // 开发期代理: npm run dev 直连本机命令行模式后端 (:desktop:run -Planghuan.cli, 默认端口 1122)。
+      // 代理所有 langhuan WebApi 路径 (get*/save*/delete*/cover/image/WS/restoreBackup/addLocalBook等),
       // 不碰 vite 自身的 /src /@vite /node_modules。
       proxy: {
         // WebSocket 接口 (searchBook / bookSourceDebug): 后端 WebSocketServer 监听在 1123 (端口 + 1)

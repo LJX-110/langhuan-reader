@@ -1,0 +1,6 @@
+{
+  "name": "liblanghuan_napi.so",
+  "types": "./Index.d.ts",
+  "version": "1.0.0",
+  "description": "Langhuan NAPI bridge and CPF Compose controller exports"
+}

@@ -9,7 +9,7 @@ import { ensurePermissionGranted } from './PermissionBridgeHandler';
  *
  * 接收 Kotlin OhosNativeBridge.invokePasteboardSync 通过 tsfn dispatch 过来的剪贴板请求,
  * 调用 @ohos.pasteboard.getSystemPasteboard() 读写纯文本,
- * 完成后通过 legado.pasteboardCallback(requestId, resultJson) 回送结果给 Kotlin。
+ * 完成后通过 langhuan.pasteboardCallback(requestId, resultJson) 回送结果给 Kotlin。
  *
  * # JSON 协议 (与 OhosPlatformOps.ohos.kt / OhosNativeBridge.kt 对齐)
  *
@@ -36,7 +36,7 @@ import { ensurePermissionGranted } from './PermissionBridgeHandler';
  * 由 Kotlin 侧把空串归一为 null (与 iOS UIPasteboard.string 为 nil 语义对齐)。
  */
 
-// Pasteboard callback 类型 (由 EntryAbility 注入, 内部调 legado.pasteboardCallback)
+// Pasteboard callback 类型 (由 EntryAbility 注入, 内部调 langhuan.pasteboardCallback)
 export type PasteboardCallback = (requestId: number, resultJson: string) => void;
 
 // UIAbilityContext (读剪贴板需 requestPermissionsFromUser 申请 READ_PASTEBOARD; 由 EntryAbility 注入)
@@ -65,7 +65,7 @@ interface PasteboardWritePayload {
  * 处理来自 Kotlin 的剪贴板请求 (由 EntryAbility 注册的 tsfn 回调调用)。
  *
  * @param requestJson 请求 JSON 字符串 (含 requestId/action/payload)
- * @param callback 回送结果的函数 (EntryAbility 注入 legado.pasteboardCallback)
+ * @param callback 回送结果的函数 (EntryAbility 注入 langhuan.pasteboardCallback)
  */
 export function handlePasteboardRequest(requestJson: string, callback: PasteboardCallback): void {
   dispatchBridgeRequest(requestJson, 'PasteboardBridge', handleAction, callback);

@@ -3,8 +3,8 @@
 package org.jsoup
 
 import com.fleeksoft.ksoup.Ksoup
-import io.legado.app.help.http.KmpHttpClient
-import io.legado.app.utils.URL
+import com.langhuan.reader.help.http.KmpHttpClient
+import com.langhuan.reader.utils.URL
 import org.jsoup.internal.HttpConnection
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.asFacadeDocument
@@ -32,7 +32,7 @@ expect object Jsoup {
      * [HttpConnection] 裸建客户端(模块独立可测);注入后所有请求复用宿主共享 client——
      * 继承其拦截器(CookieJar 注入/回写、限流、Cronet 等),per-request 配置由平台门面
      * [org.jsoup.internal.buildPlatformClient] 用 newBuilder 覆盖。
-     * native: 无人注入时由平台门面回退 [io.legado.app.help.http.OkHttpClientProviders] 的共享客户端。
+     * native: 无人注入时由平台门面回退 [com.langhuan.reader.help.http.OkHttpClientProviders] 的共享客户端。
      * (expect 属性无 backing field, @Volatile 由各端 actual 加)
      */
     var clientFactory: (() -> KmpHttpClient)?

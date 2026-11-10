@@ -94,14 +94,14 @@ class JsApiProcessor(
         // (工厂函数体内有唯一标记注释 `// @@methods:<factory>@@`, 桥拼接时逐工厂替换)。
         // 未列出的类的方法不生成 (无法确定 JS 暴露面)。
         val NATIVE_JS_FACTORY_BY_CLASS: Map<String, String> = mapOf(
-            "io.legado.app.help.JsExtensionsCommon" to "__createJavaObj",
-            "io.legado.app.data.entities.BaseSource" to "__createBaseSourceObj",
-            "io.legado.app.help.http.StrResponse" to "__createStrResponseObj",
+            "com.langhuan.reader.help.JsExtensionsCommon" to "__createJavaObj",
+            "com.langhuan.reader.data.entities.BaseSource" to "__createBaseSourceObj",
+            "com.langhuan.reader.help.http.StrResponse" to "__createStrResponseObj",
             "org.jsoup.Connection.Response" to "__createRespObj",
             // Base<T> 自限定接口的方法 (hasHeader/hasCookie/multiHeaders 等) 只经 Response 对象暴露
             "org.jsoup.Connection.Base" to "__createRespObj",
-            "io.legado.app.model.analyzeRule.QueryTTF" to "__createQueryTTFObj",
-            "io.legado.app.utils.JsURL" to "__createJsUrlObj",
+            "com.langhuan.reader.model.analyzeRule.QueryTTF" to "__createQueryTTFObj",
+            "com.langhuan.reader.utils.JsURL" to "__createJsUrlObj",
         )
 
         // REF 返回 → 对象 handle 的方法白名单 (ownerFqn.name → JS 包装工厂名):
@@ -137,7 +137,7 @@ class JsApiProcessor(
             // (Connection.Response/StrResponse/BaseSource 等, 桥侧各有专属 JS 工厂函数,
             // 生成闭包按 NATIVE_JS_FACTORY_BY_CLASS 分区注入, 不再有同名冲突)。
             val nativeTargetFqns = buildSet {
-                add("io.legado.app.help.JsExtensionsCommon")
+                add("com.langhuan.reader.help.JsExtensionsCommon")
                 options["jsapi.nativeTargets"]?.split(',')?.forEach { raw ->
                     val fqn = raw.trim()
                     if (fqn.isNotEmpty()) add(fqn)
@@ -899,8 +899,8 @@ class JsApiProcessor(
         sb.appendLine()
         sb.appendLine("package $GEN_PKG")
         sb.appendLine()
-        sb.appendLine("import io.legado.app.utils.GSON")
-        sb.appendLine("import io.legado.app.utils.toJson")
+        sb.appendLine("import com.langhuan.reader.utils.GSON")
+        sb.appendLine("import com.langhuan.reader.utils.toJson")
         sb.appendLine()
         sb.appendLine("/**")
         sb.appendLine(" * native 端 (iOS/鸿蒙) @JsApi 新方法分派表 (KSP 生成, 勿手改)。")

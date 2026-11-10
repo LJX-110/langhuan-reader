@@ -2,7 +2,7 @@
 //  ContentView.swift
 //  iosApp
 //
-//  legado KMP iOS UI 根: 用 UIViewControllerRepresentable 包装 shared 模块的
+//  langhuan KMP iOS UI 根: 用 UIViewControllerRepresentable 包装 shared 模块的
 //  `MainViewController()` (Compose Multiplatform ComposeUIViewController)。
 //
 //  ## 调用链
@@ -10,10 +10,10 @@
 //  ```
 //  iOSApp (SwiftUI App)
 //    └── ContentView (UIViewControllerRepresentable)
-//          └── LegadoRootViewController (本文件: 状态栏图标明暗的决定者)
+//          └── LanghuanRootViewController (本文件: 状态栏图标明暗的决定者)
 //                └── MainViewControllerKt.MainViewController() (Kotlin, shared framework)
 //                      └── ComposeUIViewController
-//                            └── AppTheme { LegadoApp(navigator, screenModelStore) }
+//                            └── AppTheme { LanghuanApp(navigator, screenModelStore) }
 //                                  └── shared RouteContent 按 AppRoute 分发全部路由
 //                                        (零薄壳: 平台薄壳 Composable 已删, 见 README.md)
 //  ```
@@ -42,12 +42,12 @@ import shared  // Kotlin Multiplatform shared framework
 /// SwiftUI 的宿主控制器把样式决定权交给子控制器 (UIHostingController override 了
 /// `childForStatusBarStyle`), 而 Compose 的根控制器不提供该覆盖点, 故这里包一层:
 /// 本容器不把决定权继续下传, 由 Kotlin 侧按阅读样式/深色覆盖层驱动。
-final class LegadoRootViewController: UIViewController {
+final class LanghuanRootViewController: UIViewController {
 
     /// 状态栏样式通道 (Kotlin → Swift): 与状态栏显隐同一套通知桥。
-    /// Kotlin 常量: IosStatusBarStyleNotification = "legado.statusBarStyle",
+    /// Kotlin 常量: IosStatusBarStyleNotification = "langhuan.statusBarStyle",
     /// userInfo key "style" = Int (0=跟随界面风格 / 1=浅色图标 / 2=深色图标)
-    private static let styleNotification = Notification.Name("legado.statusBarStyle")
+    private static let styleNotification = Notification.Name("langhuan.statusBarStyle")
     private static let styleKey = "style"
 
     private let content: UIViewController
@@ -59,7 +59,7 @@ final class LegadoRootViewController: UIViewController {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("LegadoRootViewController 只支持代码创建")
+        fatalError("LanghuanRootViewController 只支持代码创建")
     }
 
     override var preferredStatusBarStyle: UIStatusBarStyle { statusBarStyle }
@@ -105,7 +105,7 @@ struct ContentView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {
         // MainViewControllerKt: Kotlin 顶层函数 MainViewController() 的 Swift 桥接类
         // (Kotlin 编译器自动生成 <FileName>Kt 类, 文件名为 MainViewController.kt)
-        LegadoRootViewController(content: MainViewControllerKt.MainViewController())
+        LanghuanRootViewController(content: MainViewControllerKt.MainViewController())
     }
 
     /// SwiftUI 更新回调 (本场景 Compose 自管理状态, 无更新逻辑)。

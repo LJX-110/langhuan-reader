@@ -90,14 +90,14 @@
         }
     }
 
-    // 链接点击: 拦截后交给 javaScriptProxy (legadoMarkdownBridge.openLink) → ArkTS → KMP 系统浏览器
+    // 链接点击: 拦截后交给 javaScriptProxy (langhuanMarkdownBridge.openLink) → ArkTS → KMP 系统浏览器
     document.addEventListener('click', function (e) {
         var t = e.target;
         var a = t && t.closest ? t.closest('a') : null;
         if (a && a.href) {
             e.preventDefault();
-            if (window.legadoMarkdownBridge && window.legadoMarkdownBridge.openLink) {
-                window.legadoMarkdownBridge.openLink(a.href);
+            if (window.langhuanMarkdownBridge && window.langhuanMarkdownBridge.openLink) {
+                window.langhuanMarkdownBridge.openLink(a.href);
             }
         }
     }, false);

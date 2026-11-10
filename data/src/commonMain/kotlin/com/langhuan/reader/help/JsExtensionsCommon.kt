@@ -1,0 +1,1336 @@
+package com.langhuan.reader.help
+
+import com.langhuan.reader.constant.AppConst
+import com.langhuan.reader.constant.AppLog
+import com.langhuan.reader.constant.AppPattern
+import com.langhuan.reader.constant.EventBus
+import com.langhuan.reader.constant.androidId
+import com.langhuan.reader.constant.dateFormat
+import com.langhuan.reader.data.entities.BaseSource
+import com.langhuan.reader.exception.NoStackTraceException
+import com.langhuan.reader.help.archive.ArchiveProviders
+import com.langhuan.reader.help.compress.StreamDecompressor
+import com.langhuan.reader.help.crypto.AsymmetricCrypto
+import com.langhuan.reader.help.crypto.Sign
+import com.langhuan.reader.help.crypto.SymmetricCrypto
+import com.langhuan.reader.help.config.AppConfigProviders
+import com.langhuan.reader.help.coroutine.ConcurrentRateLimiter
+import com.langhuan.reader.help.coroutine.IoDispatcher
+import com.langhuan.reader.help.coroutine.runBlockingInScope
+import com.langhuan.reader.help.http.BackstageWebViewProviders
+import com.langhuan.reader.help.http.CookieStoreProviders
+import com.langhuan.reader.help.http.StrResponse
+import com.langhuan.reader.help.http.cookieJarHeader
+import com.langhuan.reader.help.source.SourceDebugLoggers
+import com.langhuan.reader.help.source.SourceVerificationHelpShared
+import com.langhuan.reader.help.toast.Toasters
+import com.langhuan.reader.help.ui.OpenUrlProviders
+import com.langhuan.reader.model.analyzeRule.AnalyzeUrlFactories
+import com.langhuan.reader.model.analyzeRule.QueryTTF
+import com.langhuan.reader.model.script.jsContext
+import com.langhuan.reader.model.script.jsContextOrNull
+import com.langhuan.reader.ui.root.AppNavigatorProviders
+import com.langhuan.reader.ui.root.AppOverlay
+import com.langhuan.reader.utils.Base64Lenient
+import com.langhuan.reader.utils.EncoderUtils
+import com.langhuan.reader.utils.EncodingDetect
+import com.langhuan.reader.utils.GSON
+import com.langhuan.reader.utils.HtmlFormatter
+import com.langhuan.reader.utils.JsURL
+import com.langhuan.reader.utils.MD5Utils
+import com.langhuan.reader.utils.StringUtils
+import com.langhuan.reader.utils.fromJsonObject
+import com.langhuan.reader.utils.getUrlSuffix
+import com.langhuan.reader.utils.isAbsUrl
+import com.langhuan.reader.utils.mapAsync
+import com.langhuan.reader.utils.postEvent
+import com.langhuan.reader.utils.randomUUIDString
+import com.langhuan.reader.utils.stackTraceStr
+import com.langhuan.reader.utils.toStringArray
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.toList
+import org.jsoup.Connection
+import org.jsoup.Jsoup
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
+
+/**
+ * JsExtensions 纯函数面(下沉 commonMain)。
+ * app JsExtensions 继承本接口, 调用处写法不变。
+ *
+ * JDK 依赖 (URLEncoder/SimpleDateFormat/Date/Locale/SimpleTimeZone/UUID/Charset/ChineseUtils)
+ * 经 [JsExtensionsPlatform] expect 门面委托 jvmAndAndroidMain actual, 行为与原 jvmAndAndroidMain 内联实现一致。
+ *
+ * # runBlocking 保留说明 (逃生舱)
+ *
+ * `webView` / `webViewGetSource` / `webViewGetOverrideUrl` / `ajaxAll` 经 app 端 [JsExtensions]
+ * (标注 `@JsApi`) 暴露给 JS 引擎 (QuickJS), JS 调用是同步的, 不能 suspend。故这四个方法无法改为
+ * suspend, 内部经 [runBlockingInScope] (commonMain expect, 各端 actual) 委托阻塞语义:
+ * jvmAndAndroidMain 与 nativeMain (iOS/鸿蒙共用) 的 actual 都直调 kotlinx.coroutines.runBlocking,
+ * 行为与直调 runBlocking 零差异。
+ * - JVM 端 (Android/desktop): runBlocking 安全, JS 引擎在 IO 线程同步调用 (与 [CacheManager] 同策略)。
+ * - Native 端 (iOS/鸿蒙): JS 引擎已启用 (nativeMain QuickJS cinterop), 但
+ *   [BackstageWebViewProviders] 未注册实现, 这四个方法调用仍会抛错 —— 这是 provider 未注册问题,
+ *   与阻塞包装方式无关, 经 runBlockingInScope 迁移不改变该行为。
+ * - 同策略参考: [CacheManager] (object 级 `@JsApi`, 内部同样经 runBlockingInScope 桥接)。
+ */
+@Suppress("unused")
+interface JsExtensionsCommon {
+
+    /* Str转ByteArray */
+    fun strToBytes(str: String): ByteArray {
+        return strToBytes(str, "UTF-8")
+    }
+
+    fun strToBytes(str: String, charset: String): ByteArray {
+        return JsExtensionsPlatform.strToBytes(str, charset)
+    }
+
+    /* ByteArray转Str */
+    fun bytesToStr(bytes: ByteArray): String {
+        return bytesToStr(bytes, "UTF-8")
+    }
+
+    fun bytesToStr(bytes: ByteArray, charset: String): String {
+        return JsExtensionsPlatform.bytesToStr(bytes, charset)
+    }
+
+    /**
+     * js实现base64解码,不能删
+     */
+    fun base64Decode(str: String?): String {
+        // 原版返回非空 String, 保持签名; str 为 null 时给空串 (原版 hutool Base64.decodeStr 不会返回 null)
+        return Base64Lenient.decodeStr(str) ?: ""
+    }
+
+    fun base64Decode(str: String?, charset: String): String {
+        return JsExtensionsPlatform.base64DecodeStr(str, charset) ?: ""
+    }
+
+    /* HexString 解码为字节数组 */
+    @OptIn(ExperimentalStdlibApi::class)
+    fun hexDecodeToByteArray(hex: String): ByteArray? = hex.hexToByteArray()
+
+    /* hexString 解码为utf8String*/
+    @OptIn(ExperimentalStdlibApi::class)
+    fun hexDecodeToString(hex: String): String? = hex.hexToByteArray().decodeToString()
+
+    /* utf8 编码为hexString */
+    @OptIn(ExperimentalStdlibApi::class)
+    fun hexEncodeToString(utf8: String): String? = utf8.encodeToByteArray().toHexString()
+
+    /**
+     * 格式化时间
+     */
+    fun timeFormatUTC(time: Long, format: String, sh: Int): String? {
+        return JsExtensionsPlatform.formatTimeUtc(time, format, sh)
+    }
+
+    /**
+     * 时间格式化
+     */
+    fun timeFormat(time: Long): String {
+        // AppConst.dateFormat 已下沉 commonMain, format(Date) 重载已删除, 改传 Long (行为不变)
+        return AppConst.dateFormat.format(time)
+    }
+
+    fun encodeURI(str: String): String {
+        return try {
+            JsExtensionsPlatform.urlEncode(str, "UTF-8")
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
+    fun encodeURI(str: String, enc: String): String {
+        return try {
+            JsExtensionsPlatform.urlEncode(str, enc)
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
+    fun htmlFormat(str: String): String {
+        return HtmlFormatter.formatKeepImg(str)
+    }
+
+    fun toURL(urlStr: String): JsURL {
+        return JsURL(urlStr)
+    }
+
+    fun toURL(url: String, baseUrl: String? = null): JsURL {
+        return JsURL(url, baseUrl)
+    }
+
+    /**
+     * 生成UUID
+     */
+    fun randomUUID() = randomUUIDString()
+
+    fun base64Decode(str: String, flags: Int): String {
+        return EncoderUtils.base64Decode(str, flags)
+    }
+
+    fun base64DecodeToByteArray(str: String?): ByteArray? {
+        if (str.isNullOrBlank()) {
+            return null
+        }
+        return EncoderUtils.base64DecodeToByteArray(str, 0)
+    }
+
+    fun base64DecodeToByteArray(str: String?, flags: Int): ByteArray? {
+        if (str.isNullOrBlank()) {
+            return null
+        }
+        return EncoderUtils.base64DecodeToByteArray(str, flags)
+    }
+
+    fun base64Encode(str: String): String? {
+        return EncoderUtils.base64Encode(str, 2)
+    }
+
+    fun base64Encode(str: String, flags: Int): String? {
+        return EncoderUtils.base64Encode(str, flags)
+    }
+
+    fun t2s(text: String): String {
+        return JsExtensionsPlatform.chineseT2S(text)
+    }
+
+    fun s2t(text: String): String {
+        return JsExtensionsPlatform.chineseS2T(text)
+    }
+
+    /**
+     * 章节数转数字
+     */
+    fun toNumChapter(s: String?): String? {
+        s ?: return null
+        val match = AppPattern.titleNumPattern.find(s)
+        if (match != null) {
+            val intStr = StringUtils.stringToInt(match.groupValues[2])
+            return "${match.groupValues[1]}${intStr}${match.groupValues[3]}"
+        }
+        return s
+    }
+
+    /**
+     * 当前书源/订阅源, 由实现端注入。
+     * commonMain 的 AnalyzeUrlCore/AnalyzeRuleCore/BaseSource 已 override。
+     */
+    fun getSource(): BaseSource?
+
+    //****************** 加解密 (平台实现经 JsCryptoProviders 注册) ******************//
+
+    fun md5Encode(str: String): String {
+        return JsCryptoProviders.get().md5Encode(str)
+    }
+
+    fun md5Encode16(str: String): String {
+        return JsCryptoProviders.get().md5Encode16(str)
+    }
+
+    /**
+     * 生成摘要，并转为 16 进制字符串
+     */
+    fun digestHex(data: String, algorithm: String): String {
+        return JsCryptoProviders.get().digestHex(data, algorithm)
+    }
+
+    /**
+     * 生成摘要，并转为 16 进制字符串（原始字节入参）
+     *
+     * 字符串重载按 UTF-8 编码, 无法对任意二进制数据摘要求值; 本重载按原始字节摘要。
+     */
+    fun digestHex(data: ByteArray, algorithm: String): String {
+        return JsCryptoProviders.get().digestHex(data, algorithm)
+    }
+
+    /**
+     * 生成摘要，并转为 Base64 字符串
+     */
+    fun digestBase64Str(data: String, algorithm: String): String {
+        return JsCryptoProviders.get().digestBase64Str(data, algorithm)
+    }
+
+    /**
+     * 生成散列消息鉴别码，并转为 16 进制字符串
+     */
+    @Suppress("FunctionName")
+    fun HMacHex(data: String, algorithm: String, key: String): String {
+        return JsCryptoProviders.get().HMacHex(data, algorithm, key)
+    }
+
+    /**
+     * 生成散列消息鉴别码，并转为 Base64 字符串
+     */
+    @Suppress("FunctionName")
+    fun HMacBase64(data: String, algorithm: String, key: String): String {
+        return JsCryptoProviders.get().HMacBase64(data, algorithm, key)
+    }
+
+    /**
+     * 在js中这样使用
+     * java.createSymmetricCrypto(transformation, key, iv).decrypt(data)
+     * java.createSymmetricCrypto(transformation, key, iv).decryptStr(data)
+     * java.createSymmetricCrypto(transformation, key, iv).encrypt(data)
+     * java.createSymmetricCrypto(transformation, key, iv).encryptBase64(data)
+     * java.createSymmetricCrypto(transformation, key, iv).encryptHex(data)
+     */
+
+    /* 调用SymmetricCrypto key为null时使用随机密钥*/
+    fun createSymmetricCrypto(
+        transformation: String,
+        key: ByteArray?,
+        iv: ByteArray?
+    ): SymmetricCrypto {
+        return JsCryptoProviders.get().createSymmetricCrypto(transformation, key, iv)
+    }
+
+    fun createSymmetricCrypto(
+        transformation: String,
+        key: ByteArray
+    ): SymmetricCrypto {
+        return createSymmetricCrypto(transformation, key, null)
+    }
+
+    fun createSymmetricCrypto(
+        transformation: String,
+        key: String
+    ): SymmetricCrypto {
+        return createSymmetricCrypto(transformation, key, null)
+    }
+
+    fun createSymmetricCrypto(
+        transformation: String,
+        key: String,
+        iv: String?
+    ): SymmetricCrypto {
+        return createSymmetricCrypto(
+            transformation, key.encodeToByteArray(), iv?.encodeToByteArray()
+        )
+    }
+
+    /* keys都为null时使用随机密钥 */
+    fun createAsymmetricCrypto(
+        transformation: String
+    ): AsymmetricCrypto {
+        return JsCryptoProviders.get().createAsymmetricCrypto(transformation)
+    }
+
+    fun createSign(
+        algorithm: String
+    ): Sign {
+        return JsCryptoProviders.get().createSign(algorithm)
+    }
+
+    //****************** P1: webView 系列 (从 app JsExtensions 下沉) ******************//
+
+    /**
+     * 协程上下文, 用于 [runBlockingInScope] 包装 webView 挂起调用。
+     * 取自 [jsContext] (js 执行上下文注入), 缺失时退化为 [EmptyCoroutineContext]。
+     */
+    private val context: CoroutineContext
+        get() = jsContext.coroutineContext ?: EmptyCoroutineContext
+
+    /**
+     * 使用webView访问网络
+     * @param html 直接用webView载入的html, 如果html为空直接访问url
+     * @param url html内如果有相对路径的资源不传入url访问不了
+     * @param js 用来取返回值的js语句, 没有就返回整个源代码
+     * @return 返回js获取的内容
+     */
+    fun webView(html: String?, url: String?, js: String?, delayTime: Long = 1000L): String? {
+        if (JsExtensionsPlatform.isMainThread()) {
+            error("webView must be called on a background thread")
+        }
+        // @JsApi 同步调用约束: JS 引擎不能调 suspend, 经 runBlockingInScope 桥接; 详见接口级 KDoc
+        return runBlockingInScope(context) {
+            BackstageWebViewProviders.get().create(
+                url = url,
+                html = html,
+                javaScript = js,
+                headerMap = getSource()?.getHeaderMap(true),
+                tag = getSource()?.getKey(),
+                delayTime = delayTime
+            ).getStrResponse().body
+        }
+    }
+
+    fun webView(html: String?, url: String?, js: String?) = webView(html, url, js, 1000L)
+
+    /**
+     * 使用webView获取资源url
+     */
+    fun webViewGetSource(
+        html: String?,
+        url: String?,
+        js: String?,
+        sourceRegex: String?,
+        delayTime: Long = 1000L
+    ): String? {
+        if (JsExtensionsPlatform.isMainThread()) {
+            error("webViewGetSource must be called on a background thread")
+        }
+        // @JsApi 同步调用约束: JS 引擎不能调 suspend, 经 runBlockingInScope 桥接; 详见接口级 KDoc
+        return runBlockingInScope(context) {
+            BackstageWebViewProviders.get().create(
+                url = url,
+                html = html,
+                javaScript = js,
+                headerMap = getSource()?.getHeaderMap(true),
+                tag = getSource()?.getKey(),
+                sourceRegex = sourceRegex,
+                delayTime = delayTime
+            ).getStrResponse().body
+        }
+    }
+
+    fun webViewGetSource(html: String?, url: String?, js: String?, sourceRegex: String?) =
+        webViewGetSource(html, url, js, sourceRegex, 1000L)
+
+    /**
+     * 使用webView获取跳转url
+     */
+    fun webViewGetOverrideUrl(
+        html: String?,
+        url: String?,
+        js: String?,
+        overrideUrlRegex: String?,
+        delayTime: Long = 1000L
+    ): String? {
+        if (JsExtensionsPlatform.isMainThread()) {
+            error("webViewGetOverrideUrl must be called on a background thread")
+        }
+        // @JsApi 同步调用约束: JS 引擎不能调 suspend, 经 runBlockingInScope 桥接; 详见接口级 KDoc
+        return runBlockingInScope(context) {
+            BackstageWebViewProviders.get().create(
+                url = url,
+                html = html,
+                javaScript = js,
+                headerMap = getSource()?.getHeaderMap(true),
+                tag = getSource()?.getKey(),
+                overrideUrlRegex = overrideUrlRegex,
+                delayTime = delayTime
+            ).getStrResponse().body
+        }
+    }
+
+    fun webViewGetOverrideUrl(html: String?, url: String?, js: String?, overrideUrlRegex: String?) =
+        webViewGetOverrideUrl(html, url, js, overrideUrlRegex, 1000L)
+
+    /**
+     * 访问网络,返回String
+     */
+    fun ajax(url: Any): String? {
+        val urlStr = if (url is List<*>) {
+            url.firstOrNull().toString()
+        } else {
+            url.toString()
+        }
+        // 用 AnalyzeUrlCore 替代 app 端 AnalyzeUrl (AnalyzeUrlCore 已下沉 commonMain, 行为等价)
+        val analyzeUrl = AnalyzeUrlFactories.create(
+            urlStr,
+            source = getSource(),
+            coroutineContext = jsContext.coroutineContext ?: EmptyCoroutineContext
+        )
+        return kotlin.runCatching {
+            analyzeUrl.getStrResponse().body
+        }.onFailure {
+            jsContext.ensureActive()
+            AppLog.put("ajax(${urlStr}) error\n${it.message}", it)
+        }.getOrElse {
+            it.stackTraceStr
+        }
+    }
+
+    /**
+     * 并发访问网络
+     */
+    fun ajaxAll(urlList: Array<String>): Array<StrResponse> {
+        // AppConfig.threadCount 未下沉, 改用 AppConfigProviders.get().threadCount (等价)
+        // @JsApi 同步调用约束: JS 引擎不能调 suspend, 经 runBlockingInScope 桥接; 详见接口级 KDoc
+        // runBlockingInScope 的 block 无 CoroutineScope receiver, 上下文需在 lambda 外捕获
+        val scopeContext = jsContext.coroutineContext ?: EmptyCoroutineContext
+        return runBlockingInScope(scopeContext) {
+            urlList.asFlow().mapAsync(AppConfigProviders.get().threadCount) { url ->
+                val analyzeUrl = AnalyzeUrlFactories.create(
+                    url,
+                    source = getSource(),
+                    coroutineContext = scopeContext
+                )
+                analyzeUrl.getStrResponseAwait()
+            }.flowOn(IoDispatcher).toList().toTypedArray()
+        }
+    }
+
+    /**
+     * 构造响应对象 (供登录检查JS替换本次响应)
+     *
+     * 登录检查JS的返回值会被强转为 StrResponse, 而 JS 侧无法自行构造它:
+     * iOS/鸿蒙没有 Java 反射 (`Packages` / `importClass` 不可用), 安卓/桌面虽有但属 JVM 专有写法,
+     * 所以四端统一用此工厂: `result = java.strResponse(java.url, 解密后的正文)`。
+     * 只能造新的替换旧的, 不能改已有实例 (raw/body/errorBody 均为 private set)。
+     */
+    fun strResponse(url: String, body: String?): StrResponse = StrResponse(url, body)
+
+    // 单参重载: JVM 端反射按实参个数选方法, 缺该重载时 java.strResponse(url) 在安卓/桌面
+    // 报找不到方法 (native 端 getStringOrNull 容忍缺省), 靠它补平跨端差异
+    fun strResponse(url: String): StrResponse = StrResponse(url, null)
+
+    /**
+     * 访问网络,返回Response<String>
+     */
+    fun connect(urlStr: String): StrResponse {
+        val analyzeUrl = AnalyzeUrlFactories.create(
+            urlStr,
+            source = getSource(),
+            coroutineContext = jsContext.coroutineContext ?: EmptyCoroutineContext
+        )
+        return kotlin.runCatching {
+            analyzeUrl.getStrResponse()
+        }.onFailure {
+            jsContext.ensureActive()
+            AppLog.put("connect(${urlStr}) error\n${it.message}", it)
+        }.getOrElse {
+            StrResponse(analyzeUrl.url, it.stackTraceStr)
+        }
+    }
+
+    /**
+     * 访问网络,返回Response<String>, 带自定义 header
+     */
+    fun connect(urlStr: String, header: String?): StrResponse {
+        val headerMap = GSON.fromJsonObject<Map<String, String>>(header).getOrNull()
+        val analyzeUrl = AnalyzeUrlFactories.create(
+            urlStr,
+            headerMapF = headerMap,
+            source = getSource(),
+            coroutineContext = jsContext.coroutineContext ?: EmptyCoroutineContext
+        )
+        return kotlin.runCatching {
+            analyzeUrl.getStrResponse()
+        }.onFailure {
+            jsContext.ensureActive()
+            AppLog.put("ajax($urlStr,$header) error\n${it.message}", it)
+        }.getOrElse {
+            StrResponse(analyzeUrl.url, it.stackTraceStr)
+        }
+    }
+
+    /**
+     * js实现重定向拦截,网络访问get
+     *
+     * (sslContext 入参经 [JsExtensionsPlatform.unsafeSslContext] 门面, native 端为 null 不走 unsafe SSL)
+     */
+    fun get(urlStr: String, headers: Map<String, String>): Connection.Response {
+        val requestHeaders = if (getSource()?.enabledCookieJar == true) {
+            headers.toMutableMap().apply { put(cookieJarHeader, "1") }
+        } else headers
+        val rateLimiter = ConcurrentRateLimiter(getSource())
+        val response = rateLimiter.withLimitBlocking {
+            jsContext.ensureActive()
+            Jsoup.connect(urlStr)
+                .sslContext(JsExtensionsPlatform.unsafeSslContext())
+                .ignoreContentType(true)
+                .followRedirects(false)
+                .headers(requestHeaders)
+                .method(Connection.Method.GET)
+                .execute()
+        }
+        return response
+    }
+
+    /**
+     * js实现重定向拦截,网络访问head,不返回Response Body更省流量
+     */
+    fun head(urlStr: String, headers: Map<String, String>): Connection.Response {
+        val requestHeaders = if (getSource()?.enabledCookieJar == true) {
+            headers.toMutableMap().apply { put(cookieJarHeader, "1") }
+        } else headers
+        val rateLimiter = ConcurrentRateLimiter(getSource())
+        val response = rateLimiter.withLimitBlocking {
+            jsContext.ensureActive()
+            Jsoup.connect(urlStr)
+                .sslContext(JsExtensionsPlatform.unsafeSslContext())
+                .ignoreContentType(true)
+                .followRedirects(false)
+                .headers(requestHeaders)
+                .method(Connection.Method.HEAD)
+                .execute()
+        }
+        return response
+    }
+
+    /**
+     * 网络访问post
+     */
+    fun post(urlStr: String, body: String, headers: Map<String, String>): Connection.Response {
+        return postWithBody(urlStr, body, null, headers)
+    }
+
+    /**
+     * 网络访问post (请求体为原始字节)
+     *
+     * 端口按 postDataCharset 编码字符串写请求体, 故字节体按 ISO-8859-1 中转:
+     * 一字节对应一个字符, 端口再用同一编码写回, 线上字节与入参逐字节一致。
+     */
+    fun post(urlStr: String, body: ByteArray, headers: Map<String, String>): Connection.Response {
+        return postWithBody(
+            urlStr,
+            JsExtensionsPlatform.bytesToStr(body, "ISO-8859-1"),
+            "ISO-8859-1",
+            headers
+        )
+    }
+
+    private fun postWithBody(
+        urlStr: String,
+        body: String,
+        bodyCharset: String?,
+        headers: Map<String, String>,
+    ): Connection.Response {
+        val requestHeaders = if (getSource()?.enabledCookieJar == true) {
+            headers.toMutableMap().apply { put(cookieJarHeader, "1") }
+        } else headers
+        val rateLimiter = ConcurrentRateLimiter(getSource())
+        val response = rateLimiter.withLimitBlocking {
+            jsContext.ensureActive()
+            Jsoup.connect(urlStr)
+                .sslContext(JsExtensionsPlatform.unsafeSslContext())
+                .ignoreContentType(true)
+                .followRedirects(false)
+                .apply { if (bodyCharset != null) postDataCharset(bodyCharset) }
+                .requestBody(body)
+                .headers(requestHeaders)
+                .method(Connection.Method.POST)
+                .execute()
+        }
+        return response
+    }
+
+    /**
+     * 刷新 UI (通过 EventBus 通知, login/explore/book)
+     */
+    fun refreshUi(target: String) {
+        val tag = when (target.lowercase()) {
+            "login" -> EventBus.REFRESH_LOGIN_UI
+            "explore" -> EventBus.REFRESH_EXPLORE
+            "book" -> EventBus.REFRESH_BOOK_INFO
+            else -> {
+                AppLog.put("java.refreshUi: 未知 target=$target")
+                return
+            }
+        }
+        postEvent(tag, true)
+    }
+
+    /**
+     * 调试日志输出
+     */
+    fun log(msg: Any?): Any? {
+        val js = jsContextOrNull
+        js?.ensureActive()
+        val loggerContext = js?.coroutineContext ?: EmptyCoroutineContext
+        getSource()?.let {
+            SourceDebugLoggers.log(loggerContext, it.getKey(), msg.toString())
+        } ?: SourceDebugLoggers.log(loggerContext, msg.toString())
+        AppLog.putDebug("${getSource()?.getTag() ?: "源"}调试输出: $msg")
+        return msg
+    }
+
+    /**
+     * 输出对象类型
+     */
+    fun logType(any: Any?) {
+        // KMP 下输出 Kotlin 类型名 (如 "kotlin.String"), 与原版 javaClass.name
+        // 的 Java 类型名 (如 "java.lang.String") 不同, 书源若按字符串解析调试输出会看到差异;
+        // native 端 qualifiedName 可能为 null, 兜底 simpleName
+        if (any == null) log("null")
+        else log(any::class.qualifiedName ?: any::class.simpleName ?: "Unknown")
+    }
+
+    /**
+     * 安卓 ID (AppConst.androidId 已下沉 commonMain, 由宿主启动时注入)
+     */
+    fun androidId() = AppConst.androidId
+
+    //****************** P1: UI 反馈 (toast/longToast/getWebViewUA/openUrl, 走 Providers) ******************
+
+    /**
+     * 弹窗提示 (走 [Toasters], 由宿主端注册)
+     */
+    fun toast(msg: Any?) {
+        jsContext.ensureActive()
+        Toasters.get().toast("${getSource()?.getTag()}: $msg")
+    }
+
+    /**
+     * 弹窗提示 停留时间较长
+     */
+    fun longToast(msg: Any?) {
+        jsContext.ensureActive()
+        Toasters.get().toastLong("${getSource()?.getTag()}: $msg")
+    }
+
+    /**
+     * 复制文本到系统剪贴板 (先弹确认对话框, 用户确认后才写入)。
+     *
+     * 完整文本存 [IntentData] (one-shot), payload 只带 key, 避免超长文本进
+     * Overlay 快照序列化; 对话框内容只显示文本前面一截 (超长截断), 确认后
+     * 取完整文本写入剪贴板。前台无界面 (AppNavigator 未注册) 时静默忽略。
+     */
+    fun copy(text: Any?) {
+        jsContext.ensureActive()
+        val navigator = AppNavigatorProviders.getOrNull() ?: return
+        val textStr = text?.toString() ?: ""
+        // 复用 IntentData 临时大数据容器 (one-shot, 对话框取走即删)
+        IntentData.put(COPY_CONFIRM_KEY, textStr)
+        navigator.showOverlay(
+            AppOverlay.Dialog(
+                key = COPY_CONFIRM_OVERLAY_KEY,
+                payload = COPY_CONFIRM_KEY,
+            )
+        )
+    }
+
+    /**
+     * 获取 WebView 默认 UserAgent (走 [UserAgentProviders], 由宿主端注册)
+     */
+    fun getWebViewUA(): String {
+        return UserAgentProviders.getWebViewUA()
+    }
+
+    /**
+     * 打开链接 (走 [OpenUrlProviders], 由宿主端注册)
+     *
+     * 弹跳转确认对话框, 与原 app 端 `OpenUrlConfirmDialog.display` 等价。
+     */
+    fun openUrl(url: String, mimeType: String? = null) {
+        require(url.length < 64 * 1024) { "openUrl parameter url too long" }
+        jsContext.ensureActive()
+        val source = getSource() ?: throw NoStackTraceException("openUrl source cannot be null")
+        OpenUrlProviders.get().openUrl(
+            url,
+            mimeType,
+            source.getKey(),
+            source.getTag(),
+            source.getSourceType()
+        )
+    }
+
+    fun openUrl(url: String) {
+        openUrl(url, null)
+    }
+
+    //****************** P1: 字体反混淆 (queryTTF / replaceFont) ******************//
+
+    /**
+     * 解析字体Base64数据,返回字体解析类
+     */
+    @Deprecated(
+        "Deprecated",
+        ReplaceWith("queryTTF(data)")
+    )
+    fun queryBase64TTF(data: String?): QueryTTF? {
+        log("queryBase64TTF(String)方法已过时,并将在未来删除；请无脑使用queryTTF(Any)替代，新方法支持传入 url、本地文件、base64、ByteArray 自动判断&自动缓存，特殊情况需禁用缓存请传入第二可选参数false:Boolean")
+        return queryTTF(data)
+    }
+
+    /**
+     * 返回字体解析类
+     * @param data 支持url,本地文件,base64,ByteArray,自动判断,自动缓存
+     * @param useCache 可选开关缓存,不传入该值默认开启缓存
+     */
+    fun queryTTF(data: Any?, useCache: Boolean): QueryTTF? {
+        try {
+            var key: String? = null
+            var qTTF: QueryTTF?
+            when (data) {
+                is String -> {
+                    if (useCache) {
+                        // 替代 java.security.MessageDigest SHA-256 hex (JVM 专属), 走 JsExtensionsPlatform 门面
+                        key = JsExtensionsPlatform.sha256Hex(data.encodeToByteArray())
+                        qTTF = AppCacheManager.getQueryTTF(key)
+                        qTTF?.let { return it }
+                    }
+                    val font: ByteArray? = when {
+                        // AnalyzeUrl → AnalyzeUrlCore (已下沉 commonMain, 行为等价)
+                        data.isAbsUrl() -> AnalyzeUrlFactories.create(
+                            data,
+                            source = getSource(),
+                            coroutineContext = jsContext.coroutineContext ?: EmptyCoroutineContext
+                        ).getByteArray()
+
+                        else -> base64DecodeToByteArray(data)
+                    }
+                    font ?: return null
+                    qTTF = QueryTTF(font)
+                }
+
+                is ByteArray -> {
+                    if (useCache) {
+                        key = JsExtensionsPlatform.sha256Hex(data)
+                        qTTF = AppCacheManager.getQueryTTF(key)
+                        qTTF?.let { return it }
+                    }
+                    qTTF = QueryTTF(data)
+                }
+
+                else -> return null
+            }
+            key?.let { AppCacheManager.put(it, qTTF) }
+            return qTTF
+        } catch (e: Exception) {
+            AppLog.put("[queryTTF] 获取字体处理类出错", e)
+            throw e
+        }
+    }
+
+    fun queryTTF(data: Any?): QueryTTF? {
+        return queryTTF(data, true)
+    }
+
+    /**
+     * @param text 包含错误字体的内容
+     * @param errorQueryTTF 错误的字体
+     * @param correctQueryTTF 正确的字体
+     * @param filter 删除 errorQueryTTF 中不存在的字符
+     */
+    fun replaceFont(
+        text: String,
+        errorQueryTTF: QueryTTF?,
+        correctQueryTTF: QueryTTF?,
+        filter: Boolean
+    ): String {
+        if (errorQueryTTF == null || correctQueryTTF == null) return text
+        // 这里不能用toCharArray,因为有些文字占多个字节
+        val contentArray = text.toStringArray()
+        val intArray = IntArray(1)
+        contentArray.forEachIndexed { index, s ->
+            // String.codePointAt(0) 是 JVM 专属, 走 firstCodePoint() 辅助函数处理代理对
+            val oldCode = s.firstCodePoint()
+            // 忽略正常的空白字符
+            if (errorQueryTTF.isBlankUnicode(oldCode)) {
+                return@forEachIndexed
+            }
+            // 删除轮廓数据不存在的字符
+            var glyf = errorQueryTTF.getGlyfByUnicode(oldCode)  // 轮廓数据不存在
+            if (errorQueryTTF.getGlyfIdByUnicode(oldCode) == 0) glyf = null // 轮廓数据指向保留索引0
+            if (filter && (glyf == null)) {
+                contentArray[index] = ""
+                return@forEachIndexed
+            }
+            // 使用轮廓数据反查Unicode
+            val code = correctQueryTTF.getUnicodeByGlyf(glyf)
+            if (code != 0) {
+                intArray[0] = code
+                // String(IntArray, 0, 1) 是 JDK 专属构造, 走 codePointToString() 辅助函数
+                contentArray[index] = codePointToString(intArray[0])
+            }
+        }
+        return contentArray.joinToString("")
+    }
+
+    /**
+     * @param text 包含错误字体的内容
+     * @param errorQueryTTF 错误的字体
+     * @param correctQueryTTF 正确的字体
+     */
+    fun replaceFont(
+        text: String,
+        errorQueryTTF: QueryTTF?,
+        correctQueryTTF: QueryTTF?
+    ): String {
+        return replaceFont(text, errorQueryTTF, correctQueryTTF, false)
+    }
+
+    //****************** P1: Cookie 读取 (getCookie) ******************//
+
+    /**
+     * js实现读取cookie
+     *
+     * 底层走 [CookieStoreProviders] (已下沉 commonMain, app 端注册 AndroidCookieStoreProvider
+     * 委托 CookieStore)。未注册时返回空串, 与原 app 端 CookieStore.getCookie 等价。
+     */
+    fun getCookie(tag: String): String {
+        return getCookie(tag, null)
+    }
+
+    fun getCookie(tag: String, key: String?): String {
+        val provider = CookieStoreProviders.get() ?: return ""
+        return key?.let { provider.getKey(tag, it) } ?: provider.getCookie(tag)
+    }
+
+    //****************** P1 压缩文件读取 (走 ArchiveProviders, 跨端) ******************//
+
+    /**
+     * 获取网络zip文件里面的数据
+     * @param url zip文件的链接或十六进制字符串
+     * @param path 所需获取文件在zip内的路径
+     * @return zip指定文件的数据
+     */
+    fun getZipStringContent(url: String, path: String): String {
+        val byteArray = getZipByteArrayContent(url, path) ?: return ""
+        val charsetName = EncodingDetect.getEncode(byteArray)
+        return JsExtensionsPlatform.bytesToStr(byteArray, charsetName)
+    }
+
+    fun getZipStringContent(url: String, path: String, charsetName: String): String {
+        val byteArray = getZipByteArrayContent(url, path) ?: return ""
+        return JsExtensionsPlatform.bytesToStr(byteArray, charsetName)
+    }
+
+    /**
+     * 获取网络Rar文件里面的数据
+     * @param url Rar文件的链接或十六进制字符串
+     * @param path 所需获取文件在Rar内的路径
+     * @return Rar指定文件的数据
+     */
+    fun getRarStringContent(url: String, path: String): String {
+        val byteArray = getRarByteArrayContent(url, path) ?: return ""
+        val charsetName = EncodingDetect.getEncode(byteArray)
+        return JsExtensionsPlatform.bytesToStr(byteArray, charsetName)
+    }
+
+    fun getRarStringContent(url: String, path: String, charsetName: String): String {
+        val byteArray = getRarByteArrayContent(url, path) ?: return ""
+        return JsExtensionsPlatform.bytesToStr(byteArray, charsetName)
+    }
+
+    /**
+     * 获取网络7zip文件里面的数据
+     * @param url 7zip文件的链接或十六进制字符串
+     * @param path 所需获取文件在7zip内的路径
+     * @return 7zip指定文件的数据
+     */
+    fun get7zStringContent(url: String, path: String): String {
+        val byteArray = get7zByteArrayContent(url, path) ?: return ""
+        val charsetName = EncodingDetect.getEncode(byteArray)
+        return JsExtensionsPlatform.bytesToStr(byteArray, charsetName)
+    }
+
+    fun get7zStringContent(url: String, path: String, charsetName: String): String {
+        val byteArray = get7zByteArrayContent(url, path) ?: return ""
+        return JsExtensionsPlatform.bytesToStr(byteArray, charsetName)
+    }
+
+    /**
+     * 获取网络zip文件里面的数据 (统一走 ArchiveProviders, zip 不特殊化)
+     * @param url zip文件的链接或十六进制字符串
+     * @param path 所需获取文件在zip内的路径
+     * @return zip指定文件的数据
+     *
+     * 与原 app 端差异 (2026-08-06 对照确认): 原版用 ZipInputStream 逐条目线性扫描且
+     * while 条件与循环尾双重推进 nextEntry, 奇数位条目永远匹配不到 (原版 bug);
+     * 本实现经 [ArchiveProviders] 走索引解析 (RemoteZipCore ensureMeta 精确匹配),
+     * 为修复版, 保持现状。
+     */
+    fun getZipByteArrayContent(url: String, path: String): ByteArray? {
+        return ArchiveProviders.get().getByteArrayContent(resolveBytes(url), path)
+    }
+
+    /**
+     * 获取网络Rar文件里面的数据
+     * @param url Rar文件的链接或十六进制字符串
+     * @param path 所需获取文件在Rar内的路径
+     * @return Rar指定文件的数据
+     */
+    fun getRarByteArrayContent(url: String, path: String): ByteArray? {
+        return ArchiveProviders.get().getByteArrayContent(resolveBytes(url), path)
+    }
+
+    /**
+     * 获取网络7zip文件里面的数据
+     * @param url 7zip文件的链接或十六进制字符串
+     * @param path 所需获取文件在7zip内的路径
+     * @return 7zip指定文件的数据
+     */
+    fun get7zByteArrayContent(url: String, path: String): ByteArray? {
+        return ArchiveProviders.get().getByteArrayContent(resolveBytes(url), path)
+    }
+
+    //****************** 内存单段解压 (gzip/zlib/裸 deflate, 全端同一实现) ******************//
+
+    /**
+     * 解压内存中的一段压缩数据 (压缩包解归档见 [unArchiveFile] / [getZipByteArrayContent])。
+     *
+     * @param data 压缩数据: 网络链接 / 十六进制字符串 / 字节数组; 为空时直接返回 null
+     * @param format gzip / zlib / deflate(裸流, 无 zlib 头) / auto(按魔数判断)
+     * @return 解压后的字节; 数据损坏、截断或与 format 不符时返回 null
+     * @throws IllegalArgumentException data 不是链接/十六进制字符串/字节数组, 或 format 不在上述取值内
+     */
+    fun decompressBytes(data: Any?, format: String): ByteArray? {
+        if (data == null) return null
+        return StreamDecompressor.decompress(resolveBytes(data), format)
+    }
+
+    /**
+     * 解压内存中的一段压缩数据并转为字符串, 编码按内容自动检测。
+     *
+     * @param data 压缩数据: 网络链接 / 十六进制字符串 / 字节数组
+     * @param format gzip / zlib / deflate / auto
+     * @return 解压并解码后的字符串; 解压失败返回空串
+     */
+    fun decompressString(data: Any?, format: String): String {
+        return decompressString(data, format, "")
+    }
+
+    /**
+     * 解压内存中的一段压缩数据并转为字符串。
+     *
+     * @param charsetName 指定编码; 空串时按内容自动检测
+     */
+    fun decompressString(data: Any?, format: String, charsetName: String): String {
+        val bytes = decompressBytes(data, format) ?: return ""
+        val charset = charsetName.ifBlank { EncodingDetect.getEncode(bytes) }
+        return JsExtensionsPlatform.bytesToStr(bytes, charset)
+    }
+
+    /**
+     * 入参归一为字节: 链接走网络下载, 十六进制字符串解码, 字节数组原样 (JS 数组经桥接为 List)。
+     */
+    private fun resolveBytes(data: Any): ByteArray = when (data) {
+        is ByteArray -> data
+        is List<*> -> ByteArray(data.size) { (data[it] as? Number)?.toByte() ?: 0 }
+        is String -> if (data.isAbsUrl()) {
+            AnalyzeUrlFactories.create(
+                data,
+                source = getSource(),
+                coroutineContext = jsContext.coroutineContext ?: EmptyCoroutineContext
+            ).getByteArray()
+        } else {
+            data.hexToByteArray()
+        }
+
+        else -> throw IllegalArgumentException(
+            "data 只支持链接/十六进制字符串/字节数组, 收到 ${data::class.simpleName}"
+        )
+    }
+
+    //****************** P1: 浏览器验证流程 (从 app JsExtensions 下沉) ******************
+
+    /**
+     * 使用内置浏览器打开链接，手动验证网站防爬
+     * @param url 要打开的链接
+     * @param title 浏览器页面的标题
+     */
+    fun startBrowser(url: String, title: String) {
+        jsContext.ensureActive()
+        // saveResult=false/refetchAfterSuccess=false 对齐原 app 端 SourceVerificationHelp.startBrowser 默认
+        SourceVerificationHelpShared.startBrowser(
+            getSource(), url, title,
+            saveResult = false,
+            refetchAfterSuccess = false
+        )
+    }
+
+    /**
+     * 使用内置浏览器打开链接 (BottomSheet 半屏方式)
+     * @param url 要打开的链接
+     * @param title 浏览器页面的标题
+     */
+    fun startBrowser(url: String, title: String, asBottomSheet: Boolean) {
+        jsContext.ensureActive()
+        SourceVerificationHelpShared.startBrowser(
+            getSource(),
+            url,
+            title,
+            false,
+            refetchAfterSuccess = false,
+            asBottomSheet = asBottomSheet
+        )
+    }
+
+    /**
+     * 使用内置浏览器打开链接，并等待网页结果
+     */
+    fun startBrowserAwait(url: String, title: String, refetchAfterSuccess: Boolean): StrResponse {
+        jsContext.ensureActive()
+        val body = SourceVerificationHelpShared.getVerificationResult(
+            getSource(), url, title, true, refetchAfterSuccess
+        )
+        return StrResponse(url, body)
+    }
+
+    fun startBrowserAwait(url: String, title: String): StrResponse {
+        return startBrowserAwait(url, title, false)
+    }
+
+    /**
+     * 打开图片验证码对话框，等待返回验证结果
+     */
+    fun getVerificationCode(imageUrl: String): String {
+        jsContext.ensureActive()
+        return SourceVerificationHelpShared.getVerificationResult(getSource(), imageUrl, "", false)
+    }
+
+    //****************** P1: 文件操作 (从 app JsExtensions 下沉, 走 FileUtilsCommon) ******************
+
+    /**
+     * 获取缓存文件绝对路径
+     * @param path 相对路径
+     * @return 绝对路径字符串
+     *
+     * 备注 (与原 app 端差异, 2026-08-06 用户拍板只备注不修):
+     * 原版返回 java.io.File 对象 (JS 可调 .exists()/.readBytes() 等); 本实现返回路径
+     * String —— commonMain 跨平台签名统一所需 (native 端无法暴露 Java File 对象),
+     * 属迁移时的能力退化, 书源 JS 按 File 用法的调用需适配为字符串 + 现有工具函数。
+     * 安全校验未丢: [FileUtilsCommon.resolveCachePath] 复刻原版路径解析 + 非法路径
+     * SecurityException 检查。
+     */
+    fun getFile(path: String): String {
+        return FileUtilsCommon.resolveCachePath(path)
+    }
+
+    /**
+     * 读取本地文件字节
+     * @param path 相对路径
+     * @return 文件字节内容, 文件不存在返回 null
+     */
+    fun readFile(path: String): ByteArray? {
+        return FileUtilsCommon.readBytes(FileUtilsCommon.resolveCachePath(path))
+    }
+
+    /**
+     * 读取文本文件 (自动检测编码)
+     */
+    fun readTxtFile(path: String): String {
+        val bytes = FileUtilsCommon.readBytes(FileUtilsCommon.resolveCachePath(path)) ?: return ""
+        val charsetName = EncodingDetect.getEncode(bytes)
+        return JsExtensionsPlatform.bytesToStr(bytes, charsetName)
+    }
+
+    /**
+     * 读取文本文件 (指定编码)
+     */
+    fun readTxtFile(path: String, charsetName: String): String {
+        val bytes = FileUtilsCommon.readBytes(FileUtilsCommon.resolveCachePath(path)) ?: return ""
+        return JsExtensionsPlatform.bytesToStr(bytes, charsetName)
+    }
+
+    /**
+     * 删除本地文件
+     */
+    fun deleteFile(path: String): Boolean {
+        return FileUtilsCommon.delete(FileUtilsCommon.resolveCachePath(path), true)
+    }
+
+    /**
+     * js实现Zip压缩文件解压
+     * @param zipPath 相对路径
+     * @return 相对路径
+     */
+    fun unzipFile(zipPath: String): String {
+        return unArchiveFile(zipPath)
+    }
+
+    /**
+     * js实现7Zip压缩文件解压
+     * @param zipPath 相对路径
+     * @return 相对路径
+     */
+    fun un7zFile(zipPath: String): String {
+        return unArchiveFile(zipPath)
+    }
+
+    /**
+     * js实现Rar压缩文件解压
+     * @param zipPath 相对路径
+     * @return 相对路径
+     */
+    fun unrarFile(zipPath: String): String {
+        return unArchiveFile(zipPath)
+    }
+
+    /**
+     * js实现压缩文件解压 (走 ArchiveProviders, 跨端)
+     * @param zipPath 相对路径
+     * @return 解压临时目录相对路径
+     */
+    fun unArchiveFile(zipPath: String): String {
+        if (zipPath.isEmpty()) return ""
+        val absPath = FileUtilsCommon.resolveCachePath(zipPath)
+        val archiveProvider = ArchiveProviders.get()
+        archiveProvider.deCompress(absPath)
+        // basename 提取: 兼容 '/' 与 '\' 分隔符, 与原 File.name 行为一致
+        val name = absPath.substringAfterLast('/').substringAfterLast('\\')
+        return FileUtilsCommon.getPath(archiveProvider.tempFolderName, MD5Utils.md5Encode16(name))
+    }
+
+    /**
+     * js实现文件夹内所有文本文件读取
+     * @param path 文件夹相对路径
+     * @return 所有文件字符串换行连接
+     */
+    fun getTxtInFolder(path: String): String {
+        if (path.isEmpty()) return ""
+        val absPath = FileUtilsCommon.resolveCachePath(path)
+        val contents = StringBuilder()
+        FileUtilsCommon.listFiles(absPath).forEach { fileAbsPath ->
+            val bytes = FileUtilsCommon.readBytes(fileAbsPath) ?: return@forEach
+            val charsetName = EncodingDetect.getEncode(bytes)
+            contents.append(JsExtensionsPlatform.bytesToStr(bytes, charsetName))
+                .append("\n")
+        }
+        if (contents.isNotEmpty()) {
+            contents.deleteAt(contents.length - 1)
+        }
+        FileUtilsCommon.delete(absPath, true)
+        return contents.toString()
+    }
+
+    /**
+     * 下载文件
+     * @param url 下载地址:可带参数type
+     * @return 下载的文件相对路径
+     */
+    fun downloadFile(url: String): String {
+        jsContext.ensureActive()
+        val analyzeUrl = AnalyzeUrlFactories.create(
+            url,
+            source = getSource(),
+            coroutineContext = jsContext.coroutineContext ?: EmptyCoroutineContext
+        )
+        val type = analyzeUrl.type ?: getUrlSuffix(url)
+        val path = FileUtilsCommon.getPath(
+            FileUtilsCommon.getCachePath(),
+            "${MD5Utils.md5Encode16(url)}.${type}"
+        )
+        FileUtilsCommon.createFileReplace(path)
+        return try {
+            // 流式写入 (对齐原版 getInputStream().copyTo, 大文件不整块缓冲): 失败直接抛,
+            // 不静默回退全量缓冲 —— 原版流式失败即失败, JS 侧要能看到异常。
+            // 注: commonMain expect InputStream 未实现 Closeable, use{} 不可用, 手动 try-finally
+            val input = analyzeUrl.getInputStream()
+            try {
+                FileUtilsCommon.copyToFile(path, input)
+            } finally {
+                input.close()
+            }
+            path.substring(FileUtilsCommon.getCachePath().length)
+        } catch (e: Throwable) {
+            FileUtilsCommon.delete(path, true)
+            throw e
+        }
+    }
+
+    /**
+     * 实现16进制字符串转文件
+     * @param content 需要转成文件的16进制字符串
+     * @param url 通过url里的参数来判断文件类型
+     * @return 相对路径
+     */
+    @Deprecated(
+        "Deprecated",
+        ReplaceWith("downloadFile(url)")
+    )
+    fun downloadFile(content: String, url: String): String {
+        jsContext.ensureActive()
+        val type = AnalyzeUrlFactories.create(
+            url,
+            source = getSource(),
+            coroutineContext = jsContext.coroutineContext ?: EmptyCoroutineContext
+        ).type ?: return ""
+        FileUtilsCommon.createFolderIfNotExist(FileUtilsCommon.getCachePath())
+        val path = FileUtilsCommon.getPath(
+            FileUtilsCommon.getCachePath(),
+            "${MD5Utils.md5Encode16(url)}.${type}"
+        )
+        FileUtilsCommon.createFileReplace(path)
+        content.hexToByteArray().let {
+            if (it.isNotEmpty()) {
+                FileUtilsCommon.writeBytes(path, it)
+            }
+        }
+        return path.substring(FileUtilsCommon.getCachePath().length)
+    }
+
+    /**
+     * 缓存以文本方式保存的文件 如.js .txt等
+     * @param urlStr 网络文件的链接
+     * @return 返回缓存后的文件内容
+     */
+    fun cacheFile(urlStr: String): String {
+        return cacheFile(urlStr, 0)
+    }
+
+    /**
+     * 缓存以文本方式保存的文件 如.js .txt等
+     * @param saveTime 缓存时间，单位：秒
+     */
+    fun cacheFile(urlStr: String, saveTime: Int): String {
+        val key = MD5Utils.md5Encode16(urlStr)
+        val cachePath = CacheManager.get(key)
+        return if (
+            cachePath.isNullOrBlank() ||
+            !FileUtilsCommon.exist(FileUtilsCommon.resolveCachePath(cachePath))
+        ) {
+            val path = downloadFile(urlStr)
+            log("首次下载 $urlStr >> $path")
+            CacheManager.put(key, path, saveTime)
+            readTxtFile(path)
+        } else {
+            readTxtFile(cachePath)
+        }
+    }
+
+    /**
+     * 可从网络，本地文件(阅读私有数据目录相对路径)导入JavaScript脚本
+     */
+    fun importScript(path: String): String {
+        val result = when {
+            path.startsWith("http") -> cacheFile(path)
+            else -> readTxtFile(path)
+        }
+        if (result.isBlank()) throw NoStackTraceException("$path 内容获取失败或者为空")
+        return result
+    }
+
+    companion object {
+        /** [copy] 确认对话框的 Overlay key (与 [com.langhuan.reader.ui.root.LanghuanApp] 分发接线一致)。 */
+        const val COPY_CONFIRM_OVERLAY_KEY = "copy_confirm"
+
+        /** [copy] 完整文本在 [IntentData] 中的 one-shot key (payload 只带 key, 避免超长文本进快照)。 */
+        const val COPY_CONFIRM_KEY = "copy_confirm_text"
+    }
+}
+
+//****************** P1 辅助函数 (顶层 private, 替代 JVM 专属 API) ******************//
+
+/**
+ * 取字符串首个码点, 替代 `String.codePointAt(0)` (JVM 专属扩展)。
+ *
+ * 处理代理对: 高代理 (D800..DBFF) + 低代理 (DC00..DFFF) 组合为补充平面码点;
+ * 否则取首 Char 的 code。空串返回 -1 (与原 codePointAt 行为对齐: 越界抛 IndexOutOfBoundsException,
+ * 这里返回 -1 安全兜底, 调用方 toStringArray 的元素至少 1 Char, 不会命中)。
+ */
+private fun String.firstCodePoint(): Int {
+    if (isEmpty()) return -1
+    val c = this[0].code
+    if (c in 0xD800..0xDBFF && length >= 2) {
+        val low = this[1].code
+        if (low in 0xDC00..0xDFFF) {
+            // 补充平面码点公式: 0x10000 + (高 - 0xD800) * 0x400 + (低 - 0xDC00)
+            return 0x10000 + (c - 0xD800) * 0x400 + (low - 0xDC00)
+        }
+    }
+    return c
+}
+
+/**
+ * 码点转字符串, 替代 `String(IntArray, offset, length)` JDK 专属构造函数。
+ *
+ * BMP 平面 (code < 0x10000) 单 Char; 补充平面拆为高/低代理对。
+ */
+private fun codePointToString(code: Int): String {
+    return if (code < 0x10000) {
+        charArrayOf(code.toChar()).concatToString()
+    } else {
+        val normalized = code - 0x10000
+        val high = 0xD800 + (normalized shr 10)
+        val low = 0xDC00 + (normalized and 0x3FF)
+        charArrayOf(high.toChar(), low.toChar()).concatToString()
+    }
+}

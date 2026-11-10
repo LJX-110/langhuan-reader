@@ -97,7 +97,7 @@ abstract class HttpSource : CatalogueSource {
      * OkHttp 拦截器（禁漫图片分割重排等）由此生效; 宿主图片加载链路经
      * MangaPluginImageFetcher 委托本方法取字节。
      *
-     * existingSize 为上游断点续传语义, legado 缓存链为整字节缓存, 忽略。
+     * existingSize 为上游断点续传语义, langhuan 缓存链为整字节缓存, 忽略。
      */
     open suspend fun getImage(page: Page, existingSize: Long = 0L): Response =
         client.newCall(imageRequest(page)).awaitSuccess()

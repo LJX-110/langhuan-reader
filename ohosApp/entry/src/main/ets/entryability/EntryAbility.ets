@@ -23,11 +23,11 @@ import {
   notifySystemCancelled,
   notifyAbilityDestroyed
 } from '../bridge/ContinuousTaskArbiter';
-// napi 桥接层加载 (鸿蒙编译产物 liblegado_napi.so)
-// 详见 ohosApp/INTEROP.md 与 ohosApp/entry/src/main/cpp/legado_napi.cpp
+// napi 桥接层加载 (鸿蒙编译产物 liblanghuan_napi.so)
+// 详见 ohosApp/INTEROP.md 与 ohosApp/entry/src/main/cpp/langhuan_napi.cpp
 // KP5: napi 桥接已就绪 (bookshelfList/searchBook/loadChapter/importBookSource 接入真实 KMP 数据)
-// import legado from 'liblegado_napi.so' (ArkTS 侧 napi 模块加载)
-import legado from 'liblegado_napi.so';
+// import langhuan from 'liblanghuan_napi.so' (ArkTS 侧 napi 模块加载)
+import langhuan from 'liblanghuan_napi.so';
 // KP8+ Image/Media 桥接处理器 (ArkTS 侧 PixelMap/AVPlayer 真实实现)
 import { handleImageRequest } from '../bridge/ImageBridgeHandler';
 import { initMediaBridge, handleMediaCommand, buildLaunchWantAgent } from '../bridge/MediaBridgeHandler';
@@ -162,7 +162,7 @@ interface WindowCommand {  action: string;  // 'setKeepScreenOn' | 'setPreferred
 }
 
 // ===== 外部启动请求投递串约定 (与 ui/src/ohosMain OhosLaunchRequests 常量逐字对齐) =====
-// 只传一个字符串的 napi 导出 (legado_handle_launch_request) 无法携带整个 Want, 故把 Want.type
+// 只传一个字符串的 napi 导出 (langhuan_handle_launch_request) 无法携带整个 Want, 故把 Want.type
 // 拼成 `mime:<type>|<uri>` 前缀形式 (同 `route:` 一样的既有约定), 由 Kotlin 侧解回。
 // 改这三处字面量必须同步改 OhosLaunchRequests, 否则外部投递会静默变成 DeepLink。
 const LAUNCH_ROUTE_PREFIX: string = 'route:';
@@ -170,7 +170,7 @@ const LAUNCH_MIME_PREFIX: string = 'mime:';
 const LAUNCH_MIME_SEPARATOR: string = '|';
 
 // ===== 系统分享接收串约定 (与 ui/src/ohosMain OhosLaunchRequests 的 TEXT_PREFIX 逐字对齐) =====
-// 分享进来的文本可能含任意字符 (也可能本身就是带 scheme 的地址/legado 深链), 与普通 uri 无法区分,
+// 分享进来的文本可能含任意字符 (也可能本身就是带 scheme 的地址/langhuan 深链), 与普通 uri 无法区分,
 // 故按已有 `route:` / `mime:` 同一路数用 `text:` 前缀显式标记, 由 Kotlin 侧解回 (含链接 token 的
 // 文本回主界面, 其余进搜索页 —— 分流在 shared 侧统一处置, 对照原版 AssociationActivity.dispose)。
 const SHARE_TEXT_PREFIX: string = 'text:';
@@ -253,7 +253,7 @@ function mimeOfShareUtd(utd: string): string {
 }
 
 /**
- * 分享记录 → 外部启动请求串 (交 legado.handleLaunchRequest → OhosLaunchRequests.parse)。
+ * 分享记录 → 外部启动请求串 (交 langhuan.handleLaunchRequest → OhosLaunchRequests.parse)。
  *
  * - 文件记录 (官方契约: uri 载荷 = 应用/用户文件 URI, 链接与文本走 content):
  *   文件附件优先于附带文字 (对照 Android SEND 的 EXTRA_STREAM 优先), 不因
@@ -276,7 +276,7 @@ function toLaunchRequestFromSharedRecord(record: systemShare.SharedRecord, allow
     }
     const mime = mimeOfShareUtd(record.utd);
     if (mime.length === 0) {
-      console.error('[Legado] shared record without MIME mapping: utd=' + record.utd + ', uri=' + uri);
+      console.error('[Langhuan] shared record without MIME mapping: utd=' + record.utd + ', uri=' + uri);
       return { request: uri, error: '' };
     }
     return { request: LAUNCH_MIME_PREFIX + mime + LAUNCH_MIME_SEPARATOR + uri, error: '' };
@@ -302,7 +302,7 @@ function toLaunchRequestFromSharedRecord(record: systemShare.SharedRecord, allow
  * 而本 Ability 其余投递口都只看 `want.uri` —— 不读这里就等于"快捷方式怎么配都是死的"。
  * 值约定为**裸路由名** (与 Android 快捷方式 intent 的 `route` extra、iOS 的
  * `UIApplicationShortcutItemUserInfo["route"]` 同一形制), 拼上既有的 `route:` 前缀后投给
- * legado.handleLaunchRequest → OhosLaunchRequests.parse → navigateToRoute。
+ * langhuan.handleLaunchRequest → OhosLaunchRequests.parse → navigateToRoute。
  *
  * @returns 空串 = 本次启动不是带 route 的快捷方式 (或值不是字符串)
  */
@@ -359,7 +359,7 @@ function dispatchNotificationAction(want: Want): boolean {
     action: action
   };
   emitPlatformEvent(payload);
-  console.info('[Legado] notification action dispatched: id=' + notificationId + ', action=' + action);
+  console.info('[Langhuan] notification action dispatched: id=' + notificationId + ', action=' + action);
   return true;
 }
 
@@ -378,19 +378,19 @@ function dispatchNotificationAction(want: Want): boolean {
  */
 function registerContinuousTaskCancelListener(): void {
   if (deviceInfo.sdkApiVersion < 15) {
-    console.info('[Legado] continuousTaskCancel listener skipped, api=' + deviceInfo.sdkApiVersion);
+    console.info('[Langhuan] continuousTaskCancel listener skipped, api=' + deviceInfo.sdkApiVersion);
     return;
   }
   try {
     backgroundTaskManager.on('continuousTaskCancel',
       (info: backgroundTaskManager.ContinuousTaskCancelInfo): void => {
-        console.info('[Legado] continuous task cancelled, id=' + info.id + ', reason=' + info.reason);
+        console.info('[Langhuan] continuous task cancelled, id=' + info.id + ', reason=' + info.reason);
         // 归属只认系统回传的任务 id: 本地"当前持有者"在音频与后台作业交叠时会算到另一条业务上
         notifySystemCancelled(info.reason, info.id);
       });
-    console.info('[Legado] continuousTaskCancel listener installed');
+    console.info('[Langhuan] continuousTaskCancel listener installed');
   } catch (e) {
-    console.error('[Legado] register continuousTaskCancel failed: ' + JSON.stringify(e));
+    console.error('[Langhuan] register continuousTaskCancel failed: ' + JSON.stringify(e));
   }
 }
 
@@ -430,13 +430,13 @@ function registerSafely(register: () => void, successLog: string, failLogPrefix:
 }
 
 /**
- * 鸿蒙 UIAbility 入口 - Legado 应用启动入口。
+ * 鸿蒙 UIAbility 入口 - Langhuan 应用启动入口。
  *
- * 对应 Android 端 `MainActivity` (app/src/main/java/io/legado/app/ui/main/MainActivity.kt)。
+ * 对应 Android 端 `MainActivity` (app/src/main/java/com/langhuan/reader/ui/main/MainActivity.kt)。
  * 当前为 KP8+ 阶段:
- * 1. onCreate 中调用 [legado.registerOhosProviders] 注册 shared 模块所有 KMP provider
+ * 1. onCreate 中调用 [langhuan.registerOhosProviders] 注册 shared 模块所有 KMP provider
  *    (AppFilesDir/PreferenceProvider/AppConfigAccessor/AppDb/BookStorage/SourceHelp/JsEngines/Tts 等)
- *    —— 见 [io.legado.app.help.config.registerOhosProviders]
+ *    —— 见 [com.langhuan.reader.help.config.registerOhosProviders]
  * 2. onWindowStageCreate 中加载 `pages/Index` 作为首页
  * 3. KP5 已接入真实数据库 (Room KMP BundledSQLiteDriver) 与书源加载 (napi bookshelfList/searchBook/loadChapter)
  * 4. KP7+ 已注入 filesDir/cacheDir 沙盒路径 + 注册 Toast/Notification tsfn 回调
@@ -450,8 +450,8 @@ function registerSafely(register: () => void, successLog: string, failLogPrefix:
  *    使 OhosToastProvider.showToast (promptAction.showToast) 和 OhosOpenUrlProvider.openUrl (context.startAbility)
  *    在鸿蒙端真实工作 (此前均为 println stub)
  *
- * 注意: `liblegado_napi.so` 由 CMakeLists.txt 编译 legado_napi.cpp 生成，
- * 直接链接 CPF `ohosArm64` 产物 `liblegado_shared.so` 与 Compose RenderNode 桥。
+ * 注意: `liblanghuan_napi.so` 由 CMakeLists.txt 编译 langhuan_napi.cpp 生成，
+ * 直接链接 CPF `ohosArm64` 产物 `liblanghuan_shared.so` 与 Compose RenderNode 桥。
  * 根 Gradle staging 和 CMake 均对缺失产物直接失败，不再生成表面可运行的 mock HAP。
  */
 /**
@@ -465,13 +465,13 @@ function registerSafely(register: () => void, successLog: string, failLogPrefix:
  * 交付时机: 崩溃当场进程已终止, 系统缓存后**下次启动**回调 —— 这正是本函数放在 onCreate
  * 最早处的原因 (晚注册会漏掉本次启动应补报的事件)。
  *
- * 落盘: 把系统给的现场文本交给 KMP (legado.reportHostException), 与 K/N 崩溃日志同目录,
+ * 落盘: 把系统给的现场文本交给 KMP (langhuan.reportHostException), 与 K/N 崩溃日志同目录,
  * 用户在"关于 → 崩溃日志"里能一并看到。
  */
 function installSystemCrashWatcher(): void {
   try {
     hiAppEvent.addWatcher({
-      name: 'legado_crash_watcher',
+      name: 'langhuan_crash_watcher',
       appEventFilters: [
         {
           domain: hiAppEvent.domain.OS,
@@ -486,9 +486,9 @@ function installSystemCrashWatcher(): void {
         }
       }
     });
-    console.info('[Legado] system crash watcher installed');
+    console.info('[Langhuan] system crash watcher installed');
   } catch (e) {
-    console.error('[Legado] installSystemCrashWatcher failed: ' + JSON.stringify(e));
+    console.error('[Langhuan] installSystemCrashWatcher failed: ' + JSON.stringify(e));
   }
 }
 
@@ -525,7 +525,7 @@ function reportSystemCrash(info: hiAppEvent.AppEventInfo): void {
     }
     reportHostException('ohos-system-crash', lines.join('\n'));
   } catch (e) {
-    console.error('[Legado] reportSystemCrash failed: ' + JSON.stringify(e));
+    console.error('[Langhuan] reportSystemCrash failed: ' + JSON.stringify(e));
   }
 }
 
@@ -550,7 +550,7 @@ function readFaultLog(path: string): string | null {
       fs.closeSync(file);
     }
   } catch (e) {
-    console.error('[Legado] readFaultLog failed: ' + JSON.stringify(e));
+    console.error('[Langhuan] readFaultLog failed: ' + JSON.stringify(e));
     return null;
   }
 }
@@ -564,7 +564,7 @@ function deleteFaultLog(path: string): void {
   try {
     fs.unlinkSync(path);
   } catch (e) {
-    console.error('[Legado] deleteFaultLog failed: ' + JSON.stringify(e));
+    console.error('[Langhuan] deleteFaultLog failed: ' + JSON.stringify(e));
   }
 }
 
@@ -574,9 +574,9 @@ const FAULT_LOG_MAX_BYTES: number = 1024 * 1024;
 /** 把异常现场交给 KMP 落盘; 失败只打日志 (崩溃路径上不能再抛)。 */
 function reportHostException(kind: string, detail: string): void {
   try {
-    legado.reportHostException(kind, detail);
+    langhuan.reportHostException(kind, detail);
   } catch (e) {
-    console.error('[Legado] reportHostException failed: ' + JSON.stringify(e));
+    console.error('[Langhuan] reportHostException failed: ' + JSON.stringify(e));
   }
 }
 
@@ -590,7 +590,7 @@ export default class EntryAbility extends UIAbility {
   private sharePendingFailures: string[] = [];
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
-    console.info('[Legado] EntryAbility.onCreate');
+    console.info('[Langhuan] EntryAbility.onCreate');
 
     // 系统崩溃事件订阅最先装: 崩溃事件在下次启动补报, 晚注册会漏掉本次启动应补报的事件;
     // 本方法内后续任何一步抛异常也只能靠它留下现场
@@ -600,11 +600,11 @@ export default class EntryAbility extends UIAbility {
     // 必须在 registerOhosProviders 之前调用, 使 OhosDatabaseDriver.defaultDbPath 读到真实沙盒路径
     // (而非 POSIX user.dir 回退路径)。context.filesDir / cacheDir 为鸿蒙 Context 标准沙盒目录。
     try {
-      legado.registerFileDir(this.context.filesDir);
-      legado.registerCacheDir(this.context.cacheDir);
-      console.info('[Legado] ohos sandbox dirs injected: filesDir=' + this.context.filesDir);
+      langhuan.registerFileDir(this.context.filesDir);
+      langhuan.registerCacheDir(this.context.cacheDir);
+      console.info('[Langhuan] ohos sandbox dirs injected: filesDir=' + this.context.filesDir);
     } catch (e) {
-      console.error('[Legado] registerFileDir/CacheDir failed: ' + JSON.stringify(e));
+      console.error('[Langhuan] registerFileDir/CacheDir failed: ' + JSON.stringify(e));
     }
 
     // 注入应用版本名 (供关于页显示与复制)。版本号写在 app.json5, 且由 hvigorfile.ts 在构建阶段
@@ -612,10 +612,10 @@ export default class EntryAbility extends UIAbility {
     // getBundleInfoForSelfSync 取自身 BundleInfo, versionName 即 app.json5 的 versionName 字段。
     try {
       const bundleInfo = bundleManager.getBundleInfoForSelfSync(bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT);
-      legado.registerAppVersion(bundleInfo.versionName);
-      console.info('[Legado] app version injected: ' + bundleInfo.versionName);
+      langhuan.registerAppVersion(bundleInfo.versionName);
+      console.info('[Langhuan] app version injected: ' + bundleInfo.versionName);
     } catch (e) {
-      console.error('[Legado] registerAppVersion failed: ' + JSON.stringify(e));
+      console.error('[Langhuan] registerAppVersion failed: ' + JSON.stringify(e));
     }
 
     // KP8+: 初始化 System 桥接处理器 (注入 UIAbilityContext 供 handleOpenUrl 调 startAbility)。
@@ -623,15 +623,15 @@ export default class EntryAbility extends UIAbility {
     // SystemBridgeHandler.abilityContext 已就绪 (避免 KMP 极早调用 openUrl 时 context 未注入)。
     registerSafely((): void => {
       initSystemBridge(this.context);
-    }, '[Legado] system bridge initialized (UIAbilityContext injected)', '[Legado] initSystemBridge failed: ');
+    }, '[Langhuan] system bridge initialized (UIAbilityContext injected)', '[Langhuan] initSystemBridge failed: ');
 
     // KP5: 注册 shared 模块所有 KMP provider。
     // 必须在任何 commonMain 业务代码调用前完成 (webBook 编排链依赖 AppConfigAccessor;
-    // KMP 业务侧调 legado.bookshelfList() 等 napi 函数依赖 AppDbProviders 已注册)。
-    // napi 桥接层 (legado_napi.cpp) 内部已对 dlsym 失败做 null 兜底, 此处调用始终安全。
+    // KMP 业务侧调 langhuan.bookshelfList() 等 napi 函数依赖 AppDbProviders 已注册)。
+    // napi 桥接层 (langhuan_napi.cpp) 内部已对 dlsym 失败做 null 兜底, 此处调用始终安全。
     registerSafely((): void => {
-      legado.registerOhosProviders();
-    }, '[Legado] KMP providers registered via napi', '[Legado] registerOhosProviders failed: ');
+      langhuan.registerOhosProviders();
+    }, '[Langhuan] KMP providers registered via napi', '[Langhuan] registerOhosProviders failed: ');
 
     // 统一平台事件回送通道 (HTTP 下载进度 + 应用生命周期: ArkTS → Kotlin 单向推送, 单通道复用)。
     // Kotlin 侧 OhosPlatformEventChannel (OhosNativeBridge.onPlatformEvent) 按 type 分发到
@@ -640,9 +640,9 @@ export default class EntryAbility extends UIAbility {
     // 进度回调与 EntryAbility 生命周期回调都走此通道, 迟到只影响早期事件丢失 (warn 降级)。
     registerSafely((): void => {
       initPlatformEvent((json: string): void => {
-        legado.platformEvent(json);
+        langhuan.platformEvent(json);
       });
-    }, '[Legado] platform event callback registered via napi', '[Legado] initPlatformEvent failed: ');
+    }, '[Langhuan] platform event callback registered via napi', '[Langhuan] initPlatformEvent failed: ');
 
     // 系统深浅色初值: Kotlin/Native 侧没有 configuration API, 「主题模式=跟随系统」这一档
     // 只能由 ArkTS 供给 (Kotlin 侧落到 NativeSystemTheme, 见 OhosPlatformEventChannel)。
@@ -651,38 +651,38 @@ export default class EntryAbility extends UIAbility {
       const isDark: boolean =
         this.context.config.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
       emitColorMode(isDark);
-    }, '[Legado] system colorMode injected', '[Legado] emitColorMode failed: ');
+    }, '[Langhuan] system colorMode injected', '[Langhuan] emitColorMode failed: ');
 
     // 系统事件源: 来电状态 (telephony.observer) + 网络可用 (net.connection)
     // 两者都经 PlatformEventBridge 同一通道回送 Kotlin (OhosPlatformEventChannel 按 type 分发),
     // 与 mediaEvent 同方向。须在 initPlatformEvent 之后 (通道未注入时事件被 warn 降级丢弃)。
     registerSafely((): void => {
       installSystemEventSources();
-    }, '[Legado] system event sources installed (callState/netAvailable)', '[Legado] installSystemEventSources failed: ');
+    }, '[Langhuan] system event sources installed (callState/netAvailable)', '[Langhuan] installSystemEventSources failed: ');
 
     // 长时任务被取消 (用户删除长时任务通知/系统管控): 回送 KMP 停服务并撤业务通知。
     // 须在 initPlatformEvent 之后 (事件通道未注入时事件被丢弃); 低版本设备上内部自行跳过。
     registerSafely((): void => {
       registerContinuousTaskCancelListener();
-    }, '[Legado] continuous task cancel listener installed', '[Legado] registerContinuousTaskCancelListener failed: ');
+    }, '[Langhuan] continuous task cancel listener installed', '[Langhuan] registerContinuousTaskCancelListener failed: ');
 
     // KP7+: 注册 Toast/Notification tsfn 回调 (KMP → ArkTS 跨线程 dispatch)。
-    // C++ 侧 (legado_napi.cpp RegisterToastCallback) 创建 napi_threadsafe_function 包装此回调,
-    // 并通过 @CName legado_register_toast_fn/legado_register_notification_fn 把 dispatch 函数指针
+    // C++ 侧 (langhuan_napi.cpp RegisterToastCallback) 创建 napi_threadsafe_function 包装此回调,
+    // 并通过 @CName langhuan_register_toast_fn/langhuan_register_notification_fn 把 dispatch 函数指针
     // 注入 Kotlin OhosNativeBridge.toastTsfn/notificationTsfn。此后 KMP 业务侧
     // OhosNativeBridge.showToast/showNotification 调用时, JSON payload 跨线程 dispatch 到此回调,
     // 由 ArkTS 调 promptAction.showToast / notificationManager.publish (KMP 无 ArkTS API 访问能力)。
     // 未注册时 KMP 侧降级 println (见 OhosNativeBridge.showToast/showNotification)。
     // KP8+: toast 回调抽至 SystemBridgeHandler.handleShowToast (与 handleOpenUrl 一并管理 system 桥接)。
     registerSafely((): void => {
-      legado.registerToastCallback(handleShowToast);
-      legado.registerNotificationCallback(async (json: string): Promise<void> => {
+      langhuan.registerToastCallback(handleShowToast);
+      langhuan.registerNotificationCallback(async (json: string): Promise<void> => {
         try {
           const payload = JSON.parse(json) as NotificationPayload;
           if (payload.action === 'CANCEL') {
             // 通知不存在时 cancel 会以 1600007 拒绝, 不接住就是无人处理的 Promise 拒绝
             notificationManager.cancel(payload.id).catch((err: Error): void => {
-              console.info('[Legado] notification cancel ignored: ' + JSON.stringify(err) + ', id=' + payload.id);
+              console.info('[Langhuan] notification cancel ignored: ' + JSON.stringify(err) + ', id=' + payload.id);
             });
             // 该通知背靠长时任务时一并释放 (对照 app 端 WebService 的 stopSelf 同时停前台服务)
             if (payload.stopContinuousTask === true) {
@@ -740,7 +740,7 @@ export default class EntryAbility extends UIAbility {
               }
               request.actionButtons = actionButtons;
             } catch (e) {
-              console.error('[Legado] notification actionButtons failed: ' + JSON.stringify(e));
+              console.error('[Langhuan] notification actionButtons failed: ' + JSON.stringify(e));
             }
           }
           // 点击通知拉起应用: 带 clickAction 的通知 (原版 contentIntent 直达 Service action)
@@ -757,12 +757,12 @@ export default class EntryAbility extends UIAbility {
               : await buildLaunchWantAgent(this.context, routeOfNotification(payload.id));
             request.wantAgent = taskWantAgent;
           } catch (e) {
-            console.error('[Legado] notification wantAgent failed: ' + JSON.stringify(e));
+            console.error('[Langhuan] notification wantAgent failed: ' + JSON.stringify(e));
           }
           // 发布失败 (通知未授权 1600004 / 不允许发送 1600020 等) 必须可见:
           // publish 返回 Promise, 不用 catch 接住的话失败现场什么都不剩
           notificationManager.publish(request).catch((err: Error): void => {
-            console.error('[Legado] notification publish failed: ' + JSON.stringify(err) + ', id=' + payload.id);
+            console.error('[Langhuan] notification publish failed: ' + JSON.stringify(err) + ', id=' + payload.id);
           });
           // 长时任务: 交仲裁器申请 —— 音频/朗读占着时这里只记录期望、不申请 (降级为只发业务通知),
           // 音频随后起时仲裁器会把后台作业让出去 (业务与通知都不受影响)。
@@ -790,189 +790,189 @@ export default class EntryAbility extends UIAbility {
             await releaseWorkTask(this.context, payload.id.toString());
           }
         } catch (e) {
-          console.error('[Legado] notification callback failed: ' + JSON.stringify(e) + ', json=' + json);
+          console.error('[Langhuan] notification callback failed: ' + JSON.stringify(e) + ', json=' + json);
         }
       });
-    }, '[Legado] toast/notification tsfn callbacks registered via napi', '[Legado] registerToastCallback/NotificationCallback failed: ');
+    }, '[Langhuan] toast/notification tsfn callbacks registered via napi', '[Langhuan] registerToastCallback/NotificationCallback failed: ');
 
     // KP8+: 注册 OpenUrl tsfn 回调 (KMP → ArkTS 跨线程 dispatch, 同 Toast 模式 fire-and-forget)。
-    // C++ 侧 (legado_napi.cpp RegisterOpenUrlCallback) 创建 napi_threadsafe_function 包装此回调,
-    // 并通过 @CName legado_register_open_url_fn 把 dispatch 函数指针
+    // C++ 侧 (langhuan_napi.cpp RegisterOpenUrlCallback) 创建 napi_threadsafe_function 包装此回调,
+    // 并通过 @CName langhuan_register_open_url_fn 把 dispatch 函数指针
     // 注入 Kotlin OhosNativeBridge.openUrlTsfn。此后 KMP 业务侧 OhosOpenUrlProviderImpl.openUrl →
     // OhosNativeBridge.openUrl 调用时, JSON payload 跨线程 dispatch 到此回调,
     // 由 ArkTS 调 context.startAbility(Want) 打开 URL (KMP 无 ArkTS API 访问能力)。
     // 未注册时 KMP 侧降级 println (见 OhosNativeBridge.openUrl)。
     registerSafely((): void => {
-      legado.registerOpenUrlCallback(handleOpenUrl);
-    }, '[Legado] openUrl tsfn callback registered via napi', '[Legado] registerOpenUrlCallback failed: ');
+      langhuan.registerOpenUrlCallback(handleOpenUrl);
+    }, '[Langhuan] openUrl tsfn callback registered via napi', '[Langhuan] registerOpenUrlCallback failed: ');
 
     // KP8+: 注册 FilePicker tsfn 回调 (KMP → ArkTS 跨线程 dispatch, 同 Image/Crypto/Http 模式)。
-    // C++ 侧 (legado_napi.cpp RegisterFilePickerCallback) 创建 napi_threadsafe_function 包装此回调,
-    // 并通过 @CName legado_register_file_picker_fn 把 dispatch 函数指针
+    // C++ 侧 (langhuan_napi.cpp RegisterFilePickerCallback) 创建 napi_threadsafe_function 包装此回调,
+    // 并通过 @CName langhuan_register_file_picker_fn 把 dispatch 函数指针
     // 注入 Kotlin OhosNativeBridge.filePickerTsfn。此后 KMP 业务侧 OhosFilePicker.pickDocuments /
     // pickDocumentContent → OhosNativeBridge.invokeFilePickerSync 调用时, JSON 请求跨线程 dispatch
     // 到此回调, 由 ArkTS FilePickerBridgeHandler 调 @ohos.file.picker.DocumentViewPicker 选文件 /
-    // @ohos.file.fs 读内容, 完成后调 legado.filePickerCallback(requestId, resultJson) 回送结果
+    // @ohos.file.fs 读内容, 完成后调 langhuan.filePickerCallback(requestId, resultJson) 回送结果
     // 唤醒 KMP 侧 CompletableDeferred。未注册时 KMP 侧降级返回 null (见 OhosFilePicker.ohos.kt)。
     registerSafely((): void => {
       // 相册保存 (saveImageToAlbum) 需 UIAbilityContext 申请权限 + 建图库资源
       initFilePickerBridge(this.context);
-      const registeredGen: number = legado.registerFilePickerCallback((json: string): void => {
+      const registeredGen: number = langhuan.registerFilePickerCallback((json: string): void => {
         handleFilePickerRequest(json, (requestId: number, resultJson: string): void => {
-          legado.filePickerCallback(requestId, resultJson);
+          langhuan.filePickerCallback(requestId, resultJson);
         });
       });
       // 只有真实 number 代次才建立新源资格; 注册抛错时 registerSafely 捕获, 保留旧源
       if (typeof registeredGen === 'number' && registeredGen > 0) {
         invalidateFilePickerSource(registeredGen);
       }
-    }, '[Legado] filePicker tsfn callback registered via napi', '[Legado] registerFilePickerCallback failed: ');
+    }, '[Langhuan] filePicker tsfn callback registered via napi', '[Langhuan] registerFilePickerCallback failed: ');
 
     // Pasteboard tsfn 回调注册 (KMP → ArkTS 跨线程 dispatch, 同 FilePicker 模式)
     // KMP OhosPlatformOps.copyToClipboard / readFromClipboard → OhosNativeBridge.invokePasteboardSync
     // 发 read/write 请求, ArkTS 侧 PasteboardBridgeHandler 调 @ohos.pasteboard.getSystemPasteboard
-    // 读写纯文本, 完成后调 legado.pasteboardCallback(requestId, resultJson) 回送结果
+    // 读写纯文本, 完成后调 langhuan.pasteboardCallback(requestId, resultJson) 回送结果
     // 唤醒 KMP 侧 CompletableDeferred。未注册时 KMP 侧降级 println / 返回 null。
     registerSafely((): void => {
       initPasteboardBridge(this.context);
-      legado.registerPasteboardCallback((json: string): void => {
+      langhuan.registerPasteboardCallback((json: string): void => {
         handlePasteboardRequest(json, (requestId: number, resultJson: string): void => {
-          legado.pasteboardCallback(requestId, resultJson);
+          langhuan.pasteboardCallback(requestId, resultJson);
         });
       });
-    }, '[Legado] pasteboard tsfn callback registered via napi', '[Legado] registerPasteboardCallback failed: ');
+    }, '[Langhuan] pasteboard tsfn callback registered via napi', '[Langhuan] registerPasteboardCallback failed: ');
 
     // Network tsfn 回调注册 (KMP → ArkTS 跨线程 dispatch, 同 Pasteboard 模式)
     // KMP NetworkAvailability.ohos.kt → OhosNativeBridge.invokeNetworkSync 发 query 请求,
     // ArkTS 侧 NetworkBridgeHandler 调 @ohos.net.connection getDefaultNetSync +
     // getConnectionPropertiesSync (需 ohos.permission.GET_NETWORK_INFO, normal+system_grant)
-    // 查询网络可用性与是否 WiFi, 完成后调 legado.networkCallback(requestId, resultJson) 回送结果
+    // 查询网络可用性与是否 WiFi, 完成后调 langhuan.networkCallback(requestId, resultJson) 回送结果
     // 唤醒 KMP 侧 CompletableDeferred。未注册时 KMP 侧降级 true (不拦截)。
     registerSafely((): void => {
-      legado.registerNetworkCallback((json: string): void => {
+      langhuan.registerNetworkCallback((json: string): void => {
         handleNetworkRequest(json, (requestId: number, resultJson: string): void => {
-          legado.networkCallback(requestId, resultJson);
+          langhuan.networkCallback(requestId, resultJson);
         });
       });
-    }, '[Legado] network tsfn callback registered via napi', '[Legado] registerNetworkCallback failed: ');
+    }, '[Langhuan] network tsfn callback registered via napi', '[Langhuan] registerNetworkCallback failed: ');
 
     // KP8+: 注册 Image/Media tsfn 回调 (KMP → ArkTS 跨线程 dispatch)。
     // Image: KMP OhosNativeBridge.invokeImageSync 发图片操作请求 (decode/encode/size/crop/split/stitch),
     //        ArkTS 侧 ImageBridgeHandler 调 @ohos.multimedia.image 执行真实像素操作,
-    //        完成后调 legado.imageCallback(requestId, resultJson, body?) 回送结果唤醒 KMP 侧 CompletableDeferred
+    //        完成后调 langhuan.imageCallback(requestId, resultJson, body?) 回送结果唤醒 KMP 侧 CompletableDeferred
     //        (混合协议: 控制面 JSON + 数据面裸字节 ArrayBuffer, decode 入参图片字节 / encode 出参 packed 字节)。
     // Media: KMP OhosNativeBridge.sendMediaCommand 发播放器命令 (setSource/play/pause/stop/seekTo/release),
     //        ArkTS 侧 MediaBridgeHandler 调 @ohos.multimedia.media AVPlayer 执行真实播放,
-    //        AVPlayer 事件通过 legado.mediaEvent(eventJson) 回送给 KMP 侧 MediaEventListener。
+    //        AVPlayer 事件通过 langhuan.mediaEvent(eventJson) 回送给 KMP 侧 MediaEventListener。
     registerSafely((): void => {
       // Image: 注册 tsfn 回调, 请求 JSON + 裸字节 dispatch 到 handleImageRequest
-      legado.registerImageCallback((json: string, bytes: ArrayBuffer | undefined): void => {
+      langhuan.registerImageCallback((json: string, bytes: ArrayBuffer | undefined): void => {
         handleImageRequest(json, bytes, (requestId: number, resultJson: string, body: ArrayBuffer | undefined): void => {
-          legado.imageCallback(requestId, resultJson, body);
+          langhuan.imageCallback(requestId, resultJson, body);
         });
       });
-    }, '[Legado] image tsfn callback registered via napi', '[Legado] registerImageCallback failed: ');
+    }, '[Langhuan] image tsfn callback registered via napi', '[Langhuan] registerImageCallback failed: ');
 
     registerSafely((): void => {
-      // Media: 先注入事件回送函数 (AVPlayer 事件 → legado.mediaEvent → KMP) 与 UIAbilityContext (AVSession/长时任务)
+      // Media: 先注入事件回送函数 (AVPlayer 事件 → langhuan.mediaEvent → KMP) 与 UIAbilityContext (AVSession/长时任务)
       initMediaBridge((eventJson: string): void => {
-        legado.mediaEvent(eventJson);
+        langhuan.mediaEvent(eventJson);
       }, this.context);
       // 再注册 tsfn 回调, 命令 JSON dispatch 到 handleMediaCommand
-      legado.registerMediaCallback((json: string): void => {
+      langhuan.registerMediaCallback((json: string): void => {
         handleMediaCommand(json);
       });
-    }, '[Legado] media tsfn callback registered via napi', '[Legado] registerMediaCallback failed: ');
+    }, '[Langhuan] media tsfn callback registered via napi', '[Langhuan] registerMediaCallback failed: ');
 
     // TTS tsfn 回调注册 (KMP → ArkTS 跨线程 dispatch)
     // KMP OhosNativeBridge.sendTtsCommand 发 TTS 命令 (createEngine/speak/pause/resume/stop/shutdown),
     // ArkTS 侧 TtsBridgeHandler 调 @kit.CoreSpeechKit textToSpeech 执行真实朗读,
-    // TTS 事件通过 legado.ttsEvent(eventJson) 回送给 KMP 侧 TtsEventListener
+    // TTS 事件通过 langhuan.ttsEvent(eventJson) 回送给 KMP 侧 TtsEventListener
     registerSafely((): void => {
       initTtsBridge((eventJson: string): void => {
-        legado.ttsEvent(eventJson);
+        langhuan.ttsEvent(eventJson);
       });
-      legado.registerTtsCallback((json: string): void => {
+      langhuan.registerTtsCallback((json: string): void => {
         handleTtsCommand(json);
       });
-    }, '[Legado] tts tsfn callback registered via napi', '[Legado] registerTtsCallback failed: ');
+    }, '[Langhuan] tts tsfn callback registered via napi', '[Langhuan] registerTtsCallback failed: ');
 
     // Crypto tsfn 回调注册 (KMP → ArkTS 跨线程 dispatch, 同 Image 模式)
     // KMP OhosNativeBridge.invokeCryptoSync 发 crypto 操作请求 (encrypt/decrypt/sign/verify),
     // ArkTS 侧 CryptoBridgeHandler 调 @ohos.security.cryptoFramework 执行真实运算,
-    // 完成后调 legado.cryptoCallback(requestId, resultJson) 回送结果唤醒 KMP 侧 CompletableDeferred。
+    // 完成后调 langhuan.cryptoCallback(requestId, resultJson) 回送结果唤醒 KMP 侧 CompletableDeferred。
     registerSafely((): void => {
-      legado.registerCryptoCallback((json: string): void => {
+      langhuan.registerCryptoCallback((json: string): void => {
         handleCryptoRequest(json, (requestId: number, resultJson: string): void => {
-          legado.cryptoCallback(requestId, resultJson);
+          langhuan.cryptoCallback(requestId, resultJson);
         });
       });
-    }, '[Legado] crypto tsfn callback registered via napi', '[Legado] registerCryptoCallback failed: ');
+    }, '[Langhuan] crypto tsfn callback registered via napi', '[Langhuan] registerCryptoCallback failed: ');
 
     // Http tsfn 回调注册 (KMP → ArkTS 跨线程 dispatch, 同 Crypto 模式, 混合协议)
     // KMP OhosNativeBridge.invokeHttpSync 发 HTTP 请求 (execute/cancel),
     // ArkTS 侧 HttpBridgeHandler 调 @ohos.net.http 执行真实请求,
-    // 完成后调 legado.httpCallback(requestId, resultJson, body?) 回送结果唤醒 KMP 侧 CompletableDeferred
+    // 完成后调 langhuan.httpCallback(requestId, resultJson, body?) 回送结果唤醒 KMP 侧 CompletableDeferred
     // (混合协议: 控制面 JSON + 数据面响应 body 裸字节 ArrayBuffer; 请求 body 同样裸传)。
     registerSafely((): void => {
-      legado.registerHttpCallback((json: string, body: ArrayBuffer | undefined): void => {
+      langhuan.registerHttpCallback((json: string, body: ArrayBuffer | undefined): void => {
         handleHttpRequest(json, body, (requestId: number, resultJson: string, respBody: ArrayBuffer | undefined): void => {
-          legado.httpCallback(requestId, resultJson, respBody);
+          langhuan.httpCallback(requestId, resultJson, respBody);
         });
       });
-    }, '[Legado] http tsfn callback registered via napi', '[Legado] registerHttpCallback failed: ');
+    }, '[Langhuan] http tsfn callback registered via napi', '[Langhuan] registerHttpCallback failed: ');
 
     // 后台 WebView tsfn 回调注册 (KMP → ArkTS 跨线程 dispatch, 同 Http 模式, 混合协议)
     // KMP OhosNativeBridge.invokeWebViewSync(jsonControl, htmlRaw) 发后台抓取请求
     // (书源 webView/webViewGetSource 规则), 控制面 JSON 与数据面裸 html 双参数 dispatch 到
     // ArkTS 侧 WebViewBridgeHandler, 用隐藏 Web 组件 (Index.ets 挂载) 加载页面 + runJavaScript 取源码,
-    // 完成后调 legado.webViewCallback(requestId, resultJson, bodyRaw) 回送结果
+    // 完成后调 langhuan.webViewCallback(requestId, resultJson, bodyRaw) 回送结果
     // (resultJson 为控制面小字段, bodyRaw 为裸源码/命中 URL) 唤醒 KMP 侧 CompletableDeferred。
     registerSafely((): void => {
-      legado.registerWebViewCallback((json: string, htmlRaw: string): void => {
+      langhuan.registerWebViewCallback((json: string, htmlRaw: string): void => {
         handleWebViewRequest(json, htmlRaw, (requestId: number, resultJson: string, bodyRaw: string): void => {
-          legado.webViewCallback(requestId, resultJson, bodyRaw);
+          langhuan.webViewCallback(requestId, resultJson, bodyRaw);
         });
       });
-    }, '[Legado] webView tsfn callback registered via napi', '[Legado] registerWebViewCallback failed: ');
+    }, '[Langhuan] webView tsfn callback registered via napi', '[Langhuan] registerWebViewCallback failed: ');
 
     // 前台 Web 控制器 tsfn 回调注册 (KMP → ArkTS 跨线程 dispatch, 单 JSON 协议)
     // KMP OhosWebViewControllerBridge → OhosNativeBridge.invokeWebControllerSync 发前台 WebView
     // 命令 (show/hide/load/reload/eval/hitTest 等), dispatch 到 ArkTS 侧 WebViewBridgeHandler
     // 的 handleForegroundWebRequest (操作 Index.ets 挂载的前台 Web 组件),
-    // 完成后调 legado.webControllerCallback(requestId, resultJson) 回送结果唤醒 KMP 侧
+    // 完成后调 langhuan.webControllerCallback(requestId, resultJson) 回送结果唤醒 KMP 侧
     // CompletableDeferred。未注册时 KMP 侧 isReady 恒为 false, 前台 Web 只显示占位文字。
     registerSafely((): void => {
-      legado.registerWebControllerCallback((json: string): void => {
+      langhuan.registerWebControllerCallback((json: string): void => {
         handleForegroundWebRequest(json, (requestId: number, resultJson: string): void => {
-          legado.webControllerCallback(requestId, resultJson);
+          langhuan.webControllerCallback(requestId, resultJson);
         });
       });
-    }, '[Legado] webController tsfn callback registered via napi', '[Legado] registerWebControllerCallback failed: ');
+    }, '[Langhuan] webController tsfn callback registered via napi', '[Langhuan] registerWebControllerCallback failed: ');
 
     // Markdown 查看器 tsfn 回调注册 (KMP → ArkTS 跨线程 dispatch, 同 Toast 模式 fire-and-forget)
     // KMP MarkdownContent (ArkUIView2 混排的 Web 组件) → OhosNativeBridge.sendMarkdown
     // 发渲染请求 { content, isDark, fontSize }, dispatch 到 ArkTS 侧 MarkdownBridgeHandler,
     // 经 Index.ets 挂载的查看器 Web 组件 runJavaScript 注入 renderMarkdown (marked + hljs) 渲染。
-    // 页面内链接点击经 legado.markdownEvent(eventJson) 回送 KMP 走系统浏览器。
+    // 页面内链接点击经 langhuan.markdownEvent(eventJson) 回送 KMP 走系统浏览器。
     registerSafely((): void => {
-      legado.registerMarkdownCallback((json: string): void => {
+      langhuan.registerMarkdownCallback((json: string): void => {
         handleMarkdownRequest(json);
       });
-    }, '[Legado] markdown tsfn callback registered via napi', '[Legado] registerMarkdownCallback failed: ');
+    }, '[Langhuan] markdown tsfn callback registered via napi', '[Langhuan] registerMarkdownCallback failed: ');
 
     // Battery tsfn 回调注册 (KMP → ArkTS 跨线程 dispatch, 阅读页电池电量查询)
     // KMP OhosReaderPlatformProvider.getBatteryLevel → OhosNativeBridge.invokeBatterySync
     // 发 getLevel 请求, ArkTS 侧 BatteryBridgeHandler 调 @ohos.batteryInfo.batterySOC,
-    // 完成后调 legado.batteryCallback(requestId, resultJson) 回送结果唤醒 KMP 侧 CompletableDeferred。
+    // 完成后调 langhuan.batteryCallback(requestId, resultJson) 回送结果唤醒 KMP 侧 CompletableDeferred。
     // 未注册时 KMP 侧 getBatteryLevel 恒返回 -1 (阅读页不显示电量)。
     registerSafely((): void => {
-      legado.registerBatteryCallback((json: string): void => {
+      langhuan.registerBatteryCallback((json: string): void => {
         handleBatteryRequest(json, (requestId: number, resultJson: string): void => {
-          legado.batteryCallback(requestId, resultJson);
+          langhuan.batteryCallback(requestId, resultJson);
         });
       });
-    }, '[Legado] battery tsfn callback registered via napi', '[Legado] registerBatteryCallback failed: ');
+    }, '[Langhuan] battery tsfn callback registered via napi', '[Langhuan] registerBatteryCallback failed: ');
 
     // Share tsfn 回调注册 (KMP → ArkTS 跨线程 dispatch, 系统分享面板, 同 Toast 模式 fire-and-forget)
     // KMP OhosPlatformServices.sharing.shareText/shareFile → OhosNativeBridge.shareText/shareFile
@@ -981,8 +981,8 @@ export default class EntryAbility extends UIAbility {
     registerSafely((): void => {
       // ShareController.show 需 UIAbilityContext, 注册回调前先注入
       initShareBridge(this.context);
-      legado.registerShareCallback(handleShareRequest);
-    }, '[Legado] share tsfn callback registered via napi', '[Legado] registerShareCallback failed: ');
+      langhuan.registerShareCallback(handleShareRequest);
+    }, '[Langhuan] share tsfn callback registered via napi', '[Langhuan] registerShareCallback failed: ');
 
     // Keyboard tsfn 回调注册 (KMP → ArkTS 跨线程 dispatch, 软键盘显隐/避让, 同 Window 模式 fire-and-forget)
     // KMP OhosPlatformServices.keyboard.hideSoftInput/setSoftInputPolicy
@@ -990,39 +990,39 @@ export default class EntryAbility extends UIAbility {
     // ArkTS 侧 KeyboardBridgeHandler 调 @ohos.inputMethod / UIContext。
     // 未注册时 KMP 侧降级 println。
     registerSafely((): void => {
-      legado.registerKeyboardCallback(handleKeyboardCommand);
-    }, '[Legado] keyboard tsfn callback registered via napi', '[Legado] registerKeyboardCallback failed: ');
+      langhuan.registerKeyboardCallback(handleKeyboardCommand);
+    }, '[Langhuan] keyboard tsfn callback registered via napi', '[Langhuan] registerKeyboardCallback failed: ');
 
     // PDF 桥回调注册 (KMP → ArkTS, Window/FilePicker 同款源代次通道, 单 JSON 请求面)
     // KMP OhosNativeBridge.invokePdfSync 发 PDF 操作请求 (openDocument/renderPage/closeDocument),
     // ArkTS 侧 PdfBridgeHandler 调 @hms.officeservice.pdfservice 真实加载/渲染, 完成后经本
-    // 回调链回送 legado.pdfCallback(requestId, resultJson, jpegBytes?) 唤醒 KMP 侧等待。
+    // 回调链回送 langhuan.pdfCallback(requestId, resultJson, jpegBytes?) 唤醒 KMP 侧等待。
     // 未注入时 KMP 侧按打开/渲染失败降级 (见 OhosPdfRenderPort, 不伪造页图)。
     registerSafely((): void => {
-      legado.registerPdfCallback((json: string): void => {
+      langhuan.registerPdfCallback((json: string): void => {
         handlePdfRequest(json, (requestId: number, resultJson: string, body: ArrayBuffer | undefined): void => {
-          legado.pdfCallback(requestId, resultJson, body);
+          langhuan.pdfCallback(requestId, resultJson, body);
         });
       });
-    }, '[Legado] pdf tsfn callback registered via napi', '[Legado] registerPdfCallback failed: ');
+    }, '[Langhuan] pdf tsfn callback registered via napi', '[Langhuan] registerPdfCallback failed: ');
 
     // Permission tsfn 回调注册 (KMP → ArkTS 跨线程 dispatch, 权限查询/申请)
     // KMP OhosPlatformServices.permissions.hasPermission/requestPermission
     // → OhosNativeBridge.invokePermissionSync 经 tsfn dispatch 到此回调,
     // ArkTS 侧 PermissionBridgeHandler 调 @ohos.abilityAccessCtrl.checkAccessTokenSync /
-    // requestPermissionsFromUser, 完成后调 legado.permissionCallback 回送结果。
+    // requestPermissionsFromUser, 完成后调 langhuan.permissionCallback 回送结果。
     // 未注册时 KMP 侧按"无权限"降级。
     registerSafely((): void => {
       initPermissionBridge(this.context);
-      legado.registerPermissionCallback((json: string): void => {
+      langhuan.registerPermissionCallback((json: string): void => {
         handlePermissionRequest(json, (requestId: number, resultJson: string): void => {
-          legado.permissionCallback(requestId, resultJson);
+          langhuan.permissionCallback(requestId, resultJson);
         });
       });
-    }, '[Legado] permission tsfn callback registered via napi', '[Legado] registerPermissionCallback failed: ');
+    }, '[Langhuan] permission tsfn callback registered via napi', '[Langhuan] registerPermissionCallback failed: ');
 
     // 外部启动请求冷启动投递 (放 onCreate 最尾: 须在 registerOhosProviders 之后,
-    // 否则 LegadoDeepLinkHandler 下游导入 VM 取 AppDbProviders 会未注册)。
+    // 否则 LanghuanDeepLinkHandler 下游导入 VM 取 AppDbProviders 会未注册)。
     this.handleDeepLink(want);
   }
 
@@ -1032,31 +1032,31 @@ export default class EntryAbility extends UIAbility {
    * 对应 Android 端 AssociationActivity 的 singleTask onNewIntent 语义。
    */
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
-    console.info('[Legado] EntryAbility.onNewWant');
+    console.info('[Langhuan] EntryAbility.onNewWant');
     this.handleDeepLink(want);
   }
 
   /**
    * 投递外部启动请求给 KMP 侧 (onCreate 冷启动 / onNewWant 热启动共用)。
    *
-   * # 分流 (与 Kotlin LegadoNativeExports.handleDeepLink / handleLaunchRequest 分工对应)
+   * # 分流 (与 Kotlin LanghuanNativeExports.handleDeepLink / handleLaunchRequest 分工对应)
    * - 系统分享投递 (action = ohos.want.action.sendData) → handleSharedData
    *   (systemShare.getSharedData → 逐条记录投 OhosLaunchRequests; 按 action 判定,
    *   不依赖分享 want 的 uri 形态, 也不与下方 uri/parameters 分支重复处理)
    * - 通知按钮点击 (want.uri 为空, notificationId + action 在 want.parameters) →
    *   emitPlatformEvent (Kotlin OhosPlatformEventChannel 的 type="notificationAction")
-   * - legado:// / yuedu:// 一键导入链接 → legado.handleDeepLink
-   *   (@CName legado_handle_deep_link → LegadoDeepLinkHandler 弹勾选导入对话框)
-   * - 主屏快捷方式 (want.uri 为空, 路由在 want.parameters.route) → legado.handleLaunchRequest
+   * - langhuan:// / yuedu:// 一键导入链接 → langhuan.handleDeepLink
+   *   (@CName langhuan_handle_deep_link → LanghuanDeepLinkHandler 弹勾选导入对话框)
+   * - 主屏快捷方式 (want.uri 为空, 路由在 want.parameters.route) → langhuan.handleLaunchRequest
    * - 其余非空 URI (文件关联 file:// / 其他 scheme deep link / 通知 route:xxx) →
-   *   legado.handleLaunchRequest (@CName legado_handle_launch_request → OhosLaunchRequests
-   *   → LaunchRequestBus → Compose LegadoApp 路由导航)。普通启动 want.uri 为空, 跳过。
+   *   langhuan.handleLaunchRequest (@CName langhuan_handle_launch_request → OhosLaunchRequests
+   *   → LaunchRequestBus → Compose LanghuanApp 路由导航)。普通启动 want.uri 为空, 跳过。
    *
    * # want.type (MIME) 为何要拼进同一串
    * 系统把视频投给本 Ability 时, 光有 want.uri 不够: 媒体库地址形如
    * `file://media/Video/<fileId>`, 末段没有扩展名, KMP 侧 VideoDirect 的扩展名嗅探判不出
    * 视频 (只有 want.type = video/mp4 能认)。napi 导出签名只能传一个字符串, 改签名要同步
-   * 重生成 liblegado_shared_api.h (构建产物, 不得手改), 所以按 Kotlin OhosLaunchRequests
+   * 重生成 liblanghuan_shared_api.h (构建产物, 不得手改), 所以按 Kotlin OhosLaunchRequests
    * 的既定约定把 MIME 前缀拼到同一串: `mime:<type>|<uri>` (与已有的 `route:` 前缀同一路数)。
    * 不带 MIME 的普通启动串依旧原样透传, 旧链路行为零变化。
    */
@@ -1082,30 +1082,30 @@ export default class EntryAbility extends UIAbility {
       if (shortcutRoute.length > 0) {
         const routeRequest: string = LAUNCH_ROUTE_PREFIX + shortcutRoute;
         try {
-          const handledRoute: boolean = legado.handleLaunchRequest(routeRequest);
-          console.info('[Legado] shortcut route dispatched: handled=' + handledRoute + ', route=' + shortcutRoute);
+          const handledRoute: boolean = langhuan.handleLaunchRequest(routeRequest);
+          console.info('[Langhuan] shortcut route dispatched: handled=' + handledRoute + ', route=' + shortcutRoute);
         } catch (e) {
-          console.error('[Legado] shortcut route dispatch failed: ' + JSON.stringify(e) + ', route=' + shortcutRoute);
+          console.error('[Langhuan] shortcut route dispatch failed: ' + JSON.stringify(e) + ', route=' + shortcutRoute);
         }
       }
       return;
     }
-    if (uri.startsWith('legado://') || uri.startsWith('yuedu://')) {
+    if (uri.startsWith('langhuan://') || uri.startsWith('legado://') || uri.startsWith('yuedu://')) {
       try {
-        const handled: boolean = legado.handleDeepLink(uri);
-        console.info('[Legado] deep link dispatched: handled=' + handled + ', uri=' + uri);
+        const handled: boolean = langhuan.handleDeepLink(uri);
+        console.info('[Langhuan] deep link dispatched: handled=' + handled + ', uri=' + uri);
       } catch (e) {
-        console.error('[Legado] handleDeepLink failed: ' + JSON.stringify(e) + ', uri=' + uri);
+        console.error('[Langhuan] handleDeepLink failed: ' + JSON.stringify(e) + ', uri=' + uri);
       }
       return;
     }
     // 文件关联 / 其他 scheme deep link / 通知 route: 投递给 LaunchRequestBus (Compose 侧消费路由)
     const request: string = withMimeTypeHint(uri, want.type ?? '');
     try {
-      const handled: boolean = legado.handleLaunchRequest(request);
-      console.info('[Legado] launch request dispatched: handled=' + handled + ', uri=' + uri);
+      const handled: boolean = langhuan.handleLaunchRequest(request);
+      console.info('[Langhuan] launch request dispatched: handled=' + handled + ', uri=' + uri);
     } catch (e) {
-      console.error('[Legado] handleLaunchRequest failed: ' + JSON.stringify(e) + ', uri=' + uri);
+      console.error('[Langhuan] handleLaunchRequest failed: ' + JSON.stringify(e) + ', uri=' + uri);
     }
   }
 
@@ -1114,7 +1114,7 @@ export default class EntryAbility extends UIAbility {
    *
    * 分享投递的载荷不在 want.uri 里, 在 systemShare.getSharedData 解出的 SharedData
    * 记录中 (SDK 契约: 入参是"分享能力 Ability 收到的 want"); 逐条转成既有投递串交
-   * legado.handleLaunchRequest → OhosLaunchRequests.parse → LaunchRequestBus。
+   * langhuan.handleLaunchRequest → OhosLaunchRequests.parse → LaunchRequestBus。
    *
    * 跨全部记录执行单文件约束: 文件记录 (uri 非空) 多于一件时告知仅支持单文件,
    * 不做部分导入 (maxFileSupported 是面板侧入口过滤, 不是全局数量保证);
@@ -1142,23 +1142,23 @@ export default class EntryAbility extends UIAbility {
           if (failure.length === 0) {
             failure = dispatch.error;
           }
-          console.error('[Legado] share record rejected: ' + dispatch.error + ', utd=' + record.utd);
+          console.error('[Langhuan] share record rejected: ' + dispatch.error + ', utd=' + record.utd);
           continue;
         }
         if (dispatch.request.length === 0) {
           continue;
         }
         try {
-          const handled: boolean = legado.handleLaunchRequest(dispatch.request);
+          const handled: boolean = langhuan.handleLaunchRequest(dispatch.request);
           if (!handled && failure.length === 0) {
             failure = '分享内容投递失败';
           }
-          console.info('[Legado] share data dispatched: handled=' + handled + ', request=' + dispatch.request);
+          console.info('[Langhuan] share data dispatched: handled=' + handled + ', request=' + dispatch.request);
         } catch (e) {
           if (failure.length === 0) {
             failure = '分享内容投递失败';
           }
-          console.error('[Legado] handleLaunchRequest (share) failed: ' + JSON.stringify(e) + ', request=' + dispatch.request);
+          console.error('[Langhuan] handleLaunchRequest (share) failed: ' + JSON.stringify(e) + ', request=' + dispatch.request);
         }
       }
       if (failure.length > 0) {
@@ -1166,7 +1166,7 @@ export default class EntryAbility extends UIAbility {
       }
     }).catch((err: Error): void => {
       // 解析失败 (BusinessError 401 / 1003703001): 对用户可见, 不影响其它启动路径
-      console.error('[Legado] getSharedData failed: ' + JSON.stringify(err));
+      console.error('[Langhuan] getSharedData failed: ' + JSON.stringify(err));
       this.showShareFailure('读取分享数据失败: ' + (err.message ?? JSON.stringify(err)));
     });
   }
@@ -1179,13 +1179,13 @@ export default class EntryAbility extends UIAbility {
     const ctx = this.shareToastContext;
     if (ctx === undefined) {
       this.sharePendingFailures.push(message);
-      console.error('[Legado] share failure pending (window not ready): ' + message);
+      console.error('[Langhuan] share failure pending (window not ready): ' + message);
       return;
     }
     try {
       ctx.getPromptAction().showToast({ message: message });
     } catch (e) {
-      console.error('[Legado] share failure toast failed: ' + JSON.stringify(e));
+      console.error('[Langhuan] share failure toast failed: ' + JSON.stringify(e));
     }
   }
 
@@ -1200,12 +1200,12 @@ export default class EntryAbility extends UIAbility {
     try {
       ctx.getPromptAction().showToast({ message: message });
     } catch (e) {
-      console.error('[Legado] share failure toast failed: ' + JSON.stringify(e));
+      console.error('[Langhuan] share failure toast failed: ' + JSON.stringify(e));
     }
   }
 
   onConfigurationUpdate(newConfig: Configuration): void {
-    console.info('[Legado] EntryAbility.onConfigurationUpdate');
+    console.info('[Langhuan] EntryAbility.onConfigurationUpdate');
     // 系统深浅色变更 → Kotlin NativeSystemTheme: 刷按日/夜取键的派生缓存并 emit RECREATE,
     // AppTheme 与直读日/夜色的界面随之重组 (「主题模式=跟随系统」时生效)。
     try {
@@ -1213,12 +1213,12 @@ export default class EntryAbility extends UIAbility {
         newConfig.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
       emitColorMode(isDark);
     } catch (e) {
-      console.error('[Legado] colorMode update failed: ' + JSON.stringify(e));
+      console.error('[Langhuan] colorMode update failed: ' + JSON.stringify(e));
     }
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
-    console.info('[Legado] EntryAbility.onWindowStageCreate');
+    console.info('[Langhuan] EntryAbility.onWindowStageCreate');
 
     // 注入显示物理像素尺寸 (供 shared ScreenInfoProviders / sharedUiMain AppDialogSizes
     // 计算对话框尺寸; 未注册时 AppDialogSizes 兜底 get() 直接 error 导致所有对话框崩溃,
@@ -1230,27 +1230,27 @@ export default class EntryAbility extends UIAbility {
       const displayInfo = display.getDefaultDisplaySync();
       const widthPx = Math.round(displayInfo.width * displayInfo.densityPixels);
       const heightPx = Math.round(displayInfo.height * displayInfo.densityPixels);
-      legado.registerScreenSize(widthPx, heightPx);
-      console.info('[Legado] screen size injected: ' + widthPx + 'x' + heightPx);
+      langhuan.registerScreenSize(widthPx, heightPx);
+      console.info('[Langhuan] screen size injected: ' + widthPx + 'x' + heightPx);
     } catch (e) {
-      console.error('[Legado] registerScreenSize failed: ' + JSON.stringify(e));
+      console.error('[Langhuan] registerScreenSize failed: ' + JSON.stringify(e));
     }
 
     // 加载首页 Index, ArkTS 路由表见 resources/base/profile/main_pages.json
     windowStage.loadContent('pages/Index', (err) => {
       if (err && err.code) {
-        console.error('[Legado] loadContent failed: ' + JSON.stringify(err));
+        console.error('[Langhuan] loadContent failed: ' + JSON.stringify(err));
         // 主窗口没内容层: 该窗口上的对话框不可能再回传结果, 结束等待中的对话框请求
         this.closeDialogChannel('主窗口加载失败: ' + (err.message ?? String(err.code)));
         this.closeFilePickerChannel('主窗口加载失败: ' + (err.message ?? String(err.code)));
         // 内容层未建成: 分享失败的缓冲提示无处显示, 日志留痕 (不丢原因)
         if (this.sharePendingFailures.length > 0) {
-          console.error('[Legado] share failure notices undelivered (no content): ' +
+          console.error('[Langhuan] share failure notices undelivered (no content): ' +
             this.sharePendingFailures.join(' | '));
         }
         return;
       }
-      console.info('[Legado] loadContent pages/Index succeed');
+      console.info('[Langhuan] loadContent pages/Index succeed');
 
       // 分享失败 toast 的 UIContext (window.getMainWindowSync().getUIContext(),
       // 官方契约 "Get the UIContext associate with the window content" —— 内容就绪后取得),
@@ -1258,7 +1258,7 @@ export default class EntryAbility extends UIAbility {
       try {
         this.shareToastContext = windowStage.getMainWindowSync().getUIContext();
       } catch (e) {
-        console.error('[Legado] get UIContext for share toast failed: ' + JSON.stringify(e));
+        console.error('[Langhuan] get UIContext for share toast failed: ' + JSON.stringify(e));
       }
       this.flushShareFailures();
 
@@ -1268,23 +1268,23 @@ export default class EntryAbility extends UIAbility {
       // 视频页全屏只控制系统栏显隐与方向。
       windowStage.getMainWindow().then((win: window.Window) => {
         win.setWindowLayoutFullScreen(true).catch((err: Error): void => {
-          console.error('[Legado] setWindowLayoutFullScreen failed: ' + JSON.stringify(err));
+          console.error('[Langhuan] setWindowLayoutFullScreen failed: ' + JSON.stringify(err));
         });
       }).catch((err: Error): void => {
-        console.error('[Legado] getMainWindow failed: ' + JSON.stringify(err));
+        console.error('[Langhuan] getMainWindow failed: ' + JSON.stringify(err));
         // 拿不到主窗口: 窗口类命令与对话框都无处执行, 结束等待中的对话框请求
         this.closeDialogChannel('主窗口不可用: ' + (err.message ?? String(err)));
         this.closeFilePickerChannel('主窗口不可用: ' + (err.message ?? String(err)));
       });
 
       // 窗口策略桥 (KMP → ArkTS @ohos.window): 注册 tsfn 回调。
-      // C++ 侧 (legado_napi.cpp RegisterWindowCallback) 创建 napi_threadsafe_function 包装此回调,
-      // 经 @CName legado_register_window_fn 注入 dispatch 指针到 Kotlin OhosNativeBridge.windowTsfn。
+      // C++ 侧 (langhuan_napi.cpp RegisterWindowCallback) 创建 napi_threadsafe_function 包装此回调,
+      // 经 @CName langhuan_register_window_fn 注入 dispatch 指针到 Kotlin OhosNativeBridge.windowTsfn。
       // 此后 KMP WindowController.setFullscreen/setKeepScreenOn/setOrientation/setSystemBars
       // 的 JSON 命令跨线程 dispatch 到此回调, 由 ArkTS 在窗口上执行 @ohos.window API。
       // 未注册时 KMP 侧降级 println (见 OhosNativeBridge.sendWindowCommand)。
       try {
-        const windowGen: number = legado.registerWindowCallback((json: string): void => {
+        const windowGen: number = langhuan.registerWindowCallback((json: string): void => {
           try {
             const cmd = JSON.parse(json) as WindowCommand;
             if (cmd.action === 'showDialog') {
@@ -1297,7 +1297,7 @@ export default class EntryAbility extends UIAbility {
                 requestId = inner.requestId ?? 0;
                 requestGen = inner.gen ?? 0;
               } catch (e) {
-                console.error('[Legado] showDialog payload parse failed: ' + JSON.stringify(e));
+                console.error('[Langhuan] showDialog payload parse failed: ' + JSON.stringify(e));
               }
               if (requestGen > this.dialogMaxGen) this.dialogMaxGen = requestGen;
               if (requestId > 0 && requestGen < this.dialogMinGen) {
@@ -1330,15 +1330,15 @@ export default class EntryAbility extends UIAbility {
                   const navigation = cmd.navigationBar ?? true;
                   win.setSpecificSystemBarEnabled('status', status)
                     .catch((err: Error): void => {
-                      console.error('[Legado] setSpecificSystemBarEnabled(status) failed: ' + JSON.stringify(err));
+                      console.error('[Langhuan] setSpecificSystemBarEnabled(status) failed: ' + JSON.stringify(err));
                     });
                   win.setSpecificSystemBarEnabled('navigation', navigation)
                     .catch((err: Error): void => {
-                      console.error('[Legado] setSpecificSystemBarEnabled(navigation) failed: ' + JSON.stringify(err));
+                      console.error('[Langhuan] setSpecificSystemBarEnabled(navigation) failed: ' + JSON.stringify(err));
                     });
                   win.setSpecificSystemBarEnabled('navigationIndicator', navigation)
                     .catch((err: Error): void => {
-                      console.error('[Legado] setSpecificSystemBarEnabled(navigationIndicator) failed: ' + JSON.stringify(err));
+                      console.error('[Langhuan] setSpecificSystemBarEnabled(navigationIndicator) failed: ' + JSON.stringify(err));
                     });
                   break;
                 }
@@ -1354,35 +1354,35 @@ export default class EntryAbility extends UIAbility {
                   // 无, 直接终止)。从 window tsfn 通道分发 (复用桥避免新增独立通道)。
                   try {
                     this.context.terminateSelf();
-                    console.info('[Legado] window callback: exitApplication (terminateSelf)');
+                    console.info('[Langhuan] window callback: exitApplication (terminateSelf)');
                   } catch (e) {
-                    console.error('[Legado] window callback terminateSelf failed: ' + JSON.stringify(e));
+                    console.error('[Langhuan] window callback terminateSelf failed: ' + JSON.stringify(e));
                   }
                   break;
                 default:
-                  console.warn('[Legado] window callback unknown action: ' + cmd.action);
+                  console.warn('[Langhuan] window callback unknown action: ' + cmd.action);
               }
             }).catch((e: Error) => {
-              console.error('[Legado] window callback getMainWindow failed: ' + JSON.stringify(e));
+              console.error('[Langhuan] window callback getMainWindow failed: ' + JSON.stringify(e));
             });
           } catch (e) {
-            console.error('[Legado] window callback failed: ' + JSON.stringify(e) + ', json=' + json);
+            console.error('[Langhuan] window callback failed: ' + JSON.stringify(e) + ', json=' + json);
           }
         });
         this.dialogMinGen = windowGen;
         this.dialogMaxGen = windowGen;
-        console.info('[Legado] window tsfn callback registered via napi');
+        console.info('[Langhuan] window tsfn callback registered via napi');
       } catch (e) {
-        console.error('[Legado] registerWindowCallback failed: ' + JSON.stringify(e));
+        console.error('[Langhuan] registerWindowCallback failed: ' + JSON.stringify(e));
       }
     });
   }
 
   onWindowStageDestroy(): void {
-    console.info('[Legado] EntryAbility.onWindowStageDestroy');
+    console.info('[Langhuan] EntryAbility.onWindowStageDestroy');
     // 窗口销毁: 立即撤销 C++ 三个当前源资格, 并让 JS 后置 showDialog 拒绝旧源
     this.dialogMinGen = this.dialogMaxGen + 1;
-    legado.invalidateAllSources();
+    langhuan.invalidateAllSources();
     this.closeDialogChannel('主窗口已销毁');
     this.closeFilePickerChannel('主窗口已销毁');
     this.closePermissionChannel('主窗口已销毁');
@@ -1403,7 +1403,7 @@ export default class EntryAbility extends UIAbility {
     try {
       emitDialogResult(0, JSON.stringify(payload));
     } catch (e) {
-      console.error('[Legado] closeDialogChannel failed: ' + JSON.stringify(e));
+      console.error('[Langhuan] closeDialogChannel failed: ' + JSON.stringify(e));
     }
   }
 
@@ -1417,15 +1417,15 @@ export default class EntryAbility extends UIAbility {
     try {
       // 撤 C++ 当前源资格 + ETS 已见源队列: 窗口销毁后不再启动任何旧源输入/复制
       invalidateFilePickerSource();
-      legado.invalidateFilePickerSource();
+      langhuan.invalidateFilePickerSource();
       const payload: FilePickerChannelClosedPayload = {
         ok: false,
         error: reason,
         pendingIds: drainFilePickerRequests()
       };
-      legado.filePickerCallback(0, JSON.stringify(payload));
+      langhuan.filePickerCallback(0, JSON.stringify(payload));
     } catch (e) {
-      console.error('[Legado] closeFilePickerChannel failed: ' + JSON.stringify(e));
+      console.error('[Langhuan] closeFilePickerChannel failed: ' + JSON.stringify(e));
     }
   }
 
@@ -1440,9 +1440,9 @@ export default class EntryAbility extends UIAbility {
         error: reason,
         pendingIds: pendingPermissionRequestIds()
       };
-      legado.permissionCallback(0, JSON.stringify(payload));
+      langhuan.permissionCallback(0, JSON.stringify(payload));
     } catch (e) {
-      console.error('[Legado] closePermissionChannel failed: ' + JSON.stringify(e));
+      console.error('[Langhuan] closePermissionChannel failed: ' + JSON.stringify(e));
     }
   }
 
@@ -1451,12 +1451,12 @@ export default class EntryAbility extends UIAbility {
    * 下所有长时任务"), Ability 销毁后必须重新申请, 故清掉仲裁器的持有态。
    */
   onDestroy(): void {
-    console.info('[Legado] EntryAbility.onDestroy');
+    console.info('[Langhuan] EntryAbility.onDestroy');
     notifyAbilityDestroyed();
   }
 
   onForeground(): void {
-    console.info('[Legado] EntryAbility.onForeground');
+    console.info('[Langhuan] EntryAbility.onForeground');
     // 应用回到前台 → Kotlin OhosAppLifecycle (阅读页 onEnter 挂的监听器调 ReaderScreenModel.onResume:
     // 开始阅读计时 + web 进度恢复, 对齐 iOS UIApplicationWillEnterForegroundNotification)。
     // 事件仅在前台切换时触发一次, 无重复; 阅读页未挂监听时 Kotlin 侧无操作。
@@ -1464,14 +1464,14 @@ export default class EntryAbility extends UIAbility {
   }
 
   onBackground(): void {
-    console.info('[Legado] EntryAbility.onBackground');
+    console.info('[Langhuan] EntryAbility.onBackground');
     // 应用退到后台 → Kotlin OhosAppLifecycle (阅读页监听器调 ReaderScreenModel.onPause:
     // 计时结束 + 落库上传 + 取消预下载, 对齐 iOS UIApplicationDidEnterBackgroundNotification)。
     emitAppLifecycle('onBackground');
     // 进后台正是保活要紧的时刻: 按系统真实状态自检一次长时任务是否还在
     // (系统可能在没有任何回调的情况下挂起/取消; 取消回调只回传部分原因)
     verifyWorkTasks(this.context).catch((e: Error): void => {
-      console.error('[Legado] verify continuous task state failed: ' + JSON.stringify(e));
+      console.error('[Langhuan] verify continuous task state failed: ' + JSON.stringify(e));
     });
   }
 }

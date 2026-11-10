@@ -52,7 +52,7 @@ Windows 下把 `./gradlew` 换成 `.\gradlew.bat`。工程路径必须是纯 ASC
 
 ## 版本
 
-`versionName` 由 `-PappVersion` 注入，本地构建默认 `1.0.0`；`versionCode = 10000 + 提交数`。
+`versionName` 由 `-PappVersion` 注入，本地构建默认 `2.0.0`；`versionCode = 10000 + 提交数`。
 
 ## 许可
 

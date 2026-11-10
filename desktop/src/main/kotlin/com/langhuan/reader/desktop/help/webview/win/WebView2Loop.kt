@@ -1,0 +1,302 @@
+package com.langhuan.reader.desktop.help.webview.win
+
+import com.sun.jna.Native
+import com.sun.jna.Pointer
+import com.sun.jna.platform.win32.Kernel32
+import com.sun.jna.platform.win32.Ole32
+import com.sun.jna.platform.win32.User32
+import com.sun.jna.platform.win32.WinDef
+import com.sun.jna.platform.win32.WinUser
+import com.langhuan.reader.constant.AppLog
+import com.langhuan.reader.desktop.help.win.createHiddenMessageWindow
+import com.langhuan.reader.desktop.help.win.registerMessageWindowClass
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeoutOrNull
+import java.awt.Toolkit
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+
+/**
+ * WebView2 专用 STA 线程 + Win32 消息泵。
+ *
+ * WebView2 的所有 COM 调用与回调都必须在**创建它的那个跑消息泵的 STA 线程**上, 因此本对象
+ * 起一条独立守护线程 (CoInitializeEx APARTMENTTHREADED + GetMessage 循环) 独占所有窗口与
+ * WebView 实例。刻意不复用 AWT EDT: Compose Desktop 走 Skiko, EDT 的消息泵归 AWT 工具线程,
+ * 跨线程持有 HWND 会把焦点/输入队列搅在一起 (同仓 mpv 走独立进程 `--wid` 才没这问题)。
+ *
+ * 副作用是可见窗口只能是**独立顶层窗口**而非嵌进 Compose 布局 —— 登录/验证本就是弹窗语义,
+ * 可接受。
+ *
+ * 泵线程结束 (建窗失败 / 消息循环退出) 时它名下的窗口与它所在套间里的 COM 对象随线程失效:
+ * 泵在不在按线程存活判定, 线程已结束就整代重建 (见 [ensureStarted])。
+ */
+internal object WebView2Loop {
+
+    /** 自定义消息: 唤醒消息循环去消费 [tasks]。 */
+    private const val WM_RUN_TASK = WinUser.WM_USER + 1
+
+    private const val WINDOW_CLASS = "LanghuanWebView2Host"
+
+    private val tasks = ConcurrentLinkedQueue<() -> Unit>()
+
+    /** 消息泵窗口: 仅用于收 [WM_RUN_TASK], 不承载 WebView。 */
+    @Volatile
+    private var pumpWindow: WinDef.HWND? = null
+
+    /** 消息泵线程; 线程结束即泵不可用 (它名下的窗口随线程被系统收走)。 */
+    @Volatile
+    private var pumpThread: Thread? = null
+
+    /** 本代建窗结果的就绪闸门; [START_TIMEOUT_SECONDS] 内未放开即按启动失败处理。 */
+    @Volatile
+    private var pumpReady: CountDownLatch? = null
+
+    /**
+     * 消息泵代号: 每换一代 +1。
+     *
+     * 泵线程结束即它所在 STA 套间里的 COM 对象失效 (见 [ensureStarted]), 跨代对象按本代号
+     * 判代 —— [WebView2Environment] 缓存的环境据此作废, 交新代重建。
+     */
+    @Volatile
+    var generation: Long = 0L
+        private set
+
+    /** 每个 HWND 的消息处理钩子 (WM_SIZE/WM_CLOSE/工具栏绘制与鼠标), 由窗口创建方注册。 */
+    private val windowHooks = HashMap<Pointer, (Int, WinDef.WPARAM, WinDef.LPARAM) -> Boolean>()
+
+    // 强引用: WNDCLASS 里的 lpfnWndProc 是 JNA 回调, 被 GC 后窗口消息即崩
+    private val windowProc = WinUser.WindowProc { hwnd, msg, wParam, lParam ->
+        try {
+            when {
+                msg == WM_RUN_TASK -> {
+                    drainTasks()
+                    WinDef.LRESULT(0)
+                }
+
+                windowHooks[hwnd.pointer]?.invoke(msg, wParam, lParam) == true -> WinDef.LRESULT(0)
+
+                else -> User32.INSTANCE.DefWindowProc(hwnd, msg, wParam, lParam)
+            }
+        } catch (e: Throwable) {
+            // JNA 回调内异常默认只打 stderr 静默吞掉; 工具栏曾因 paint 内
+            // UnsatisfiedLinkError 永久不重绘 (白条) 而无任何日志, 这里必须显式记录
+            AppLog.put("WebView2 窗口消息处理异常 (msg=${msg})", e)
+            WinDef.LRESULT(0)
+        }
+    }
+
+    /** gdi32 补充: CreateSolidBrush (窗口背景画刷)。 */
+    private interface WebView2Gdi32Ex : com.sun.jna.win32.StdCallLibrary {
+        fun CreateSolidBrush(crColor: Int): Pointer
+    }
+
+    private val webview2Gdi32Ex: WebView2Gdi32Ex by lazy {
+        Native.load(
+            "gdi32",
+            WebView2Gdi32Ex::class.java,
+            com.sun.jna.win32.W32APIOptions.DEFAULT_OPTIONS
+        )
+    }
+
+    /**
+     * 启动 (泵不在时整代重建) 消息泵; 返回是否可用。
+     *
+     * 泵在不在按**泵线程是否还在**判, 不按 [pumpWindow] 是否非空: 线程结束 (建窗失败 / 消息
+     * 循环退出) 时它名下的窗口由系统随线程释放 (MSDN "Terminating a Thread"), 而本地记的
+     * 句柄仍非空 —— 按句柄判会让此后每次调用都以为泵还在, 任务投进失效句柄没人抽取, WebView2
+     * 在本次运行内再也不可用 (只能重启应用)。线程已结束就整代重建; 建不出来的那一代只是这一次
+     * 不可用 (线程随之结束), 下一次调用继续重试。
+     *
+     * 幂等: 泵线程还在 (含正在启动的那一代) 即不新建; 全程持锁, 并发调用者等锁后看到新线程
+     * 已在跑, 不会起出两份泵。
+     */
+    @Synchronized
+    fun ensureStarted(): Boolean {
+        if (pumpThread?.isAlive != true) {
+            // 换代: 只作废随线程失效的本地引用 (窗口与钩子已由系统随线程收走, 这里不会与上一代
+            // 线程并发访问); 任务队列不随线程失效, 留给新代接着抽取
+            pumpWindow = null
+            windowHooks.clear()
+            val ready = CountDownLatch(1)
+            val thread = Thread({ runLoop(ready) }, "langhuan-webview2")
+            thread.isDaemon = true
+            pumpThread = thread
+            pumpReady = ready
+            generation++
+            thread.start()
+        }
+        val ready = pumpReady ?: return pumpWindow != null
+        // 这一代已有结论 (就绪或建窗失败): 只看建窗结果
+        if (ready.count == 0L) return pumpWindow != null
+        // 超时不再等: 建窗口卡住时按启动失败处理, 上层降级到无 WebView 路径而不是永久挂起
+        if (!ready.await(START_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+            AppLog.put("WebView2 消息泵启动超时 (${START_TIMEOUT_SECONDS}s), 按不可用处理")
+            // 卡住的这一代不再让后续调用白等: 之后就绪与否按窗口是否出现判定
+            pumpReady = null
+            return false
+        }
+        return pumpWindow != null
+    }
+
+    /**
+     * 把 [block] 排到 WebView2 线程执行 (不等待完成)。
+     *
+     * 必须先 [ensureStarted]: 首次调用 (如书源 `java.startBrowser` 直接开窗) 时消息泵
+     * 线程尚未启动, 只入队不 PostMessage 会导致任务永远不被消费, 环境/窗口创建 20s
+     * 静默超时 (曾表现为"WebView2 窗口创建失败"后无任何其他日志)。
+     */
+    fun post(block: () -> Unit) {
+        if (!ensureStarted()) return
+        tasks += block
+        val hwnd = pumpWindow ?: return
+        User32.INSTANCE.PostMessage(hwnd, WM_RUN_TASK, WinDef.WPARAM(0), WinDef.LPARAM(0))
+    }
+
+    /** 在 WebView2 线程执行并等结果 (COM 对象只能在本线程碰)。超时/异常返回 null。 */
+    suspend fun <T : Any> runOnLoop(timeoutMs: Long = 10_000L, block: () -> T?): T? {
+        if (!ensureStarted()) return null
+        val deferred = CompletableDeferred<T?>()
+        post { deferred.complete(runCatching(block).getOrNull()) }
+        return withTimeoutOrNull(timeoutMs) { deferred.await() }
+    }
+
+    private fun runLoop(ready: CountDownLatch) {
+        val created = runCatching {
+            Ole32.INSTANCE.CoInitializeEx(Pointer.NULL, Ole32.COINIT_APARTMENTTHREADED)
+            registerWindowClass()
+            createWindow(visible = false, title = WINDOW_CLASS).also { pumpWindow = it }
+        }.onFailure {
+            AppLog.put("WebView2 消息泵启动失败", it)
+        }.isSuccess
+        ready.countDown()
+        if (!created) {
+            runCatching { Ole32.INSTANCE.CoUninitialize() }
+            return
+        }
+        val msg = WinUser.MSG()
+        while (User32.INSTANCE.GetMessage(msg, null, 0, 0) > 0) {
+            User32.INSTANCE.TranslateMessage(msg)
+            User32.INSTANCE.DispatchMessage(msg)
+            // PostThreadMessage 之外的路径也顺手清一次, 避免任务卡到下一条消息
+            drainTasks()
+        }
+        runCatching { Ole32.INSTANCE.CoUninitialize() }
+    }
+
+    private fun drainTasks() {
+        while (true) {
+            val task = tasks.poll() ?: return
+            runCatching { task() }.onFailure { AppLog.put("WebView2 任务执行失败", it) }
+        }
+    }
+
+    private fun registerWindowClass() {
+        // WNDCLASSEX 注册样板统一在 help/win/Win32MessageWindow (与任务栏媒体同款);
+        // 重复注册返回 ERROR_CLASS_ALREADY_EXISTS, 无害
+        registerMessageWindowClass(
+            className = WINDOW_CLASS,
+            wndProc = windowProc,
+            owner = "WebView2",
+            // 工具栏区背景由窗口背景画刷承担 (深色主题下默认白底会露馅);
+            // 主题背景色跟随创建时主题 (短生命周期窗口, 不追动态切换)
+            hbrBackground = WinDef.HBRUSH(
+                webview2Gdi32Ex.CreateSolidBrush(WebView2WindowTheme.themeBgColorRef())
+            ),
+        )
+    }
+
+    /**
+     * 建窗口。[visible] = false 时不给 WS_VISIBLE 且摆到屏幕外:
+     * 窗口全程不显示 (无头), 但仍是真 HWND, 消息与 WebView2 渲染都正常。
+     */
+    fun createWindow(
+        visible: Boolean,
+        title: String,
+        bounds: WindowBounds = WindowBounds()
+    ): WinDef.HWND {
+        if (!visible) {
+            // 隐藏泵窗口: WS_POPUP + 屏幕外, 样板同 helper (尺寸无关紧要, 仅收消息)
+            return createHiddenMessageWindow(WINDOW_CLASS, title.ifBlank { "langhuan" })
+        }
+        // 可见分支是弹窗语义 (WS_OVERLAPPEDWINDOW + 置前 + 主题同步), 不走隐藏窗口 helper
+        val hwnd = User32.INSTANCE.CreateWindowEx(
+            0,
+            WINDOW_CLASS,
+            title.ifBlank { "langhuan" },
+            WinUser.WS_OVERLAPPEDWINDOW,
+            bounds.x, bounds.y, bounds.width, bounds.height,
+            null, null,
+            Kernel32.INSTANCE.GetModuleHandle(null),
+            null,
+        ) ?: error("CreateWindowEx 失败 (err=${Native.getLastError()})")
+        User32.INSTANCE.ShowWindow(hwnd, WinUser.SW_SHOW)
+        // 弹窗语义: 新窗口置前显示。曾出现 WebView2 窗口启动在主窗口后面
+        // (ShowWindow 不改变 Z 序, 主窗口保持激活)。HWND_TOP 提升到 Z 序顶部
+        // (非 TOPMOST 置顶), 再请求前台激活 (同进程前台时 SetForegroundWindow 有效)
+        User32.INSTANCE.SetWindowPos(
+            hwnd,
+            null, // HWND_TOP = NULL 指针 (置顶 Z 序, 非 TOPMOST)
+            0, 0, 0, 0,
+            WinUser.SWP_NOMOVE or WinUser.SWP_NOSIZE or WinUser.SWP_SHOWWINDOW
+        )
+        User32.INSTANCE.SetForegroundWindow(hwnd)
+        // 原生标题栏跟随应用主题 (与主窗口原生控制栏观感统一)
+        WebView2WindowTheme.apply(hwnd)
+        return hwnd
+    }
+
+    fun hookWindow(
+        hwnd: WinDef.HWND,
+        handler: (Int, WinDef.WPARAM, WinDef.LPARAM) -> Boolean,
+    ) {
+        windowHooks[hwnd.pointer] = handler
+    }
+
+    fun unhookWindow(hwnd: WinDef.HWND) {
+        windowHooks.remove(hwnd.pointer)
+    }
+
+    fun clientRect(hwnd: WinDef.HWND): RectValue {
+        val rect = WinDef.RECT()
+        User32.INSTANCE.GetClientRect(hwnd, rect)
+        return RectValue().apply {
+            left = rect.left
+            top = rect.top
+            right = rect.right
+            bottom = rect.bottom
+        }
+    }
+
+    private const val CW_USEDEFAULT = 0x80000000.toInt()
+
+    /**
+     * 屏幕居中窗口矩形 (弹窗语义): 独立浏览器窗口默认居中打开, 尺寸自适应屏幕。
+     */
+    fun centeredBounds(): WindowBounds {
+        val screen = Toolkit.getDefaultToolkit().screenSize
+        val width = kotlin.math.min(DEFAULT_WIDTH, (screen.width * 0.8).toInt().coerceAtLeast(400))
+        val height =
+            kotlin.math.min(DEFAULT_HEIGHT, (screen.height * 0.8).toInt().coerceAtLeast(300))
+        return WindowBounds(
+            x = ((screen.width - width) / 2).coerceAtLeast(0),
+            y = ((screen.height - height) / 2).coerceAtLeast(0),
+            width = width,
+            height = height,
+        )
+    }
+
+    private const val DEFAULT_WIDTH = 1100
+    private const val DEFAULT_HEIGHT = 800
+
+    /** CreateWindowEx 窗口矩形参数 (默认 = 系统居中 + 原默认尺寸)。 */
+    class WindowBounds(
+        val x: Int = CW_USEDEFAULT,
+        val y: Int = CW_USEDEFAULT,
+        val width: Int = DEFAULT_WIDTH,
+        val height: Int = DEFAULT_HEIGHT,
+    )
+
+    /** 消息泵启动等待上限。 */
+    private const val START_TIMEOUT_SECONDS = 30L
+}

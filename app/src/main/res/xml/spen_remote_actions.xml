@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <remote-actions
-    actionset_label="Legado"
+    actionset_label="琅嬛阁"
     version="1.2">
     <action
         id="next_page"

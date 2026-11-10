@@ -1,5 +1,5 @@
 /*
- * legado_wndchrome —— Windows 窗口控制条 native 桥 (纯 C, 扁平导出 + JNA 映射)
+ * langhuan_wndchrome —— Windows 窗口控制条 native 桥 (纯 C, 扁平导出 + JNA 映射)
  *
  * 设计依据 (调研见 build/research/win32-titlebar/SYNTHESIS.md):
  *  - AWT 自身的 WndProc 就是 SetWindowSubclass 挂的 (OpenJDK ComCtl32Util.cpp), 外部可再挂一层
@@ -17,8 +17,8 @@
  *  3) 禁改 GWL_STYLE / GWL_EXSTYLE —— DesktopFullscreenController 持有样式快照, 改了会被它还原
  *  4) 所有导出函数必须可重复调用 (幂等), 失败只置错误码不崩
  */
-#ifndef LEGADO_WNDCHROME_H
-#define LEGADO_WNDCHROME_H
+#ifndef LANGHUAN_WNDCHROME_H
+#define LANGHUAN_WNDCHROME_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -156,4 +156,4 @@ int lgchrome_last_os_error(void);
 #ifdef __cplusplus
 }
 #endif
-#endif /* LEGADO_WNDCHROME_H */
+#endif /* LANGHUAN_WNDCHROME_H */

@@ -2,8 +2,8 @@
 
 package org.jsoup
 
-import io.legado.app.help.http.KmpHttpClient
-import io.legado.app.utils.URL
+import com.langhuan.reader.help.http.KmpHttpClient
+import com.langhuan.reader.utils.URL
 import org.jsoup.nodes.Document
 import org.jsoup.parser.Parser
 import kotlin.concurrent.Volatile

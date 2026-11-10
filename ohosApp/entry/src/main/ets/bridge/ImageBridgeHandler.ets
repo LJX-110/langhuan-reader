@@ -5,7 +5,7 @@ import image from '@ohos.multimedia.image';
  *
  * 接收 Kotlin OhosNativeBridge.invokeImageSync 通过 tsfn dispatch 过来的图片操作请求,
  * 调用 @ohos.multimedia.image (PixelMap/ImageSource/ImagePacker) 执行真实像素操作,
- * 完成后通过 legado.imageCallback(requestId, resultJson, body?) 回送结果给 Kotlin。
+ * 完成后通过 langhuan.imageCallback(requestId, resultJson, body?) 回送结果给 Kotlin。
  *
  * # 混合协议 (与 OhosImageOps.kt / OhosNativeBridge.kt 对齐, 同 WebView 桥思路: 大字节走裸参数)
  *
@@ -51,7 +51,7 @@ interface PixelMapEntry {
   releaseResolve?: (response: ImageResponse) => void;
 }
 
-// Image callback 类型 (由 EntryAbility 注入, 内部调 legado.imageCallback; body 为数据面裸字节)
+// Image callback 类型 (由 EntryAbility 注入, 内部调 langhuan.imageCallback; body 为数据面裸字节)
 export type ImageCallback = (requestId: number, resultJson: string, body: ArrayBuffer | undefined) => void;
 
 // ===== 请求/响应接口定义 (与 Kotlin 侧 JSON 协议对齐) =====
@@ -192,7 +192,7 @@ async function releaseCreatedEntries(ids: number[]): Promise<void> {
  *
  * @param requestJson 请求 JSON 字符串 (含 requestId/action/payload 控制面)
  * @param bytes 数据面裸字节 ArrayBuffer (decode 的图片字节; 其余 action 为 undefined)
- * @param callback 回送结果的函数 (EntryAbility 注入 legado.imageCallback)
+ * @param callback 回送结果的函数 (EntryAbility 注入 langhuan.imageCallback)
  */
 export function handleImageRequest(requestJson: string, bytes: ArrayBuffer | undefined, callback: ImageCallback): void {
   let req: ImageBridgeRequest;

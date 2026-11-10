@@ -106,7 +106,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity> <!-- 主界面 -->
-        <!-- legado:// / yuedu:// deep link 透明壳 (对照 master AssociationActivity):
+        <!-- langhuan:// / yuedu:// deep link 透明壳 (对照 master AssociationActivity):
              浮在其他应用之上只显示导入对话框, 主界面页面零渲染; 导入完成自动 finish -->
         <activity
             android:name=".ui.association.AssociationActivity"
@@ -122,6 +122,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
+                <data android:scheme="langhuan" />
                 <data android:scheme="legado" />
                 <data android:scheme="yuedu" />
             </intent-filter>
@@ -450,7 +451,7 @@
             android:exported="true"
             android:foregroundServiceType="dataSync"
             android:icon="@drawable/ic_web_service_noti"
-            android:label="legado Web Service"
+            android:label="琅嬛阁 Web 服务"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />

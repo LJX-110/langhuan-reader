@@ -50,20 +50,20 @@
 -include ../modules/quickjs/consumer-rules.pro
 
 # AnalyzeRuleCore 下沉 commonMain 后无法用 androidx @Keep (无 common 变体), 按类名 keep (JS 反射调用其方法)
--keep,allowoptimization class io.legado.app.model.analyzeRule.AnalyzeRuleCore { *; }
+-keep,allowoptimization class com.langhuan.reader.model.analyzeRule.AnalyzeRuleCore { *; }
 
 # 书源 JS 面实现类 (BookSource/HttpTTS/AnalyzeRuleCore/AnalyzeUrlCore/RssJsExtensionsJvm 等):
 # JS 桥经 JavaObjectBridge 按方法名反射调用, 不 keep 时未被 Kotlin 直接调用的成员会被当死代码删除。
--keep class * implements io.legado.app.help.JsExtensionsCommon { *; }
+-keep class * implements com.langhuan.reader.help.JsExtensionsCommon { *; }
 
 # 数据实体 (Gson 反射 + Room + JS 访问; data/consumer-rules.pro 已覆盖
-# io.legado.app.data.entities.**, 此处兜底其它包的实体)
+# com.langhuan.reader.data.entities.**, 此处兜底其它包的实体)
 -keep class **.data.entities.** { *; }
--keep class io.legado.app.model.fileBook.ZipEntry { *; }
--keep class io.legado.app.model.fileBook.ZipImageCache { *; }
+-keep class com.langhuan.reader.model.fileBook.ZipEntry { *; }
+-keep class com.langhuan.reader.model.fileBook.ZipImageCache { *; }
 
 # 应用入口 (无其它类引用, 不 keep 会被当死代码删除 → 整个 UI 图连带裁掉)
--keep class io.legado.desktop.MainKt {
+-keep class com.langhuan.reader.desktop.MainKt {
     public static void main(java.lang.String[]);
 }
 

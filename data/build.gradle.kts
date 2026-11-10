@@ -5,13 +5,13 @@
 // 依赖的 help Provider 接口与 JS 桥核心 (JsExtensionsCommon/StrResponse/model.script)。
 // JS 桥架构约束: model/script + JsExtensionsCommon + StrResponse 必须同模块
 // (KSP 生成的 NativeGeneratedDispatch 是 internal object, 桥代码在 model/script 内引用)。
-import io.legado.buildlogic.generateCNamesAliases
+import com.langhuan.buildlogic.generateCNamesAliases
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.plugin.KotlinDependencyHandler
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 
 plugins {
-    id("legado.kmp.library")
+    id("langhuan.kmp.library")
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.room)
     alias(libs.plugins.ksp)
@@ -35,12 +35,12 @@ val enableOhosTarget = providers.gradleProperty("enableOhosTarget").orNull?.toBo
 // 带 `@Entity(withoutRowId = ...)` 的实体源码单独放一个 srcDir (同 :shared 的机制,
 // 鸿蒙构建由 deriveOhosRoomEntities 换派生副本)。
 val ROOM_ENTITIES_SRC_DIR = "src/roomEntitiesMain/kotlin"
-val ENTITY_PACKAGE_PATH = "io/legado/app/data/entities"
+val ENTITY_PACKAGE_PATH = "com/langhuan/reader/data/entities"
 
 // nativeMain 里依赖 C 符号的桥文件: 从 nativeMain 排除, stage 进 leaf 源集
 // (quickjs = model/script JS 桥, generateCNamesAliases 在 build-logic)。
 val nativeInteropSourcePatterns = listOf(
-    "io/legado/app/model/script/*.native.kt",
+    "com/langhuan/reader/model/script/*.native.kt",
 )
 val nativeInteropSourceRoot = file("src/nativeMain/kotlin")
 
@@ -160,7 +160,7 @@ abstract class DeriveOhosRoomImpl : DefaultTask() {
         }
         val outRoot = outputDirectory.get().asFile
         outRoot.deleteRecursively()
-        val outDir = outRoot.resolve("io/legado/app/data")
+        val outDir = outRoot.resolve("com/langhuan/reader/data")
         outDir.mkdirs()
         sources.forEach { source ->
             val derived = source.readText()
@@ -249,8 +249,8 @@ fun ohosRoomKspSources(): ConfigurableFileTree {
         .dir("generated/ksp/ohosArm64/ohosArm64Main/kotlin").get().asFile
     return fileTree(kspDir).apply {
         include(
-            "io/legado/app/data/AppDatabase_Impl.kt",
-            "io/legado/app/data/AppDatabase_AutoMigration_*_Impl.kt",
+            "com/langhuan/reader/data/AppDatabase_Impl.kt",
+            "com/langhuan/reader/data/AppDatabase_AutoMigration_*_Impl.kt",
         )
     }
 }
@@ -294,7 +294,7 @@ val verifyOhosRoomDerived = if (enableOhosTarget) {
 
 // ohosArm64 只存在于 CPF 分支 KGP, 交给 build-logic 的约定插件声明。
 if (enableOhosTarget) {
-    pluginManager.apply("legado.kmp.ohos")
+    pluginManager.apply("langhuan.kmp.ohos")
     // cinterop (quickjs) 的 def/头文件在本模块 src/cinterop, 故 cinterop 绑定
     // 也随本模块配置 (旧版在 OhosTargetConventionPlugin 里对全部模块注入, 其它模块无 def
     // 文件导致 cinterop 任务失败)。用标准 targets.named API 配置, 不依赖 CPF DSL。
@@ -345,7 +345,7 @@ kotlin {
     jvm()
 
     android {
-        namespace = "io.legado.data"
+        namespace = "com.langhuan.reader.data"
         compileSdk = 37
         minSdk = 24
         // 真机测试源集 (androidDeviceTest)。jvmAndAndroidTest 只在 JVM 上跑,
@@ -484,8 +484,8 @@ kotlin {
                 // 同签名 stub 类顶替 (与旧 :shared 同款处理)。
                 if (!isMacHost) {
                     kotlin.exclude(
-                        "io/legado/app/help/media/AvPlayerBufferingObserver.ios.kt",
-                        "io/legado/app/help/media/AvPlayerItemStatusObserver.ios.kt",
+                        "com/langhuan/reader/help/media/AvPlayerBufferingObserver.ios.kt",
+                        "com/langhuan/reader/help/media/AvPlayerItemStatusObserver.ios.kt",
                     )
                     kotlin.srcDir("src/iosWindowsCheckMain/kotlin")
                 }
@@ -497,7 +497,7 @@ kotlin {
                 if (!isMacHost) {
                     kotlin.exclude(
                         *nativeInteropSourcePatterns.toTypedArray(),
-                        "io/legado/app/napi/quickjs/CNamesAliases.kt",
+                        "com/langhuan/reader/napi/quickjs/CNamesAliases.kt",
                     )
                 }
             }
@@ -507,7 +507,7 @@ kotlin {
                 if (!isMacHost) {
                     kotlin.exclude(
                         *nativeInteropSourcePatterns.toTypedArray(),
-                        "io/legado/app/napi/quickjs/CNamesAliases.kt",
+                        "com/langhuan/reader/napi/quickjs/CNamesAliases.kt",
                     )
                 }
             }
@@ -532,8 +532,8 @@ kotlin {
                 kotlin.srcDir(layout.buildDirectory.dir("generated/ksp/ohosArm64/ohosArm64Main/kotlin"))
                 kotlin.srcDir(ohosRoomDerivedDir)
                 kotlin.exclude(
-                    "io/legado/app/data/AppDatabase_Impl.kt",
-                    "io/legado/app/data/AppDatabase_AutoMigration_*_Impl.kt",
+                    "com/langhuan/reader/data/AppDatabase_Impl.kt",
+                    "com/langhuan/reader/data/AppDatabase_AutoMigration_*_Impl.kt",
                 )
             }
         }
@@ -606,8 +606,8 @@ if (enableIosTarget || enableOhosTarget) {
         arg("jsapi.native", "true")
         arg(
             "jsapi.nativeTargets",
-            "org.jsoup.Connection.Response,io.legado.app.help.http.StrResponse,io.legado.app.data.entities.BaseSource," +
-                "io.legado.app.model.analyzeRule.QueryTTF,io.legado.app.utils.JsURL"
+            "org.jsoup.Connection.Response,com.langhuan.reader.help.http.StrResponse,com.langhuan.reader.data.entities.BaseSource," +
+                "com.langhuan.reader.model.analyzeRule.QueryTTF,com.langhuan.reader.utils.JsURL"
         )
     }
 }

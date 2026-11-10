@@ -17,7 +17,7 @@ Apache License 2.0 (同目录 LICENSE)。
 `com.google.material.colorutilities.` 前缀, 其余逐行原样 (含文件头 Apache 许可声明);
 剥除了 error_prone 注解 (@Var/@CanIgnoreReturnValue/@CheckReturnValue, 纯静态提示,
 其 artifact 随 material 移除后不在依赖内)。消费入口:
-`io.legado.app.lib.theme.MonetColorExtract` 用 Hct / SchemeContent / MaterialDynamicColors。
+`com.langhuan.reader.lib.theme.MonetColorExtract` 用 Hct / SchemeContent / MaterialDynamicColors。
 
 ## 更新方式
 

@@ -1,4 +1,4 @@
-package io.legado.buildlogic
+package com.langhuan.buildlogic
 
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.ValueSource
@@ -24,9 +24,9 @@ abstract class NativeToolchainValueSource :
     interface Params : ValueSourceParameters {
         // 勿以 is 开头命名 Property 抽象方法: Gradle 装饰器按 JavaBean 规范保留 is* 前缀, 会拒生成
         val windowsHost: Property<Boolean>
-        /** gradle property legado.cmake.path */
+        /** gradle property langhuan.cmake.path */
         val cmakeProp: Property<String>
-        /** gradle property legado.mingw.path */
+        /** gradle property langhuan.mingw.path */
         val mingwProp: Property<String>
         /** local.properties 的 sdk.dir (cmake 兜底搜索根) */
         val sdkDir: Property<String>

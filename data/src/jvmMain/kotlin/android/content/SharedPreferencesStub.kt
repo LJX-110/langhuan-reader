@@ -6,11 +6,11 @@
 // 不会终生停在内存态。
 package android.content
 
-import io.legado.app.constant.AppLog
-import io.legado.app.help.file.AppFilesDirs
-import io.legado.app.help.storage.FilesJsonStore
-import io.legado.app.utils.FileUtilsBase
-import io.legado.app.utils.atomicWriteTempPath
+import com.langhuan.reader.constant.AppLog
+import com.langhuan.reader.help.file.AppFilesDirs
+import com.langhuan.reader.help.storage.FilesJsonStore
+import com.langhuan.reader.utils.FileUtilsBase
+import com.langhuan.reader.utils.atomicWriteTempPath
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject

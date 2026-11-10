@@ -21,14 +21,14 @@ expect fun logQuickJsWarn(tag: String, msg: String, e: Throwable? = null)
 // ============ native 库加载抽象 ============
 
 /**
- * 加载 legado_quickjs native 库。
+ * 加载 langhuan_quickjs native 库。
  *
- * - Android: `System.loadLibrary("legado_quickjs")` 从 APK lib/ 目录读取 .so
+ * - Android: `System.loadLibrary("langhuan_quickjs")` 从 APK lib/ 目录读取 .so
  * - 桌面 JVM: 从构建产物 (`build/libs/jvm/native/`) 或系统属性指定路径加载 .dll/.so/.dylib
  *
  * 桌面端 native 库不可用时抛 [UnsatisfiedLinkError], 调用方需捕获。
  */
-expect fun loadLegadoQuickJsNative()
+expect fun loadLanghuanQuickJsNative()
 
 // ============ 计时器平台唤醒 (JS 线程泵送协约) ============
 

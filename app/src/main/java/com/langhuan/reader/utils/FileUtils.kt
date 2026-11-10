@@ -1,0 +1,345 @@
+package com.langhuan.reader.utils
+
+import android.net.Uri
+import android.util.Base64
+import android.webkit.MimeTypeMap
+import android.webkit.URLUtil
+import com.langhuan.reader.App
+import com.langhuan.reader.constant.AppConst
+import com.langhuan.reader.constant.AppLog
+import com.langhuan.reader.constant.fileNameFormat
+import com.langhuan.reader.help.copyToFileAtomically
+import com.langhuan.reader.help.writeBytesAtomically
+import java.io.Closeable
+import java.io.File
+import java.io.InputStream
+import java.util.regex.Pattern
+
+object FileUtils {
+
+    fun createFileIfNotExist(root: File, vararg subDirFiles: String): File =
+        FileUtilsBase.createFileIfNotExist(root, *subDirFiles)
+
+    fun createFolderIfNotExist(root: File, vararg subDirs: String): File =
+        FileUtilsBase.createFolderIfNotExist(root, *subDirs)
+
+    fun createFolderIfNotExist(filePath: String): File =
+        FileUtilsBase.createFolderIfNotExist(filePath)
+
+    fun createFileWithReplace(filePath: String): File =
+        FileUtilsBase.createFileWithReplace(filePath)
+
+    fun getPath(rootPath: String, vararg subDirFiles: String): String =
+        FileUtilsBase.getPath(rootPath, *subDirFiles)
+
+    fun getPath(root: File, vararg subDirFiles: String): String =
+        FileUtilsBase.getPath(root, *subDirFiles)
+
+    /**
+     * 将目录分隔符统一为平台默认的分隔符，并为目录结尾添加分隔符
+     */
+    fun separator(path: String): String = FileUtilsBase.separator(path)
+
+    fun closeSilently(c: Closeable?) {
+        FileUtilsBase.closeSilently(c)
+    }
+
+    /**
+     * 列出指定目录下的所有子目录
+     */
+    @JvmOverloads
+    fun listDirs(
+        startDirPath: String,
+        excludeDirs: Array<String>? = null,
+        @FileUtilsBase.SortType sortType: Int = FileUtilsBase.BY_NAME_ASC
+    ): Array<File> = FileUtilsBase.listDirs(startDirPath, excludeDirs, sortType)
+
+    /**
+     * 列出指定目录下的所有子目录及所有文件
+     */
+    @JvmOverloads
+    fun listDirsAndFiles(
+        startDirPath: String,
+        allowExtensions: Array<String>? = null
+    ): Array<File>? {
+        val files: Array<File>? = if (allowExtensions == null) {
+            listFiles(startDirPath)
+        } else {
+            listFiles(startDirPath, allowExtensions)
+        }
+        val dirs = listDirs(startDirPath)
+        if (files == null) {
+            return null
+        }
+        return dirs + files
+    }
+
+    /**
+     * 列出指定目录下的所有文件
+     */
+    @JvmOverloads
+    fun listFiles(
+        startDirPath: String,
+        filterPattern: Pattern? = null,
+        @FileUtilsBase.SortType sortType: Int = FileUtilsBase.BY_NAME_ASC
+    ): Array<File> = FileUtilsBase.listFiles(startDirPath, filterPattern, sortType)
+
+    /**
+     * 列出指定目录下的所有文件
+     */
+    fun listFiles(startDirPath: String, allowExtensions: Array<String>?): Array<File>? =
+        FileUtilsBase.listFiles(startDirPath, allowExtensions)
+
+    /**
+     * 列出指定目录下的所有文件
+     */
+    fun listFiles(startDirPath: String, allowExtension: String?): Array<File>? =
+        FileUtilsBase.listFiles(startDirPath, allowExtension)
+
+    /**
+     * 判断文件或目录是否存在
+     */
+    fun exist(path: String): Boolean = FileUtilsBase.exist(path)
+
+    /**
+     * 删除文件或目录
+     */
+    @JvmOverloads
+    fun delete(file: File, deleteRootDir: Boolean = false): Boolean =
+        FileUtilsBase.delete(file, deleteRootDir)
+
+    /**
+     * 删除文件或目录
+     */
+    @JvmOverloads
+    fun delete(path: String, deleteRootDir: Boolean = true): Boolean =
+        FileUtilsBase.delete(path, deleteRootDir)
+
+    /**
+     * 复制文件为另一个文件，或复制某目录下的所有文件及目录到另一个目录下
+     */
+    fun copy(src: String, tar: String): Boolean = FileUtilsBase.copy(src, tar)
+
+    /**
+     * 复制文件或目录
+     */
+    fun copy(src: File, tar: File): Boolean = FileUtilsBase.copy(src, tar)
+
+    /**
+     * 移动文件或目录
+     */
+    fun move(src: String, tar: String): Boolean = FileUtilsBase.move(src, tar)
+
+    /**
+     * 移动文件或目录
+     */
+    fun move(src: File, tar: File): Boolean = FileUtilsBase.move(src, tar)
+
+    /**
+     * 文件重命名
+     */
+    fun rename(oldPath: String, newPath: String): Boolean =
+        FileUtilsBase.rename(oldPath, newPath)
+
+    /**
+     * 文件重命名
+     */
+    fun rename(src: File, tar: File): Boolean = FileUtilsBase.rename(src, tar)
+
+    /**
+     * 读取文本文件, 失败将返回空串
+     */
+    @JvmOverloads
+    fun readText(filepath: String, charset: String = "utf-8"): String =
+        FileUtilsBase.readText(filepath, charset)
+
+    /**
+     * 读取文件内容, 失败将返回空串
+     */
+    fun readBytes(filepath: String): ByteArray? = FileUtilsBase.readBytes(filepath)
+
+    /**
+     * 保存文本内容
+     */
+    @JvmOverloads
+    fun writeText(filepath: String, content: String, charset: String = "utf-8"): Boolean =
+        FileUtilsBase.writeText(filepath, content, charset)
+
+    /**
+     * 追加文本内容
+     */
+    fun appendText(path: String, content: String): Boolean =
+        FileUtilsBase.appendText(path, content)
+
+    /**
+     * 获取文件大小
+     */
+    fun getLength(path: String): Long = FileUtilsBase.getLength(path)
+
+    /**
+     * 获取文件或网址的名称（包括后缀）
+     */
+    fun getName(path: String?): String = FileUtilsBase.getName(path)
+
+    /**
+     * 获取文件名（不包括扩展名）
+     */
+    fun getNameExcludeExtension(path: String): String =
+        FileUtilsBase.getNameExcludeExtension(path)
+
+    /**
+     * 获取格式化后的文件大小
+     */
+    fun getSize(path: String): String {
+        val fileSize = getLength(path)
+        return ConvertUtils.formatFileSize(fileSize)
+    }
+
+    /**
+     * 获取文件后缀,不包括“.”
+     */
+    fun getExtension(pathOrUrl: String): String = FileUtilsBase.getExtension(pathOrUrl)
+
+    /**
+     * 通过文件头魔数获取图片后缀名（含“.”）
+     */
+    fun getImageExtension(file: File): String = FileUtilsBase.getImageExtension(file)
+
+    /**
+     * 获取文件的MIME类型
+     */
+    fun getMimeType(pathOrUrl: String): String {
+        val ext = getExtension(pathOrUrl)
+        val map = MimeTypeMap.getSingleton()
+        return map.getMimeTypeFromExtension(ext) ?: "*/*"
+    }
+
+    /**
+     * 获取格式化后的文件/目录创建或最后修改时间
+     */
+    @JvmOverloads
+    fun getDateTime(path: String, format: String = "yyyy年MM月dd日HH:mm"): String =
+        FileUtilsBase.getDateTime(path, format)
+
+    /**
+     * 获取格式化后的文件/目录创建或最后修改时间
+     */
+    fun getDateTime(file: File, format: String): String =
+        FileUtilsBase.getDateTime(file, format)
+
+    /**
+     * 比较两个文件的最后修改时间
+     */
+    fun compareLastModified(path1: String, path2: String): Int =
+        FileUtilsBase.compareLastModified(path1, path2)
+
+    /**
+     * 创建多级别的目录
+     */
+    fun makeDirs(path: String): Boolean = FileUtilsBase.makeDirs(path)
+
+    /**
+     * 创建多级别的目录
+     */
+    fun makeDirs(file: File): Boolean = FileUtilsBase.makeDirs(file)
+
+    /**
+     * 将图片URL或Base64数据保存到指定目录
+     * @param imageData 图片URL或Base64数据
+     * @param dirUri 目标目录Uri (content:// 或 file://)
+     * @param fileName 保存的文件名，为空时自动生成时间戳文件名
+     * @return 写入是否成功 (目标未被触碰时的写失败如实返回 false)
+     */
+    fun saveImage(imageData: String, dirUri: Uri, fileName: String? = null): Boolean {
+        val byteArray = urlOrBase64ToBytes(imageData) ?: return false
+        val name = fileName ?: run {
+            val ext = getExtension(imageData).let {
+                if (it.length <= 5 && it.matches(Regex("[a-zA-Z0-9]+"))) ".$it" else ".jpg"
+            }
+            "${AppConst.fileNameFormat.format(System.currentTimeMillis())}$ext"
+        }
+        return writeImageBytes(dirUri, name, byteArray)
+    }
+
+    /**
+     * 将本地图片文件保存到指定目录
+     * @param imageFile 本地图片文件
+     * @param dirUri 目标目录URI（支持content://和file://）
+     * @param fileName 保存的文件名，默认使用原文件名
+     * @return 是否保存成功
+     */
+    fun saveImage(imageFile: File, dirUri: Uri, fileName: String? = null): Boolean {
+        val ext = getImageExtension(imageFile)
+        val name =
+            fileName ?: "${AppConst.fileNameFormat.format(System.currentTimeMillis())}$ext"
+        return writeImageBytes(dirUri, name, imageFile.readBytes())
+    }
+
+    /**
+     * 将图片输入流保存到指定目录 (流式写入, 不整份进内存)
+     * @param inputStream 图片输入流, 由本入口读取并关闭
+     * @param dirUri 目标目录URI（支持content://和file://）
+     * @param ext 文件扩展名（含点）
+     * @return 是否保存成功
+     */
+    fun saveImage(inputStream: InputStream, dirUri: Uri, ext: String = ".jpg"): Boolean {
+        val name = "${AppConst.fileNameFormat.format(System.currentTimeMillis())}$ext"
+        return inputStream.use { writeImageStream(dirUri, name, it) }
+    }
+
+    /**
+     * 图片整份写入 [dirUri] 下的 [name]: content:// 目录走 SAF 临时文档 + 改名就位
+     * ([writeDocumentBytesAtomically], 目标名上的旧同名图先挪成契约过渡件, 就位失败时改回原样);
+     * file:// 目录走同目录唯一临时件 + 改名 ([writeBytesAtomically])。
+     * 就位成立时写入期间目标名上是完整的旧图或新图; 提供方不支持同目录就位时由
+     * [writeDocumentBytesAtomically] 直写回落, 写入被打断时目标名上可能是半截 (与不做就位处理同
+     * 一落点)。
+     */
+    private fun writeImageBytes(dirUri: Uri, name: String, bytes: ByteArray): Boolean {
+        if (dirUri.isContentScheme()) {
+            return writeDocumentBytesAtomically(App.instance, dirUri, name, bytes)
+        }
+        val dirPath = RealPathUtil.getPath(App.instance, dirUri) ?: return false
+        return writeBytesAtomically(File(dirPath, name).path, bytes)
+    }
+
+    /**
+     * 图片流式写入 [dirUri] 下的 [name] (不整份进内存), 落盘机制与 [writeImageBytes] 同一份:
+     * content:// 目录走 SAF 临时文档 + 改名就位, file:// 目录走同目录唯一临时件 + 改名。
+     */
+    private fun writeImageStream(dirUri: Uri, name: String, input: InputStream): Boolean {
+        if (dirUri.isContentScheme()) {
+            return copyToDocumentAtomically(App.instance, dirUri, name, input)
+        }
+        val dirPath = RealPathUtil.getPath(App.instance, dirUri) ?: return false
+        return runCatching {
+            // 无可归属请求: 图片保存工具入口的调用方各异 (分享/换封面/网图保存),
+            // 本层拿不到统一的等待方资格, 传 null = 无父门, 行为与无撤销时逐字一致
+            copyToFileAtomically(File(dirPath, name).path, input)
+        }.onFailure {
+            AppLog.put("图片写入失败: $name\n${it.localizedMessage}", it)
+        }.isSuccess
+    }
+
+    /**
+     * 将图片URL或Base64数据转换为ByteArray
+     * @param data 图片URL或Base64数据
+     * @return 图片的ByteArray，失败返回null
+     */
+    fun urlOrBase64ToBytes(data: String): ByteArray? {
+        return if (URLUtil.isValidUrl(data)) {
+            try {
+                val request = okhttp3.Request.Builder().url(data).build()
+                com.langhuan.reader.help.http.okHttpClient.newCall(request).execute().body.bytes()
+            } catch (e: Exception) {
+                null
+            }
+        } else {
+            try {
+                Base64.decode(data.split(",").toTypedArray()[1], Base64.DEFAULT)
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+}

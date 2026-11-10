@@ -111,9 +111,9 @@ const router = useRouter()
 const store = useBookStore()
 const isNight = computed(() => store.isNight)
 
-const KINDS_STORAGE_KEY = 'legado_web_explore_kinds_cache'
-const SOURCES_STORAGE_KEY = 'legado_web_explore_sources_cache'
-const EXPANDED_URL_KEY = 'legado_web_explore_expanded_url'
+const KINDS_STORAGE_KEY = 'langhuan_web_explore_kinds_cache'
+const SOURCES_STORAGE_KEY = 'langhuan_web_explore_sources_cache'
+const EXPANDED_URL_KEY = 'langhuan_web_explore_expanded_url'
 
 // 会话持久化辅助方法
 function initKindsFromStorage(): Map<string, ExploreKind[]> {

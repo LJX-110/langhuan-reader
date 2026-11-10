@@ -1,13 +1,13 @@
 package org.jsoup.internal
 
-import io.legado.app.help.http.KmpHttpClient
-import io.legado.app.help.http.KmpHttpClientBuilder
-import io.legado.app.help.http.KmpRequestBody
-import io.legado.app.help.http.OkHttpClientProviders
-import io.legado.app.help.http.toKmpMediaType
-import io.legado.app.help.http.toKmpRequestBody
-import io.legado.app.utils.InputStream
-import io.legado.app.utils.textCharsetCodec
+import com.langhuan.reader.help.http.KmpHttpClient
+import com.langhuan.reader.help.http.KmpHttpClientBuilder
+import com.langhuan.reader.help.http.KmpRequestBody
+import com.langhuan.reader.help.http.OkHttpClientProviders
+import com.langhuan.reader.help.http.toKmpMediaType
+import com.langhuan.reader.help.http.toKmpRequestBody
+import com.langhuan.reader.utils.InputStream
+import com.langhuan.reader.utils.textCharsetCodec
 import okio.IOException
 import org.jsoup.Connection
 import kotlin.time.Duration

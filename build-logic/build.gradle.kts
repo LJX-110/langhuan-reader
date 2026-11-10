@@ -9,7 +9,7 @@ repositories {
     maven("https://maven.eazytec-cloud.com/nexus/repository/maven-public/")
 }
 
-group = "io.legado.buildlogic"
+group = "com.langhuan.buildlogic"
 
 java {
     toolchain {
@@ -66,33 +66,33 @@ if (enableOhosTarget) {
 gradlePlugin {
     plugins {
         register("androidApplication") {
-            id = "legado.android.application"
-            implementationClass = "io.legado.buildlogic.AndroidApplicationConventionPlugin"
+            id = "langhuan.android.application"
+            implementationClass = "com.langhuan.buildlogic.AndroidApplicationConventionPlugin"
         }
         register("androidBenchmark") {
-            id = "legado.android.benchmark"
-            implementationClass = "io.legado.buildlogic.AndroidBenchmarkConventionPlugin"
+            id = "langhuan.android.benchmark"
+            implementationClass = "com.langhuan.buildlogic.AndroidBenchmarkConventionPlugin"
         }
         register("kmpLibrary") {
-            id = "legado.kmp.library"
-            implementationClass = "io.legado.buildlogic.KmpLibraryConventionPlugin"
+            id = "langhuan.kmp.library"
+            implementationClass = "com.langhuan.buildlogic.KmpLibraryConventionPlugin"
         }
         register("kmpNativeLibrary") {
-            id = "legado.kmp.native.library"
-            implementationClass = "io.legado.buildlogic.KmpNativeLibraryConventionPlugin"
+            id = "langhuan.kmp.native.library"
+            implementationClass = "com.langhuan.buildlogic.KmpNativeLibraryConventionPlugin"
         }
         register("jvmApplication") {
-            id = "legado.jvm.application"
-            implementationClass = "io.legado.buildlogic.JvmApplicationConventionPlugin"
+            id = "langhuan.jvm.application"
+            implementationClass = "com.langhuan.buildlogic.JvmApplicationConventionPlugin"
         }
         register("compose") {
-            id = "legado.compose"
-            implementationClass = "io.legado.buildlogic.ComposeConventionPlugin"
+            id = "langhuan.compose"
+            implementationClass = "com.langhuan.buildlogic.ComposeConventionPlugin"
         }
         if (enableOhosTarget) {
             register("kmpOhos") {
-                id = "legado.kmp.ohos"
-                implementationClass = "io.legado.buildlogic.OhosTargetConventionPlugin"
+                id = "langhuan.kmp.ohos"
+                implementationClass = "com.langhuan.buildlogic.OhosTargetConventionPlugin"
             }
         }
     }

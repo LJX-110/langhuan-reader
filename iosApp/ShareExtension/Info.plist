@@ -14,14 +14,14 @@
   当前规则 = NSPredicate 谓词串 (收哪些类型、数量约束与支持清单) 见 project.yml 同段注释。
   交付与生效前提 (未签名 ipa 拿不到 App Group entitlement, 链路不生效) 见
   project.yml 的 ShareExtension 段与 ShareViewController.swift 头部注释。
-  文本落到与文件不同的槽 (ShareText/), 原因见 ShareViewController.swift 的 legadoTextDirName。
+  文本落到与文件不同的槽 (ShareText/), 原因见 ShareViewController.swift 的 langhuanTextDirName。
 -->
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>zh-Hans</string>
 	<key>CFBundleDisplayName</key>
-	<string>Legado</string>
+	<string>Langhuan</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

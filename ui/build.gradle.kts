@@ -8,15 +8,17 @@ import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 import org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType
 
 plugins {
-    id("legado.kmp.library")
+    id("langhuan.kmp.library")
     alias(libs.plugins.kotlin.serialization)
-    id("legado.compose")
+    id("langhuan.compose")
 }
 
 compose.resources {
     generateResClass = always
     // app/desktop 等消费方访问 Res 资源, 显式公开
     publicResClass = true
+    // 固定生成包名: 不随 group / 模块名漂移, 全仓 import 只认这一个前缀
+    packageOfResClass = "com.langhuan.reader.ui.generated.resources"
 }
 
 val isMacHost = System.getProperty("os.name").startsWith("Mac", ignoreCase = true)
@@ -70,7 +72,7 @@ kotlin {
     jvm()
 
     android {
-        namespace = "io.legado.ui"
+        namespace = "com.langhuan.reader.ui"
         compileSdk = 37
         minSdk = 24
         // compose.resources 需要 assets 接入 (与 :shared 同款机制)
@@ -87,7 +89,7 @@ kotlin {
                     framework {
                         baseName = "shared"
                         isStatic = false
-                        binaryOption("bundleId", "shutiao.reader.shared")
+                        binaryOption("bundleId", "com.langhuan.reader.shared")
                     }
                     all {
                         linkerOpts("-L${nativeLibDir.absolutePath}", "-lquickjs", "-lsqlite3")
@@ -108,13 +110,13 @@ kotlin {
 
     if (enableOhosTarget) {
         // CPF fork 只发布 Android/iOS/OHOS 变体, 不发布 Desktop JVM (与 :shared 同款策略)
-        pluginManager.apply("legado.kmp.ohos")
-        // 出口模块: 本模块产出最终 liblegado_shared.so (stage 任务只 stage :ui 的产物)。
-        // ohosArm64 target 已由 legado.kmp.ohos 注册, 用标准 targets.named API 配置产物。
+        pluginManager.apply("langhuan.kmp.ohos")
+        // 出口模块: 本模块产出最终 liblanghuan_shared.so (stage 任务只 stage :ui 的产物)。
+        // ohosArm64 target 已由 langhuan.kmp.ohos 注册, 用标准 targets.named API 配置产物。
         targets.named<KotlinNativeTarget>("ohosArm64") {
             binaries {
                 sharedLib {
-                    baseName = "legado_shared"
+                    baseName = "langhuan_shared"
                     if (buildType == NativeBuildType.RELEASE) {
                         // optimized=true 开 Kotlin 编译优化 pass, clang 走 clangOptFlags.ohos_arm64。
                         // -O3 在 16G 内存机器上 clang 指令选择 OOM (zipFiles 实测), 钉 -O2;
@@ -258,7 +260,7 @@ kotlin {
                 // 非 mac: sceneorientation cinterop (需本机 Apple SDK) 无法生成, 方向请求
                 // 由 iosWindowsCheckMain 源根的同签名 stub 顶替 (与 :data 的 KVO 观察器同款处理)。
                 if (!isMacHost) {
-                    kotlin.exclude("io/legado/app/ui/IosSceneOrientation.kt")
+                    kotlin.exclude("com/langhuan/reader/ui/IosSceneOrientation.kt")
                     kotlin.srcDir("src/iosWindowsCheckMain/kotlin")
                 }
             }

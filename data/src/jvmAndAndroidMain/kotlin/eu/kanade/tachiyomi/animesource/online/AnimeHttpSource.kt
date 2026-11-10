@@ -20,7 +20,7 @@ import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.await
 import eu.kanade.tachiyomi.network.awaitSuccess
-import io.legado.app.help.coroutine.IoDispatcher
+import com.langhuan.reader.help.coroutine.IoDispatcher
 import kotlinx.coroutines.withContext
 import okhttp3.Headers
 import okhttp3.OkHttpClient

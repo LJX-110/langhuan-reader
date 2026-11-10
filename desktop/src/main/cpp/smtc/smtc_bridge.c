@@ -432,7 +432,7 @@ static DWORD g_last_timeline_tick;
 
 #define LGM_APPLY (WM_APP + 11)
 #define LGM_QUIT  (WM_APP + 12)
-#define SMTC_WINDOW_CLASS L"LegadoSmtcWindow"
+#define SMTC_WINDOW_CLASS L"LanghuanSmtcWindow"
 
 static void copy_ws(wchar_t *dst, size_t cap, const wchar_t *src) {
     if (!src) {
@@ -597,7 +597,7 @@ static int setup_session(void) {
            WS_EX_TOOLWINDOW 不进任务栏/Alt-Tab, WS_EX_NOACTIVATE 不抢焦点。
            CreateWindowExW 已实体化窗口, GetForWindow 只需句柄合法, 无需 ShowWindow。 */
         g_own_hwnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                SMTC_WINDOW_CLASS, L"legado-smtc",
+                SMTC_WINDOW_CLASS, L"langhuan-smtc",
                 WS_POPUP,
                 -32000, -32000, 0, 0,
                 NULL, NULL, wc.hInstance, NULL);

@@ -4,7 +4,7 @@
 // 仅存在于 :data 的 jvm 变体 (data/src/jvmMain), :app (android 变体) 编译与打包不接触本目录。
 package android.content
 
-import io.legado.app.help.file.AppFilesDirs
+import com.langhuan.reader.help.file.AppFilesDirs
 import java.io.File
 
 open class Context {
@@ -21,7 +21,7 @@ open class Context {
     open fun getApplicationContext(): Context = this
 
     /** 桌面无 Android 包名, 扩展构建 UA/做包名校验时拿到与宿主一致的等价包名。 */
-    open fun getPackageName(): String = "io.legado.app"
+    open fun getPackageName(): String = "com.langhuan.reader"
 
     /** 桌面无 Activity 跳转面 (扩展的"打开网页"型动作在此为空操作)。 */
     open fun startActivity(intent: Intent) {

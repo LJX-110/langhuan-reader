@@ -23,9 +23,9 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.core.content.ContextCompat
-import io.legado.app.constant.AppLog
-import io.legado.app.help.http.CookieStore
-import io.legado.app.help.http.isOutdated
+import com.langhuan.reader.constant.AppLog
+import com.langhuan.reader.help.http.CookieStore
+import com.langhuan.reader.help.http.isOutdated
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl

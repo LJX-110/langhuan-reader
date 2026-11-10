@@ -3,7 +3,7 @@
 // 共用同一份数据; 空实现会让需登录或带 CF 挑战的插件源在桌面静默取不到数据。
 package android.webkit
 
-import io.legado.app.help.http.CookieStoreProviders
+import com.langhuan.reader.help.http.CookieStoreProviders
 
 class CookieManager private constructor() {
 

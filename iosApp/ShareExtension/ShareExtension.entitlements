@@ -12,14 +12,14 @@
   此时 FileManager.containerURL(forSecurityApplicationGroupIdentifier:) 恒返回 nil,
   ShareViewController 交付不了, 但会当场把原因与替代导入路径弹给用户看, 不崩。
 
-  ⚠️ 值与 ShareExtension/ShareViewController.swift 的 legadoAppGroupId、
+  ⚠️ 值与 ShareExtension/ShareViewController.swift 的 langhuanAppGroupId、
   ui/src/iosMain/.../IosShareInbox.kt 的 APP_GROUP_ID 逐字一致 (改一处要四处同改)。
 -->
 <plist version="1.0">
 <dict>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.shutiao.reader</string>
+		<string>group.com.langhuan.reader</string>
 	</array>
 </dict>
 </plist>

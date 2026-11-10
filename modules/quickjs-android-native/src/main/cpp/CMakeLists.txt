@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(legado_quickjs LANGUAGES C CXX)
+project(langhuan_quickjs LANGUAGES C CXX)
 
 # QuickJS-NG 源码目录 (单一数据源: 与 iOS/鸿蒙 cinterop 共用 modules/quickjs/src/main/cinterop/quickjs-ng/)
-get_filename_component(LEGADO_PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../.." ABSOLUTE)
-set(QUICKJS_NG_DIR "${LEGADO_PROJECT_ROOT}/modules/quickjs/src/main/cinterop/quickjs-ng")
+get_filename_component(LANGHUAN_PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../.." ABSOLUTE)
+set(QUICKJS_NG_DIR "${LANGHUAN_PROJECT_ROOT}/modules/quickjs/src/main/cinterop/quickjs-ng")
 
 # ============ 通用瘦身开关 ============
 # ThinLTO 跨 TU 内联+死码; gc-sections 回收无用 section。
@@ -21,14 +21,14 @@ set(QUICKJS_NG_DIR "${LEGADO_PROJECT_ROOT}/modules/quickjs/src/main/cinterop/qui
 #   单独走 MSVC 选项 (/O2 /GL /Gy /Gw /EHsc /OPT:REF /OPT:ICF /LTCG)
 
 # GCC/Clang 通用编译选项 (Android/Linux/macOS/MinGW)
-set(LEGADO_QUICKJS_COMMON_FLAGS_GCC
+set(LANGHUAN_QUICKJS_COMMON_FLAGS_GCC
         -fvisibility=hidden
         -ffunction-sections
         -fdata-sections
         -fno-unwind-tables
         -fno-asynchronous-unwind-tables
 )
-set(LEGADO_QUICKJS_CXX_FLAGS_GCC
+set(LANGHUAN_QUICKJS_CXX_FLAGS_GCC
         -fno-exceptions
         -fno-rtti
 )
@@ -70,7 +70,7 @@ if (MSVC)
     )
 else ()
     target_compile_options(quickjs_ng PRIVATE
-            ${LEGADO_QUICKJS_COMMON_FLAGS_GCC}
+            ${LANGHUAN_QUICKJS_COMMON_FLAGS_GCC}
             -O2
             -Wall
             -Wno-unused-parameter
@@ -81,7 +81,7 @@ else ()
 endif ()
 
 # ============ JNI 桥接层共享库 ============
-add_library(legado_quickjs SHARED
+add_library(langhuan_quickjs SHARED
         jni/jni_bridge.cpp
         jni/jni_handle.cpp
         jni/jni_object_class.cpp
@@ -91,20 +91,20 @@ add_library(legado_quickjs SHARED
 )
 
 # C++17 标准
-set_target_properties(legado_quickjs PROPERTIES
+set_target_properties(langhuan_quickjs PROPERTIES
         CXX_STANDARD 17
         CXX_STANDARD_REQUIRED ON
 )
 
-# PREFIX "": 仅 Windows 桌面端去掉 lib 前缀, 让产出 legado_quickjs.dll
-# - Windows MinGW: jvmMain/Platform.kt 用 System.load(absolutePath) 查找 legado_quickjs.dll (MinGW 默认 liblegado_quickjs.dll, 需 PREFIX "" 去前缀)
+# PREFIX "": 仅 Windows 桌面端去掉 lib 前缀, 让产出 langhuan_quickjs.dll
+# - Windows MinGW: jvmMain/Platform.kt 用 System.load(absolutePath) 查找 langhuan_quickjs.dll (MinGW 默认 liblanghuan_quickjs.dll, 需 PREFIX "" 去前缀)
 # - Windows MSVC: MSVC 默认无 lib 前缀, PREFIX "" 是 no-op
-# - Android: System.loadLibrary("legado_quickjs") 自动查找 liblegado_quickjs.so (必须保留 lib 前缀, 否则 UnsatisfiedLinkError)
-# - macOS/Linux: jvmMain 查找 liblegado_quickjs.dylib/.so (保留默认 lib 前缀)
-# 注: 之前无条件 PREFIX "" 误伤 Android 端 (产出 legado_quickjs.so 无 lib 前缀, System.loadLibrary 找不到),
+# - Android: System.loadLibrary("langhuan_quickjs") 自动查找 liblanghuan_quickjs.so (必须保留 lib 前缀, 否则 UnsatisfiedLinkError)
+# - macOS/Linux: jvmMain 查找 liblanghuan_quickjs.dylib/.so (保留默认 lib 前缀)
+# 注: 之前无条件 PREFIX "" 误伤 Android 端 (产出 langhuan_quickjs.so 无 lib 前缀, System.loadLibrary 找不到),
 #     导致 java.lang.NoClassDefFoundError: com.script.quickjs.QuickJsNative 运行时崩溃
 if (WIN32 AND NOT ANDROID)
-    set_target_properties(legado_quickjs PROPERTIES PREFIX "")
+    set_target_properties(langhuan_quickjs PROPERTIES PREFIX "")
 endif ()
 
 # JNI 头文件目录 (Android NDK 自带 jni.h, 桌面端从 JDK include 引入)
@@ -128,7 +128,7 @@ if (NOT ANDROID)
     endif ()
 
     if (JDK_INCLUDE_DIR AND EXISTS "${JDK_INCLUDE_DIR}/jni.h")
-        message(STATUS "[legado_quickjs] Using JDK include: ${JDK_INCLUDE_DIR}")
+        message(STATUS "[langhuan_quickjs] Using JDK include: ${JDK_INCLUDE_DIR}")
         # 桌面平台子目录 (jni_md.h): win32/linux/darwin
         if (WIN32)
             set(JDK_OS_INCLUDE_DIR "${JDK_INCLUDE_DIR}/win32")
@@ -138,11 +138,11 @@ if (NOT ANDROID)
             set(JDK_OS_INCLUDE_DIR "${JDK_INCLUDE_DIR}/linux")
         endif ()
     else ()
-        message(FATAL_ERROR "[legado_quickjs] jni.h not found. Please set JAVA_HOME env var.")
+        message(FATAL_ERROR "[langhuan_quickjs] jni.h not found. Please set JAVA_HOME env var.")
     endif ()
 endif ()
 
-target_include_directories(legado_quickjs PRIVATE
+target_include_directories(langhuan_quickjs PRIVATE
         ${QUICKJS_NG_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/jni
         ${JDK_INCLUDE_DIR}
@@ -150,15 +150,15 @@ target_include_directories(legado_quickjs PRIVATE
 )
 
 if (MSVC)
-    target_compile_options(legado_quickjs PRIVATE
+    target_compile_options(langhuan_quickjs PRIVATE
             /O2
             /W3
             /EHsc
     )
 else ()
-    target_compile_options(legado_quickjs PRIVATE
-            ${LEGADO_QUICKJS_COMMON_FLAGS_GCC}
-            ${LEGADO_QUICKJS_CXX_FLAGS_GCC}
+    target_compile_options(langhuan_quickjs PRIVATE
+            ${LANGHUAN_QUICKJS_COMMON_FLAGS_GCC}
+            ${LANGHUAN_QUICKJS_CXX_FLAGS_GCC}
             -O2
             -Wall
             -Wno-unused-parameter
@@ -170,12 +170,12 @@ if (ANDROID)
     # Android: NDK Clang + ThinLTO + GNU ld + 16KB 页面对齐
     # 保持原行为: -flto=thin + gc-sections/icf/exclude-libs + max-page-size=16384 + log 库
     target_compile_options(quickjs_ng PRIVATE -flto=thin)
-    target_compile_options(legado_quickjs PRIVATE -flto=thin)
+    target_compile_options(langhuan_quickjs PRIVATE -flto=thin)
 
     # Android 15+ 要求 native 库 16 KB 页面对齐,否则在 16 KB 页面设备上可能无法安装
     # 链接器标志 -z max-page-size=16384 强制 ELF 对齐到 16 KB
     # 官方文档: https://developer.android.com/guide/practices/page-sizes
-    target_link_options(legado_quickjs PRIVATE
+    target_link_options(langhuan_quickjs PRIVATE
             "-Wl,-z,max-page-size=16384"
             "-flto=thin"
             "-Wl,--gc-sections"
@@ -184,7 +184,7 @@ if (ANDROID)
     )
 
     # Android: 链接 QuickJS-NG + Android log
-    target_link_libraries(legado_quickjs
+    target_link_libraries(langhuan_quickjs
             PRIVATE
             quickjs_ng
             log
@@ -192,14 +192,14 @@ if (ANDROID)
 elseif (MSVC)
     # 桌面 Windows MSVC: /GL (LTCG) + /Gy /Gw (function/data sections) + /OPT:REF/ICF
     target_compile_options(quickjs_ng PRIVATE /GL /Gy /Gw)
-    target_compile_options(legado_quickjs PRIVATE /GL /Gy /Gw)
-    target_link_options(legado_quickjs PRIVATE
+    target_compile_options(langhuan_quickjs PRIVATE /GL /Gy /Gw)
+    target_link_options(langhuan_quickjs PRIVATE
             "/OPT:REF"
             "/OPT:ICF"
             "/LTCG"
     )
     # 桌面 Windows: 不链接 log, 不用 16KB 页面对齐
-    target_link_libraries(legado_quickjs
+    target_link_libraries(langhuan_quickjs
             PRIVATE
             quickjs_ng
     )
@@ -208,55 +208,55 @@ else ()
     # ThinLTO 仅 Clang 支持, 通过编译器检测决定是否启用
     if (CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "AppleClang")
         target_compile_options(quickjs_ng PRIVATE -flto=thin)
-        target_compile_options(legado_quickjs PRIVATE -flto=thin)
-        set(LEGADO_QUICKJS_LTO_FLAG "-flto=thin")
+        target_compile_options(langhuan_quickjs PRIVATE -flto=thin)
+        set(LANGHUAN_QUICKJS_LTO_FLAG "-flto=thin")
     elseif (WIN32)
         # MinGW GCC: C:\mingw64 的 ar/ld 未装配 lto plugin (ar 报 "plugin needed to handle lto
         # object", 链接期大量 undefined reference to JS_*), 与 Linux binutils 不同; 关闭 LTO
-        set(LEGADO_QUICKJS_LTO_FLAG "")
+        set(LANGHUAN_QUICKJS_LTO_FLAG "")
     else ()
         # Linux GCC: -flto (binutils 带 lto plugin, ubuntu CI 验证可链接)
         target_compile_options(quickjs_ng PRIVATE -flto)
-        target_compile_options(legado_quickjs PRIVATE -flto)
-        set(LEGADO_QUICKJS_LTO_FLAG "-flto")
+        target_compile_options(langhuan_quickjs PRIVATE -flto)
+        set(LANGHUAN_QUICKJS_LTO_FLAG "-flto")
     endif ()
 
     if (APPLE)
         # Apple ld: -dead_strip 等价 gc-sections, 不支持 --icf/--exclude-libs
-        target_link_options(legado_quickjs PRIVATE
+        target_link_options(langhuan_quickjs PRIVATE
                 "-Wl,-dead_strip"
-                ${LEGADO_QUICKJS_LTO_FLAG}
+                ${LANGHUAN_QUICKJS_LTO_FLAG}
         )
     elseif (WIN32)
         # MinGW: --gc-sections + -static。--icf=all 仅 gold/lld 支持 (C:\mingw64 的 BFD
         # ld 报 unrecognized option), 与 Linux 桌面分支一致去掉。
         # --exclude-libs=ALL 不支持 (lld 默认不重导出静态库符号, 无需此选项)
         # -static: 静态链接 UCRT + winpthread + libc++, 避免 DLL 依赖加载失败
-        target_link_options(legado_quickjs PRIVATE
+        target_link_options(langhuan_quickjs PRIVATE
                 "-Wl,--gc-sections"
                 "-static"
-                ${LEGADO_QUICKJS_LTO_FLAG}
+                ${LANGHUAN_QUICKJS_LTO_FLAG}
         )
     else ()
         # Linux GNU ld: --gc-sections + --exclude-libs=ALL
         # (--icf=all 仅 gold/lld 支持, BFD ld 报 unrecognized option; ubuntu CI 的 /usr/bin/ld 即 BFD)
-        target_link_options(legado_quickjs PRIVATE
+        target_link_options(langhuan_quickjs PRIVATE
                 "-Wl,--gc-sections"
                 "-Wl,--exclude-libs=ALL"
-                ${LEGADO_QUICKJS_LTO_FLAG}
+                ${LANGHUAN_QUICKJS_LTO_FLAG}
         )
     endif ()
 
     # 桌面 Linux/macOS/MinGW: 不链接 log
     # MinGW (LLVM-MinGW) 需链接 winpthread (pthread_mutex_* 等)
     if (WIN32 AND NOT MSVC)
-        target_link_libraries(legado_quickjs
+        target_link_libraries(langhuan_quickjs
                 PRIVATE
                 quickjs_ng
                 pthread
         )
     else ()
-        target_link_libraries(legado_quickjs
+        target_link_libraries(langhuan_quickjs
                 PRIVATE
                 quickjs_ng
         )

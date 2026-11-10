@@ -15,8 +15,8 @@ actual fun logQuickJsWarn(tag: String, msg: String, e: Throwable?) {
     Log.w(tag, msg, e)
 }
 
-actual fun loadLegadoQuickJsNative() {
-    System.loadLibrary("legado_quickjs")
+actual fun loadLanghuanQuickJsNative() {
+    System.loadLibrary("langhuan_quickjs")
 }
 
 // ============ 计时器平台唤醒 (Android) ============

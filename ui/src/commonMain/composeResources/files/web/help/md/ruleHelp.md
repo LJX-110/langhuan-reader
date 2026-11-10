@@ -1,14 +1,14 @@
 # 源规则帮助
 
-* [阅读3.0(Legado)规则说明](https://mgz0227.github.io/The-tutorial-of-Legado/)
-* [书源帮助文档](https://mgz0227.github.io/The-tutorial-of-Legado/Rule/source.html)
-* [订阅源帮助文档](https://mgz0227.github.io/The-tutorial-of-Legado/Rule/rss.html)
+* [阅读3.0(Langhuan)规则说明](https://mgz0227.github.io/The-tutorial-of-Langhuan/)
+* [书源帮助文档](https://mgz0227.github.io/The-tutorial-of-Langhuan/Rule/source.html)
+* [订阅源帮助文档](https://mgz0227.github.io/The-tutorial-of-Langhuan/Rule/rss.html)
 * 辅助键盘❓中可插入URL参数模板,打开帮助,js教程,选择文件
 * 规则标志, {{......}}内使用规则必须有明显的规则标志,没有规则标志当作js执行
 ```
 @@ 默认规则,直接写时可以省略@@
 @XPath: xpath规则,直接写时以/开头可省略@XPath
-@Json: json规则,直接写时以$.或$[开头可省略@Json
+@Json: json规则,直接写时以$.或$开头可省略@Json
 @CSS: css选择器规则
 : regex规则,不可省略,只可以用在书籍列表和目录列表
 ```
@@ -23,7 +23,7 @@
 * jsLib
 
 >
-注入JavaScript到JS引擎中，支持两种格式，可实现[函数共用](https://github.com/huajideshutiao/legado/wiki/JavaScript%E5%87%BD%E6%95%B0%E5%85%B1%E7%94%A8)
+注入JavaScript到JS引擎中，支持两种格式，可实现[函数共用
 
 > `JavaScript Code` 直接填写JavaScript片段  
 > `{"example":"https://www.example.com/js/example.js", ...}` 自动复用已经下载的js文件
@@ -272,7 +272,7 @@ let options = {
 * 图片解密
 > 适用于图片需要二次解密的情况，直接填写JavaScript，返回解密后的`ByteArray`  
 >
-部分变量说明：java（仅支持[js扩展类](https://github.com/huajideshutiao/legado/blob/master/data/src/commonMain/kotlin/io/legado/app/help/JsExtensionsCommon.kt)
+部分变量说明：java（仅支持js扩展类
 ），result为待解密图片的`ByteArray`，src为图片链接
 > 漫画切块重排一类的解密可用注入的`image`对象（跨端一致），详见js帮助的「image 对象（图片解密）」章节
 

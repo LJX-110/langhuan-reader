@@ -2,7 +2,7 @@
  * PDF 桥接处理器 (ArkTS 侧 @hms.officeservice.pdfservice 实现)。
  *
  * 请求面: invokePdfSync 经源代次通道 dispatch (控制面 JSON: requestId/action/payload,
- * gen 资格在 C++ 层把关); 结果面: legado.pdfCallback(requestId, resultJson, bytes?) 回送。
+ * gen 资格在 C++ 层把关); 结果面: langhuan.pdfCallback(requestId, resultJson, bytes?) 回送。
  * 动作: openDocument {path} (前置 releaseCurrent 含草稿终结, 未成功拒绝; PARSE_SUCCESS
  * 判定, 失败释放草稿不发布) / renderPage {index,width} (整页矩阵 getAreaPixelMap →
  * 白底合成 → ImagePacker JPEG 90) / closeDocument (releaseCurrent, 失败如实 ok:false)。
@@ -47,7 +47,7 @@ let pdfDoc: pdfService.PdfDocument | undefined = undefined;
  */
 let pendingDraft: pdfService.PdfDocument | undefined = undefined;
 
-/** 桥请求入口 (EntryAbility.onCreate 经 legado.registerPdfCallback 注册; gen 通道单 JSON 参)。 */
+/** 桥请求入口 (EntryAbility.onCreate 经 langhuan.registerPdfCallback 注册; gen 通道单 JSON 参)。 */
 export function handlePdfRequest(
   requestJson: string,
   cb: (requestId: number, resultJson: string, body?: ArrayBuffer) => void

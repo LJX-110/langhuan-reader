@@ -50,8 +50,8 @@
 </template>
 
 <script setup lang="ts">
-import API, { toAbsoluteUrl, legado_http_entry_point } from '@api'
-import { isLegadoUrl } from '@/utils/utils'
+import API, { toAbsoluteUrl, langhuan_http_entry_point } from '@api'
+import { isLanghuanUrl } from '@/utils/utils'
 
 interface ImageItem {
   rawUrl: string
@@ -220,7 +220,7 @@ const initImages = () => {
         loadFailed: false,
       }
     }
-    const entryPoint = legado_http_entry_point
+    const entryPoint = langhuan_http_entry_point
     if (typeof entryPoint === 'string' && entryPoint && url.startsWith(entryPoint)) {
       return {
         rawUrl: url,
@@ -232,8 +232,8 @@ const initImages = () => {
       }
     }
 
-    // 2. 包含请求头等参数的 Legado URL 或 源配置了正文图片解密 (imageDecode) 时，走后端图片代理
-    if ((forceProxy || isLegadoUrl(url)) && props.bookUrl) {
+    // 2. 包含请求头等参数的 Langhuan URL 或 源配置了正文图片解密 (imageDecode) 时，走后端图片代理
+    if ((forceProxy || isLanghuanUrl(url)) && props.bookUrl) {
       return {
         rawUrl: url,
         currentSrc: API.getProxyImageUrl(props.bookUrl, url),
