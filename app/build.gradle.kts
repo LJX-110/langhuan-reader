@@ -153,10 +153,9 @@ android {
         abi {
             isEnable = true
             reset()
-            // 只保留 arm 系 ABI (arm64-v8a + armeabi-v7a); x86/x86_64 不再出包。
-            // universal 仍出, 且只含已编译 ABI
-            include("armeabi-v7a", "arm64-v8a")
-            isUniversalApk = true
+            // 只出 arm64-v8a: 现代设备通用, 不再出 32 位与 universal 包
+            include("arm64-v8a")
+            isUniversalApk = false
         }
     }
 

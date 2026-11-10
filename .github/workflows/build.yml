@@ -32,11 +32,30 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
 
-      # 只出 release 包: 已开 R8 + 资源裁剪, 单 ABI 约 5MB
-      - name: Build release APKs
+      # 复用仓库已有的签名 Secrets, 仓库里不落任何密钥文件
+      - name: Restore release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "缺少 ANDROID_KEYSTORE_BASE64, 无法生成正式签名包"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      # 只出 arm64-v8a 单包: 已开 R8 + 资源裁剪
+      - name: Build release APK
+        env:
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew assembleAppRelease --parallel --build-cache --warning-mode all
+          ./gradlew assembleAppRelease --parallel --build-cache --warning-mode all \
+            -PRELEASE_STORE_FILE="$RUNNER_TEMP/release.jks" \
+            -PRELEASE_STORE_PASSWORD="$STORE_PASSWORD" \
+            -PRELEASE_KEY_ALIAS="$KEY_ALIAS" \
+            -PRELEASE_KEY_PASSWORD="$KEY_PASSWORD"
 
       # 推 v* 标签才发版, 平时 build 只做校验
       - name: Publish release
