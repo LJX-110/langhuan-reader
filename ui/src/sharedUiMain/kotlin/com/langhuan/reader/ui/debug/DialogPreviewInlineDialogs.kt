@@ -24,21 +24,13 @@ import com.langhuan.reader.ui.book.group.GroupViewModelShared
 import com.langhuan.reader.ui.book.import.remote.ServerConfigDialog
 import com.langhuan.reader.ui.book.import.remote.ServersDialog
 import com.langhuan.reader.ui.book.manage.SourcePickerDialog
-import com.langhuan.reader.ui.book.manga.config.MangaColorFilterConfig
-import com.langhuan.reader.ui.book.manga.config.MangaColorFilterDialog
-import com.langhuan.reader.ui.book.manga.config.MangaFooterConfig
-import com.langhuan.reader.ui.book.manga.config.MangaFooterSettingDialog
 import com.langhuan.reader.ui.book.read.CharsetDialog
 import com.langhuan.reader.ui.book.read.ContentEditDialog
 import com.langhuan.reader.ui.book.read.DownloadDialog
 import com.langhuan.reader.ui.book.read.EffectiveReplacesDialog
 import com.langhuan.reader.ui.book.read.ImageStyleDialog
-import com.langhuan.reader.ui.book.read.SimulatedReadingDialog
 import com.langhuan.reader.ui.book.read.UnderlineBubbleState
 import com.langhuan.reader.ui.book.read.UnderlineNoteBubbleHost
-import com.langhuan.reader.ui.book.read.config.AutoReadActions
-import com.langhuan.reader.ui.book.read.config.AutoReadController
-import com.langhuan.reader.ui.book.read.config.AutoReadPanelDialogHost
 import com.langhuan.reader.ui.book.read.config.ClickActionDialog
 import com.langhuan.reader.ui.book.read.config.FontSelectDialog
 import com.langhuan.reader.ui.book.read.config.PageKeyDialog
@@ -54,21 +46,12 @@ import com.langhuan.reader.ui.route.ChangeChapterSourceDialogHost
 import com.langhuan.reader.ui.route.ChangeSourceDialogHost
 import com.langhuan.reader.ui.route.ReadLayoutConfigDialogHost
 import com.langhuan.reader.ui.route.TocDialogHost
-import com.langhuan.reader.ui.main.home.HomeSectionEditDialog
-import com.langhuan.reader.ui.main.home.HomeSectionManageDialog
-import com.langhuan.reader.ui.main.home.HomeTabEditDialog
-import com.langhuan.reader.ui.main.home.HomeTabManageDialog
+import com.langhuan.reader.ui.main.home.SectionCoverRow
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.custom_page_key
 import com.langhuan.reader.ui.generated.resources.effective_replaces
 import com.langhuan.reader.ui.generated.resources.group_manage
-import com.langhuan.reader.ui.generated.resources.home_add_section
-import com.langhuan.reader.ui.generated.resources.home_manage_for_tab
-import com.langhuan.reader.ui.generated.resources.home_tab_add
-import com.langhuan.reader.ui.generated.resources.home_tab_manage
 import com.langhuan.reader.ui.generated.resources.lookup_word
-import com.langhuan.reader.ui.generated.resources.manga_color_filter
-import com.langhuan.reader.ui.generated.resources.manga_footer_config
 import com.langhuan.reader.ui.generated.resources.search_scope
 import com.langhuan.reader.ui.generated.resources.select_book_source
 import com.langhuan.reader.ui.generated.resources.select_font
@@ -174,13 +157,6 @@ internal suspend fun buildDialogEntries(
         DialogPreviewEntry.Inline(DialogPreviewGroup.DIALOG, "dialog_speak_engine", titleOf(Res.string.speak_engine), "SpeakEngineDialog") { onDismiss ->
             SpeakEnginePreview(onDismiss)
         },
-        DialogPreviewEntry.Inline(DialogPreviewGroup.DIALOG, "dialog_simulated_reading", nameText("模拟追读"), "SimulatedReadingDialog") { onDismiss ->
-            SimulatedReadingDialog(
-                book = book ?: Book(),
-                onApply = { onDismiss() },
-                onDismiss = onDismiss,
-            )
-        },
         DialogPreviewEntry.Inline(DialogPreviewGroup.DIALOG, "dialog_image_style", nameText("图片样式"), "ImageStyleDialog") { onDismiss ->
             ImageStyleDialog(
                 book = book ?: Book(),
@@ -199,22 +175,6 @@ internal suspend fun buildDialogEntries(
             CharsetDialog(
                 book = book ?: Book(),
                 onApply = { onDismiss() },
-                onDismiss = onDismiss,
-            )
-        },
-        DialogPreviewEntry.Inline(DialogPreviewGroup.DIALOG, "dialog_manga_color_filter", titleOf(Res.string.manga_color_filter), "MangaColorFilterDialog") { onDismiss ->
-            MangaColorFilterDialog(
-                config = MangaColorFilterConfig(),
-                grayEnabled = false,
-                onColorFilterChange = {},
-                onGrayChange = {},
-                onDismiss = onDismiss,
-            )
-        },
-        DialogPreviewEntry.Inline(DialogPreviewGroup.DIALOG, "dialog_manga_footer", titleOf(Res.string.manga_footer_config), "MangaFooterSettingDialog") { onDismiss ->
-            MangaFooterSettingDialog(
-                config = MangaFooterConfig(),
-                onConfigChange = {},
                 onDismiss = onDismiss,
             )
         },
@@ -242,18 +202,6 @@ internal suspend fun buildDialogEntries(
                 onSave = { onDismiss() },
                 onDismiss = onDismiss,
             )
-        },
-        DialogPreviewEntry.Inline(DialogPreviewGroup.DIALOG, "dialog_home_section_edit", titleOf(Res.string.home_add_section), "HomeSectionEditDialog") { onDismiss ->
-            HomeSectionEditDialog(tabTitle = "预览分组", onDismiss = onDismiss)
-        },
-        DialogPreviewEntry.Inline(DialogPreviewGroup.DIALOG, "dialog_home_section_manage", titleOf(Res.string.home_manage_for_tab, "预览分组"), "HomeSectionManageDialog") { onDismiss ->
-            HomeSectionManageDialog(tabTitle = "预览分组", onDismiss = onDismiss)
-        },
-        DialogPreviewEntry.Inline(DialogPreviewGroup.DIALOG, "dialog_home_tab_edit", titleOf(Res.string.home_tab_add), "HomeTabEditDialog") { onDismiss ->
-            HomeTabEditDialog(onDismiss = onDismiss)
-        },
-        DialogPreviewEntry.Inline(DialogPreviewGroup.DIALOG, "dialog_home_tab_manage", titleOf(Res.string.home_tab_manage), "HomeTabManageDialog") { onDismiss ->
-            HomeTabManageDialog(onDismiss = onDismiss)
         },
         DialogPreviewEntry.Inline(DialogPreviewGroup.DIALOG, "dialog_dict", titleOf(Res.string.lookup_word), "DictDialogHost") { onDismiss ->
             DictDialogHost(word = "预览", onDismiss = onDismiss)
@@ -299,14 +247,6 @@ internal suspend fun buildDialogEntries(
                 )
             }
         },
-        DialogPreviewEntry.Inline(DialogPreviewGroup.SHEET, "sheet_auto_read", nameText("自动翻页面板"), "AutoReadPanelDialogHost") { onDismiss ->
-            // 速度滑条读写真实配置 (与阅读页同一份), 其余动作按钮在预览里不接后端
-            AutoReadPanelDialogHost(
-                controller = PreviewAutoReadController,
-                actions = PreviewAutoReadActions,
-                onDismiss = onDismiss,
-            )
-        },
         DialogPreviewEntry.Inline(DialogPreviewGroup.SHEET, "sheet_change_source", nameText("换源"), "ChangeSourceDialogHost") { onDismiss ->
             val changeSourceBook = book
             if (changeSourceBook == null) {
@@ -339,28 +279,6 @@ internal suspend fun buildDialogEntries(
             }
         },
     )
-}
-
-/** 自动翻页控制器的预览实现: 速度读写真实配置, 与阅读页同一份。 */
-private object PreviewAutoReadController : AutoReadController {
-    override var autoReadSpeed: Int
-        get() = ReadBookConfigProviders.get().autoReadSpeed
-        set(value) {
-            ReadBookConfigProviders.get().autoReadSpeed = value
-        }
-}
-
-/** 自动翻页面板的动作槽: 预览里只展示形制, 按钮不接阅读页后端。 */
-private object PreviewAutoReadActions : AutoReadActions {
-    override fun openChapterList() = Unit
-
-    override fun showMenuBar() = Unit
-
-    override fun autoPageStop() = Unit
-
-    override fun showReadStyle() = Unit
-
-    override fun upTtsSpeechRate() = Unit
 }
 
 @Composable

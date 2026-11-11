@@ -67,14 +67,13 @@ fun warmAppStringCache() {
 /** 启动期同步上下文关键 key (AppStringKey 之外)。仅保留首屏/前台/渠道初始化依赖项。 */
 private val warmKeys = listOf(
     // ---- 通知渠道 / 前台服务 ----
-    "action_download", "read_aloud", "web_service", "cannot_empty",
+    "action_download", "read_aloud", "cannot_empty",
     // ---- 快捷方式 ----
     "bookshelf", "last_read",
     // ---- 启动协议 / 更新 / 退出 ----
     "privacy_policy", "agree", "refuse", "double_click_exit",
     "is_latest_version", "check_update", "restore", "webdav_after_local_restore_confirm",
-    // ---- 核心权限提示与通用对话框 ----
-    "notification_permission_rationale", "ignore_battery_permission_rationale",
+    // ---- 核心提示与通用对话框 ----
     "dialog_title", "dialog_setting", "dialog_cancel", "cancel", "ok",
 )
 

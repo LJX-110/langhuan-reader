@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.langhuan.reader.data.entities.Book
 import com.langhuan.reader.help.book.isImage
@@ -17,11 +18,23 @@ import com.langhuan.reader.ui.book.read.ReadBookViewModelShared
 import com.langhuan.reader.ui.book.read.page.SplineFling
 import com.langhuan.reader.ui.book.read.page.entities.PageDirectionShared
 import com.langhuan.reader.ui.book.read.page.entities.TextPage
+import com.langhuan.reader.ui.book.read.page.entities.paragraphAt
 import com.langhuan.reader.ui.book.read.page.splineFlingDecaySpec
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.min
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
+
+/** 用户拖拽后暂停朗读跟随的时长。 */
+private const val FOLLOW_RESUME_DELAY_MS = 4_000L
+
+/** 跟随滚动的视口安全区比例（上下各留 22%）。 */
+private const val FOLLOW_SAFE_ZONE_FRACTION = 0.22f
+
+/** 跟随滚动的基础动画时长（距离由 animateScrollBy 按页高折算）。 */
+private const val FOLLOW_ANIM_DURATION_MS = 320
 
 /**
  * 滚动翻页 delegate（sharedUiMain，Compose Multiplatform 版，行级滚动）。
@@ -135,6 +148,9 @@ class ScrollPageDelegateCompose(
             this.density = density
         }
     }
+
+    /** 最近一次用户拖拽起点：拖拽后短暂暂停朗读跟随，避免刚滑走就被拉回。 */
+    private var lastUserDragMark: TimeMark? = null
     // endregion
 
     init {
@@ -158,15 +174,6 @@ class ScrollPageDelegateCompose(
      * translationY: 在 graphicsLayer 绘制阶段读取, 不触发重组。
      */
     val contentOffset: Float get() = _currentOffset
-
-    /**
-     * 自动翻页连续滚动驱动：按推进量走行级 scroll 折算（对照原版 AutoPager 每帧
-     * `curPage.scroll(-scrollOffset)`）。正 deltaPx = 内容上移露出下一页；
-     * 负值（上一页方向）同样折算，但自动翻页只推进正值。
-     *
-     * @return false = 命中硬边界（书首/书末），调用方应停止自动翻页
-     */
-    override fun onAutoScrollBy(deltaPx: Float): Boolean = applyScrollDelta(-deltaPx)
 
     // region 滚动核心算法 (对照旧 ContentTextView.scroll :138-170)
 
@@ -291,6 +298,72 @@ class ScrollPageDelegateCompose(
 
     // endregion
 
+    // region 朗读跟随滚动
+
+    /**
+     * 将章内字符位置所在的段首滚入视口安全区。
+     *
+     * - 目标段优先取 [paragraphAt] 的段首偏移，朗读按句推进时不会逐字挪动画面；
+     * - 目标已在视口上/下安全区内时不滚动；
+     * - 用户拖拽后 [FOLLOW_RESUME_DELAY_MS] 内不跟随，尊重手动浏览；
+     * - 系统关闭动画（MotionDurationScale=0）或 [animate]=false 时直接落位。
+     *
+     * @return true = 本次实际发生了滚动
+     */
+    fun revealChapterPosition(chapterPos: Int, animate: Boolean = true): Boolean {
+        lastUserDragMark?.let {
+            if (it.elapsedNow().inWholeMilliseconds < FOLLOW_RESUME_DELAY_MS) return false
+        }
+        if (isMoved || animJob?.isActive == true) return false
+        val cur = viewModel.curTextPage.value ?: return false
+        val chapter = cur.textChapter ?: return false
+        val anchor = chapter.paragraphAt(chapterPos)?.startOffset ?: chapterPos
+        var pageTop = 0f
+        var targetTop = Float.NaN
+        var targetBottom = Float.NaN
+        for (i in 0..2) {
+            val page = renderPage(i) ?: break
+            val line = page.lines.firstOrNull { line ->
+                anchor >= line.chapterPosition &&
+                    anchor < line.chapterPosition + line.charSize
+            }
+            if (line != null) {
+                targetTop = pageTop + line.lineTop
+                targetBottom = pageTop + line.lineBottom
+                break
+            }
+            pageTop += page.height
+        }
+        if (!targetTop.isFinite() || !targetBottom.isFinite()) return false
+        val visibleHeight = cur.visibleHeight
+        if (visibleHeight <= 0) return false
+        val safe = visibleHeight * FOLLOW_SAFE_ZONE_FRACTION
+        val visibleTop = -_currentOffset
+        val visibleBottom = visibleTop + visibleHeight
+        val delta = when {
+            targetTop < visibleTop + safe -> visibleTop + safe - targetTop
+            targetBottom > visibleBottom - safe -> visibleBottom - safe - targetBottom
+            else -> return false
+        }
+        if (abs(delta) < 1f) return false
+        val reduceMotion =
+            scope.coroutineContext[MotionDurationScale]?.scaleFactor == 0f
+        if (!animate || reduceMotion) {
+            abortAnim()
+            return applyScrollDelta(delta)
+        }
+        abortAnim()
+        isStarted = true
+        isRunning = true
+        animJob = scope.launch {
+            animateScrollBy(delta, FOLLOW_ANIM_DURATION_MS)
+            onAnimStop()
+        }
+        return true
+    }
+
+    // endregion
+
     // region 保留一行翻页 (对照旧 ScrollPageDelegate.calcNextPageOffset/calcPrevPageOffset :139-157)
 
     /**
@@ -381,6 +454,8 @@ class ScrollPageDelegateCompose(
             val deltaY = y - startY
             if (deltaY == 0f) return
             isMoved = true
+            // 用户接管滚动手势: 朗读跟随短暂让位, 避免刚滑走就被拉回
+            lastUserDragMark = TimeSource.Monotonic.markNow()
             // 滚动模式双向滚动, 无方向判定 (对照旧 ScrollPageDelegate.onScroll 只追踪移动)
             startY = y
             lastY = y
@@ -421,9 +496,6 @@ class ScrollPageDelegateCompose(
             onAnimStop()
             return
         }
-        // 惯性滚动开始：暂停自动翻页推进（对照原版 ScrollPageDelegate.onAnimStart 首行
-        // readView.onScrollAnimStart → autoPager.pause；末尾 onAnimStop 里 resume 成对）
-        autoPager?.pause()
         isStarted = true
         isRunning = true
         animJob?.cancel()
@@ -481,9 +553,6 @@ class ScrollPageDelegateCompose(
 
     override fun abortAnim() {
         // 取消正在执行的动画协程 (对照旧 abortAnim: 只取消 scroller, 不动滚动偏移)
-        // 滚动模式下原版 abortAnim 首行是 readView.onScrollAnimStop() → autoPager.resume(),
-        // 即打断惯性后立即恢复自动翻页 (按下本身不暂停，pause 只由 onFling 起惯性时发出)
-        autoPager?.resume()
         val running = animJob?.isActive == true
         animJob?.cancel()
         animJob = null
@@ -513,8 +582,6 @@ class ScrollPageDelegateCompose(
         isCancel = false
         mDirection = PageDirectionShared.NONE
         animJob = null
-        // 动画结束恢复自动翻页推进 (对照原版 onScrollAnimStop → autoPager.resume)
-        autoPager?.resume()
     }
 
     override fun nextPageByAnim(animDurationMs: Int) {

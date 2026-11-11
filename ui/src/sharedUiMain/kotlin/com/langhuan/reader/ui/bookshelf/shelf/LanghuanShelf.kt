@@ -63,6 +63,7 @@ import com.langhuan.reader.ui.compose.theme.AppColors
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.LanghuanType
 import com.langhuan.reader.ui.compose.theme.langhuanOnColor
+import com.langhuan.reader.uimodel.BookItemUi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -97,6 +98,8 @@ class LanghuanShelfState {
  * 拖动与惯性只改一个偏移量，不触发子组件重组。
  *
  * @param books 书架书目（按传入顺序排列）
+ * @param coverBook 封面对实体回查: 封面解密 / cbz 取图要完整 [Book], 由页面边界按
+ *   [BookItemUi.bookUrl] 回查后注入; 返回 null 时按 [BookItemUi] 自带封面地址加载
  * @param initialBookUrl 首次落点：通常传最近阅读的那本
  * @param state 外部控制入口（tab 双击滚顶）
  * @param refreshEnabled 是否允许下拉刷新
@@ -107,15 +110,16 @@ class LanghuanShelfState {
  */
 @Composable
 fun LanghuanShelf(
-    books: List<Book>,
+    books: List<BookItemUi>,
     modifier: Modifier = Modifier,
+    coverBook: (BookItemUi) -> Book? = { null },
     initialBookUrl: String? = null,
     state: LanghuanShelfState = remember { LanghuanShelfState() },
     refreshEnabled: Boolean = false,
     refreshing: Boolean = false,
     onRefresh: () -> Unit = {},
-    onOpen: (Book) -> Unit,
-    onLongPress: (Book) -> Unit,
+    onOpen: (BookItemUi) -> Unit,
+    onLongPress: (BookItemUi) -> Unit,
 ) {
     val colors = AppTheme.colors
     if (books.isEmpty()) {
@@ -222,7 +226,9 @@ fun LanghuanShelf(
             for (i in (centerIndex - 1)..(centerIndex + 1)) {
                 val book = books.getOrNull(i) ?: continue
                 if (covers.containsKey(book.bookUrl)) continue
-                val url = book.getDisplayCover()
+                // 实体只用于封面解密 / cbz 取图 / 自定义封面相对路径解析, 缺失时退回 Ui 封面地址
+                val entity = coverBook(book)
+                val url = entity?.getDisplayCover() ?: book.customCoverUrl ?: book.coverUrl
                 covers[book.bookUrl] = if (url.isNullOrBlank()) {
                     null
                 } else {
@@ -237,7 +243,7 @@ fun LanghuanShelf(
                     runCatching {
                         loader.loadBitmap(
                             url = url,
-                            book = book,
+                            book = entity,
                             bookSource = source,
                             isCover = true,
                             widthPx = metrics.coverImageW.roundToInt(),
@@ -353,7 +359,7 @@ fun LanghuanShelf(
 
 /** 整排书：先铺地面投影，再按格位顺序画书。 */
 private fun DrawScope.drawShelfRow(
-    books: List<Book>,
+    books: List<BookItemUi>,
     offset: Float,
     metrics: LanghuanShelfMetrics,
     colors: AppColors,
@@ -438,7 +444,7 @@ private fun DrawScope.drawFloorCast(
 
 /** 一本书：地面投影已画好，这里画顶面、封面、书脊。 */
 private fun DrawScope.drawBook(
-    book: Book,
+    book: BookItemUi,
     slot: Int,
     focus: Float,
     metrics: LanghuanShelfMetrics,
@@ -643,7 +649,7 @@ private fun blend(base: Color, overlay: Color, fraction: Float): Color = Color(
 /** 书名区：当前居中那本的名字、作者与格位计数。 */
 @Composable
 private fun ShelfMeta(
-    book: Book,
+    book: BookItemUi,
     index: Int,
     total: Int,
     modifier: Modifier = Modifier,

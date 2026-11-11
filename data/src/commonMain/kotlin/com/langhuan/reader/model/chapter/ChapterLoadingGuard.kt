@@ -13,10 +13,8 @@ import kotlin.coroutines.CoroutineContext
 /**
  * 章节装载的并发守卫 + 任务表。
  *
- * 收敛原先四份实现: `ReadBookViewModelShared`(守卫 + 任务表)、`ReadBookShared`、
- * `MangaReaderViewModelShared`、`AudioPlayManager` 的 `addLoading/removeLoading`。
- * 视频侧原用 `loadChapterToken` 轮次令牌另成一套, 也改走本类 (令牌语义 =
- * 「同章新任务替换旧任务」的特例)。
+ * 收敛 `ReadBookViewModelShared`(守卫 + 任务表)、`ReadBookShared` 与
+ * `AudioPlayManager` 的 `addLoading/removeLoading`。
  *
  * # 能力
  * - [tryAdd] / [release]: 同章不并发装载 (原版 `addLoading` / `removeLoading`)。
@@ -27,9 +25,9 @@ import kotlin.coroutines.CoroutineContext
  * - [cancelOutside]: 切章后取消三章窗口外的在途任务。
  *
  * # 两种启动语义
- * - **[launch] (装载全程在任务内)**: 文字 / 视频 —— 正文获取是 suspend, 在任务内 await
+ * - **[launch] (装载全程在任务内)**: 文字 / 音频 —— 正文获取是 suspend, 在任务内 await
  *   完成。任务被替换即旧装载真死, 故装载标记的生命周期与任务一致。
- * - **[launchIfIdle] (装载跨出任务)**: 漫画 —— 任务只负责启动 fire-and-forget 下载
+ * - **[launchIfIdle] (装载跨出任务)**: 任务只负责启动 fire-and-forget 下载
  *   (跑在独立 downloadScope 上, 不随任务取消), 标记必须活到下载回调的
  *   `contentLoadFinish`。此时**不能**做同章替换: 取消一个已把活交出去的任务毫无意义,
  *   却会让新任务被旧任务留下的标记挡住而空跑, 最终谁都不再释放, 永久堵死该章。
@@ -179,9 +177,9 @@ class ChapterLoadingGuard(
     }
 
     /**
-     * 抢到装载权才启动任务; 该章已在装载中则不启动并返回 null (漫画)。
+     * 抢到装载权才启动任务; 该章已在装载中则不启动并返回 null。
      *
-     * 不做同章替换, 与原版漫画一致 (`addLoading` 失败即放弃本次调用)。
+     * 不做同章替换 (`addLoading` 失败即放弃本次调用)。
      * 标记的释放归调用方: 交接给下载则由下载回调释放, 未交接 (早退 / 抛错 / 取消)
      * 则由调用方 finally 释放 —— 本方法不能代它清: 任务正常结束时下载才刚起步。
      */

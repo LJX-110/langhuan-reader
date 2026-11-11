@@ -65,14 +65,12 @@ import com.langhuan.reader.data.entities.SearchBook
 import com.langhuan.reader.data.entities.SearchKeyword
 import com.langhuan.reader.help.config.AppConfigProviders
 import com.langhuan.reader.model.webBook.ExploreOptionUiState
-import com.langhuan.reader.model.webBook.PluginFilterSession
 import com.langhuan.reader.model.webBook.SEARCH_LAYOUT_SOURCE_GROUP
 import com.langhuan.reader.model.webBook.SourceSearchGroup
 import com.langhuan.reader.ui.main.home.SectionCoverRow
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import com.langhuan.reader.ui.main.home.SectionTitleRow
-import com.langhuan.reader.ui.book.manga.extension.PluginSearchFilterRow
 import com.langhuan.reader.ui.book.read.ReadMenuFab
 import com.langhuan.reader.ui.bookshelf.CoverRatioLayoutState
 import com.langhuan.reader.ui.bookshelf.CoverSlotRatio
@@ -88,6 +86,7 @@ import com.langhuan.reader.ui.bookshelf.ShelfLastUpdateText
 import com.langhuan.reader.ui.bookshelf.ShelfListItem
 import com.langhuan.reader.ui.bookshelf.ShelfRowIcon
 import com.langhuan.reader.ui.bookshelf.ShelfVideoItem
+import com.langhuan.reader.uimodel.BookItemUi
 import com.langhuan.reader.ui.bookshelf.shelfCoverHeightDp
 import com.langhuan.reader.ui.bookshelf.UnreadBadge
 import com.langhuan.reader.ui.bookshelf.toCoverBook
@@ -297,8 +296,7 @@ fun SearchScreen(
     }
 
     val sourceOptionsMap by viewModel.sourceSearchOptionsFlow.collectAsState()
-    val pluginFiltersVersion by viewModel.pluginFiltersVersion.collectAsState()
-    // 本轮搜索源快照: 单源聚簇顶部筛选入口据此取源 (多源聚簇不展示筛选)
+    // 本轮搜索源快照 (按源分区/可配置项区块用)
     val searchSources by viewModel.searchSources.collectAsState()
 
     // 搜索布局: 低 3 位=列数 (0/1 单列; 2..6 N 列网格), bit 4 (0x10)=视频标志,
@@ -427,21 +425,6 @@ fun SearchScreen(
                             )
                         }
                     }
-                    // 插件源筛选入口: 仅聚簇布局且本轮只有一个源时在顶部; 多源聚簇不展示
-                    // (按源分类布局下入口在各源区块内)。会话实例由本页 VM 持有, 随页面销毁即丢。
-                    if (!isSourceGroupLayout) {
-                        PluginSearchFilterRow(
-                            source = searchSources.singleOrNull(),
-                            sessionVersion = pluginFiltersVersion,
-                            getSession = viewModel::getPluginFilterSession,
-                            onFiltersChanged = { source -> viewModel.restartSourceSearch(source) },
-                            onResetFilters = { source -> viewModel.resetSourceFilters(source) },
-                            onEditingChanged = { url, editing ->
-                                if (editing) viewModel.pauseSourcePagination(url)
-                                else viewModel.resumeSourcePagination(url)
-                            },
-                        )
-                    }
                     CompositionLocalProvider(LocalCoverRatioLayout provides coverRatioState) {
                         ResultArea(
                             viewModel = viewModel,
@@ -450,13 +433,11 @@ fun SearchScreen(
                             groups = searchGroups,
                             sourceOptions = sourceOptionsMap,
                             searchSources = searchSources,
-                            getPluginFilterSession = viewModel::getPluginFilterSession,
                             isSourceGroupLayout = isSourceGroupLayout,
                             spanCount = spanCount,
                             styleIsVideo = styleIsVideo,
                             styleCols = styleCols,
                             bookshelfVersion = bookshelfVersion,
-                            pluginFiltersVersion = pluginFiltersVersion,
                             coverSlot = resolvedCoverSlot,
                         )
                     }
@@ -545,9 +526,6 @@ private fun SearchActions(
         }
         CheckMenuItem(stringResource(Res.string.all_source), checked = names.isEmpty()) {
             dismiss(); viewModel.selectScopeAll()
-        }
-        TextMenuItem(stringResource(Res.string.source_filter_rule)) {
-            dismiss(); navCallbacks.onShowSourceFilterRule()
         }
         TextMenuItem(stringResource(Res.string.log)) { dismiss(); navCallbacks.onShowAppLog() }
     }
@@ -741,13 +719,11 @@ private fun ColumnScope.ResultArea(
     groups: List<SourceSearchGroup>,
     sourceOptions: Map<String, List<ExploreOptionUiState>>,
     searchSources: List<BookSource>,
-    getPluginFilterSession: (String) -> PluginFilterSession?,
     isSourceGroupLayout: Boolean,
     spanCount: Int,
     styleIsVideo: Boolean,
     styleCols: Int,
     bookshelfVersion: Int,
-    pluginFiltersVersion: Int,
     coverSlot: @Composable (SearchBook, Modifier, CoverSlotRatio) -> Unit,
 ) {
     @Suppress("UNUSED_EXPRESSION") bookshelfVersion // 书架增删时重组刷新绿点
@@ -758,9 +734,7 @@ private fun ColumnScope.ResultArea(
             groups,
             sourceOptions,
             searchSources,
-            getPluginFilterSession,
             styleIsVideo,
-            pluginFiltersVersion,
             bookshelfVersion,
             coverSlot,
         )
@@ -813,13 +787,12 @@ private fun ColumnScope.ResultArea(
                 contentType = { "searchBook" }) { book ->
                 val binding = rememberSharedCoverSourceBinding(book.bookUrl, "search-result")
                 CompositionLocalProvider(LocalSharedCoverBinding provides binding) {
-                    val displayBook = remember(book) { book.toBook() }
-                    val cover: @Composable (Book, Modifier, CoverSlotRatio, Int) -> Unit =
+                    val cover: @Composable (BookItemUi, Modifier, CoverSlotRatio, Int) -> Unit =
                         { _, modifier, coverRatio, _ ->
                             coverSlot(book, modifier, coverRatio)
                         }
                     ShelfVideoItem(
-                        book = displayBook,
+                        book = book.toBookItemUi(),
                         coverReloadTick = 0,
                         onClick = {
                             navCallbacks.onBookClick(book, sharedToken = binding.pageToken)
@@ -875,12 +848,11 @@ private fun ColumnScope.ResultArea(
                         spanCount == 1 -> {
                             val isVideoStyle = styleCols == 0 && styleIsVideo
                             ShelfExploreListItem(
-                                book = book,
+                                book = book.toBookItemUi(),
                                 isVideoStyle = isVideoStyle,
                                 inBookshelf = viewModel.isInBookShelf(book),
                                 showShelfDot = true,
                                 originCount = book.origins.size,
-                                intro = book.intro,
                                 onClick = {
                                     navCallbacks.onBookClick(book, sharedToken = binding.pageToken)
                                 },
@@ -896,13 +868,12 @@ private fun ColumnScope.ResultArea(
 
                         // 多列网格卡 (cols>=2 非视频)
                         else -> {
-                            val displayBook = remember(book) { book.toBook() }
-                            val cover: @Composable (Book, Modifier, CoverSlotRatio, Int) -> Unit =
+                            val cover: @Composable (BookItemUi, Modifier, CoverSlotRatio, Int) -> Unit =
                                 { _, modifier, coverRatio, _ ->
                                     coverSlot(book, modifier, coverRatio)
                                 }
                             ShelfGridItem(
-                                book = displayBook,
+                                book = book.toBookItemUi(),
                                 coverReloadTick = 0,
                                 refreshingUrls = emptySet(),
                                 onClick = {
@@ -938,9 +909,7 @@ private fun ColumnScope.SourceGroupResultArea(
     groups: List<SourceSearchGroup>,
     sourceOptions: Map<String, List<ExploreOptionUiState>>,
     searchSources: List<BookSource>,
-    getPluginFilterSession: (String) -> PluginFilterSession?,
     styleIsVideo: Boolean,
-    pluginFiltersVersion: Int,
     bookshelfVersion: Int,
     coverSlot: @Composable (SearchBook, Modifier, CoverSlotRatio) -> Unit,
 ) {
@@ -954,15 +923,13 @@ private fun ColumnScope.SourceGroupResultArea(
                 if (count > 0 && !forward) viewModel.scrollToBottom()
             }
     }
-    val sections = remember(groups, searchSources, sourceOptions, pluginFiltersVersion) {
+    val sections = remember(groups, searchSources, sourceOptions) {
         val grouped = groups.map { SourceSectionState(it.source, it.books) }
         val withGroup = groups.mapTo(HashSet()) { it.source.bookSourceUrl }
         // 零结果源只在仍有可配置入口时保留区块; 无可配置能力的普通零结果源不铺空占位
         val configurable = searchSources.filter { source ->
-            source.bookSourceUrl !in withGroup && (
-                sourceOptions[source.bookSourceUrl]?.isNotEmpty() == true ||
-                    getPluginFilterSession(source.bookSourceUrl)?.isEmpty == false
-                )
+            source.bookSourceUrl !in withGroup &&
+                sourceOptions[source.bookSourceUrl]?.isNotEmpty() == true
         }
         grouped + configurable.map { SourceSectionState(it, emptyList()) }
     }
@@ -979,7 +946,6 @@ private fun ColumnScope.SourceGroupResultArea(
                 section,
                 sourceOptions[section.source.bookSourceUrl].orEmpty(),
                 styleIsVideo,
-                pluginFiltersVersion,
                 coverSlot,
             )
         }
@@ -993,7 +959,6 @@ private fun SourceSection(
     section: SourceSectionState,
     options: List<ExploreOptionUiState>,
     styleIsVideo: Boolean,
-    pluginFiltersVersion: Int,
     coverSlot: @Composable (SearchBook, Modifier, CoverSlotRatio) -> Unit,
 ) {
     val source = section.source
@@ -1006,18 +971,6 @@ private fun SourceSection(
         SectionTitleRow(source.bookSourceName) {
             navCallbacks.onSourceSectionClick(source, viewModel.searchKey)
         }
-        // 插件源筛选入口 (仅插件源声明了筛选器时一行): 紧跟源标题, 在参数选项行之上
-        PluginSearchFilterRow(
-            source = source,
-            sessionVersion = pluginFiltersVersion,
-            getSession = viewModel::getPluginFilterSession,
-            onFiltersChanged = { viewModel.restartSourceSearch(it) },
-            onResetFilters = { viewModel.resetSourceFilters(it) },
-            onEditingChanged = { url, editing ->
-                if (editing) viewModel.pauseSourcePagination(url)
-                else viewModel.resumeSourcePagination(url)
-            },
-        )
         // 该源搜索 url 声明的可配置项 chip 行 (无声明为零行): 点选只重搜该源
         ExploreOptionsRow(
             options = options,

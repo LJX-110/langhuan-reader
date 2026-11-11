@@ -8,8 +8,6 @@ import com.langhuan.reader.help.FileUtilsCommon
 import com.langhuan.reader.help.book.isLocal
 import com.langhuan.reader.help.config.AppConfigProviders
 import com.langhuan.reader.help.coroutine.IoDispatcher
-import com.langhuan.reader.help.image.MangaPluginImageFetcherProviders
-import com.langhuan.reader.help.image.PluginImageUrl
 import com.langhuan.reader.model.analyzeRule.AnalyzeUrlFactories
 import com.langhuan.reader.model.fileBook.FileBook
 import com.langhuan.reader.model.script.runScriptWithContext
@@ -205,13 +203,7 @@ object BookImageDownloadShared {
                 }
                 storage.deleteImage(book, ch, src)
             }
-            // 插件源图片: 内部协议形态 → 委托扩展自身 client (拦截器还原), 与
-            // MangaImageBytesLoader 插件分支同构; 失败抛异常走下方统一 catch
-            val bytes = PluginImageUrl.parse(src)?.let { (sourceId, encodedUrl) ->
-                MangaPluginImageFetcherProviders.getOrNull()
-                    ?.fetchImage(sourceId, encodedUrl)
-                    ?: throw RuntimeException("插件源图片下载失败: $src")
-            } ?: AnalyzeUrlFactories.create(
+            val bytes = AnalyzeUrlFactories.create(
                 rawUrl = src,
                 source = bookSource,
                 coroutineContext = currentCoroutineContext()

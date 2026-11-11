@@ -49,7 +49,7 @@ object RouteResults {
     // 章节换源 (对齐 ChangeChapterSourceDialog.CallBack.replaceContent 回传 content)
     const val CHANGE_CHAPTER_SOURCE = "change_chapter_source"
 
-    // 阅读器返回 (对齐 ReadBookActivity/AudioPlay/VideoPlay/MangaReader/ReadRss 返回)
+    // 阅读器返回 (对齐 ReadBookActivity/AudioPlay 返回)
     const val READER = "reader"
 
     // Overlay 结果 key: 分组选择对话框 (key="group_select" 的 AppOverlay.Dialog 关闭时回传 groupId)

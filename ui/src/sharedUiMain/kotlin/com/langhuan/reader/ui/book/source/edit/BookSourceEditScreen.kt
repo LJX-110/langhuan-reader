@@ -157,11 +157,8 @@ fun BookSourceEditScreen(
             Unit
         }
     }
-    // 仅本屏注册, 离屏自动注销: 别处长按选词不会多出这一项; 只读源不注册 —— 查找替换
-    // 直改编辑器状态, 会绕过字段 readOnly
-    if (state.ruleEditable) {
-        TextToolbarFindReplaceEffect(findReplaceAction)
-    }
+    // 仅本屏注册, 离屏自动注销: 别处长按选词不会多出这一项
+    TextToolbarFindReplaceEffect(findReplaceAction)
     // 对齐原版 BookSourceEditActivity 的 onBackPressedDispatcher → keyboardTool.tryConsumeBack():
     // 键盘已收起而查找面板仍开时, 返回键先收面板并清查找态, 不退出页面
     AppBackHandler(enabled = keyboardState.canConsumeBack) {
@@ -236,21 +233,18 @@ fun BookSourceEditScreen(
             onEditorActive = stableOnEditorActive,
             modifier = Modifier.weight(1f),
         )
-        // 只读源隐藏编辑辅助条: 辅助键插入/撤销/重做/查找替换全部直改编辑器状态, 绕过 readOnly
-        if (state.ruleEditable) {
-            KeyboardToolbar(
-                state = keyboardState,
-                onSendText = { activeEditor.value?.insertAtCursor(it) },
-                onUndo = { activeEditor.value?.undo() },
-                onRedo = { activeEditor.value?.redo() },
-                onShowConfig = onShowKeyboardConfig,
-                target = {
-                    activeEditor.value?.let {
-                        CodeEditorSearchTarget(it, searchHighlight) { focusManager.clearFocus() }
-                    }
-                },
-            )
-        }
+        KeyboardToolbar(
+            state = keyboardState,
+            onSendText = { activeEditor.value?.insertAtCursor(it) },
+            onUndo = { activeEditor.value?.undo() },
+            onRedo = { activeEditor.value?.redo() },
+            onShowConfig = onShowKeyboardConfig,
+            target = {
+                activeEditor.value?.let {
+                    CodeEditorSearchTarget(it, searchHighlight) { focusManager.clearFocus() }
+                }
+            },
+        )
     }
 }
 
@@ -277,10 +271,6 @@ class BookSourceEditState {
     var exploreColsIndex by mutableIntStateOf(0)
     var currentTab by mutableIntStateOf(0)
 
-    /** 规则字段是否可编辑 (判定唯一出处: data 层 BookSource.ruleEditable)。
-     *  不可编辑时页面降级只读: 规则字段 readOnly、规则 tab 隐藏、头部规则类开关冻结、编辑辅助条隐藏 */
-    var ruleEditable by mutableStateOf(true)
-
     /** upSourceView 重建实体列表后自增, 驱动表单区整体重建 */
     var sourceVersion by mutableIntStateOf(0)
 }
@@ -296,7 +286,6 @@ class BookSourceEditState {
 data class BookSourceEditCallbacks(
     val onBack: () -> Unit = {},
     val onSave: () -> Unit = {},
-    val onDebug: () -> Unit = {},
     val onLogin: () -> Unit = {},
     val onSearch: () -> Unit = {},
     val onClearCookie: () -> Unit = {},
@@ -339,13 +328,6 @@ private fun EditActions(state: BookSourceEditState, callbacks: BookSourceEditCal
         Icon(
             painter = painterResource(Res.drawable.ic_save),
             contentDescription = stringResource(Res.string.action_save),
-            tint = colors.primaryText,
-        )
-    }
-    IconButton(onClick = callbacks.onDebug) {
-        Icon(
-            painter = painterResource(Res.drawable.ic_bug_report),
-            contentDescription = stringResource(Res.string.debug_source),
             tint = colors.primaryText,
         )
     }
@@ -408,7 +390,6 @@ private fun HeaderRow1(state: BookSourceEditState, callbacks: BookSourceEditCall
                 options = stringArrayResource(Res.array.book_type),
                 selectedIndex = state.bookSourceTypeIndex,
                 onSelect = callbacks.onBookSourceTypeChange,
-                enabled = state.ruleEditable,
             )
         }
         HeaderCheckBox("is_enable", state.enabled, onChange = callbacks.onEnabledChange)
@@ -416,15 +397,13 @@ private fun HeaderRow1(state: BookSourceEditState, callbacks: BookSourceEditCall
             "auto_save_cookie",
             state.enabledCookieJar,
             onChange = callbacks.onEnabledCookieJarChange,
-            enabled = state.ruleEditable,
         )
         HeaderCheckBox(
             "enable_dangerous_api",
             state.enableDangerousApi,
             onChange = callbacks.onEnableDangerousApiClick,
-            enabled = state.ruleEditable,
         )
-        HeaderCheckBox("enable_review", state.enabledReview, onChange = callbacks.onEnabledReviewChange, enabled = state.ruleEditable)
+        HeaderCheckBox("enable_review", state.enabledReview, onChange = callbacks.onEnabledReviewChange)
     }
 }
 
@@ -502,8 +481,6 @@ private fun TabBar(state: BookSourceEditState, callbacks: BookSourceEditCallback
             .height(DesignTokens.viewHeightLarge)
     ) {
         tabTitles.forEachIndexed { i, key ->
-            // 只读源查看: 规则 tab (搜索/发现/详情/目录/正文/段评) 全隐藏, 仅保留基本信息
-            if (!state.ruleEditable && i != 0) return@forEachIndexed
             val selected = state.currentTab == i
             Box(
                 Modifier
@@ -584,7 +561,7 @@ private fun EditFields(
                         fieldId = fieldId,
                         entity = entity,
                         editor = editor,
-                        readOnly = !state.ruleEditable,
+                        readOnly = false,
                         syntax = syntax,
                         activeState = activeEditorState,
                         searchHighlight = searchHighlight,

@@ -10,7 +10,7 @@ import com.langhuan.reader.data.entities.BookSourcePart
 import com.langhuan.reader.data.entities.HttpTTS
 import com.langhuan.reader.data.entities.Review
 import com.langhuan.reader.help.DirectLinkUploadRule
-import com.langhuan.reader.help.RssToolbarActions
+
 import com.langhuan.reader.help.book.effectiveBookSaveDir
 import com.langhuan.reader.help.config.PreferenceProviders
 import com.langhuan.reader.help.coroutine.IoDispatcher
@@ -26,7 +26,6 @@ import kotlinx.coroutines.Job
 import com.langhuan.reader.utils.FlowBus
 import com.langhuan.reader.utils.encodeURI
 import com.langhuan.reader.utils.isAbsUrl
-import com.langhuan.reader.web.WebServerManager
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -122,34 +121,6 @@ interface PlatformCapabilities {
     }
 
     /**
-     * RSS 阅读直开窗 (2026-08-07 用户拍板: RSS 阅读页去外壳, 功能移入浏览器窗口工具栏)。
-     *
-     * 返回 true = 平台已处理 (弹出带 RSS 工具栏的浏览器窗口), 调用方不再渲染 ReadRssScreen
-     * 页面外壳 (移动端默认 false, 保持内嵌页面)。窗口工具栏带 收藏/朗读/分享/登录 按钮
-     * (目录不入窗口工具栏: 弹层在主窗口, 会被 RSS 独立窗口遮挡)
-     * (动作经 [RssToolbarActions] 回调回 shared), 星收藏态经 [RssToolbarActions.onStarChanged]
-     * 反推更新; 窗口被关闭时平台实现负责让 RSS 路由出栈。
-     *
-     * @param js 源注入脚本 (无正文规则、直接加载网址时传入): 原版在每次网页加载完成后执行,
-     *   平台实现应在每次导航完成时执行它 (有正文规则时脚本已随正文 HTML 内联, 传 null)。
-     */
-    fun openRssReader(
-        book: Book,
-        chapter: BookChapter?,
-        url: String,
-        html: String?,
-        headerMap: Map<String, String>,
-        actions: RssToolbarActions,
-        js: String? = null,
-    ): Boolean = false
-
-    /**
-     * RSS 阅读是否直开独立窗口 (2026-08-07): true 时 ReadRssRoute 跳过页面外壳渲染
-     * (内容加载期间无占位界面, 就绪后经 [openRssReader] 开窗); 移动端 false 保持内嵌页面。
-     */
-    val rssDirectWindow: Boolean get() = false
-
-    /**
      * 该端是否有可用于**页面内子状态返回**的返回通道: Android/鸿蒙的返回键与返回手势 (系统交给
      * 应用), 桌面的 ESC 统一返回链。
      *
@@ -180,12 +151,6 @@ interface PlatformCapabilities {
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit,
     ) = unsupported("测试直链上传")
-
-    // Web 服务: 启停服务 (Android 起 Service 壳, 其余端直接调 WebServerManager)
-    fun setWebService(enabled: Boolean) = unsupported("setWebService")
-
-    // Web 服务: 当前访问地址 ("" = 未运行), 开关态与副标题都由它派生
-    val webServiceAddress: StateFlow<String> get() = WebServiceAddressState.flow
 
     // 换封面源弹窗 (对照 app 端 ChangeCoverDialog)
     fun showChangeCoverDialog(book: Book, onCoverSelected: (String) -> Unit) =
@@ -903,34 +868,4 @@ internal object PlatformCapabilitiesDefaults {
     val emptyItemsFlow: StateFlow<List<ImportFileItem>> = MutableStateFlow(emptyList())
     val nullStringFlow: StateFlow<String?> = MutableStateFlow(null)
     val falseFlow: StateFlow<Boolean> = MutableStateFlow(false)
-}
-
-/**
- * Web 服务访问地址 (进程级单例, 四端唯一一份)。
- *
- * WEB_SERVICE 事件的载荷就是地址, 但仍回读 [WebServerManager.hostAddress] 以免依赖载荷类型;
- * 空串即未运行, 服务启动中显示正在启动服务, 运行但无可用网络时是平台传入的本地化文案。
- */
-internal object WebServiceAddressState {
-
-    private val scope = CoroutineScope(SupervisorJob() + IoDispatcher)
-
-    private fun currentAddress(): String {
-        val address = WebServerManager.hostAddress
-        if (address.isNotEmpty()) return address
-        if (WebServerManager.isRun) {
-            return syncGetString("service_starting")
-        }
-        return ""
-    }
-
-    val flow: StateFlow<String> by lazy {
-        MutableStateFlow(currentAddress()).also { state ->
-            scope.launch {
-                FlowBus.with(EventBus.WEB_SERVICE).collect {
-                    state.value = currentAddress()
-                }
-            }
-        }
-    }
 }

@@ -7,8 +7,6 @@ import com.langhuan.reader.data.entities.BaseBook
 import com.langhuan.reader.data.entities.BookSource
 import com.langhuan.reader.data.entities.PinnedExplore
 import com.langhuan.reader.data.entities.SearchBook
-import com.langhuan.reader.data.entities.PluginExploreKindUrl
-import com.langhuan.reader.data.entities.isTachiyomiPluginSource
 import com.langhuan.reader.help.IntentData
 import com.langhuan.reader.help.PinnedExploreHelp
 import com.langhuan.reader.help.book.isNotShelf
@@ -23,10 +21,8 @@ import com.langhuan.reader.model.webBook.BookListPager
 import com.langhuan.reader.model.webBook.ExploreOptionSelection
 import com.langhuan.reader.model.webBook.ExploreOptionUiState
 import com.langhuan.reader.model.webBook.ExploreOptionSelectionInvalidatedException
-import com.langhuan.reader.model.webBook.PluginFilterSession
 import com.langhuan.reader.model.webBook.WebBook.getBookListAwait
 import com.langhuan.reader.model.webBook.mergeExploreOptionDefinitions
-import com.langhuan.reader.model.webBook.pluginFilterSessionOf
 import com.langhuan.reader.utils.concurrent.newConcurrentSet
 import com.langhuan.reader.utils.stackTraceStr
 import com.langhuan.reader.utils.throttleLatest
@@ -141,27 +137,6 @@ class ExploreShowViewModelShared(
 
     /** 当前发现样式 (bookSource?.exploreStyle ?: 0)。 */
     val exploreStyle: Int get() = bookSource?.exploreStyle ?: 0
-
-    /**
-     * 当前发现分类页是否为插件源的"筛选"分类 (筛选入口据此判定; 其余分类/非插件源 false)。
-     * TVBox 站点不属 Tachiyomi/Aniyomi 插件源 (无筛选契约)。
-     */
-    val isPluginFilterKind: Boolean
-        get() = rawExploreUrl == PluginExploreKindUrl.FILTER &&
-            bookSource?.isTachiyomiPluginSource() == true
-
-    /**
-     * 本页取数用的会话筛选实例 (漫画 [MangaFilterSession] / 视频 [AnimeFilterSession]; 仅本页会话内
-     * 有效, VM 随页面销毁即丢, 不持久化)。由 [createPluginExploreFilters] 经唯一入口
-     * [pluginFilterSessionOf] 建 (平台侧等注册表就绪后才作答), 经 [explore] 透传取数委派;
-     * 入口行"重置"或退出重进页面时新建会话。
-     */
-    var pluginExploreFilters: PluginFilterSession? = null
-        private set
-
-    /** 筛选会话版本 (每次替换实例 +1): 面板据此重组 (结构相等的两份实例否则会被 Compose 跳过)。 */
-    private val _pluginFiltersVersion = MutableStateFlow(0)
-    val pluginFiltersVersion: StateFlow<Int> = _pluginFiltersVersion.asStateFlow()
 
     /** 原始发现 URL (含参数 chip, 解析后填入 [exploreOptions])。 */
     private var rawExploreUrl: String? = null
@@ -323,7 +298,6 @@ class ExploreShowViewModelShared(
             books.clear()
             paginationPaused = false
             paginationInterrupted = false
-            pluginExploreFilters = null
             bookSource = null
             rawExploreUrl = null
             exploreName = null
@@ -332,7 +306,6 @@ class ExploreShowViewModelShared(
             exploreSlot.cancel()
             _pageState.value = ExplorePageState(requestId = requestId, loading = true)
         }
-        _pluginFiltersVersion.update { it + 1 }
         return session
     }
 
@@ -358,7 +331,6 @@ class ExploreShowViewModelShared(
         }
         _sourceReadyFlow.tryEmit(Unit)
         _upStarFlow.value = isFavorite()
-        createPluginExploreFilters(session)
         if (isSessionCurrent(session)) explore()
     }
 
@@ -413,48 +385,6 @@ class ExploreShowViewModelShared(
             )
         }
         _upStarFlow.value = isFavorite()
-    }
-
-    /**
-     * 建本页取数用的会话筛选实例: 插件源"筛选"分类页与单源搜索模式各建一次。
-     *
-     * 筛选不持久化: 实例为源默认筛选的新建件 (源 getFilterList 每次全新实例),
-     * 挂本 VM (页面会话) 随页面销毁即丢; 每次进入均为全新默认。
-     */
-    private suspend fun createPluginExploreFilters(session: Long) {
-        val source = synchronized(stateLock) { bookSource } ?: return
-        if (!isPluginFilterKind && !isSearchMode) return
-        val filter = pluginFilterSessionOf(source)
-        synchronized(stateLock) {
-            if (sessionId != session) return
-            pluginExploreFilters = filter
-        }
-        _pluginFiltersVersion.update { it + 1 }
-    }
-
-    /**
-     * 重置到源默认筛选: 换新会话实例并返回 (拿不到新实例返回 null, 保留原实例)。
-     * 入口行"重置"调用, 调用方换实例后重载第 1 页。
-     */
-    suspend fun resetPluginExploreFilters(): PluginFilterSession? {
-        var session = 0L
-        var source: BookSource? = null
-        synchronized(stateLock) {
-            session = sessionId
-            source = bookSource
-            if (source == null) return null
-            requestId++
-            paginationPaused = false
-            paginationInterrupted = false
-            exploreSlot.cancel()
-        }
-        val filter = pluginFilterSessionOf(source!!) ?: return null
-        synchronized(stateLock) {
-            if (sessionId != session) return null
-            pluginExploreFilters = filter
-        }
-        _pluginFiltersVersion.update { it + 1 }
-        return filter
     }
 
     /** 单选换值; 返回是否实际变化 (调用方据此决定是否重载)。 */
@@ -593,7 +523,6 @@ class ExploreShowViewModelShared(
                 replaceAll = pager.nextPageUrl == null,
                 fresh = pager.page == 1 && pager.nextPageUrl == null,
                 isSearch = isSearchMode,
-                filters = pluginExploreFilters,
                 selections = _optionsFlow.value.associate {
                     it.name to it.selectionSnapshot()
                 },
@@ -626,7 +555,6 @@ class ExploreShowViewModelShared(
                 getBookListAwait(
                     request.source, request.key, request.page,
                     isSearch = request.isSearch,
-                    pluginFilters = request.filters,
                     nextPageUrl = request.nextPageUrl,
                     allowFreshInvalidatedOptions = request.fresh,
                     onUrlResolved = { analyzeUrl: AnalyzeUrlCore ->
@@ -732,7 +660,6 @@ class ExploreShowViewModelShared(
         /** 本次是从第 1 页重新取数; 只有 fresh 允许旧选择失效后按默认继续。 */
         val fresh: Boolean,
         val isSearch: Boolean,
-        val filters: PluginFilterSession?,
         val selections: Map<String, ExploreOptionSelection>,
     )
 

@@ -577,15 +577,6 @@ object IosPlatformCapabilities : NativePlatformCapabilities {
     override fun isTablet(): Boolean =
         UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad
 
-    // ===== Web 服务 =====
-
-    /**
-     * iOS 无 Web 服务 (没有后台常驻能力, 服务只能在前台期间存活), 「我的」页的开关按能力门禁
-     * 隐藏 (见 `WebServerPlatforms.getOrNull` 判定)。本覆写兜住"开关之外仍被调用"的路径:
-     * iOS 未注册 [com.langhuan.reader.web.WebServerPlatforms] 实现, 落到共享基类会抛错被静默记日志。
-     */
-    override fun setWebService(enabled: Boolean) = unsupported("网络服务")
-
     // ===== 关于页 =====
 
     // ===== 书籍详情页 =====

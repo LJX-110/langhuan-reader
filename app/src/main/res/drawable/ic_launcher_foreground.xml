@@ -15,7 +15,7 @@
         android:strokeLineCap="round"
         android:pathData="M39,62 L39,78" />
     <path
-        android:strokeColor="#B08A4F"
+        android:strokeColor="#F3EBDD"
         android:strokeWidth="8"
         android:strokeLineCap="round"
         android:pathData="M54,62 L54,78" />
@@ -24,8 +24,8 @@
         android:strokeWidth="8"
         android:strokeLineCap="round"
         android:pathData="M69,62 L69,78" />
-    <!-- 檐顶的铜色点 -->
+    <!-- 檐顶点 -->
     <path
-        android:fillColor="#B08A4F"
+        android:fillColor="#F3EBDD"
         android:pathData="M50.5,33 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0 Z" />
 </vector>

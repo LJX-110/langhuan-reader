@@ -73,6 +73,8 @@ include(":modules:treeview")
 include(":foundation")
 include(":data")
 include(":core")
+// P3 架构解耦: 纯 UI 展示模型, 不依赖 data/core/Compose
+include(":ui-model")
 include(":ui")
 include(":desktop")
 if (enableOhosTarget) {

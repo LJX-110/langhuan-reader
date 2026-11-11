@@ -11,6 +11,7 @@ import com.langhuan.reader.data.AppDbProviders
 import com.langhuan.reader.data.entities.BaseBook
 import com.langhuan.reader.data.entities.Book
 import com.langhuan.reader.data.entities.BookChapter
+import com.langhuan.reader.data.entities.BookSource
 import com.langhuan.reader.exception.LocalBookSourceFileDeleteException
 import com.langhuan.reader.help.RuleBigDataProviders
 import com.langhuan.reader.help.config.AppConfigProviders
@@ -61,6 +62,24 @@ val BaseBook.isImage: Boolean
 
 val BaseBook.isRss: Boolean
     get() = isType(BookType.rss)
+
+/**
+ * 核心小说闭环是否展示这本书。
+ *
+ * 视频、图片（漫画）、RSS 功能已移除；旧数据仍留在库里，但书架 / 搜索 / 发现不再展示。
+ */
+val BaseBook.isCoreReaderSupported: Boolean
+    get() = !isVideo && !isImage && !isRss
+
+/**
+ * 核心小说闭环是否展示这个书源。
+ *
+ * 视频源、图片源、RSS 源都不再进入搜索与发现。
+ */
+val BookSource.isCoreReaderSupported: Boolean
+    get() = bookSourceType != BookSourceType.video &&
+            bookSourceType != BookSourceType.image &&
+            bookSourceType != BookSourceType.rss
 
 val BaseBook.isWebFile: Boolean
     get() = isType(BookType.webFile)

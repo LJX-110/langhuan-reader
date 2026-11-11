@@ -23,7 +23,6 @@ import com.langhuan.reader.napi.OhosNativeBridge
 import com.langhuan.reader.ui.OhosPlatformCapabilities
 import com.langhuan.reader.ui.compose.platform.SharedThemeStoreProvider
 import com.langhuan.reader.ui.percentDecode
-import com.langhuan.reader.ui.root.AppRoute
 import com.langhuan.reader.ui.root.BrowserService
 import com.langhuan.reader.ui.root.CrashLogProvider
 import com.langhuan.reader.ui.root.ExternalRequestService
@@ -47,7 +46,6 @@ import com.langhuan.reader.ui.root.SystemBarsPolicy
 import com.langhuan.reader.ui.root.imageExtension
 import com.langhuan.reader.ui.root.WindowController
 import com.langhuan.reader.ui.root.SavedRef
-import com.langhuan.reader.ui.video.VideoDirect
 import com.langhuan.reader.utils.File
 import com.langhuan.reader.utils.KS_JSON
 import com.langhuan.reader.utils.ColorUtils
@@ -326,24 +324,6 @@ object OhosLaunchRequests {
         val hint = extractMimeHint(value)
         val address = hint?.second ?: value
         if (address.isEmpty()) return null
-        // 外部明确告知 MIME 是视频: 直投播放态。判据仍用 shared 的 [VideoDirect] (与 iOS/桌面
-        // 一份), 只是把 mimeIsVideo 替它填上; 地址不带可播 scheme 时 targetFor 返回 null,
-        // 落回下面的常规分支 (不得因为一个 MIME 把路由偷换成视频)。
-        if (hint != null && VideoDirect.isVideoMime(hint.first)) {
-            // 标题只能取地址末段: 系统媒体库投来的形如 `file://media/Video/<fileId>`, 末段是
-            // fileId 而不是 `x.mp4`, 所以从图库投视频时标题会显示成一串数字 (用户已拍板 1A:
-            // 接受这个观感, 不加权限)。两条依据均取自本机 SDK 声明, 不是推断:
-            //  - @ohos.app.ability.Want.d.ts:281-287 —— `parameters?: Record<string, Object>`,
-            //    官方**未规定任何显示名/文件名键**, 拿它取名等于编造键名去赌;
-            //  - @ohos.file.photoAccessHelper.d.ts —— `PhotoAsset.displayName` 存在 (:928),
-            //    但取 PhotoAsset 的接口**每一条都标着 @permission ohos.permission.READ_IMAGEVIDEO**
-            //    (:627/646/665/…), 那是 user_grant 受限权限 —— 为一个标题让阅读器弹一次
-            //    “允许读取相册视频”并背上上架审核代价, 不对等, 故不走这条路。
-            // 不要再“顺手补上真实文件名”: 要么加权限(行为变更, 需拍板), 要么维持现状。
-            VideoDirect.targetFor(address, mimeIsVideo = true, mime = hint.first)?.let { direct ->
-                return LaunchRequest.OpenRoute(AppRoute.VideoPlay(direct))
-            }
-        }
         val scheme = address.substringBefore("://", missingDelimiterValue = "").lowercase()
         return when (scheme) {
             // 鸿蒙文件关联与分享面板给出的文件地址 (file://docs/... 文档授权体 URI 等),

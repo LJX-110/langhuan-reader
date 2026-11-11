@@ -627,7 +627,6 @@ private class MacWindowHandle(
                 title = request.title,
                 toolbar = MacToolbar(
                     onAction = { action -> onToolbarAction(action) },
-                    rssActions = request.rssActions,
                     // 确定按钮仅登录/验证模式显示 (三端对齐 Windows)
                     showOk = request.isLogin || request.saveResult,
                     // 书源 key 非空时菜单显示 禁用源/删除源 (2026-08-08)
@@ -647,8 +646,6 @@ private class MacWindowHandle(
         session = created
         currentUrl = request.url
         CocoaLoop.post { created.setUserAgent(request.effectiveUserAgent) }
-        // RSS 收藏态反推: shared 侧书架操作完成后经 onStarChanged 更新窗口星图标 (对照 Windows 引擎)
-        request.rssActions?.onStarChanged = { starred -> created.toolbar?.setStarred(starred) }
         // cookie 注入 (suspend): 确保在启动导航前完成注入
         injectWebViewCookies(
             request.url,
@@ -718,19 +715,6 @@ private class MacWindowHandle(
             // 菜单按钮 (⋯) 在工具栏内部直接弹 NSMenu, 不经过引擎分发
             ToolbarAction.MENU -> Unit
 
-            // RSS 模式按钮 (2026-08-07: RSS 阅读去页面外壳, 功能移入窗口工具栏)
-            ToolbarAction.STAR_TOGGLE -> request.rssActions?.onStarToggle()
-
-            ToolbarAction.READ_ALOUD -> request.rssActions?.onReadAloud {
-                // 页面还活着时抓 outerHTML (对照原版 readAloud 的 evaluateJavascript;
-                // 与 onOkPressed saveResult 分支抓取方式一致)
-                runCatching { target.evaluateJavascript(DesktopWebViewEngineBase.DEFAULT_JS) }.getOrNull()
-            }
-
-            ToolbarAction.SHARE -> request.rssActions?.onShare()
-
-            ToolbarAction.LOGIN -> request.rssActions?.onLogin()
-
             // 最大化/全屏切换 (对照原版 menu_full_screen): NSWindow toggleFullScreen
             ToolbarAction.FULL_SCREEN -> {
                 target.toggleFullScreen()
@@ -790,8 +774,6 @@ private class MacWindowHandle(
         val target = session
         session = null
         if (target != null) {
-            // 先置 disposed 再销毁: 队列残留的 setStarred 任务直接跳过 (防悬垂句柄)
-            target.toolbar?.dispose()
             CocoaLoop.post { target.destroy() }
         }
     }

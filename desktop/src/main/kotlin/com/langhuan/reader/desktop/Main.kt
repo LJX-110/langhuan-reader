@@ -38,8 +38,6 @@ import com.langhuan.reader.help.config.ReadConfigProviders
 import com.langhuan.reader.help.coroutine.Coroutine
 import com.langhuan.reader.help.coroutine.registerJvmDebugState
 import com.langhuan.reader.help.file.desktopResolveStoredRef
-import com.langhuan.reader.help.extension.MangaExtensionHostProviders
-import com.langhuan.reader.help.extension.MangaExtensionManager
 import com.langhuan.reader.help.file.desktopAppRootDir
 import com.langhuan.reader.help.file.desktopResolveStoredRef
 import com.langhuan.reader.help.image.decodeBytesSampled
@@ -49,7 +47,6 @@ import com.langhuan.reader.help.storage.BackupShared
 import com.langhuan.reader.help.ui.OpenUrlProvider
 import com.langhuan.reader.help.ui.OpenUrlProviders
 import com.langhuan.reader.help.toast.DesktopTrayNotifier
-import com.langhuan.reader.help.tvbox.TvBoxSniffPlatforms
 import com.langhuan.reader.help.tts.TtsEngineProvider
 import com.langhuan.reader.model.ActiveReadBookRegistry
 import com.langhuan.reader.utils.OkHttpUrlCanonicalizer
@@ -65,11 +62,9 @@ import com.langhuan.reader.ui.book.audio.AudioPlayPlatformProviders
 import com.langhuan.reader.ui.book.audio.SharedAudioPlayPlatformProvider
 import com.langhuan.reader.ui.book.info.LocalBlurCoverBgSlot
 import com.langhuan.reader.ui.book.info.SharedBlurCoverBg
-import com.langhuan.reader.ui.book.manga.MangaReaderScreenModel
 import com.langhuan.reader.ui.book.read.ReaderPlatformProviders
 import com.langhuan.reader.ui.book.read.page.provider.registerSkiaTextMeasurer
 import com.langhuan.reader.ui.book.source.SourceUiEventBridgeHost
-import com.langhuan.reader.ui.book.video.VideoPlayPlatformProviders
 import com.langhuan.reader.ui.browser.LocalWebViewSlot
 import com.langhuan.reader.ui.compose.component.AlertButton
 import com.langhuan.reader.ui.compose.component.AppAlertDialog
@@ -107,8 +102,6 @@ import com.langhuan.reader.desktop.audio.registerDesktopSystemMediaControl
 import com.langhuan.reader.desktop.config.probeSystemNightMode
 import com.langhuan.reader.desktop.config.registerDesktopSystemNightModeDetector
 import com.langhuan.reader.help.crash.CrashMarkerProviders
-import com.langhuan.reader.desktop.cli.isServerMode
-import com.langhuan.reader.desktop.cli.resolveExplicitDataDir
 import com.langhuan.reader.desktop.help.DataRootLock
 import com.langhuan.reader.desktop.help.DesktopCrashLogDirs
 import com.langhuan.reader.desktop.help.DesktopCrashHandler
@@ -124,10 +117,8 @@ import com.langhuan.reader.desktop.help.registerDesktopArchiveProvider
 import com.langhuan.reader.desktop.constant.DesktopAppInfo
 import com.langhuan.reader.desktop.help.registerDesktopScreenInfoProvider
 import com.langhuan.reader.desktop.help.source.registerDesktopVerificationUiProvider
-import com.langhuan.reader.desktop.help.tvbox.DesktopTvBoxSniffer
 import com.langhuan.reader.desktop.help.tts.DesktopReadAloudHost
 import com.langhuan.reader.desktop.help.ui.DesktopOpenUrlProviderImpl
-import com.langhuan.reader.desktop.extension.DesktopMangaExtensionHost
 import com.langhuan.reader.desktop.model.fileBook.DesktopPdfRenderPort
 import com.langhuan.reader.model.fileBook.PdfFileShared
 import com.langhuan.reader.model.fileBook.PdfRenderProviders
@@ -153,9 +144,7 @@ import com.langhuan.reader.desktop.ui.installSystemThemeWatcher
 import com.langhuan.reader.desktop.ui.FileDropHintOverlay
 import com.langhuan.reader.desktop.ui.browser.DesktopWebViewSlot
 import com.langhuan.reader.desktop.ui.onFilesDroppedToWindow
-import com.langhuan.reader.desktop.ui.platform.DesktopMangaReaderPlatform
 import com.langhuan.reader.desktop.ui.platform.DesktopReaderPlatformProvider
-import com.langhuan.reader.desktop.ui.platform.MediampVideoPlayPlatformProvider
 import com.langhuan.reader.desktop.ui.tray.DesktopMediaTray
 import com.langhuan.reader.desktop.ui.tray.DesktopTaskbarMedia
 import com.langhuan.reader.desktop.ui.tray.DesktopTrayTaskNotifications
@@ -214,20 +203,13 @@ fun main(args: Array<String>) {
     // 只解析一次 —— 单实例守卫要在数据目录写 instance.lock, 提前读会把便携模式的根目录定位歪。
     // 弹窗预览的调试数据根同样是“进程内只解析一次”的根目录, 必须在它之前落到系统属性上
     // (否则预览进程会落在正式数据根, 预览里的改动直接写进正式数据)
-    // 纯命令行模式 (--server): 只做与 GUI 相同的前置 (加密 provider / 运行时环境 / 崩溃处理),
-    // 之后的 mpv 日志接入、单实例守卫、AWT 预热、Compose 全部不执行 (见 ServerMode.kt)
-    val serverMode = isServerMode(args)
-    if (!serverMode) applyDialogPreviewRoot(args)
-    initDesktopRuntimeEnvironment(if (serverMode) resolveExplicitDataDir(args) else null)
+    applyDialogPreviewRoot(args)
+    initDesktopRuntimeEnvironment(null)
     // URL 合法化统一入口: 桌面用 OkHttp 的宽松解析 (与 Android 同一实现)
     UrlCanonicalProviders.register(OkHttpUrlCanonicalizer)
     // 全局崩溃日志 (对照 app 端 CrashHandler): 必须紧跟 initDesktopRuntimeEnvironment ——
     // 落盘目录依赖它设的 langhuan.portable.root, 提前装会把便携模式的日志写到系统缓存目录去。
     DesktopCrashHandler.install()
-    if (serverMode) {
-        runServerMode(args)
-        return
-    }
     // mpv 日志接入 AppLog: 播放失败时 mediamp 只给出 mpv_error 码 (如 -13
     // MPV_ERROR_LOADING_FAILED), 拿不到 mpv 自己那行原因 (HTTP 状态 / Failed to recognize
     // file format / 解码器缺失)。sink 汇总 mpv 事件、JNI 层与 mediamp Kotlin 三处日志,
@@ -457,10 +439,6 @@ private fun runDesktopApp() = application {
         // CF 挑战求解引擎 (书源栈 DesktopHttpProvider.okHttpClient 首次访问时按本注册与否
         // 决定是否挂 DesktopCloudflareInterceptor, 故必须早于阶段1 的任何 HTTP 访问)
         DesktopChallengeEngines.register(DesktopWebViewChallengeEngine())
-        // TVBox parse=1 网页嗅探 (对照 app 端 App.kt 的 TvBoxSniffPlatforms.register
-        // (AndroidTvBoxSniffer)): DesktopTvBoxSniffer 走 DesktopWebViewEngines (JNA, 只在
-        // :desktop), 引擎全不可用的机器在嗅探时如实报错, 直链与 json 解析不受影响
-        TvBoxSniffPlatforms.register(DesktopTvBoxSniffer)
         val duration = splashScreen.show()
         // 预热 CMP 字符串资源表: 首次取串要走 runBlocking + 资源表初始化, 实测 178~289ms。
         // 放后台线程而不是主线程: 同步预热虽然落在"闪屏可见期", 但占的是主线程, 直接拖后首帧。
@@ -1055,10 +1033,10 @@ private fun persistWindowBounds(window: java.awt.Frame?) {
 }
 
 /**
- * 阶段1 的 UI 绑定 provider 图 (依赖 AWT/Compose/JNA/skia/mediamp)。
+ * 阶段1 的 UI 绑定 provider 图 (依赖 AWT/Compose/JNA/skia)。
  *
  * GUI 与纯命令行模式共用本函数: 两边的差异只在窗口相关动作 (闪屏/托盘/任务栏/窗口监听),
- * 能力注册必须一致 —— 否则命令行模式会缺阅读、漫画、视频、朗读、图片加载等链路。
+ * 能力注册必须一致 —— 否则命令行模式会缺阅读、漫画、朗读、图片加载等链路。
  *
  * @param windowHandle 窗口句柄持有者; 命令行模式传未注入窗口的实例 (window 恒为 null)
  * @return 阅读页平台 provider (GUI 需要它在窗口内挂浮动菜单宿主)
@@ -1083,11 +1061,10 @@ internal fun registerDesktopProviderGraph(windowHandle: DesktopWindowHandle): De
     // 朗读引擎 (Windows SAPI / Linux espeak / macOS say): 依赖 JNA, 引擎实例惰性创建
     // (HttpTTS 播放器工厂无 UI 依赖, 已随 DesktopCore.registerRestProviders 注册)
     TtsEngineProvider.register(DesktopSystemTtsEngine())
-    // 4 个媒体 PlatformProvider (避免 Reader/Audio/Manga/Video Route 报 "platform unavailable"):
+    // 3 个媒体 PlatformProvider (避免 Reader/Audio/Manga Route 报 "platform unavailable"):
     // - Reader: DesktopReadMenuController 功能性菜单 (导航/章节/夜间模式)
     // - Audio: 复用 shared AudioPlayScreenContent + 桌面端 slots (封面/模糊背景/歌词/对话框)
     // - Manga: Coil3 AsyncImage 渲染 + ColorMatrix 灰度/颜色滤镜
-    // - Video: MPV 播放器 (SwingPanel + nativeHwnd 桥接, Windows 用 WComponentPeer getHwnd)
     val desktopReaderProvider = DesktopReaderPlatformProvider()
     ReaderPlatformProviders.register(desktopReaderProvider)
     // 阅读排版度量: 注册 Skia 真实字形度量, 取代 SimpleTextMeasurer 等宽近似
@@ -1096,14 +1073,6 @@ internal fun registerDesktopProviderGraph(windowHandle: DesktopWindowHandle): De
     // 阅读页内嵌图片 (PDF 单图页 / EPUB 插图): 排版取尺寸 + 绘制取位图
     registerReaderImageResolver()
     AudioPlayPlatformProviders.register(SharedAudioPlayPlatformProvider)
-    MangaReaderScreenModel.Providers.register(DesktopMangaReaderPlatform)
-    VideoPlayPlatformProviders.register(MediampVideoPlayPlatformProvider(windowHandle))
-    // 漫画插件宿主 (扩展目录扫描 + dex2jar 装载; 兼容层 Injekt 绑定/取数委派/图片获取/
-    // 管理页服务已随 DesktopCore.registerRestProviders 同步注册)
-    MangaExtensionHostProviders.register(DesktopMangaExtensionHost())
-    // 启动即装载扩展注册表 (后台异步): 虚拟行同步/登录标记/取数委派依赖注册表内存态,
-    // 不能等首次进插件管理页才装载 (Android/桌面同语义)
-    MangaExtensionManager.init()
     return desktopReaderProvider
 }
 
@@ -1162,7 +1131,7 @@ internal suspend fun registerDesktopSecondaryProviders(openUrlProvider: OpenUrlP
         // 注: 原先这里还有一发 `MpvMediampPlayer.prepareLibraries()` 预解包 (上一轮从 main() 推迟过来的)。
         // 已删除: 用户拍板把 mpv 运行时从发布 classpath 摘掉、改"视频与本地音频首次播放时按需下载",
         // 摘掉后无参 prepareLibraries() 会因找不到清单资源报 IllegalStateException, 启动期只会多出噪声日志。
-        // 媒体运行时的准备改由播放平台层 (MediampVideoPlayPlatformProvider / DesktopAudioPlayer) 触发。
+        // 媒体运行时的准备改由桌面音频引擎 (DesktopAudioPlayer) 触发。
     }
 }
 

@@ -10,7 +10,6 @@ import com.sun.jna.ptr.IntByReference
 import com.sun.jna.ptr.PointerByReference
 import com.sun.jna.win32.StdCallLibrary
 import com.langhuan.reader.constant.AppLog
-import com.langhuan.reader.help.RssToolbarActions
 import com.langhuan.reader.help.file.AppFilesDirs
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
@@ -780,7 +779,6 @@ internal class WebView2Instance private constructor(
                             toolbarSpec.title,
                             toolbarSpec.isLogin,
                             toolbarSpec.saveResult,
-                            toolbarSpec.rssActions,
                             toolbarSpec.sourceKey,
                         ).also {
                             // 2026-08-06 标准 ToolbarWindow32 控件: 创建子窗口 + 按钮 + 进度条
@@ -834,7 +832,6 @@ internal class WebView2ToolbarSpec(
     val title: String,
     val isLogin: Boolean,
     val saveResult: Boolean,
-    val rssActions: RssToolbarActions? = null,
     /** 书源 key (cookieTag): 非空时菜单显示 禁用源/删除源 (2026-08-08)。 */
     val sourceKey: String? = null,
 )

@@ -8,7 +8,6 @@ import com.langhuan.reader.help.sourceLoginOverlayPayload
 import com.langhuan.reader.help.update.UpdateCheckInfo
 import com.langhuan.reader.ui.about.CRASH_NOTICE_OVERLAY_KEY
 import com.langhuan.reader.ui.association.OpenUrlConfirmPayload
-import com.langhuan.reader.ui.book.manga.extension.MangaExtensionServiceProviders
 import com.langhuan.reader.ui.config.MODE_EDIT_PREFS
 import com.langhuan.reader.ui.root.AppOverlay
 import com.langhuan.reader.ui.root.ExportDispatchPayload
@@ -38,7 +37,6 @@ import com.langhuan.reader.ui.generated.resources.import_file_name
 import com.langhuan.reader.ui.generated.resources.import_on_line
 import com.langhuan.reader.ui.generated.resources.log
 import com.langhuan.reader.ui.generated.resources.login_source
-import com.langhuan.reader.ui.generated.resources.manga_extension_setting
 import com.langhuan.reader.ui.generated.resources.search_book_key
 import com.langhuan.reader.ui.generated.resources.set_book_variable
 import com.langhuan.reader.ui.generated.resources.set_source_variable
@@ -178,13 +176,6 @@ internal suspend fun buildOverlayEntries(): List<DialogPreviewEntry.Overlay> {
     dialog("http_tts_edit", nameText("朗读引擎编辑"), "httpTtsEdit") {
         AppOverlay.Dialog(it, payload = null)
     }
-    // 插件设置 (payload = 扩展包名; 取已装第一个, 无则空态)
-    dialog("extension_pref", titleOf(Res.string.manga_extension_setting), "extensionPref") {
-        val pkgName = MangaExtensionServiceProviders.getOrNull()
-            ?.state?.value?.installed?.firstOrNull()?.pkgName
-        AppOverlay.Dialog(it, payload = pkgName)
-    }
-
     // ===== 依赖数据: 取当前库里的第一条真实记录 =====
     val appDb = AppDbProviders.get()
     val book = previewRead("书籍样本") { appDb.bookDao.all().firstOrNull() }

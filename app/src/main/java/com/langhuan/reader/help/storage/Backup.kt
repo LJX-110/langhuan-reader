@@ -8,7 +8,6 @@ import com.langhuan.reader.exception.NoStackTraceException
 import com.langhuan.reader.help.AppWebDav
 import com.langhuan.reader.help.config.LocalConfig
 import com.langhuan.reader.help.config.ReadBookConfig
-import com.langhuan.reader.help.extension.MangaExtensionManager
 import com.langhuan.reader.lib.theme.MonetColorExtract
 import com.langhuan.reader.utils.FileDoc
 import com.langhuan.reader.utils.copyToDocumentAtomically
@@ -126,8 +125,6 @@ object AndroidBackupRestoreHook : BackupRestoreHook {
     }
 
     override suspend fun onRestoreFinished() {
-        // 偏好已被恢复覆盖, 漫画扩展的仓库/信任/启用表需同步重载内存态
-        MangaExtensionManager.onRestoreFinished()
         // 莫奈跟随开关也已被覆盖: 同轮把进程内壁纸监听注册态对齐到新 pref,
         // 否则残留监听会在壁纸变化时把恢复后的主题色拽回壁纸色
         withContext(Dispatchers.Main) {

@@ -146,44 +146,17 @@ targets:
         # 文档类型投递入口 (对照 Android AssociationActivity 的 VIEW intent-filter):
         # 让 langhuan 出现在"用其他应用打开 / 分享到"候选里, 打开后由 iOSApp.swift onOpenURL →
         # shared handleIosLaunchRequest → LaunchRequest.ImportFile → FileAssociationDispatch
-        # 按扩展名分流 (书籍/压缩包/JSON 导入; 可播视频改推播放页直投态)。
+        # 按扩展名分流 (书籍/压缩包/JSON 导入; 视频提示不支持)。
+        # 视频播放已移除, 不再申报视频 UTI/扩展名。
         #
-        # 条目 1 视频: 只声明可确证的公开 UTI —— public.movie 总类 + 四个具体电影类;
-        # mkv/webm/flv/m3u8 在 iOS 公开 UTI 表里查不到可确证的标识符 (本机无 macOS 可核,
-        # 且 UTI 注册表在系统 LaunchServices 里, 不随 Kotlin platform klib 提供),
-        # 按"不凭空造 UTI"的约定改用 CFBundleTypeExtensions 兜底。
-        # 条目 2 文档: 与条目 1 同理 —— txt/json/pdf/zip/epub 的公开 UTI 已逐条核实
+        # 条目 1/2 文档: txt/json/pdf/zip/epub 的公开 UTI 已逐条核实
         # (public.plain-text / public.json / com.adobe.pdf / public.zip-archive /
         # org.idpf.epub-container, 见 Apple System-Declared Uniform Type Identifiers 与
         # UTType 文档的 "The identifier for this type is ..."; epub 的 UTI 与同仓
         # ui/src/iosMain IosPlatformServices.toUtis 已用的 org.idpf.epub-container 同值),
         # cbz 查不到可确证的公开标识符, 一并走扩展名。
-        # 扩展名集合与 commonMain AppPattern.videoFileRegex 及 Android 端
-        # AssociationActivity 的 pathPattern 清单逐一对齐, 少一个就是"系统交给我们、
-        # 自己不认"。
         # ⚠️ 本段与 Info.plist 双写 (xcodegen generate 会用本段重写 Info.plist)
         CFBundleDocumentTypes:
-          - CFBundleTypeName: Movie
-            CFBundleTypeRole: Viewer
-            LSHandlerRank: Alternate
-            LSItemContentTypes:
-              - public.movie
-              - public.mpeg-4
-              - public.mpeg-2-transport-stream
-              - public.quicktime-movie
-              - public.avi
-          - CFBundleTypeName: Video File
-            CFBundleTypeRole: Viewer
-            LSHandlerRank: Alternate
-            CFBundleTypeExtensions:
-              - mp4
-              - mkv
-              - mov
-              - webm
-              - flv
-              - avi
-              - ts
-              - m3u8
           - CFBundleTypeName: Text Document
             CFBundleTypeRole: Viewer
             LSHandlerRank: Alternate

@@ -20,7 +20,6 @@ import com.langhuan.reader.help.source.SourceNetworkProvider
 import com.langhuan.reader.model.analyzeRule.AnalyzeRuleCore
 import com.langhuan.reader.model.analyzeRule.AnalyzeUrlCore
 import com.langhuan.reader.model.analyzeRule.QueryTTF
-import com.langhuan.reader.ui.rss.RssJsApi
 import com.langhuan.reader.utils.GSON
 import com.langhuan.reader.utils.JsURL
 import com.langhuan.reader.utils.fromJsonObject
@@ -127,7 +126,6 @@ import kotlinx.atomicfu.locks.synchronized
  *   手写仅 1406 headers toString 降级); 1500-1599: JsURL 对象属性 (仅属性, 生成器无输出, 全手写);
  *   1600-1699: BaseSource 对象方法 (getKey/getTag/getSourceType/getLoginJs 已生成表接管; 手写仅
  *   1604 getHeaderMap 特例与 1605/1606/1608/1609/1623 属性 getter 方法化 —— 属性不在生成范围, 手写保留);
- *   1610-1611: RssJsApi (RSS 拦截 JS 专属 searchBook/addBook, 见 RssJsExtensions.native)
  * - 1700-2199: 复杂对象属性桥 (NativeJsPropertyBridge, book/source/chapter/java 属性 getter,
  *   分派表与 JS 工厂见 NativeJsPropertyBridge.native.kt; >= 1700 在 dispatch 开头短路转发)
  * - 2200+: 带参分派 (NativeJsPropertyBridge.dispatchWithArgs): 2300-2399 book 变量/方法面 |
@@ -229,9 +227,6 @@ object NativeJsExtensionsBridge {
             is StrResponse -> "__createStrResponseObj"
             is JsURL -> "__createJsUrlObj"
             // 复杂对象属性桥 (NativeJsPropertyBridge): 工厂带属性 getter
-            // RSS 拦截 JS 专属: RssJsApi 分支须在 BaseSource 之前 (RssJsExtensionsNative 同时是两者),
-            // 工厂在 __createBaseSourceObj 基础上叠 searchBook/addBook (方法面分派表见 1610/1611)
-            is RssJsApi -> "__createRssJsObj"
             is BaseSource -> "__createBaseSourceObj"
             is BaseBook -> "__createBookObj"
             is BookChapterLike -> "__createChapterObj"
@@ -909,20 +904,6 @@ object NativeJsExtensionsBridge {
             obj is BaseSource && methodId == 1608 -> stringToJsValue(ctx, obj.concurrentRate)
             obj is BaseSource && methodId == 1609 -> stringToJsValue(ctx, obj.jsLib)
             obj is BaseSource && methodId == 1623 -> stringToJsValue(ctx, obj.loginUi)
-
-            // ============ RssJsApi 对象方法 (1610-1611, RSS 拦截 JS 专属) ============
-            // RssJsExtensionsNative 包装 (BaseSource + RssJsApi) 经 __createRssJsObj 注入;
-            // 非 RSS 上下文的 BaseSource 对象不含这两个方法, 不会走到此分支
-            obj is RssJsApi && methodId == 1610 -> {
-                // searchBook(key)
-                obj.searchBook(args.getString(0))
-                jsUndefined()
-            }
-            obj is RssJsApi && methodId == 1611 -> {
-                // addBook(bookUrl)
-                obj.addBook(args.getString(0))
-                jsUndefined()
-            }
 
             else -> jsUndefined()
         }

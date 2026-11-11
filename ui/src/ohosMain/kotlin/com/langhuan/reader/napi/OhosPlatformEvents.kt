@@ -9,14 +9,12 @@ import com.langhuan.reader.help.glide.progress.OnProgressListener
 import com.langhuan.reader.help.media.AudioFocusChange
 import com.langhuan.reader.help.media.PhoneCallState
 import com.langhuan.reader.help.media.SystemMediaControl
-import com.langhuan.reader.help.service.OhosWebServiceNotifications
 import com.langhuan.reader.help.storage.BackupShared
 import com.langhuan.reader.help.tts.OhosReadAloudHost
 import com.langhuan.reader.model.analyzeRule.AnalyzeUrlCore
 import com.langhuan.reader.ui.OhosPlatformCapabilities
 import com.langhuan.reader.ui.root.AppForegroundState
 import com.langhuan.reader.utils.KS_JSON
-import com.langhuan.reader.web.refreshOhosWebServerAddresses
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.serialization.Serializable
@@ -43,7 +41,7 @@ import kotlinx.serialization.Serializable
  * - 电话状态: `{ "type":"callStateChange", "state":"idle"|"ringing"|"offHook" }`
  *   → `OhosReadAloudHost.onPhoneCallState` (来电暂停朗读)
  * - 网络可用: `{ "type":"networkAvailable" }`
- *   → `com.langhuan.reader.web.refreshOhosWebServerAddresses` (刷新 Web 服务地址)
+ *   → 无 (Web 服务已移除)
  * - 系统对话框结果: `{ "type":"dialogResult", "requestId":3, "dialogResult":"{...}" }`
  *   → [OhosNativeBridge.onDialogResult] (系统对话框桥的响应侧, 见 [OhosNativeBridge.invokeDialogSync])
  * - 通知按钮点击: `{ "type":"notificationAction", "notificationId":104, "action":"stop" }`
@@ -235,10 +233,6 @@ internal object OhosPlatformEventChannel {
                     SystemMediaControl.onAudioFocusChange(AudioFocusChange.LossTransientCanDuck)
             }
 
-            // 网络可用 (ArkTS @ohos.net.connection netAvailable) → 重算 Web 服务地址。
-            // 服务没开时共享侧是 no-op, 故与 Android "只在 Service 存活期监听" 观感一致。
-            "networkAvailable" -> refreshOhosWebServerAddresses()
-
             // 电话状态三态 → 朗读宿主 (门槛与恢复语义都在共享件里)
             "callStateChange" -> when (payload.state) {
                 "idle" -> OhosReadAloudHost.onPhoneCallState(PhoneCallState.Idle)
@@ -267,10 +261,6 @@ internal object OhosPlatformEventChannel {
                 AppLog.put(
                     "长时任务已取消, 业务通知 id=${payload.notificationId} reason=${payload.reason}"
                 )
-                // Web 服务: 监听还在跑就不停服务与通知 (保活随状态重述), 停了才撤通知并释放保活
-                if (payload.notificationId == NotificationId.WebService) {
-                    OhosWebServiceNotifications.refresh()
-                }
             }
         }
     }

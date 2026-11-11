@@ -17,9 +17,9 @@ import com.langhuan.reader.desktop.media.DesktopMediaRuntime
 /**
  * 媒体播放组件按需下载的弹框宿主, 由 Main.kt 挂在主窗口 Compose 根容器 (与 DesktopToastHost 同级)。
  *
- * 为什么要一个全局宿主: 需要这套 native 的入口不止一个 —— 视频页 (`MediampVideoPlayPlatformProvider`)
- * 与桌面音频引擎 (`DesktopAudioPlayer`) 共用同一套 mpv/FFmpeg, 两处各自弹框会出现两层对话框、
- * 也各自要处理"下载完成后重建播放器"。这里只订阅 [DesktopMediaRuntime.uiState] 单点呈现。
+ * 为什么要一个全局宿主: 媒体运行时可能被多个入口用到 (当前为桌面音频引擎
+ * `DesktopAudioPlayer`), 各自弹框会出现两层对话框、也各自要处理"下载完成后重建播放器"。
+ * 这里只订阅 [DesktopMediaRuntime.uiState] 单点呈现。
  *
  * 三态与用户裁决一致: 缺失先问 (约 21MB 要占用户流量) → 下载中给进度 → 失败报错并给重试,
  * 不静默降级、不自动重下。

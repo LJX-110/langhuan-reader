@@ -115,7 +115,7 @@ fun AudioPlayRoute(
     )
 
     // 音频页键盘快捷键 (方向键/空格): 走共享 AppShortcutHandler 快捷键栈分发。
-    // 对照 ReaderRoute 阅读页 / MangaReaderScreenContent 漫画页方向键模式 —— 快捷键栈在
+    // 对照 ReaderRoute 阅读页方向键模式 —— 快捷键栈在
     // 桌面 Window onKeyEvent (Main.kt) / Android Activity dispatchKeyEvent
     // (BaseComposeActivity) 层无条件收键, 不依赖 Compose 焦点链; 而原 handleMediaKeys
     // 依赖焦点 (onPreviewKeyEvent), 桌面端未持焦时按键完全无响应
@@ -213,7 +213,7 @@ fun AudioPlayRoute(
         onLeave = { AudioPlayShared.setAudioPageResumed(entry.id.value, false) },
     )
 
-    // 订阅子页结果回填 (对照 VideoPlayRoute navigator.resultsFor(entry.id).collect)
+    // 订阅子页结果回填
     LaunchedEffect(Unit) {
         navigator.resultsFor(entry.id).collect { result ->
             when (result.key) {
@@ -257,7 +257,7 @@ fun AudioPlayRoute(
         return
     }
 
-    // 平台对话框状态 (对照 VideoPlayRoute showLogDialog / pendingBookmark)
+    // 平台对话框状态
     var showLogDialog by remember { mutableStateOf(false) }
     var pendingBookmark by remember { mutableStateOf<Bookmark?>(null) }
     // 目录弹窗显示开关 (窄屏目录入口, 对照阅读页 ReaderDialogEvent.Toc → TocDialogHost)
@@ -537,12 +537,12 @@ fun AudioPlayRoute(
     )
     } // CompositionLocalProvider(封面共享身份)
 
-    // 日志对话框 (对照 VideoPlayRoute AppLogDialog)
+    // 日志对话框
     if (showLogDialog) {
         AppLogDialog(onDismiss = { showLogDialog = false })
     }
 
-    // 书签编辑对话框 (对照 VideoPlayRoute BookmarkDialog + app addBookmark)
+    // 书签编辑对话框 (对照 app addBookmark)
     pendingBookmark?.let { bookmark ->
         BookmarkDialog(
             bookmark = bookmark,

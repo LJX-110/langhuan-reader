@@ -32,8 +32,7 @@ suspend fun resolveChapter(
 /**
  * 资源直链回写 (音视频): 内容变化时写内存 [BookChapter.resourceUrl], 在架书同步 PATCH 落库。
  *
- * 收敛音频 `AudioPlayManager.loadPlayUrl`、视频 `VideoPlayViewModelShared.loadChapter`、
- * `ResourceUrlPreloader.preload` 三处同体逻辑。
+ * 收敛音频 `AudioPlayManager.loadPlayUrl` 与 `ResourceUrlPreloader.preload` 两处同体逻辑。
  *
  * 只 PATCH resourceUrl 列而非整行 update: 整行会冲掉并发写入的其他章节字段。
  *

@@ -7,7 +7,6 @@ import com.langhuan.reader.data.entities.BookSource
 import com.langhuan.reader.help.source.SourceHelp
 import com.langhuan.reader.help.source.exploreKinds
 import com.langhuan.reader.model.webBook.WebBook
-import com.langhuan.reader.model.webBook.pluginFilterSessionOf
 import com.langhuan.reader.utils.GSON
 import com.langhuan.reader.utils.fromJsonArray
 import com.langhuan.reader.utils.fromJsonObject
@@ -132,7 +131,6 @@ object BookSourceController {
                 key = exploreUrl,
                 page = page,
                 isSearch = false,
-                pluginFilters = pluginFilterSessionOf(bookSource),
             )
             returnData.setData(pageResult.books)
         }.getOrElse {

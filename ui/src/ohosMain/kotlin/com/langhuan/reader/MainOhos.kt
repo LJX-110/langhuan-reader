@@ -33,13 +33,9 @@ import com.langhuan.reader.ui.book.audio.AudioPlayPlatformProviders
 import com.langhuan.reader.ui.book.info.LocalBlurCoverBgSlot
 import com.langhuan.reader.ui.book.info.SharedBlurCoverBg
 import com.langhuan.reader.ui.book.audio.SharedAudioPlayPlatformProvider
-import com.langhuan.reader.ui.book.manga.MangaReaderScreenModel
-import com.langhuan.reader.ui.book.manga.OhosMangaReaderPlatform
 import com.langhuan.reader.ui.book.read.OhosReaderPlatformProvider
 import com.langhuan.reader.ui.book.read.ReaderPlatformProviders
 import com.langhuan.reader.ui.book.source.SourceUiEventBridgeHost
-import com.langhuan.reader.ui.book.video.OhosVideoPlayPlatformProvider
-import com.langhuan.reader.ui.book.video.VideoPlayPlatformProviders
 import com.langhuan.reader.ui.association.DeepLinkImportHost
 import com.langhuan.reader.ui.compose.platform.LocalAppConfigProvider
 import com.langhuan.reader.ui.compose.platform.LocalEventBusProvider
@@ -99,7 +95,7 @@ fun MainOhos() {
     remember { PlatformCapabilityProviders.register(OhosPlatformCapabilities) }
     // 注册平台服务 (11 项能力经 napi 桥接 ArkTS, 供 shared LanghuanApp 经 PlatformServiceProviders.get() 取用)
     remember { PlatformServiceProviders.register(OhosPlatformServices) }
-    // 注册 4 个媒体平台 Provider (Reader/Audio/Manga/Video, 均为真实实现)
+    // 注册 2 个媒体平台 Provider (Reader/Audio, 均为真实实现)
     remember { ReaderPlatformProviders.register(OhosReaderPlatformProvider) }
     // 当前版本号 provider (供启动期默认数据补齐按版本推进; 鸿蒙无 PackageManager,
     // 取 ArkTS 注入的版本名经 versionNameToVersionCode 解析 —— 与下方 "更新日志" 弹窗同一口径)。
@@ -114,8 +110,6 @@ fun MainOhos() {
         })
     }
     remember { AudioPlayPlatformProviders.register(SharedAudioPlayPlatformProvider) }
-    remember { MangaReaderScreenModel.Providers.register(OhosMangaReaderPlatform) }
-    remember { VideoPlayPlatformProviders.register(OhosVideoPlayPlatformProvider) }
 
     // 零薄壳导航: AppNavigator 替代原平台导航宿主的 20+ 并行状态字段
     val navigator = remember { AppNavigator(AppRoute.Main()) }

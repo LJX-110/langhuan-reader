@@ -34,9 +34,7 @@ import com.langhuan.reader.ui.book.read.ReaderPlatformProvider
 import com.langhuan.reader.ui.book.read.ReaderScreenModel
 import com.langhuan.reader.ui.book.read.createReadMenuColors
 import com.langhuan.reader.ui.book.read.hasBgImageByPath
-import com.langhuan.reader.ui.book.read.page.AutoPagerCompose
 import com.langhuan.reader.ui.book.read.page.SelectionGeometry
-import com.langhuan.reader.ui.book.read.readerAutoPageActive
 import com.langhuan.reader.ui.book.read.refreshReaderImage
 import com.langhuan.reader.ui.compose.platform.DesktopThemeStoreProvider
 import com.langhuan.reader.ui.reader.ReaderImageActionMenu
@@ -148,25 +146,8 @@ class DesktopReaderPlatformProvider : ReaderPlatformProvider {
         }
     }
 
-    // 自动翻页面板停止按钮 (对照 app 端 autoPageStop → stopAutoPage: 停控制器 + 复位开关)
-    override fun autoPageStop(screenModel: ReaderScreenModel) {
-        (activeMenuBinding?.takeIf { it.first === screenModel }?.second?.state as? DesktopReadMenuState)
-            ?.stopAutoPage()
-    }
-
-    // 退到后台 / 被别的页面盖住 → 挂起自动翻页 (开关保持, 只停推进), 回到可见期自动接着翻
-    override fun autoPagePause(screenModel: ReaderScreenModel) {
-        (activeMenuBinding?.takeIf { it.first === screenModel }?.second?.state as? DesktopReadMenuState)
-            ?.pauseAutoPage()
-    }
-
-    override fun autoPageResume(screenModel: ReaderScreenModel) {
-        (activeMenuBinding?.takeIf { it.first === screenModel }?.second?.state as? DesktopReadMenuState)
-            ?.resumeAutoPage()
-    }
-
-    // 自动翻页滑条抬手 → 重新应用当前 TTS 语速 (对照 app 端 upTtsSpeechRate: 重读配置 +
-    // pause/resume 让新语速立刻作用到当前段; 本方法不写配置, 只按现配置重放)
+    // TTS 语速变更后重新应用当前语速 (重读配置 + pause/resume 让新语速立刻作用到当前段;
+    // 本方法不写配置, 只按现配置重放)
     override fun upTtsSpeechRate(screenModel: ReaderScreenModel) = DesktopReadAloudHost.upSpeechRate()
 
     override fun getBatteryLevel(): Int = DesktopBattery.getBatteryLevel()
@@ -199,17 +180,15 @@ class DesktopReaderPlatformProvider : ReaderPlatformProvider {
     }
 
     /**
-     * 阅读页销毁: 停止自动翻页并释放页面控制器/协程，清理窗口与浮层状态。
+     * 阅读页销毁: 释放页面控制器/协程，清理窗口与浮层状态。
      * 朗读宿主是进程级媒体会话，不随阅读路由销毁而停止，以保留后台/托盘控制语义。
      */
     override fun onExit(screenModel: ReaderScreenModel) {
-        autoPageStop(screenModel)
         // 只放自己这条绑定 (不经模型取新控制器)
         activeMenuBinding
             ?.takeIf { it.first === screenModel }
             ?.second
             ?.let { releaseMenuController(screenModel, it) }
-        readerAutoPageActive = false
         titleBarTintJob?.cancel()
         titleBarTintJob = null
         readerWindowTint.value = null
@@ -519,8 +498,8 @@ private class DesktopReadMenuState(
     screenModel: ReaderScreenModel,
 ) : BaseReadMenuState(navigator, screenModel) {
 
-    /** 自动翻页控制器协程作用域 (对照 app 端 AndroidReaderMenuState.autoPageScope, Main)。 */
-    private val autoPageScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    /** 朗读页面变化监听的协程作用域 (Main)。 */
+    private val aloudWatchScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     /** 章节链接开窗: 查询书源 + startBrowser 开窗在 IO 线程 (AnalyzeUrl 可能执行 header JS)。 */
     private val chapterLinkScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -556,7 +535,7 @@ private class DesktopReadMenuState(
 
     fun startAloudPageWatch() {
         aloudPageWatchJob?.cancel()
-        aloudPageWatchJob = autoPageScope.launch {
+        aloudPageWatchJob = aloudWatchScope.launch {
             ReadBookEvents.seekBarChange.collect { aloudPageChanged = true }
         }
     }
@@ -607,86 +586,13 @@ private class DesktopReadMenuState(
         )
     }
 
-    override fun clickAutoPage() {
-        if (autoPage) {
-            stopAutoPage()
-        } else {
-            startAutoPage()
-            // 收菜单 + 弹控制面板 (基类实现; startAutoPage 已置 autoPage=true,
-            // 不会被 ReaderRoute 的 autoPageActive 守卫 clear 掉)
-            showAutoPagePanel()
-        }
-    }
-
-    /** 自动翻页控制器 (对照 app 端 AndroidReaderMenuState.autoPager, shared AutoPagerCompose 承载)。 */
-    private var autoPager: AutoPagerCompose? = null
-
-    /**
-     * 启动自动翻页: 三模式语义与 app 端一致 (E-Ink 定时整页翻 / 非 E-Ink 揭示动画覆盖层 /
-     * 滚动模式连续滚动), 由 shared [AutoPagerCompose] 驱动 [ReadBookViewModelShared].
-     * 翻到全书末尾自动停 (pager.onEnd)。
-     */
-    private fun startAutoPage() {
-        stopAutoPage()
-        autoPage = true
-        readerAutoPageActive = true
-        autoPager = AutoPagerCompose(
-            viewModel = screenModel.viewModel,
-            scope = autoPageScope,
-            // 每拍现读速度配置 (对照原版每次 postDelayed 现取 ReadBookConfig.autoReadSpeed)
-            autoReadSpeed = {
-                ReadBookConfigProviders.get().autoReadSpeed.coerceAtLeast(1)
-            },
-        ).also { pager ->
-            pager.onEnd = { stopAutoPage() }
-            pager.start()
-        }
-        // 自动翻页常亮由 readerAutoPageActive 统一收敛到窗口策略层判定并下发 (拍板 4a),
-        // 杜绝此处与 LanghuanApp 双写覆盖
-    }
-
-    /** 停止自动翻页: 复位控制器 + 复位开关 (对照 app 端 stopAutoPage)。 */
-    fun stopAutoPage() {
-        autoPager?.stop()
-        autoPager = null
-        autoPage = false
-        readerAutoPageActive = false
-    }
-
-    /**
-     * 挂起自动翻页: 开关保持开着, 只停推进 (当前画面保持, 暂停时长不计入进度)。
-     *
-     * 退到后台 / 被别的页面盖住时由 [DesktopReaderPlatformProvider.autoPagePause] 调用,
-     * 回到可见期由 [resumeAutoPage] 接着推进 —— 用户不必再点一次自动翻页。
-     */
-    fun pauseAutoPage() {
-        autoPager?.pause()
-    }
-
-    /** 恢复自动翻页推进 (开关已被用户关掉时控制器已销毁, 此处自然 no-op)。 */
-    fun resumeAutoPage() {
-        autoPager?.resume()
-    }
-
     /** 释放菜单状态与协程作用域 (阅读页退出时由 Provider 调用) */
     fun dispose() {
-        stopAutoPage()
-        autoPageScope.cancel()
+        aloudWatchScope.cancel()
         chapterLinkScope.cancel()
     }
 
-    override fun clickPre() {
-        stopAutoPage()
-        super.clickPre()
-    }
-
-    override fun clickNext() {
-        stopAutoPage()
-        super.clickNext()
-    }
-
     override fun clickReadAloud() {
-        stopAutoPage()
         when {
             !DesktopReadAloudHost.isRun -> {
                 if (screenModel.viewModel.isScrollPageAnim) {

@@ -22,10 +22,8 @@ import com.langhuan.reader.help.book.BookHelpShared
 import com.langhuan.reader.help.book.addType
 import com.langhuan.reader.help.book.changeSourceTo
 import com.langhuan.reader.help.book.isAudio
-import com.langhuan.reader.help.book.isImage
 import com.langhuan.reader.help.book.isLocal
 import com.langhuan.reader.help.book.isLocalTxt
-import com.langhuan.reader.help.book.isRss
 import com.langhuan.reader.help.book.isVideo
 import com.langhuan.reader.help.book.isWebFile
 import com.langhuan.reader.help.book.removeType
@@ -153,11 +151,6 @@ fun BookInfoRoute(
             // 否则标记落在被丢弃对象上且 UI 会误显示书架书为"未在架"
             val curBook =
                 if (isSearchBook && dbBook?.origin == book.origin) dbBook else book
-            // RSS 书: tocUrl 空时补抓取地址 (详情/目录同一地址); 不改 bookUrl ——
-            // 主键换成常量 "data:" 会让多本 RSS 书挤在同一行
-            if (curBook.isRss && curBook.tocUrl.isEmpty()) {
-                curBook.tocUrl = curBook.bookUrl
-            }
             // 换实例 (搜索书并回书架那本) 才要重新展示一次 —— ShowBook
             // 同时带最新章文案模板 (旧实现在此只 bump tick, 文案停在未套模板的初值)。
             // 未换实例的普通书不展示: 构造时的 initialBook 已是同一份快照, 多余 dispatch 只会
@@ -299,9 +292,6 @@ fun BookInfoRoute(
             }
             val target = when {
                 b.isAudio -> AppRoute.AudioPlay(b.toRouteRef())
-                b.isVideo -> AppRoute.VideoPlay(b.toRouteRef())
-                b.isImage -> AppRoute.MangaReader(b.toRouteRef())
-                b.isRss -> AppRoute.ReadRss(b.toRouteRef())
                 else -> AppRoute.Reader(b.toRouteRef())
             }
             navigator.push(target, RouteResults.READER)
@@ -691,9 +681,6 @@ fun BookInfoRoute(
                                 b.durChapterPos = payload.chapterPos
                                 val target = when {
                                     b.isAudio -> AppRoute.AudioPlay(b.toRouteRef())
-                                    b.isVideo -> AppRoute.VideoPlay(b.toRouteRef())
-                                    b.isImage -> AppRoute.MangaReader(b.toRouteRef())
-                                    b.isRss -> AppRoute.ReadRss(b.toRouteRef())
                                     else -> AppRoute.Reader(b.toRouteRef())
                                 }
                                 // 目录内存交接 (对照原版 startReadActivity: IntentData.chapterList

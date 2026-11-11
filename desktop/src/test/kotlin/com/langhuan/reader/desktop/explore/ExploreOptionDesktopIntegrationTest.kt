@@ -24,8 +24,6 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import com.langhuan.reader.model.Debug
-import com.langhuan.reader.web.api.DebugWsHandler
-import com.langhuan.reader.web.api.WsSession
 import com.langhuan.reader.model.webBook.ExploreOptionUiState
 import com.langhuan.reader.model.webBook.WebBook
 import com.langhuan.reader.ui.book.explore.ExploreShowScreenModel
@@ -34,7 +32,6 @@ import com.langhuan.reader.ui.book.source.debug.BookSourceDebugUiEvent
 import com.langhuan.reader.ui.book.explore.ExploreShowUiEvent
 import com.langhuan.reader.ui.compose.component.AppChoiceField
 import com.langhuan.reader.ui.compose.component.AppMultiChoiceField
-import eu.kanade.tachiyomi.source.model.Filter
 import com.langhuan.reader.ui.compose.component.AppMixedChoiceRowGroup
 import com.langhuan.reader.ui.compose.component.ExploreOptionsRow
 import com.langhuan.reader.ui.compose.platform.DesktopAppConfigProvider
@@ -53,7 +50,7 @@ import com.langhuan.reader.utils.ScreenInfoProviders
 import com.langhuan.reader.desktop.ui.DesktopPlatformCapabilities
 import com.langhuan.reader.help.HomeTabHelpShared
 import com.langhuan.reader.ui.main.home.HomeViewModelShared
-import com.langhuan.reader.desktop.help.tvbox.TvBoxTestRuntime
+import com.langhuan.reader.desktop.DesktopTestRuntime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -82,7 +79,7 @@ class ExploreOptionDesktopIntegrationTest {
         @BeforeClass
         fun boot() {
             java.util.Locale.setDefault(java.util.Locale.ENGLISH)
-            TvBoxTestRuntime.bootstrap()
+            DesktopTestRuntime.bootstrap()
             PlatformCapabilityProviders.register(DesktopPlatformCapabilities)
             ScreenInfoProviders.register(object : ScreenInfoProvider {
                 override val screenWidthPx: Int = 2400
@@ -846,54 +843,6 @@ class ExploreOptionDesktopIntegrationTest {
     }
 
     @Test
-    fun `WS非法JSON无调试token仍send并close 传输失败也只清理自身`() = runBlocking {
-        val sent = CopyOnWriteArrayList<String>()
-        val closed = CountDownLatch(1)
-        val ws = object : WsSession {
-            override fun send(text: String) {
-                sent.add(text)
-            }
-
-            override fun close(reason: String) {
-                closed.countDown()
-            }
-        }
-        val handler = DebugWsHandler(ws, "不能为空")
-        try {
-            handler.onMessage("not-json")
-            assertTrue(closed.await(3, TimeUnit.SECONDS))
-            assertTrue(sent.contains("数据必须为Json格式"))
-            // 已 sealed 的新消息不再受理, 不会再次 send/close。
-            handler.onMessage("""{"tag":"","key":""}""")
-            kotlinx.coroutines.delay(100)
-            assertEquals(1, sent.size)
-        } finally {
-            handler.onClose()
-        }
-    }
-
-    @Test
-    fun `WS传输send失败仍尝试物理close并结束自身`() = runBlocking {
-        val closed = CountDownLatch(1)
-        val ws = object : WsSession {
-            override fun send(text: String) {
-                throw java.io.IOException("broken-pipe")
-            }
-
-            override fun close(reason: String) {
-                closed.countDown()
-            }
-        }
-        val handler = DebugWsHandler(ws, "不能为空")
-        try {
-            handler.onMessage("not-json")
-            assertTrue(closed.await(3, TimeUnit.SECONDS))
-        } finally {
-            handler.onClose()
-        }
-    }
-
-    @Test
     fun `聚合副本不污染原始分组的来源集合`() = runBlocking {
         startServer(
             queryHtml = { query ->
@@ -1446,9 +1395,9 @@ class ExploreOptionDesktopIntegrationTest {
     }
 
     private class TestSelectFilter(
-        name: String,
-        values: Array<String>,
-    ) : Filter.Select<String>(name, values)
+        val name: String,
+        val values: Array<String>,
+    )
 
     private fun filterField(
         filter: TestSelectFilter,

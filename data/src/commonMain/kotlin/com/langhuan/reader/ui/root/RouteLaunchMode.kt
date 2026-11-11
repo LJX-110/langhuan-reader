@@ -23,15 +23,15 @@ enum class RouteLaunchMode {
 val AppRoute.launchMode: RouteLaunchMode
     get() = when (this) {
         // 原版 singleTask
-        is AppRoute.Main, is AppRoute.Reader, is AppRoute.MangaReader, is AppRoute.BookInfoEdit,
+        is AppRoute.Main, is AppRoute.Reader, is AppRoute.BookInfoEdit,
         is AppRoute.AudioPlay, is AppRoute.BookSourceEdit, is AppRoute.ReplaceEdit,
         is AppRoute.About -> RouteLaunchMode.SingleTask
 
         // 原版 singleTop
         is AppRoute.BookInfo, is AppRoute.BookSourceManage, is AppRoute.TxtTocRule,
-        is AppRoute.RuleSub, is AppRoute.ReplaceRule, is AppRoute.SourceFilterRule,
+        is AppRoute.ReplaceRule, is AppRoute.SourceFilterRule,
         is AppRoute.BookshelfManage, is AppRoute.BookSourceDebug, is AppRoute.Toc,
-        is AppRoute.SearchContent, is AppRoute.ReadRss, is AppRoute.ImportBook,
+        is AppRoute.SearchContent, is AppRoute.ImportBook,
         is AppRoute.RemoteBook, is AppRoute.Bookmark -> RouteLaunchMode.SingleTop
 
         else -> RouteLaunchMode.Standard

@@ -236,7 +236,7 @@ interface AppConfigAccessor {
     val batchChangeSourceDelay: Int
 
     // ---- Web 服务 / 其他 ----
-    /** Web 服务端口 (原 AppConfig.webPort), 默认 1122。合法区间校验在 WebServerManager.getPort。 */
+    /** Web 服务端口 (原 AppConfig.webPort), 默认 1122。 */
     val webPort: Int
 
     /** 图片缓存大小 MB (原 AppConfig.bitmapCacheSize), 默认 50。 */

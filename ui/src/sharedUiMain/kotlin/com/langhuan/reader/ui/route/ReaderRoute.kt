@@ -80,10 +80,6 @@ import com.langhuan.reader.ui.book.read.ReaderSystemBarAppearanceEffect
 import com.langhuan.reader.ui.book.read.ReaderUiActions
 import com.langhuan.reader.ui.book.read.ReaderUiState
 import com.langhuan.reader.ui.book.read.UnderlineNoteBubbleHost
-import com.langhuan.reader.ui.book.read.SimulatedReadingDialog
-import com.langhuan.reader.ui.book.read.config.AutoReadActions
-import com.langhuan.reader.ui.book.read.config.AutoReadController
-import com.langhuan.reader.ui.book.read.config.AutoReadPanelDialogHost
 import com.langhuan.reader.ui.book.read.config.ChineseConverterSelectorDialog
 import com.langhuan.reader.ui.book.read.config.ClickRegionalConfigDialogHost
 import com.langhuan.reader.ui.book.read.config.CustomPageKeyDialogHost
@@ -230,22 +226,16 @@ fun ReaderRoute(
     )
 
     // ② 可见期间 (RESUMED): 对照原版 Activity onResume/onPause。
-    //    被压栈或退到后台即挂起: 先挂起自动翻页, 再做计时/落库/取消预下载。
+    //    被压栈或退到后台即挂起: 做计时/落库/取消预下载。
     //    desktop/iOS/OHOS 的路由压栈与退后台不会销毁 ScreenModel, 因此只停可复用控制器,
-    //    不调用 provider.onExit/dispose; 再次可见后恢复自动翻页, 页面与开关都不丢。
-    //    Android 已由 Activity lifecycle observer 执行 autoPageStop/自动备份, 这里不重复触发平台副作用。
+    //    不调用 provider.onExit/dispose。
+    //    Android 已由 Activity lifecycle observer 执行自动备份, 这里不重复触发平台副作用。
     OnRouteLifecycle(
         minState = Lifecycle.State.RESUMED,
         onEnter = {
             screenModel.onResume()
-            if (AppConst.JS_PLATFORM != "android") {
-                provider.autoPageResume(screenModel)
-            }
         },
         onLeave = {
-            if (AppConst.JS_PLATFORM != "android") {
-                provider.autoPagePause(screenModel)
-            }
             screenModel.onPause()
         },
     )
@@ -478,12 +468,7 @@ fun ReaderRoute(
             Toasters.get().toast(readAloudPauseText)
             return@AppBackHandler
         }
-        // ④ 自动翻页停止 (原版: isAutoPage → autoPageStop)
-        if (menuController.state.autoPage) {
-            provider.autoPageStop(screenModel)
-            return@AppBackHandler
-        }
-        // 未入架书退出确认 (原版 finish 的"加入书架"确认框，语义见上方注释)
+        // ④ 未入架书退出确认 (原版 finish 的"加入书架"确认框，语义见上方注释)
         if (currentBook?.isNotShelf == true && AppConfigProviders.get().showAddToShelfAlert) {
             screenModel.postDialogEvent(ReaderDialogEvent.AddToShelfConfirm)
         } else {
@@ -1103,57 +1088,9 @@ fun ReaderRoute(
             )
         }
 
-        // 自动翻页控制面板 (对照原版 自动翻页运行时点屏幕 → AutoReadDialog: 速度滑条 + 目录/主菜单/停止/设置);
-        // dismissed 同上由 AnimatedContent 驱动
-        is ReaderDialogEvent.AutoRead -> {
-            // 自动翻页自行结束 (如翻到全书末尾, app 端 pager.onEnd → stopAutoPage) 时收起面板
-            // (对照原版 autoPageStop → dismissDialogFragment(AutoReadDialog))
-            val autoPageActive = menuController.state.autoPage
-            LaunchedEffect(autoPageActive) {
-                if (!autoPageActive) closeDialog()
-            }
-            AutoReadPanelDialogHost(
-                controller = object : AutoReadController {
-                    // 对照原版 ReadBookConfig.autoReadSpeed (共享配置, 各端同一存储)
-                    override var autoReadSpeed: Int
-                        get() = ReadBookConfigProviders.get().autoReadSpeed
-                        set(value) {
-                            ReadBookConfigProviders.get().autoReadSpeed = value.coerceAtLeast(1)
-                        }
-                },
-                actions = object : AutoReadActions {
-                    // 目录按钮 → TocDialog (对照原版 callBack.openChapterList); 面板由驻留层自动离场
-                    override fun openChapterList() {
-                        screenModel.postDialogEvent(ReaderDialogEvent.Toc)
-                    }
+        // 自动翻页控制面板已随功能删除 (P5.5 死代码清理)
 
-                    // 主菜单按钮 → 强制弹常规菜单 (对照原版 callBack.showMenuBar, 不走 autoPage 重定向;
-                    // 面板收起由内容侧带动画 requestDismiss 驱动, 完成后经 onDismiss 清事件)
-                    override fun showMenuBar() {
-                        menuController.showMenu()
-                    }
 
-                    // 停止自动翻页 (对照原版 callBack.autoPageStop); 面板由上方 autoPageActive
-                    // 联动清事件后走离场动画
-                    override fun autoPageStop() {
-                        provider.autoPageStop(screenModel)
-                    }
-
-                    // 设置按钮 → 界面设置; 面板由驻留层自动离场 (原版这里开 showPageAnimConfig
-                    // 选择器, 但该选择器回调忽略索引、不写动画值，选完无效; 翻页动画的实际入口就是界面设置)
-                    override fun showReadStyle() {
-                        screenModel.postDialogEvent(ReaderDialogEvent.ReadStyle)
-                    }
-
-                    // 滑条抬手 → 同步 TTS 语速 (对照原版 upTtsSpeechRate)
-                    override fun upTtsSpeechRate() {
-                        provider.upTtsSpeechRate(screenModel)
-                    }
-                },
-                dismissed = panel.token != dialogSlot?.token,
-                onDismiss = closeDialog,
-            )
-        }
 
         // 目录 (对照原版 目录按钮 → TocDialog 全高底部弹窗; 选章节直接跳阅读)
         is ReaderDialogEvent.Toc -> {
@@ -1232,27 +1169,6 @@ fun ReaderRoute(
                         )
                     },
                     onBookSourceManage = { navigator.push(AppRoute.BookSourceManage) },
-                    onDismiss = { closeDialog() },
-                )
-            } else {
-                LaunchedEffect(screenModel) { closeDialog() }
-            }
-        }
-
-        // 模拟追读配置 (对照原版 menu_simulated_reading → showSimulatedReading)
-        is ReaderDialogEvent.SimulatedReading -> {
-            val book = screenModel.currentBook
-            if (book != null) {
-                SimulatedReadingDialog(
-                    book = book,
-                    onApply = {
-                        closeDialog()
-                        scope.launch {
-                            runCatching { AppDbProviders.get().bookDao.update(book) }
-                            // 对照 app 端 book.save() + viewModel.initData: 落库后重装使模拟章节总数生效
-                            screenModel.initBook(book, book.durChapterIndex)
-                        }
-                    },
                     onDismiss = { closeDialog() },
                 )
             } else {

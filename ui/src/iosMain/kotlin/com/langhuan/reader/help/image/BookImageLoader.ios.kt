@@ -15,7 +15,6 @@ import coil3.size.Scale
 import coil3.toBitmap
 import com.langhuan.reader.help.file.AppFilesDirs
 import com.langhuan.reader.help.http.OkHttpClientProviders
-import com.langhuan.reader.model.manga.MangaModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -173,12 +172,6 @@ private fun buildIosBookImageLoader(): ImageLoader {
             // 直接构 NetworkFetcher.Factory 包 NetworkClient (KtorNetworkFetcherFactory 不接受
             // NetworkClient), Ktor client 复用 NativeHttpProvider 的 KmpHttpClient 内部 client
             // (internal 字段同模块可见; lambda 惰性求值, ImageLoader 构建时不触发网络栈初始化)
-            // 漫画页: MangaModel 走完整取图链路 (图片缓存 → 本地书 FileBook → AnalyzeUrl 防盗链
-            // header 下载 → ImageUtils.decode 解密), 与 android/desktop 同源
-            add(MangaModelKeyer(), MangaModel::class)
-            add(MangaModelFetcher.Factory())
-            // 漫画页解码: 与 desktop 同源 (MangaPageCoil.kt), 预载与翻页共用同一条内存缓存
-            add(MangaPageDecoder.Factory())
             add(
                 coil3.network.NetworkFetcher.Factory(
                     networkClient = {

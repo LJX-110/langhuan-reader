@@ -15,7 +15,6 @@ import com.langhuan.reader.help.LifecycleHelp
 import com.langhuan.reader.help.i18n.androidAppString
 import com.langhuan.reader.help.toast.Toasters
 import com.langhuan.reader.ui.main.MainActivity
-import com.langhuan.reader.ui.main.videoDirectTarget
 import com.langhuan.reader.ui.root.AppRoute
 import com.langhuan.reader.ui.root.LaunchRequest
 import com.langhuan.reader.ui.root.LaunchRequestBus
@@ -294,16 +293,6 @@ class AssociationActivity : BaseComposeActivity(theme = Theme.Transparent, image
     }
 
     private fun handleIntent(intent: Intent) {
-        // 视频直投排在文件关联(书籍)分流之前: manifest 的视频 VIEW filter 就挂在本壳上, 不抢下来
-        // 会被 FileAssociationImport 当书嗅探并弹"不支持该格式"。判据与 MainActivity 共用
-        // [videoDirectTarget] (shared VideoDirect 一份); asRoot = 书架不进栈, back 即退调用方。
-        intent.videoDirectTarget()?.let { target ->
-            // 视频真实分发只结清它本条; 壳里还有其他在途工作 (已接纳导入等) 不能连带收掉
-            LaunchRequestBus.dispatch(LaunchRequest.OpenRoute(AppRoute.VideoPlay(target), asRoot = true))
-            startActivity<MainActivity>()
-            maybeFinish()
-            return
-        }
         val uri = intent.data ?: run {
             // 本投递无载荷: 只按宿主在途判定收尾, 不终结其他合法请求
             maybeFinish()

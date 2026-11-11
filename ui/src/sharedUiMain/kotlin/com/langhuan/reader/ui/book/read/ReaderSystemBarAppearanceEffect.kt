@@ -76,12 +76,11 @@ fun ReaderSystemBarAppearanceEffect(screenModel: ReaderScreenModel) {
 }
 
 /**
- * 原版 bottomDialog 计数覆盖的底部弹层: BaseBottomDialogFragment 子类 (自动翻页面板 /
- * 背景文字设置 / 朗读面板 / 阅读样式) 与显式增减计数的更多设置弹层。
+ * 原版 bottomDialog 计数覆盖的底部弹层: BaseBottomDialogFragment 子类 (朗读面板 /
+ * 阅读样式) 与显式增减计数的更多设置弹层。
  * 背景文字设置在阅读样式弹层内叠层, 同属 [ReaderDialogEvent.ReadStyle]。
  */
 private val readerBottomSheetDialogs = setOf(
-    ReaderDialogEvent.AutoRead,
     ReaderDialogEvent.ReadAloud,
     ReaderDialogEvent.ReadStyle,
     ReaderDialogEvent.MoreConfig,

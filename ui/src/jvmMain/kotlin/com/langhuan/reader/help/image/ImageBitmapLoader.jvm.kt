@@ -39,8 +39,8 @@ import kotlin.math.roundToInt
 /**
  * [ImageBitmapLoader] 的 JVM (desktop) 实现。
  *
- * 合并自 desktop AudioPlayScreen.loadAudioCover + MangaReaderScreen.loadMangaImage,
- * 消除两端 OkHttp + ImageIO + toComposeImageBitmap 重复样板。
+ * 合并自 desktop AudioPlayScreen.loadAudioCover 等图片加载样板,
+ * 统一 OkHttp + ImageIO + toComposeImageBitmap 链路。
  *
  * - 本地路径 (`file://` / `/...`): 读文件字节解码
  * - 网络路径 (`http(s)://`):

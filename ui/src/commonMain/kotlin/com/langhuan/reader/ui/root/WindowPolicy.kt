@@ -29,20 +29,6 @@ object WindowPolicies {
     val Default = WindowPolicy()
     val Reader =
         WindowPolicy(fullscreen = true, keepScreenOn = true, systemBars = SystemBarsPolicy.Hidden)
-    val Manga = WindowPolicy(
-        fullscreen = true,
-        keepScreenOn = true,
-        orientation = OrientationPolicy.Portrait,
-        systemBars = SystemBarsPolicy.Hidden
-    )
-    val VideoPlayer = WindowPolicy(
-        // 原版 VideoPlayActivity 继承 VMBaseActivity 默认 fullScreen=true:
-        // 竖屏内容铺到透明状态栏之后、由标题栏按 inset 回避, 横屏切全屏时整体隐藏系统栏
-        fullscreen = true,
-        keepScreenOn = true,
-        // 原版 VideoPlayActivity 不强制横屏, 由用户在播放页手动切换; 这里默认不锁方向
-        orientation = OrientationPolicy.Unspecified,
-    )
     val AudioPlay = WindowPolicy(
         // 原版 AudioPlayActivity 继承 VMBaseActivity 默认 fullScreen=true:
         // 模糊封面背景铺满到透明状态栏之后, 标题栏按状态栏 inset 回避
@@ -56,8 +42,6 @@ object WindowPolicies {
     /** 根据 AppRoute 返回对应 WindowPolicy */
     fun forRoute(route: AppRoute): WindowPolicy = when (route) {
         is AppRoute.Reader -> Reader
-        is AppRoute.MangaReader -> Manga
-        is AppRoute.VideoPlay -> VideoPlayer
         is AppRoute.AudioPlay -> AudioPlay
         is AppRoute.BookInfo -> BookInfo
         // 其余页面无窗口特化: 编辑页/搜索/列表/WebView 曾各自声明 adjustResize, 现已是
@@ -70,9 +54,14 @@ object WindowPolicies {
  * 阅读页系统栏策略：对照原版 ReadBookActivity.upSystemUiVisibility 语义
  * (toolBarHide = 菜单未显示时)：
  * - 菜单显示时状态栏/导航栏一律显示
+ * - 专注阅读且菜单隐藏时全部隐藏，只留正文
  * - 菜单隐藏时分别跟随 hideStatusBar / hideNavigationBar 配置（默认不隐藏）
  */
-fun readerSystemBarsPolicy(menuVisible: Boolean): SystemBarsPolicy {
+fun readerSystemBarsPolicy(
+    menuVisible: Boolean,
+    focusMode: Boolean = false,
+): SystemBarsPolicy {
+    if (focusMode && !menuVisible) return SystemBarsPolicy.Hidden
     val cfg = ReadBookConfigProviders.getOrNull()
     val hideStatus = cfg?.hideStatusBar == true
     val hideNav = cfg?.hideNavigationBar == true

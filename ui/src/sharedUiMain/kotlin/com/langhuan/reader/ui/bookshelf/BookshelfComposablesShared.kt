@@ -50,10 +50,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.langhuan.reader.data.entities.BaseBook
 import com.langhuan.reader.data.entities.Book
-import com.langhuan.reader.data.entities.BookGroup
 import com.langhuan.reader.data.entities.BookSource
-import com.langhuan.reader.help.book.isLocal
 import com.langhuan.reader.help.config.AppConfigProviders
+import com.langhuan.reader.uimodel.BookItemUi
+import com.langhuan.reader.uimodel.GroupUi
+import com.langhuan.reader.utils.pureKindText
+import com.langhuan.reader.utils.splitNotBlank
 import com.langhuan.reader.ui.compose.component.FastScrollLazyVerticalGrid
 import com.langhuan.reader.ui.compose.component.FastScrollLazyVerticalStaggeredGrid
 import com.langhuan.reader.ui.compose.component.listItemFocus
@@ -238,12 +240,12 @@ fun rememberShelfLayoutSpec(layoutSpecTick: Int, screenWidthDp: Int): ShelfLayou
 }
 
 private fun shelfItemKey(item: Any): Any = when (item) {
-    is Book -> item.bookUrl
-    is BookGroup -> "g:${item.groupId}"
+    is BookItemUi -> item.bookUrl
+    is GroupUi -> "g:${item.groupId}"
     else -> item
 }
 
-private fun shelfItemType(item: Any): Any = if (item is BookGroup) "group" else "book"
+private fun shelfItemType(item: Any): Any = if (item is GroupUi) "group" else "book"
 
 /** 网格列数: 固定宽度模式仍走 Adaptive, 否则用户列数按参考宽度响应式加列 */
 @Composable
@@ -302,19 +304,19 @@ fun ShelfBooksContent(
     // 引擎正在执行目录更新的 bookUrl 集合 (对照 app 端 MainViewModel.onUpTocBooks)：启动自动
     // 更新链路不登记 refreshingUrls，条目转圈判据需合并本集合；下拉指示器仍只用 refreshingUrls
     engineUpdatingUrls: Set<String> = emptySet(),
-    onBookClick: (Book, String?) -> Unit,
-    onBookLongClick: (Book, String?) -> Unit,
+    onBookClick: (BookItemUi, String?) -> Unit,
+    onBookLongClick: (BookItemUi, String?) -> Unit,
     showLastUpdateTime: Boolean,
     showKindIntro: Boolean,
     // coverRatio: 封面比例档位 (CoverSlotRatio)。对照原版 ShelfCover ratio 选取:
     // Book list 按 isVideoStyle 固定; Group list 恒 NOVEL(原 GroupViewHolder 不设 coverRatio);
     // Grid 恒 NOVEL; Video 按真实宽高自适应。
     // 第 4 参 coverReloadTick: 配置变更时重载封面 (宿主端封面组件按 tick 判重/重载)
-    bookCoverSlot: @Composable (Book, Modifier, CoverSlotRatio, Int) -> Unit,
-    groupCoverSlot: @Composable (BookGroup, Modifier, CoverSlotRatio, Int) -> Unit,
+    bookCoverSlot: @Composable (BookItemUi, Modifier, CoverSlotRatio, Int) -> Unit,
+    groupCoverSlot: @Composable (GroupUi, Modifier, CoverSlotRatio, Int) -> Unit,
     modifier: Modifier = Modifier,
-    onGroupClick: ((BookGroup) -> Unit)? = null,
-    onGroupLongClick: ((BookGroup) -> Unit)? = null,
+    onGroupClick: ((GroupUi) -> Unit)? = null,
+    onGroupLongClick: ((GroupUi) -> Unit)? = null,
     /**
      * 本列表在页内的配对区块身份: 共享元素配对键 = (页面, 本区块, 条目) 三元组。
      *
@@ -328,7 +330,7 @@ fun ShelfBooksContent(
     // 全表扫描, 别每次重组都跑一遍 (书架上千本时很贵); 无人刷新时直接短路
     val isRefreshing = remember(items, refreshingUrls) {
         refreshingUrls.isNotEmpty() && items.any { item ->
-            item is Book && item.bookUrl in refreshingUrls
+            item is BookItemUi && item.bookUrl in refreshingUrls
         }
     }
     // 锁定合并后集合引用, 避免子项无谓重组; 转圈判据 = 手动登记 ∪ 引擎执行集 (对照 app 端
@@ -382,7 +384,7 @@ fun ShelfBooksContent(
                     val itemModifier = if (eInk) Modifier else Modifier.animateItem()
                     when (item) {
                         // 书籍条目外包一层 Box: itemModifier(animateItem) 留在 Box 上, 分组不是书
-                        is Book -> Box(modifier = itemModifier) {
+                        is BookItemUi -> Box(modifier = itemModifier) {
                             // 共享配对身份按条目下发: 被点的封面 = 出发端 (token 由页面+区块+条目派生,
                             // 点击时交给导航),
                             // 同屏重复封面 (同书/同 URL) 也不会互相抢正身
@@ -401,7 +403,7 @@ fun ShelfBooksContent(
                             }
                         }
 
-                        is BookGroup -> GroupListItem(
+                        is GroupUi -> GroupListItem(
                             item, spec.isVideoList, coverReloadTick,
                             onClick = { onGroupClick?.invoke(item) },
                             onLongClick = { onGroupLongClick?.invoke(item) },
@@ -422,7 +424,7 @@ fun ShelfBooksContent(
                     val itemModifier = if (eInk) Modifier else Modifier.animateItem()
                     when (item) {
                         // 外层 Box 同 LIST 分支: 让 animateItem 留在 Box 上
-                        is Book -> Box(modifier = itemModifier) {
+                        is BookItemUi -> Box(modifier = itemModifier) {
                             // 共享配对身份按条目下发 (同上)
                             val binding = rememberSharedCoverSourceBinding(item.bookUrl, pairBlockId)
                             CompositionLocalProvider(LocalSharedCoverBinding provides binding) {
@@ -437,7 +439,7 @@ fun ShelfBooksContent(
                             }
                         }
 
-                        is BookGroup -> GroupGridItem(
+                        is GroupUi -> GroupGridItem(
                             item, coverReloadTick,
                             onClick = { onGroupClick?.invoke(item) },
                             onLongClick = { onGroupLongClick?.invoke(item) },
@@ -460,7 +462,7 @@ fun ShelfBooksContent(
                         items(items, key = ::shelfItemKey, contentType = ::shelfItemType) { item ->
                             val itemModifier = if (eInk) Modifier else Modifier.animateItem()
                             when (item) {
-                                is Book -> Box(modifier = itemModifier) {
+                                is BookItemUi -> Box(modifier = itemModifier) {
                                     val binding = rememberSharedCoverSourceBinding(item.bookUrl, pairBlockId)
                                     CompositionLocalProvider(LocalSharedCoverBinding provides binding) {
                                         ShelfVideoItem(
@@ -472,7 +474,7 @@ fun ShelfBooksContent(
                                     }
                                 }
 
-                                is BookGroup -> GroupVideoItem(
+                                is GroupUi -> GroupVideoItem(
                                     item, coverReloadTick,
                                     onClick = { onGroupClick?.invoke(item) },
                                     onLongClick = { onGroupLongClick?.invoke(item) },
@@ -493,7 +495,7 @@ fun ShelfBooksContent(
                             val itemModifier = if (eInk) Modifier else Modifier.animateItem()
                             when (item) {
                                 // 外层 Box 同 LIST 分支: 让 animateItem 留在 Box 上
-                                is Book -> Box(modifier = itemModifier) {
+                                is BookItemUi -> Box(modifier = itemModifier) {
                                     // 共享配对身份按条目下发 (同上)
                                     val binding = rememberSharedCoverSourceBinding(item.bookUrl, pairBlockId)
                                     CompositionLocalProvider(LocalSharedCoverBinding provides binding) {
@@ -506,7 +508,7 @@ fun ShelfBooksContent(
                                     }
                                 }
 
-                                is BookGroup -> GroupVideoItem(
+                                is GroupUi -> GroupVideoItem(
                                     item, coverReloadTick,
                                     onClick = { onGroupClick?.invoke(item) },
                                     onLongClick = { onGroupLongClick?.invoke(item) },
@@ -675,6 +677,31 @@ fun ShelfRowIcon(painterKey: String) {
     )
 }
 
+// ---- 展示模型上的条目派生值 (同 Book 实体方法口径, 只取展示模型已有字段) ----
+
+/** 展示用作者 (同 `BaseBook.getRealAuthor`: 多作者按换行拆分, 去掉 `::` 之后的别名) */
+private fun BookItemUi.shelfRealAuthor(): String =
+    author.splitNotBlank("\n").joinToString("\n") { it.split("::")[0] }
+
+/** 分类标签 (同 `BaseBook.getKindList`: 字数在前, 分类净化在后) */
+private fun BookItemUi.shelfKindList(): List<String> = buildList {
+    wordCount?.splitNotBlank(",", "\n")?.forEach { raw ->
+        if (raw.isNotBlank()) add(raw)
+    }
+    kind?.splitNotBlank(",", "\n")?.forEach { raw ->
+        val pure = raw.pureKindText()
+        if (pure.isNotBlank()) add(pure)
+    }
+}
+
+/** 展示用简介 (同 `Book.getDisplayIntro`: 自定义简介优先) */
+private fun BookItemUi.shelfDisplayIntro(): String? =
+    customIntro.takeUnless { it.isNullOrEmpty() } ?: intro
+
+/** 展示用封面 (同 `Book.getDisplayCoverRef`: 自定义封面优先; 仅用于有无封面判断) */
+private fun BookItemUi.shelfDisplayCover(): String? =
+    customCoverUrl.takeUnless { it.isNullOrEmpty() } ?: coverUrl
+
 /**
  * 列表条目, 对照 item_bookshelf_list: 书名行(徽标/转圈)+作者行(更新时间)+分类+进度+最新+简介
  *
@@ -687,7 +714,7 @@ fun ShelfRowIcon(painterKey: String) {
  */
 @Composable
 fun ShelfListItem(
-    book: Book,
+    book: BookItemUi,
     isVideoStyle: Boolean,
     coverReloadTick: Int,
     refreshingUrls: Set<String>,
@@ -702,7 +729,7 @@ fun ShelfListItem(
     forceShowIntro: Boolean = false,
     forceShowUpdateTime: Boolean = false,
     hideUnread: Boolean = false,
-    coverSlot: @Composable (Book, Modifier, CoverSlotRatio, Int) -> Unit,
+    coverSlot: @Composable (BookItemUi, Modifier, CoverSlotRatio, Int) -> Unit,
     // 更新时间 Text 注入: 父项不感知 timeTick 心跳
     lastUpdateTextSlot: @Composable () -> Unit,
 ) {
@@ -741,20 +768,14 @@ fun ShelfListItem(
                         color = colors.accent,
                         modifier = Modifier.size(26.dp),
                     )
-                } else if (!hideUnread && appConfig.showUnread) { // durChapterPos 必须在 key 中: 停在章末时其落库为负值, 未读要减 1,
-                    // 漏掉它会导致重组时命中旧缓存, 未读不更新
-                    val unread = remember(
-                        book.durChapterIndex,
-                        book.totalChapterNum,
-                        book.durChapterPos
-                    ) { book.getUnreadChapterNum() }
-                    UnreadBadge(unread, book.lastCheckCount > 0)
+                } else if (!hideUnread && appConfig.showUnread) {
+                    UnreadBadge(book.unreadCount, highlight = book.lastCheckCount > 0)
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ShelfRowIcon("ic_author")
                 Text(
-                    text = remember(book.author) { book.getRealAuthor() },
+                    text = remember(book.author) { book.shelfRealAuthor() },
                     color = colors.secondaryText,
                     fontSize = 13.sp,
                     maxLines = 1,
@@ -769,7 +790,7 @@ fun ShelfListItem(
             }
             if (forceShowKind || (showKindIntro && appConfig.bookshelfListShowKind)) {
                 // 正则切分 + 净化, 别每次重组重算
-                val kinds = remember(book.kind, book.wordCount) { book.getKindList() }
+                val kinds = remember(book.kind, book.wordCount) { book.shelfKindList() }
                 if (kinds.isNotEmpty()) KindLabels(kinds)
             }
             if (!book.durChapterTitle.isNullOrEmpty()) {
@@ -797,7 +818,7 @@ fun ShelfListItem(
                 }
             }
             if (forceShowIntro || (showKindIntro && appConfig.bookshelfListShowIntro)) {
-                val intro = remember(book.intro, book.author) { book.getDisplayIntro() }
+                val intro = remember(book.intro, book.customIntro) { book.shelfDisplayIntro() }
                 if (!intro.isNullOrBlank()) {
                     Text(
                         text = intro,
@@ -812,6 +833,45 @@ fun ShelfListItem(
         }
     }
 }
+
+/**
+ * [ShelfListItem] 的实体重载: 书架之外 (搜索结果等) 仍持有 [Book] 的调用方直接传实体,
+ * 在边界转成展示模型渲染, 避免这些页面为一次类型迁移各自加一层适配。
+ */
+@Composable
+fun ShelfListItem(
+    book: Book,
+    isVideoStyle: Boolean,
+    coverReloadTick: Int,
+    refreshingUrls: Set<String>,
+    showLastUpdateTime: Boolean,
+    showKindIntro: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    forceShowKind: Boolean = false,
+    forceShowIntro: Boolean = false,
+    forceShowUpdateTime: Boolean = false,
+    hideUnread: Boolean = false,
+    coverSlot: @Composable (Book, Modifier, CoverSlotRatio, Int) -> Unit,
+    lastUpdateTextSlot: @Composable () -> Unit,
+) = ShelfListItem(
+    book = book.toBookItemUi(),
+    isVideoStyle = isVideoStyle,
+    coverReloadTick = coverReloadTick,
+    refreshingUrls = refreshingUrls,
+    showLastUpdateTime = showLastUpdateTime,
+    showKindIntro = showKindIntro,
+    onClick = onClick,
+    onLongClick = onLongClick,
+    modifier = modifier,
+    forceShowKind = forceShowKind,
+    forceShowIntro = forceShowIntro,
+    forceShowUpdateTime = forceShowUpdateTime,
+    hideUnread = hideUnread,
+    coverSlot = { _, m, coverRatio, tick -> coverSlot(book, m, coverRatio, tick) },
+    lastUpdateTextSlot = lastUpdateTextSlot,
+)
 
 /** 更新时间 Text: derivedStateOf 订阅心跳, 仅本 Composable 在 timeTick 变化时重组 */
 @Composable
@@ -850,14 +910,14 @@ fun BookshelfBadge(modifier: Modifier = Modifier) {
  */
 @Composable
 fun ShelfGridItem(
-    book: Book,
+    book: BookItemUi,
     coverReloadTick: Int,
     refreshingUrls: Set<String>,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
     inBookshelf: Boolean? = null,
-    coverSlot: @Composable (Book, Modifier, CoverSlotRatio, Int) -> Unit,
+    coverSlot: @Composable (BookItemUi, Modifier, CoverSlotRatio, Int) -> Unit,
 ) {
     val colors = AppTheme.colors
     val appConfig = remember { AppConfigProviders.get() }
@@ -897,20 +957,38 @@ fun ShelfGridItem(
                 modifier = Modifier.align(Alignment.TopEnd).size(22.dp),
             )
         } else if (appConfig.showUnread) {
-            // durChapterPos 必须在 key 中: 停在章末时其落库为负值, 未读要减 1,
-            // 漏掉它会导致重组时命中旧缓存, 未读不更新
-            val unread =
-                remember(book.durChapterIndex, book.totalChapterNum, book.durChapterPos) {
-                    book.getUnreadChapterNum()
-                }
             UnreadBadge(
-                count = unread,
+                count = book.unreadCount,
                 highlight = book.lastCheckCount > 0,
                 modifier = Modifier.align(Alignment.TopEnd).padding(top = DesignTokens.spacingXs, end = DesignTokens.spacingXs),
             )
         }
     }
 }
+
+/**
+ * [ShelfGridItem] 的实体重载: 书架之外 (搜索结果/发现展示) 仍持有 [Book] 的调用方直接传实体。
+ */
+@Composable
+fun ShelfGridItem(
+    book: Book,
+    coverReloadTick: Int,
+    refreshingUrls: Set<String>,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    inBookshelf: Boolean? = null,
+    coverSlot: @Composable (Book, Modifier, CoverSlotRatio, Int) -> Unit,
+) = ShelfGridItem(
+    book = book.toBookItemUi(),
+    coverReloadTick = coverReloadTick,
+    refreshingUrls = refreshingUrls,
+    onClick = onClick,
+    onLongClick = onLongClick,
+    modifier = modifier,
+    inBookshelf = inBookshelf,
+    coverSlot = { _, m, coverRatio, tick -> coverSlot(book, m, coverRatio, tick) },
+)
 
 /**
  * 视频卡片, 对照 item_explore_video/bindVideoCard: 16:9 封面+粗体标题+分类+作者, 书架标记叠加封面左上。
@@ -932,16 +1010,16 @@ private val ShelfInBookshelfDotColor = Color(0xFF43A047)
  */
 @Composable
 fun ShelfVideoItem(
-    book: Book,
+    book: BookItemUi,
     coverReloadTick: Int,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
     inBookshelf: Boolean? = null,
-    coverSlot: @Composable (Book, Modifier, CoverSlotRatio, Int) -> Unit,
+    coverSlot: @Composable (BookItemUi, Modifier, CoverSlotRatio, Int) -> Unit,
 ) {
     val colors = AppTheme.colors
-    val hasCover = !book.getDisplayCover().isNullOrBlank()
+    val hasCover = !book.shelfDisplayCover().isNullOrBlank()
     Column(
         modifier
             .listItemFocus()
@@ -983,11 +1061,11 @@ fun ShelfVideoItem(
             )
         }
         // 正则切分 + 净化 / 作者拆分, 别每次重组重算
-        val kinds = remember(book.kind, book.wordCount) { book.getKindList() }
+        val kinds = remember(book.kind, book.wordCount) { book.shelfKindList() }
         if (kinds.isNotEmpty()) {
             Box(Modifier.padding(top = 2.dp)) { KindLabels(kinds) }
         }
-        val author = remember(book.author) { book.getRealAuthor() }
+        val author = remember(book.author) { book.shelfRealAuthor() }
         if (author.isNotBlank()) {
             Text(
                 text = author,
@@ -1001,17 +1079,39 @@ fun ShelfVideoItem(
     }
 }
 
+/**
+ * [ShelfVideoItem] 的实体重载: 书架之外 (主页区块/发现展示/搜索结果) 仍持有 [Book] 的调用方直接传实体。
+ */
+@Composable
+fun ShelfVideoItem(
+    book: Book,
+    coverReloadTick: Int,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    inBookshelf: Boolean? = null,
+    coverSlot: @Composable (Book, Modifier, CoverSlotRatio, Int) -> Unit,
+) = ShelfVideoItem(
+    book = book.toBookItemUi(),
+    coverReloadTick = coverReloadTick,
+    onClick = onClick,
+    onLongClick = onLongClick,
+    modifier = modifier,
+    inBookshelf = inBookshelf,
+    coverSlot = { _, m, coverRatio, tick -> coverSlot(book, m, coverRatio, tick) },
+)
+
 // ---- style2 分组(文件夹)条目: 单图封面 + 组名, 对照各 tier 的 GroupViewHolder ----
 
 @Composable
 fun GroupListItem(
-    group: BookGroup,
+    group: GroupUi,
     isVideoStyle: Boolean,
     coverReloadTick: Int,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
-    coverSlot: @Composable (BookGroup, Modifier, CoverSlotRatio, Int) -> Unit,
+    coverSlot: @Composable (GroupUi, Modifier, CoverSlotRatio, Int) -> Unit,
 ) {
     val colors = AppTheme.colors
     val coverHeight = remember(coverReloadTick, isVideoStyle) { shelfCoverHeightDp(isVideoStyle) }
@@ -1039,12 +1139,12 @@ fun GroupListItem(
 
 @Composable
 fun GroupGridItem(
-    group: BookGroup,
+    group: GroupUi,
     coverReloadTick: Int,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
-    coverSlot: @Composable (BookGroup, Modifier, CoverSlotRatio, Int) -> Unit,
+    coverSlot: @Composable (GroupUi, Modifier, CoverSlotRatio, Int) -> Unit,
 ) {
     val colors = AppTheme.colors
     Column(
@@ -1070,12 +1170,12 @@ fun GroupGridItem(
 
 @Composable
 fun GroupVideoItem(
-    group: BookGroup,
+    group: GroupUi,
     coverReloadTick: Int,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
-    coverSlot: @Composable (BookGroup, Modifier, CoverSlotRatio, Int) -> Unit,
+    coverSlot: @Composable (GroupUi, Modifier, CoverSlotRatio, Int) -> Unit,
 ) {
     val colors = AppTheme.colors
     Column(
@@ -1106,7 +1206,7 @@ fun GroupVideoItem(
  */
 @Composable
 fun ShelfExploreListItem(
-    book: BaseBook,
+    book: BookItemUi,
     isVideoStyle: Boolean,
     inBookshelf: Boolean,
     onClick: () -> Unit,
@@ -1165,14 +1265,14 @@ fun ShelfExploreListItem(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ShelfRowIcon("ic_author")
                 Text(
-                    text = remember(book.author) { book.getRealAuthor() },
+                    text = remember(book.author) { book.shelfRealAuthor() },
                     color = colors.secondaryText,
                     fontSize = 13.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            val kinds = remember(book.kind, book.wordCount) { book.getKindList() }
+            val kinds = remember(book.kind, book.wordCount) { book.shelfKindList() }
             if (kinds.isNotEmpty()) KindLabels(kinds)
             if (!book.latestChapterTitle.isNullOrEmpty()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

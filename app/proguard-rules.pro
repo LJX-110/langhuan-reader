@@ -75,25 +75,10 @@
 -keep class com.langhuan.reader.model.fileBook.ZipImageCache { *; }
 
 ############################
-# 业务：TVBox spider jar 运行时类路径供给
+# 书源 JS 类路径契约：Gson
 ############################
-# spider jar 经 DexClassLoader 双亲委派按类名解析宿主类, 宿主源码对 zxing 零引用,
-# 不 keep 会被 R8 整库裁光, jar 内 Init 二维码任务在 release 包必然 NoClassDefFoundError。
-# zxing core 为纯 Java 直调库 (无反射/无服务发现); 实测 custom_spider.jar 常量池只引用下列
-# 编码面入口, 其余格式 Writer 与其共用件 (BitArray/reedsolomon/MatrixUtil 等) 由 R8 按可达性自动保留。
-# 解析面 (Reader/decoder/Binarizer/LuminanceSource/client.result/multi/maxicode) 宿主与 jar 都不用,
-# 不再 keep, 交由 R8 裁除。
--keep class com.google.zxing.MultiFormatWriter { *; }
--keep class com.google.zxing.qrcode.QRCodeWriter { *; }
--keep class com.google.zxing.EncodeHintType { *; }
--keep class com.google.zxing.BarcodeFormat { *; }
--keep class com.google.zxing.common.BitMatrix { *; }
-# com.github.catvod.* 是 spider jar 的类路径契约面 (壳类/工具/网络, 签名须与 FongMi catvod 一致),
-# 宿主源码只引用少数接线点, 其余成员仅被 jar 直调; 纯 Java 直调面, jar 用法覆盖面不可预判,
-# 不 keep 会被 R8 整库裁光 (release 包 init/取数期 NoClassDefFoundError)。
--keep class com.github.catvod.** { *; }
-# com.google.gson.** 同为 spider jar 运行时契约 (FongMi catvod 以 api 暴露 gson,
-# 生态 jar 可直调), 混淆改名后 jar 按 FQCN 链接即断。
+# 书源 JS 经 Packages.com.google.gson.* 使用宿主 Gson, 宿主源码对 gson 零直调;
+# 不 keep 会被 R8 整库裁光, 脚本按 FQCN 链接即断。
 -keep class com.google.gson.** { *; }
 
 ############################

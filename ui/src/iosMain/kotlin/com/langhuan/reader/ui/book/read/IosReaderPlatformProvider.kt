@@ -26,7 +26,6 @@ import com.langhuan.reader.help.storage.BackupShared
 import com.langhuan.reader.help.toast.Toasters
 import com.langhuan.reader.help.tts.IosReadAloudHost
 import com.langhuan.reader.ui.book.read.ReadBookEvents
-import com.langhuan.reader.ui.book.read.page.AutoPagerCompose
 import com.langhuan.reader.ui.book.read.page.SelectionGeometry
 import com.langhuan.reader.ui.compose.platform.SharedThemeStoreProvider
 import com.langhuan.reader.ui.root.AppNavigatorProviders
@@ -104,20 +103,13 @@ object IosReaderPlatformProvider : ReaderPlatformProvider {
         screenModel: ReaderScreenModel,
         controller: ReadMenuController,
     ) {
-        (controller.state as? IosReadMenuState)?.dispose()
         if (activeMenuBinding?.first === screenModel && activeMenuBinding?.second === controller) {
             activeMenuBinding = null
         }
     }
 
-    // 自动翻页面板停止按钮 (对照 app/desktop 端 autoPageStop → stopAutoPage: 停控制器 + 复位开关)
-    override fun autoPageStop(screenModel: ReaderScreenModel) {
-        (activeMenuBinding?.takeIf { it.first === screenModel }?.second?.state as? IosReadMenuState)
-            ?.stopAutoPage()
-    }
-
-    // 自动翻页滑条抬手 → 重新应用当前 TTS 语速 (对照 app 端 upTtsSpeechRate: 重读配置 +
-    // pause/resume 让新语速立刻作用到当前段; 本方法不写配置, 只按现配置重放)
+    // TTS 语速变更后重新应用当前语速 (重读配置 + pause/resume 让新语速立刻作用到当前段;
+    // 本方法不写配置, 只按现配置重放)
     override fun upTtsSpeechRate(screenModel: ReaderScreenModel) = IosReadAloudHost.upSpeechRate()
 
     /**
@@ -177,17 +169,15 @@ object IosReaderPlatformProvider : ReaderPlatformProvider {
         ReaderImageActionMenu.dismiss()
     }
 
-    /** 阅读页销毁: 停止自动翻页并释放控制器/协程; 收起浮动菜单 + 停朗读, 避免残留 (对照原版 onDestroy → textActionMenu.dismiss)。
+    /** 阅读页销毁: 释放控制器/协程; 收起浮动菜单 + 停朗读, 避免残留 (对照原版 onDestroy → textActionMenu.dismiss)。
      *  iOS 无前台 Service 维持阅读实例 (朗读在进程内编排), 离开阅读页即失去阅读上下文, 显式停止;
      *  播放期间的锁屏/控制中心播控卡片 (SystemMediaControl) 随 stop 一并撤下。 */
     override fun onExit(screenModel: ReaderScreenModel) {
-        autoPageStop(screenModel)
         // 只放自己这条绑定 (不经模型取新控制器)
         activeMenuBinding
             ?.takeIf { it.first === screenModel }
             ?.second
             ?.let { releaseMenuController(screenModel, it) }
-        readerAutoPageActive = false
         dismissActionMenus()
         textActions = null
         IosReadAloudHost.stop()
@@ -291,12 +281,6 @@ private class IosReadMenuState(
     screenModel: ReaderScreenModel,
 ) : BaseReadMenuState(navigator, screenModel) {
 
-    /** 自动翻页控制器协程作用域 (Main)。 */
-    private val autoPageScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-
-    /** 自动翻页控制器 (对照 Desktop/Android, shared AutoPagerCompose 承载)。 */
-    private var autoPager: AutoPagerCompose? = null
-
     // 菜单栏配色 (对照原版 ReadMenu.upColorConfig, 逻辑见 shared createReadMenuColors)
     private val menuTheme: ReadMenuColors
         get() = createReadMenuColors(
@@ -311,65 +295,9 @@ private class IosReadMenuState(
     override val hasBgImage: Boolean
         get() = hasBgImageByPath(SharedThemeStoreProvider().bgImagePath)
 
-    override fun clickAutoPage() {
-        if (autoPage) {
-            stopAutoPage()
-        } else {
-            startAutoPage()
-            showAutoPagePanel()
-        }
-    }
-
-    /**
-     * 启动自动翻页: 三模式语义与 app/desktop 端一致 (E-Ink 定时整页翻 / 非 E-Ink 揭示动画覆盖层 /
-     * 滚动模式连续滚动), 由 shared [AutoPagerCompose] 驱动 [ReadBookViewModelShared].
-     * 翻到全书末尾自动停 (pager.onEnd)。
-     */
-    private fun startAutoPage() {
-        stopAutoPage()
-        autoPage = true
-        readerAutoPageActive = true
-        autoPager = AutoPagerCompose(
-            viewModel = screenModel.viewModel,
-            scope = autoPageScope,
-            // 每拍现读速度配置 (对照原版每次 postDelayed 现取 ReadBookConfig.autoReadSpeed)
-            autoReadSpeed = {
-                ReadBookConfigProviders.get().autoReadSpeed.coerceAtLeast(1)
-            },
-        ).also { pager ->
-            pager.onEnd = { stopAutoPage() }
-            pager.start()
-        }
-    }
-
-    /** 停止自动翻页: 复位控制器 + 复位开关 (对照 app/desktop 端 stopAutoPage)。 */
-    fun stopAutoPage() {
-        autoPager?.stop()
-        autoPager = null
-        autoPage = false
-        readerAutoPageActive = false
-    }
-
-    override fun clickPre() {
-        stopAutoPage()
-        super.clickPre()
-    }
-
-    override fun clickNext() {
-        stopAutoPage()
-        super.clickNext()
-    }
-
-    // 朗读短按: 停自动翻页后切换播放/暂停
+    // 朗读短按: 切换播放/暂停
     override fun clickReadAloud() {
-        stopAutoPage()
         screenModel.viewModel.toggleReadAloud()
-    }
-
-    /** 释放自动翻页协程作用域 (阅读页退出时由 Provider 调用) */
-    fun dispose() {
-        stopAutoPage()
-        autoPageScope.cancel()
     }
 }
 

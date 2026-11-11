@@ -1,4 +1,4 @@
-package com.langhuan.reader.ui.route
+﻿package com.langhuan.reader.ui.route
 
 import androidx.compose.animation.core.Easing
 import androidx.compose.foundation.MutatePriority
@@ -63,8 +63,6 @@ import com.langhuan.reader.data.entities.HomeSection
 import com.langhuan.reader.data.entities.PinnedExplore
 import com.langhuan.reader.data.entities.SearchBook
 import com.langhuan.reader.data.entities.rule.ExploreKind
-import com.langhuan.reader.help.book.isRss
-import com.langhuan.reader.help.book.isVideo
 import com.langhuan.reader.help.config.AppConfigAccessor
 import com.langhuan.reader.help.config.AppConfigProviders
 import com.langhuan.reader.help.coroutine.IoDispatcher
@@ -76,7 +74,6 @@ import com.langhuan.reader.ui.about.AppLogDialog
 import com.langhuan.reader.ui.book.group.GroupEditDialog
 import com.langhuan.reader.ui.book.group.GroupManageDialog
 import com.langhuan.reader.ui.book.group.GroupViewModelShared
-import com.langhuan.reader.ui.book.manga.extension.MangaExtensionServiceProviders
 import com.langhuan.reader.ui.book.search.SearchScope
 import com.langhuan.reader.ui.bookshelf.BookshelfActionsCallbacks
 import com.langhuan.reader.ui.bookshelf.BookshelfAddViewModelShared
@@ -110,16 +107,10 @@ import com.langhuan.reader.ui.main.explore.ExploreScreenModel
 import com.langhuan.reader.ui.main.explore.ExploreUiActions
 import com.langhuan.reader.ui.main.explore.ExploreUiEvent
 import com.langhuan.reader.ui.main.explore.ExploreUiState
-import com.langhuan.reader.ui.main.home.HomeScreen
-import com.langhuan.reader.ui.main.home.HomeScreenModel
-import com.langhuan.reader.ui.main.home.HomeSectionManageDialog
-import com.langhuan.reader.ui.main.home.HomeTabManageDialog
-import com.langhuan.reader.ui.main.local.LocalBooksTab
 import com.langhuan.reader.ui.main.home.SectionCoverRow
 import com.langhuan.reader.ui.main.home.SectionTitleRow
-import com.langhuan.reader.ui.main.home.homeSectionKey
-import com.langhuan.reader.ui.book.tvbox.TvBoxServiceProviders
-import com.langhuan.reader.ui.main.my.MyConfigScreen
+import com.langhuan.reader.ui.main.local.LocalBooksTab
+import com.langhuan.reader.ui.main.my.MyConfigContent
 import com.langhuan.reader.ui.root.AppNavigator
 import com.langhuan.reader.ui.root.AppRoute
 import com.langhuan.reader.ui.root.FileFilter
@@ -144,7 +135,6 @@ import com.langhuan.reader.ui.widget.dialog.TextDialog
 import com.langhuan.reader.ui.widget.dialog.WaitDialog
 import com.langhuan.reader.utils.FlowBus
 import com.langhuan.reader.utils.systemCurrentTimeMillis
-import com.langhuan.reader.web.WebServerPlatforms
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.conflate
@@ -160,7 +150,6 @@ import com.langhuan.reader.ui.generated.resources.draw
 import com.langhuan.reader.ui.generated.resources.empty
 import com.langhuan.reader.ui.generated.resources.error
 import com.langhuan.reader.ui.generated.resources.help
-import com.langhuan.reader.ui.generated.resources.home_source_invalid
 import com.langhuan.reader.ui.generated.resources.explore_option_invalidated
 import com.langhuan.reader.ui.generated.resources.ic_help
 import com.langhuan.reader.ui.generated.resources.import_bookshelf
@@ -169,7 +158,6 @@ import com.langhuan.reader.ui.generated.resources.ok
 import com.langhuan.reader.ui.generated.resources.open_in_browser
 import com.langhuan.reader.ui.generated.resources.select_file
 import com.langhuan.reader.ui.generated.resources.sure_del
-import com.langhuan.reader.ui.generated.resources.web_service_desc
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.abs
@@ -183,9 +171,6 @@ import kotlin.math.roundToInt
  *
  * 对照 MainActivity: visibleTags 顺序校验 + initialPage 落点 + pageSelections 跳转流 +
  * onReselect 300ms 双击 (bookshelf gotoTop / explore compress) 均与 Activity 等价。
- * HomeTab 数据流由 [HomeScreenModel] 提供 (下沉 [com.langhuan.reader.ui.main.home.HomeViewModelShared]);
- * slots (SectionBlock/InfiniteHeader/InfiniteGridCard) 原 app 端含 AndroidView/ShelfCover (L3),
- * shared 端用纯 Compose 实现占位 UI (标题 + 占位封面 + 书名/作者)。
  */
 @Composable
 fun MainRoute(
@@ -222,9 +207,9 @@ fun MainRoute(
         )
     }
 
-    // 对照 MainActivity.homePageIndex: defaultHomePage 落点, 目标 tab 隐藏时回落书架
-    val homePageIndex = remember(configTick, visibleTags, appConfig.defaultHomePage) {
-        computeHomePageIndex(visibleTags, appConfig.defaultHomePage)
+    // 首页固定书架: 不再读 defaultHomePage 偏好
+    val homePageIndex = remember(configTick, visibleTags) {
+        visibleTags.indexOf(BottomNavTag.BOOKSHELF).coerceAtLeast(0)
     }
     val initialPage = homePageIndex
 
@@ -407,11 +392,10 @@ fun MainRoute(
 }
 
 /**
- * 主界面 ScreenModel: 持有 HomeScreenModel + BookshelfViewModel + ExploreScreenModel,
+ * 主界面 ScreenModel: 持有 BookshelfViewModel + ExploreScreenModel,
  * 生命周期随 MainRoute entry (ScreenModelStore 管理 onCleared)。
  */
 private class MainScreenModel : ScreenModel {
-    val homeScreenModel = HomeScreenModel()
     val bookshelfViewModel = BookshelfViewModel()
     val exploreScreenModel = ExploreScreenModel()
 
@@ -419,7 +403,6 @@ private class MainScreenModel : ScreenModel {
     val coverRatioLayout = CoverRatioLayoutState()
 
     override fun onCleared() {
-        homeScreenModel.onCleared()
         bookshelfViewModel.onCleared()
         exploreScreenModel.onCleared()
     }
@@ -447,745 +430,7 @@ private fun computeVisibleTags(appConfig: AppConfigAccessor): List<String> {
     return tags.ifEmpty { listOf(BottomNavTag.BOOKSHELF) }
 }
 
-/** 对照 MainActivity.homePageIndex: defaultHomePage 落点, 目标 tab 隐藏时回落书架 */
-private fun computeHomePageIndex(visibleTags: List<String>, defaultHomePage: String): Int {
-    val bookshelfPos = visibleTags.indexOf(BottomNavTag.BOOKSHELF)
-    val pos = when (defaultHomePage) {
-        "home" -> visibleTags.indexOf(BottomNavTag.HOME)
-        "bookshelf" -> bookshelfPos
-        "explore" -> visibleTags.indexOf(BottomNavTag.DISCOVERY)
-        "my" -> visibleTags.indexOf(BottomNavTag.MY)
-        else -> bookshelfPos
-    }
-    return if (pos >= 0) pos else bookshelfPos.coerceAtLeast(0)
-}
-
-/**
- * 主页 tab: 通过 [HomeScreenModel] 接入数据流。
- *
- * ScreenModel 持有 [com.langhuan.reader.ui.main.home.HomeViewModelShared] (组合委托),
- * 把 6 个 StateFlow 投影为 [HomeUiState], 并实现 [HomeUiActions]。
- *
- * slots (SectionBlock/InfiniteHeader/InfiniteGridCard) 原 app 端含 AndroidView/ShelfCover (L3),
- * 此处用 shared 端纯 Compose 实现占位 UI (标题 + 占位封面 + 书名/作者), 不依赖 L3 组件;
- * 书籍点击对照 ExploreShowRoute.onBookClick: 跳 BookInfo 详情页 (SearchBook.toRouteRef())。
- */
-@Composable
-private fun HomeTabContent(
-    screenModel: HomeScreenModel,
-    navigator: AppNavigator,
-    // 主界面停稳页是否为本 tab (对照原版当前 Fragment 才 onResume→initTab)
-    active: Boolean,
-) {
-    val state by screenModel.state.collectAsState()
-    val scope = rememberCoroutineScope()
-    // 顶栏两个管理入口的弹窗态由 ScreenModel 持有, 本 Route 据此渲染 shared 对话框
-    val manageSectionOf by screenModel.manageSectionOf.collectAsState()
-    val manageTab by screenModel.manageTab.collectAsState()
-
-    // 对照 HomeTabFragment.sectionCallback.onBookClick 的分流
-    // sharedToken: 被点封面自签的页转场配对 token (只有进详情/音频页时才交给导航)
-    val onBook: (SearchBook, HomeSection, Boolean, String?) -> Unit =
-        { book, section, longClick, sharedToken ->
-            openHomeBook(book, section, longClick, sharedToken, navigator, scope)
-        }
-    // 对照 sectionCallback.onMoreClick: 标题行整行点击 → ExploreShow (该展示项的发现地址)
-    val onMore: (HomeSection) -> Unit = { section ->
-        scope.launch { openExploreShow(section, navigator) }
-    }
-    HomeScreen(
-        state = state,
-        actions = screenModel,
-        active = active,
-        // slots: shared 端纯 Compose 实现 (无 L3 AndroidView/ShelfCover, 用占位封面)
-        sectionBlockSlot = { tabTitle, section ->
-            HomeSectionBlock(
-                section = section,
-                books = state.sectionBooks[homeSectionKey(tabTitle, section.id)] ?: emptyList(),
-                loading = state.sectionLoading[homeSectionKey(tabTitle, section.id)] == true,
-                error = state.sectionError[homeSectionKey(tabTitle, section.id)] == true,
-                invalidated = state.sectionInvalidated[homeSectionKey(tabTitle, section.id)] == true,
-                options = state.sectionOptions[homeSectionKey(tabTitle, section.id)] ?: emptyList(),
-                onOptionSelect = { name, value ->
-                    screenModel.onSectionOptionSelect(tabTitle, section, name, value)
-                },
-                onOptionsSelect = { name, values ->
-                    screenModel.onSectionOptionsSelect(tabTitle, section, name, values)
-                },
-                onOptionReset = { name ->
-                    screenModel.onSectionOptionReset(tabTitle, section, name)
-                },
-                onBookClick = { book, token -> onBook(book, section, false, token) },
-                onBookLongClick = { book, token -> onBook(book, section, true, token) },
-                onMoreClick = { onMore(section) },
-            )
-        },
-        infiniteHeaderSlot = { tabTitle, section ->
-            HomeInfiniteHeader(
-                section = section,
-                options = state.sectionOptions[homeSectionKey(tabTitle, section.id)] ?: emptyList(),
-                invalidated = state.sectionInvalidated[homeSectionKey(tabTitle, section.id)] == true,
-                error = state.sectionError[homeSectionKey(tabTitle, section.id)] == true,
-                onOptionSelect = { name, value ->
-                    screenModel.onSectionOptionSelect(tabTitle, section, name, value)
-                },
-                onOptionsSelect = { name, values ->
-                    screenModel.onSectionOptionsSelect(tabTitle, section, name, values)
-                },
-                onOptionReset = { name ->
-                    screenModel.onSectionOptionReset(tabTitle, section, name)
-                },
-                onMoreClick = { onMore(section) },
-            )
-        },
-        infiniteGridCardSlot = { _, section, book ->
-            HomeInfiniteGridCard(
-                book = book,
-                coverVideo = section.coverVideo,
-                // 区块身份按展示项给出: 同页多个展示项可能含同一本书, 必须分开配对
-                blockId = "home-${section.id}",
-                onBookClick = { token -> onBook(book, section, false, token) },
-                onBookLongClick = { token -> onBook(book, section, true, token) },
-            )
-        },
-    )
-
-    // 顶栏"管理展示项" (对照 main_home 菜单 menu_manage_section)
-    manageSectionOf?.let { tabTitle ->
-        HomeSectionManageDialog(
-            tabTitle = tabTitle,
-            onDismiss = { screenModel.closeManageSection() },
-        )
-    }
-    // 顶栏"管理分组" (对照 main_home 菜单 menu_manage_tab)
-    if (manageTab) {
-        HomeTabManageDialog(onDismiss = { screenModel.closeManageTab() })
-    }
-}
-
-/**
- * 主页书籍点击分流 (对照 HomeTabFragment.sectionCallback.onBookClick)。
- *
- * bookUrl 含 "::" 伪 URL → ExploreShow (分类跳转); 否则长按/未开 devFeat 走 BookInfo,
- * 开了 devFeat 时按书籍类型分流 video/rss/其他。
- */
-private fun openHomeBook(
-    book: SearchBook,
-    section: HomeSection,
-    longClick: Boolean,
-    sharedToken: String?,
-    navigator: AppNavigator,
-    scope: CoroutineScope,
-) {
-    val urlParts = book.bookUrl.split("::", limit = 2)
-    if (urlParts.size == 2) {
-        scope.launch {
-            val source = withContext(IoDispatcher) {
-                AppDbProviders.get().bookSourceDao.getBookSource(section.sourceUrl)
-            }
-            if (source != null) {
-                navigator.push(AppRoute.ExploreShow(source, urlParts[0], urlParts[1]))
-            } else {
-                Toasters.get().toast("Source not found")
-            }
-        }
-        return
-    }
-    val ref = book.toRouteRef()
-    when {
-        longClick || !AppConfigProviders.get().devFeat ->
-            navigator.push(AppRoute.BookInfo(ref), sharedToken = sharedToken)
-
-        book.isVideo -> navigator.push(AppRoute.VideoPlay(ref))
-        book.isRss -> navigator.push(AppRoute.ReadRss(ref))
-        else -> navigator.push(AppRoute.BookInfo(ref), sharedToken = sharedToken)
-    }
-}
-
-/** 对照 sectionCallback.onMoreClick: 按 section 的 sourceUrl 取书源后跳 ExploreShow (搜索类展示项跳搜索模式) */
-private suspend fun openExploreShow(section: HomeSection, navigator: AppNavigator) {
-    val source = withContext(IoDispatcher) {
-        AppDbProviders.get().bookSourceDao.getBookSource(section.sourceUrl)
-    }
-    if (source != null) {
-        val searchKey = section.searchKey
-        if (searchKey != null) {
-            navigator.push(AppRoute.SourceSearchShow(source, searchKey))
-        } else {
-            navigator.push(AppRoute.ExploreShow(source, section.exploreName, section.exploreUrl))
-        }
-    } else {
-        Toasters.get().toast("Source not found")
-    }
-}
-
-/** 非无限流展示项区块: 标题行 + 参数 chip 行 + 内容区 (CoverRow/FourRow 横向封面行 / RankList 排行榜列) */
-@Composable
-private fun HomeSectionBlock(
-    section: HomeSection,
-    books: List<SearchBook>,
-    loading: Boolean,
-    error: Boolean,
-    invalidated: Boolean,
-    options: List<ExploreOptionUiState>,
-    onOptionSelect: (String, String) -> Unit,
-    onOptionsSelect: (String, Set<String>) -> Unit,
-    onOptionReset: (String) -> Unit,
-    onBookClick: (SearchBook, String?) -> Unit,
-    onBookLongClick: (SearchBook, String?) -> Unit,
-    onMoreClick: () -> Unit,
-) {
-    // 对照 LoadMoreView.showErrorDialog: 错误占位点击弹对话框 (原版无 retry 监听, 无按钮)
-    var showErrorDialog by remember { mutableStateOf(false) }
-    // 稳定化回调: 上层槽每次调用都新建 lambda 实例, 直接透传时数据未变也会全量重组本区块
-    val currentOnOptionSelect = rememberUpdatedState(onOptionSelect)
-    val stableOnOptionSelect: (String, String) -> Unit =
-        remember { { name, value -> currentOnOptionSelect.value(name, value) } }
-    val currentOnOptionsSelect = rememberUpdatedState(onOptionsSelect)
-    val stableOnOptionsSelect: (String, Set<String>) -> Unit =
-        remember { { name, values -> currentOnOptionsSelect.value(name, values) } }
-    val currentOnOptionReset = rememberUpdatedState(onOptionReset)
-    val stableOnOptionReset: (String) -> Unit =
-        remember { { name -> currentOnOptionReset.value(name) } }
-    val currentOnBookClick = rememberUpdatedState(onBookClick)
-    val stableOnBookClick: (SearchBook, String?) -> Unit =
-        remember { { book, token -> currentOnBookClick.value(book, token) } }
-    val currentOnBookLongClick = rememberUpdatedState(onBookLongClick)
-    val stableOnBookLongClick: (SearchBook, String?) -> Unit =
-        remember { { book, token -> currentOnBookLongClick.value(book, token) } }
-    val currentOnMoreClick = rememberUpdatedState(onMoreClick)
-    val stableOnMoreClick: () -> Unit = remember { { currentOnMoreClick.value() } }
-    // 区块身份 (同页多个展示项可能含同一本书, 必须分开配对); tab 已按 tab 分页, 无需入 id
-    val blockId = "home-${section.id}"
-    // 对照 SectionHolder.root: 每个展示项上下留白 (top default=8 / bottom xs=4)
-    Column(Modifier.fillMaxWidth().padding(top = DesignTokens.spacingDefault, bottom = DesignTokens.spacingXs)) {
-        SectionTitleRow(section.title, stableOnMoreClick)
-        ExploreOptionsRow(
-            options = options,
-            ownerKey = listOf(section.sourceUrl, section.exploreUrl, section.searchKey),
-            onSelect = stableOnOptionSelect,
-            onMultiSelect = stableOnOptionsSelect,
-            onReset = stableOnOptionReset,
-        )
-        when {
-            invalidated -> SectionStateText(
-                text = stringResource(Res.string.explore_option_invalidated),
-            )
-
-            error -> SectionStateText(
-                text = stringResource(Res.string.home_source_invalid),
-                onClick = { showErrorDialog = true },
-            )
-
-            books.isEmpty() -> if (loading) {
-                SectionStateLoading()
-            } else {
-                SectionStateText(text = stringResource(Res.string.empty))
-            }
-
-            else -> when (section.style) {
-                // 对照 HomeSectionAdapter.RANK_LIMIT: 排行榜单列前 5 名, 宽屏自适应两列前 10 名
-                HomeSection.STYLE_RANK_LIST ->
-                    HomeRankList(books, stableOnBookClick, stableOnBookLongClick, blockId)
-
-                // 对照 FourColumnAdapter: 每列 4 本, 横向翻列 (宽屏不限数量)
-                HomeSection.STYLE_FOUR_ROW -> HomeFourRow(books, stableOnBookClick, stableOnBookLongClick, blockId)
-
-                // 对照 HomeSectionAdapter: COVER_ROW 走封面行, 未知样式回落排行榜
-                HomeSection.STYLE_COVER_ROW ->
-                    SectionCoverRow(books, stableOnBookClick, stableOnBookLongClick, section.coverVideo, blockId)
-
-                else -> HomeRankList(books, stableOnBookClick, stableOnBookLongClick, blockId)
-            }
-        }
-    }
-    // 对照 LoadMoreView.showErrorDialog: 标题"错误" + 书源无效, 无按钮
-    if (showErrorDialog) {
-        AppAlertDialog(
-            onDismissRequest = { showErrorDialog = false },
-            title = stringResource(Res.string.error),
-            message = stringResource(Res.string.home_source_invalid),
-        )
-    }
-}
-
-/** 展示项加载中占位 (对照 LoadMoreView.startLoad: 36dp 转圈 + 8dp 边距) */
-@Composable
-private fun SectionStateLoading() {
-    val colors = AppTheme.colors
-    Box(Modifier.fillMaxWidth().padding(vertical = DesignTokens.spacingDefault), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator(
-            color = colors.accent,
-            modifier = Modifier.size(36.dp),
-        )
-    }
-}
-
-/** 展示项空/错误占位 (对照 view_load_more.xml tv_text: 14sp 摘要色 + 12dp 纵向 padding, 单行居中) */
-@Composable
-private fun SectionStateText(text: String, onClick: (() -> Unit)? = null) {
-    val colors = AppTheme.colors
-    Text(
-        text = text,
-        color = colors.secondaryText,
-        fontSize = 14.sp,
-        maxLines = 1,
-        textAlign = TextAlign.Center,
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(vertical = DesignTokens.spacingMd),
-    )
-}
-
-/** 对照 HomeSectionAdapter.RANK_LIMIT: 排行榜样式仅展示前 N 名 */
-private const val HOME_RANK_LIMIT = 5
-
-
-/** 排行榜列 (对照 RankBookAdapter showRank=true): 序号 + 封面 + 书名/作者, 窄屏单列5项 / 宽屏(>=600dp)双列10项 */
-@Composable
-private fun HomeRankList(
-    books: List<SearchBook>,
-    onBookClick: (SearchBook, String?) -> Unit,
-    onBookLongClick: (SearchBook, String?) -> Unit,
-    blockId: String,
-) {
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = DesignTokens.spacingDefault)) {
-        val isWide = maxWidth >= AppTheme.DesignTokens.wideScreenMinWidth
-        if (isWide) {
-            val displayBooks = books.take(10)
-            val leftBooks = displayBooks.take(5)
-            val rightBooks = displayBooks.drop(5)
-            Row(Modifier.fillMaxWidth()) {
-                Column(Modifier.weight(1f)) {
-                    leftBooks.forEachIndexed { index, book ->
-                        // 共享配对身份按条目下发 (被点的封面 = 出发端, token 由页面+区块+条目派生)
-                        val binding = rememberSharedCoverSourceBinding(book.bookUrl, blockId)
-                        HomeRankItem(index + 1, book, true, onBookClick, onBookLongClick, binding)
-                    }
-                }
-                Column(Modifier.weight(1f).padding(start = DesignTokens.spacingDefault)) {
-                    rightBooks.forEachIndexed { index, book ->
-                        val binding = rememberSharedCoverSourceBinding(book.bookUrl, blockId)
-                        HomeRankItem(index + 6, book, true, onBookClick, onBookLongClick, binding)
-                    }
-                }
-            }
-        } else {
-            val displayBooks = books.take(HOME_RANK_LIMIT)
-            Column(Modifier.fillMaxWidth()) {
-                displayBooks.forEachIndexed { index, book ->
-                    val binding = rememberSharedCoverSourceBinding(book.bookUrl, blockId)
-                    HomeRankItem(index + 1, book, true, onBookClick, onBookLongClick, binding)
-                }
-            }
-        }
-    }
-}
-
-/**
- * 四行样式 (对照 FourColumnAdapter): 书籍按 4 本一列切块, 横向翻列, 每列最多 4 本;
- * 每列内部走无序号的 [HomeRankItem] (原版 FourColumnVH 内嵌 RankBookAdapter(showRank=false))。
- * 列宽 220dp 对齐原版 FourColumnAdapter.onCreateViewHolder;
- * 惰性横向列表一次只组合可见列, 不再按结果总条数切块并全部组合;
- * fling 与吸附用 [StartSnapFlingBehavior] + [ColumnSnapEffect] 对照原版
- * Horizontal rv + StartSnapHelper(): fling 最多翻 ±1 列 + 90ms/inch 黏滞减速 +
- * 停止时半列规则吸附 (见 StartSnapHelper.findTargetSnapPosition / createScroller / findSnapView)。
- * 鼠标悬停支持滚轮横向平移。
- */
-@Composable
-private fun HomeFourRow(
-    books: List<SearchBook>,
-    onBookClick: (SearchBook, String?) -> Unit,
-    onBookLongClick: (SearchBook, String?) -> Unit,
-    blockId: String,
-) {
-    val density = LocalDensity.current
-    val itemWidthPx = with(density) { 220.dp.toPx() }
-    val columns = remember(books) { books.chunked(4) }
-    val listState = rememberLazyListState()
-    // fling 限位/黏滞 (对照 StartSnapHelper): 依赖列数, 列数变化时重建
-    val flingBehavior = remember(columns.size, itemWidthPx, density) {
-        StartSnapFlingBehavior(listState, itemWidthPx, columns.size - 1, density)
-    }
-    LazyRow(
-        state = listState,
-        flingBehavior = flingBehavior,
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalMouseWheel(listState),
-        contentPadding = PaddingValues(horizontal = DesignTokens.spacingDefault),
-    ) {
-        items(columns) { column ->
-            Column(Modifier.width(220.dp)) {
-                column.forEach { book ->
-                    // 共享配对身份按条目下发 (被点的封面 = 出发端, token 由页面+区块+条目派生)
-                    val binding = rememberSharedCoverSourceBinding(book.bookUrl, blockId)
-                    CompositionLocalProvider(LocalSharedCoverBinding provides binding) {
-                        HomeRankItem(0, book, false, onBookClick, onBookLongClick, binding)
-                    }
-                }
-            }
-        }
-    }
-    // 停止吸附: 滚动/惯性滑动停止时吸最近列 (对照原版 StartSnapHelper.findSnapView)
-    ColumnSnapEffect(listState, itemWidthPx, columns.size - 1, density)
-}
-
-/**
- * fling 限位 + 黏滞减速 (对照原版 StartSnapHelper.findTargetSnapPosition + createScroller):
- * - findTargetSnapPosition: 无论 fling 速度多大, 落点最多与当前列相差一列
- *   (velocityX > 0 → firstPos + 1; velocityX < 0 → 已对齐时 firstPos - 1, 否则 firstPos;
- *   0 速度不参与限位, 交给停止吸附);
- * - createScroller: 90ms/inch + DecelerateInterpolator 的黏滞减速 (默认 25ms/inch 偏滑),
- *   这里用相同速率曲线把 fling 动画换成受限平滑滚动。
- */
-private class StartSnapFlingBehavior(
-    private val listState: LazyListState,
-    private val itemWidthPx: Float,
-    private val maxCol: Int,
-    private val density: Density,
-) : FlingBehavior {
-
-    override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
-        if (maxCol <= 0 || initialVelocity == 0f) return 0f
-        // 首次布局未完成时没有可用的列位置, 不参与限位
-        if (listState.layoutInfo.visibleItemsInfo.isEmpty()) return 0f
-        // 列宽固定, 当前位移 = 首列索引×列宽 + 首列被起始边裁掉的宽度;
-        // 接近 0 表示当前已对齐到首列 (原版 aligned = clipped <= itemWidth/10)
-        val firstPos = listState.firstVisibleItemIndex
-        val clipped = listState.firstVisibleItemScrollOffset.toFloat()
-        val startPos = firstPos * itemWidthPx + clipped
-        val aligned = clipped <= itemWidthPx / 10f
-        val targetCol = when {
-            initialVelocity > 0f -> firstPos + 1
-            else -> if (aligned) firstPos - 1 else firstPos
-        }.coerceIn(0, maxCol)
-        stickyScrollTo(startPos, targetCol * itemWidthPx, density)
-        // 限位滚动完全消费了 fling, 无剩余速度 (同 SnapFlingBehavior 的 NoVelocity = 0f)
-        return 0f
-    }
-}
-
-/**
- * 停止吸附 (对照原版 StartSnapHelper.findSnapView + calculateDistanceToFinalSnap):
- * 滚动/惯性滑动停止时, 把最靠近起始边的列吸附对齐到容器起始边。
- *
- * 语义对齐:
- * - round 取最近列 == 原版 findSnapView 的"首列露出不足半列切下一列"
- *   (首列露出 w/2 及以上 → round 吸回当前列, 不足 w/2 → round 切下一列);
- * - 已到末尾 (不能再向前滚, 末列已完全可见) 不做吸附: 最后一列顶不到起始边, 视为已就位;
- * - 吸附动画用同一黏滞曲线 (90ms/inch DecelerateInterpolator), 同 createScroller。
- *
- * snapshotFlow + distinctUntilChanged 天然防抖: 只在滚动停止 (true→false 下降沿)
- * 时触发一次; 已在对齐位时跳过, 避免动画自触发循环。
- */
-@Composable
-private fun ColumnSnapEffect(
-    listState: LazyListState,
-    itemWidthPx: Float,
-    maxCol: Int,
-    density: Density,
-) {
-    LaunchedEffect(listState, itemWidthPx, maxCol, density) {
-        snapshotFlow { listState.isScrollInProgress }
-            .distinctUntilChanged()
-            .collect { scrolling ->
-                if (scrolling) return@collect
-                // 预判有无吸附可做 (不做则不起任务); 真正的目标在持有 mutation 内重算
-                val hasWork = snapTargetPx(
-                    firstVisibleItemIndex = listState.firstVisibleItemIndex,
-                    firstVisibleItemScrollOffset = listState.firstVisibleItemScrollOffset,
-                    itemWidthPx = itemWidthPx,
-                    maxCol = maxCol,
-                    // 首次布局完成前 layoutInfo 为空且 canScrollForward 恒为 false, 不能据此判末尾
-                    layoutReady = listState.layoutInfo.visibleItemsInfo.isNotEmpty(),
-                    canScrollForward = listState.canScrollForward,
-                ) != null
-                if (!hasWork) return@collect
-                // 吸附动画单独起 Job, 且整段动画在一个 mutation 内走完:
-                // 用户输入抢占只终止本次完整动画, snapshotFlow 观察管线继续工作
-                launch {
-                    listState.scroll(scrollPriority = MutatePriority.Default) {
-                        val start =
-                            listState.firstVisibleItemIndex * itemWidthPx +
-                                listState.firstVisibleItemScrollOffset
-                        val target = snapTargetPx(
-                            firstVisibleItemIndex = listState.firstVisibleItemIndex,
-                            firstVisibleItemScrollOffset = listState.firstVisibleItemScrollOffset,
-                            itemWidthPx = itemWidthPx,
-                            maxCol = maxCol,
-                            layoutReady = listState.layoutInfo.visibleItemsInfo.isNotEmpty(),
-                            canScrollForward = listState.canScrollForward,
-                        ) ?: return@scroll
-                        stickyScrollTo(start, target, density)
-                    }
-                }
-            }
-    }
-}
-
-/**
- * 停止吸附的目标位移 (px); null = 本次不吸附。
- *
- * - 布局未就绪 (首次布局前 layoutInfo 为空): 不拿初态推断位置, 不吸附;
- * - 已不能再向前滚 (末列已完全可见): 最后一列顶不到起始边, 视为已就位, 不吸附;
- * - 已对齐 (半列以内): 不吸附, 避免空动画自触发循环。
- *
- * round 取最近列 == 原版 findSnapView 的"首列露出不足半列切下一列"。
- */
-internal fun snapTargetPx(
-    firstVisibleItemIndex: Int,
-    firstVisibleItemScrollOffset: Int,
-    itemWidthPx: Float,
-    maxCol: Int,
-    layoutReady: Boolean,
-    canScrollForward: Boolean,
-): Float? {
-    if (!layoutReady || maxCol <= 0 || itemWidthPx <= 0f) return null
-    if (!canScrollForward) return null
-    val current = firstVisibleItemIndex * itemWidthPx + firstVisibleItemScrollOffset
-    val nearest = (current / itemWidthPx).roundToInt().coerceIn(0, maxCol)
-    val target = nearest * itemWidthPx
-    if (abs(current - target) <= 0.5f) return null
-    return target
-}
-
-/**
- * 沿黏滞曲线把滚动位置从 [startPx] 走到 [targetPx], 返回实际被消费的位移。
- *
- * 调用方必须已持有一次 mutation (fling 由框架持有, 停止吸附由 `listState.scroll` 持有):
- * 整段动画共用这次 mutation, 抢占时才只有本次动画被终止。
- * 每帧的请求量按“目标位置 - 实际已走位置”算, 边界处被 clamp 后不会把请求距离当成已走距离。
- */
-private suspend fun ScrollScope.stickyScrollTo(
-    startPx: Float,
-    targetPx: Float,
-    density: Density,
-): Float {
-    val dist = targetPx - startPx
-    if (dist == 0f) return 0f
-    // 黏滞减速: 每英寸 90ms (原版 calculateSpeedPerPixel = 90 / densityDpi, 1 英寸 = 160dp)
-    val durationMs = (abs(dist) / (density.density * 160f) * 90f).toInt().coerceAtLeast(1)
-    val startTime = withFrameNanos { it }
-    var moved = 0f
-    while (true) {
-        val now = withFrameNanos { it }
-        val t = ((now - startTime) / 1_000_000f / durationMs).coerceIn(0f, 1f)
-        val wanted = startPx + dist * STICKY_DECELERATE.transform(t) - (startPx + moved)
-        if (wanted != 0f) {
-            val consumed = scrollBy(wanted)
-            moved += consumed
-            // 已到边界: 请求不再被消费, 本次动画到此为止 (不空转, 也不把请求量当已走量)
-            if (consumed == 0f) return moved
-        }
-        if (t >= 1f) break
-    }
-    return moved
-}
-
-/** 复刻 android.view.animation.DecelerateInterpolator: f(t) = 1 - (1-t)^2 (同 LrcViewShared.DECELERATE) */
-private val STICKY_DECELERATE: Easing = Easing { fraction ->
-    1f - (1f - fraction) * (1f - fraction)
-}
-
-/** 单条排行/四行条目 (对照 item_home_rank_book.xml: 序号 28dp + 70dp 封面 + 书名/作者) */
-@Composable
-private fun HomeRankItem(
-    rank: Int,
-    book: SearchBook,
-    showRank: Boolean,
-    onBookClick: (SearchBook, String?) -> Unit,
-    onBookLongClick: (SearchBook, String?) -> Unit,
-    // 本条目封面的共享配对身份: 由外层按条目提供 (HomeFourRow / HomeRankList);
-    // 未提供时本条目不参与共享飞行 (封面仍然正常渲染)
-    coverBinding: SharedCoverBinding? = null,
-) {
-    val colors = AppTheme.colors
-    Row(
-        Modifier
-            .listItemFocus()
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = { onBookClick(book, coverBinding?.pageToken) },
-                onLongClick = { onBookLongClick(book, coverBinding?.pageToken) },
-            )
-            .padding(vertical = DesignTokens.spacingXs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (showRank) {
-            // 对照 RankBookVH: 前 3 名红/橙/黄, 其余摘要色
-            Text(
-                text = "$rank",
-                color = when (rank) {
-                    1 -> Color(0xFFE53935)
-                    2 -> Color(0xFFF57C00)
-                    3 -> Color(0xFFFBC02D)
-                    else -> colors.secondaryText
-                },
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.width(28.dp),
-            )
-        }
-        // 封面固定 70dp 高 (对照 XML iv_cover height=70dp), 恒 NOVEL 比例
-        Box(Modifier.height(70.dp).padding(start = if (showRank) DesignTokens.spacingDefault else 0.dp)) {
-            // 本条目绑定的作用域限定在本封面上 (与点击回调拿到的同一个 token)
-            if (coverBinding == null) {
-                LocalBookCoverSlot.current(book.toCoverBook(), Modifier.fillMaxHeight(), CoverSlotRatio.NOVEL, 0)
-            } else {
-                CompositionLocalProvider(LocalSharedCoverBinding provides coverBinding) {
-                    LocalBookCoverSlot.current(
-                        book.toCoverBook(),
-                        Modifier.fillMaxHeight(),
-                        CoverSlotRatio.NOVEL,
-                        0,
-                    )
-                }
-            }
-        }
-        Column(Modifier.weight(1f).padding(start = DesignTokens.spacingMd)) {
-            Text(
-                text = book.name,
-                color = colors.primaryText,
-                fontSize = 14.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (book.author.isNotBlank()) {
-                Text(
-                    text = book.getRealAuthor(),
-                    color = colors.secondaryText,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-        }
-    }
-}
-
-/** 无限流头部: 标题行 + 参数 chip 行 (对照 HomeSectionAdapter: 无限流同样显示参数行) */
-@Composable
-private fun HomeInfiniteHeader(
-    section: HomeSection,
-    options: List<ExploreOptionUiState>,
-    invalidated: Boolean,
-    error: Boolean,
-    onOptionSelect: (String, String) -> Unit,
-    onOptionsSelect: (String, Set<String>) -> Unit,
-    onOptionReset: (String) -> Unit,
-    onMoreClick: () -> Unit,
-) {
-    // 稳定化回调: 同 HomeSectionBlock, 避免数据未变时全量重组
-    val currentOnOptionSelect = rememberUpdatedState(onOptionSelect)
-    val stableOnOptionSelect: (String, String) -> Unit =
-        remember { { name, value -> currentOnOptionSelect.value(name, value) } }
-    val currentOnOptionsSelect = rememberUpdatedState(onOptionsSelect)
-    val stableOnOptionsSelect: (String, Set<String>) -> Unit =
-        remember { { name, values -> currentOnOptionsSelect.value(name, values) } }
-    val currentOnOptionReset = rememberUpdatedState(onOptionReset)
-    val stableOnOptionReset: (String) -> Unit =
-        remember { { name -> currentOnOptionReset.value(name) } }
-    val currentOnMoreClick = rememberUpdatedState(onMoreClick)
-    val stableOnMoreClick: () -> Unit = remember { { currentOnMoreClick.value() } }
-    // 对照 SectionHolder.root: 无限流头部同样有 top 8 / bottom 4 留白
-    Column(Modifier.fillMaxWidth().padding(top = DesignTokens.spacingDefault, bottom = DesignTokens.spacingXs)) {
-        SectionTitleRow(section.title, stableOnMoreClick)
-        ExploreOptionsRow(
-            options = options,
-            ownerKey = listOf(section.sourceUrl, section.exploreUrl, section.searchKey),
-            onSelect = stableOnOptionSelect,
-            onMultiSelect = stableOnOptionsSelect,
-            onReset = stableOnOptionReset,
-        )
-        if (invalidated) {
-            SectionStateText(text = stringResource(Res.string.explore_option_invalidated))
-        } else if (error) {
-            SectionStateText(text = stringResource(Res.string.home_source_invalid))
-        }
-    }
-}
-
-/** 无限流网格单元 (对照 InfiniteGridCard): 封面 + 书名, 占满单格宽度 */
-@Composable
-private fun HomeInfiniteGridCard(
-    book: SearchBook,
-    coverVideo: Boolean,
-    blockId: String,
-    onBookClick: (String?) -> Unit,
-    onBookLongClick: (String?) -> Unit,
-) {
-    val colors = AppTheme.colors
-    // 本卡片封面的共享配对身份 (页转场出发端): 点击时随回调交给导航
-    val binding = rememberSharedCoverSourceBinding(book.bookUrl, blockId)
-    // 稳定化回调: 同 HomeSectionBlock, 数据未变时卡片整体跳过重组
-    val currentOnBookClick = rememberUpdatedState(onBookClick)
-    val stableOnBookClick: () -> Unit = remember { { currentOnBookClick.value(binding.pageToken) } }
-    val currentOnBookLongClick = rememberUpdatedState(onBookLongClick)
-    val stableOnBookLongClick: () -> Unit =
-        remember { { currentOnBookLongClick.value(binding.pageToken) } }
-    CompositionLocalProvider(LocalSharedCoverBinding provides binding) {
-        if (coverVideo) {
-            // 对照原版 coverVideo 无限流 → VideoExploreShowAdapter: 视频卡占满格宽。
-            // 本格焦点由这张卡自己承担
-            ShelfVideoItem(
-                book = book.toCoverBook(),
-                coverReloadTick = 0,
-                onClick = stableOnBookClick,
-                onLongClick = stableOnBookLongClick,
-                modifier = Modifier.fillMaxWidth(),
-                coverSlot = { b, m, coverRatio, tick ->
-                    LocalBookCoverSlot.current(b, m, coverRatio, tick)
-                },
-            )
-        } else {
-            // 对照原版非视频无限流 → GridExploreShowAdapter (item_bookshelf_grid 根布局)
-            Column(
-                Modifier
-                    .listItemFocus()
-                    .fillMaxWidth()
-                    .combinedClickable(
-                        onClick = stableOnBookClick,
-                        onLongClick = stableOnBookLongClick,
-                    ),
-            ) {
-                // 对照 item_bookshelf_grid.xml: 封面四边 12dp margin, 高按 NOVEL 3:4 由宽度
-                // 反推 (原版 iv_cover wrap_content + coverRatio=NOVEL), 不读书架封面高度配置
-                LocalBookCoverSlot.current(
-                    book.toCoverBook(),
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(DesignTokens.spacingMd),
-                    CoverSlotRatio.NOVEL,
-                    0,
-                )
-                Text(
-                    text = book.name,
-                    color = colors.primaryText,
-                    fontSize = 12.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = DesignTokens.spacingDefault),
-                )
-            }
-        }
-    }
-}
-
-/**
- * 书架 tab: ViewModel 来自 [MainScreenModel] (ScreenModelStore 生命周期)。
- *
- * onBookClick 对照 app 端 BaseBookshelfState.open (→ startActivityForBook 按书籍类型分流);
- * onBookLongClick 对照 BaseBookshelfState.openBookInfo (→ BookInfoActivity)。
- * onGroupLongClick 对照 app 端 GroupSelectDialog 长按分组 → GroupEditDialog (重命名/排序/删除);
- * 溢出菜单 group_manage → GroupManageDialog (增/改名/删分组)。
- */
+/** 书架页：3D 书架 + 分组页签 + 下拉刷新（交互细节在 LanghuanShelf） */
 @Composable
 private fun BookshelfTabContent(
     viewModel: BookshelfViewModel,
@@ -1528,124 +773,30 @@ private fun ExploreTabContent(
 }
 
 /**
- * 我的 tab: 配置项回调用 navigator 跳转, 主题切换走 PlatformCapabilityProviders。
- * webService 开关态/长按菜单对照 MyConfigRoute (shared 端统一模式)。
+ * 我的 tab: 四组设置面板，与 push 路由共用 [MyConfigContent]。
  */
 @Composable
 private fun MyTabContent(navigator: AppNavigator) {
-    val caps = LocalPlatformCapabilities.current
-    // 影视源服务: 未注册端为 null, 条目隐藏 (Android 的「我的」tab 与 MyConfigRoute
-    // 共用同一份 MyConfigScreen, 判空模式两边一致)
-    val tvBoxService = TvBoxServiceProviders.getOrNull()
-    // 漫画插件服务同判空模式 (tab 与 push 路由两侧一致)
-    val mangaExtensionService = MangaExtensionServiceProviders.getOrNull()
-    // 网络服务: 未注册 WebServerPlatform 的端 (iOS) 无此服务, 开关条目隐藏
-    val webServiceSupported = WebServerPlatforms.getOrNull() != null
-    LaunchedEffect(Unit) { tvBoxService?.init() }
-    val webServiceDesc = stringResource(Res.string.web_service_desc)
-    // Web 服务地址: 空串=未运行 (对照原版 observeEvent<String>(WEB_SERVICE) 后回读 hostAddress)
-    val webServiceAddress by caps.webServiceAddress.collectAsState()
-    val webServiceSummary = webServiceAddress.ifEmpty { webServiceDesc }
-    var showWebServiceMenu by remember { mutableStateOf(false) }
-    // 对照 MyFragment.onCompatOptionsItemSelected: menu_help → showHelp("appHelp")
-    var showAppHelp by remember { mutableStateOf(false) }
-
     Column(Modifier.fillMaxSize()) {
-        // 顶栏 (对照 fragment_my_config.xml 的 TitleBar title=my + main_my.xml 的 help 图标);
-        // tab 页无返回键, 故不用 AppTitleBar (它恒渲染返回箭头), 复刻其视觉容器
-        MyTabTitleBar(onHelp = { showAppHelp = true })
-        MyConfigScreen(
-            webServiceChecked = webServiceAddress.isNotEmpty(),
-            webServiceSummary = webServiceSummary,
-            showWebService = webServiceSupported,
-            onThemeModeChange = {
-                PlatformCapabilityProviders.get().applyDayNight()
-            },
-            onWebServiceChange = { caps.setWebService(it) },
-            onWebServiceLongClick = { showWebServiceMenu = true },
-            onThemeSetting = { navigator.push(AppRoute.ThemeConfig) },
-            onWebDavSetting = { navigator.push(AppRoute.BackupConfig) },
-            onOtherSetting = { navigator.push(AppRoute.OtherConfig) },
-            onBookSourceManage = { navigator.push(AppRoute.BookSourceManage) },
-            onMangaExtensionManage = mangaExtensionService?.let { svc ->
-                {
-                    svc.init()
-                    navigator.push(AppRoute.MangaExtension)
-                }
-            },
-            onTvBoxManage = tvBoxService?.let { svc ->
-                {
-                    svc.init()
-                    navigator.push(AppRoute.TvBox)
-                }
-            },
-            onReplaceManage = { navigator.push(AppRoute.ReplaceRule) },
-            onSourceFilterRuleManage = { navigator.push(AppRoute.SourceFilterRule) },
-            onTxtTocRuleManage = { navigator.push(AppRoute.TxtTocRule) },
-            onDictRuleManage = { navigator.push(AppRoute.DictRule) },
-            onRuleSubManage = { navigator.push(AppRoute.RuleSub) },
-            onBookmark = { navigator.push(AppRoute.Bookmark()) },
-            onReadRecord = { navigator.push(AppRoute.ReadRecord) },
-            onSourceToolbox = { navigator.push(AppRoute.SourceToolbox) },
-            onAbout = { navigator.push(AppRoute.About) },
-            onDialogPreview = DialogPreviewLaunchers.getOrNull(),
-        )
-    }
-
-    // 帮助对话框 (对照 MyFragment.showHelp("appHelp"))
-    if (showAppHelp) {
-        HelpDialog("appHelp") { showAppHelp = false }
-    }
-
-    // web 服务长按菜单 (对照 app 端 selector: 复制地址 / 浏览器打开)
-    if (showWebServiceMenu) {
-        val url = webServiceAddress.takeIf { it.isNotEmpty() }
-        AppSelectorDialog(
-            onDismissRequest = { showWebServiceMenu = false },
-            items = listOf(
-                stringResource(Res.string.copy_url),
-                stringResource(Res.string.open_in_browser)
-            ),
-            onItemSelected = { i ->
-                when (i) {
-                    0 -> url?.let { PlatformCapabilityProviders.get().copyToClipboard(it) }
-                    1 -> url?.let { PlatformCapabilityProviders.get().openExternalUrl(it) }
-                }
-            },
-        )
+        MyTabTitleBar()
+        MyConfigContent(navigator = navigator)
     }
 }
 
 /**
- * "我的" tab 顶栏 (对照 fragment_my_config.xml 的 TitleBar + main_my.xml 的 help 图标)。
- *
- * 不复用 [com.langhuan.reader.ui.compose.component.AppTitleBar]: 后者恒渲染返回箭头, tab 页无返回;
- * 背景/insets/E-Ink 分割线取值与其一致。
+ * "我的" tab 顶栏：页眉与书架 / 发现 / 本地同源，tab 页无返回键。
  */
 @Composable
-private fun MyTabTitleBar(onHelp: () -> Unit) {
-    val colors = AppTheme.colors
+private fun MyTabTitleBar() {
     val eInk = LocalEInk.current
     Box(Modifier.fillMaxWidth().then(if (eInk) Modifier else Modifier.platformStatusBarPadding())) {
-        // 页眉与书架 / 发现 / 本地同源：主题色细竖线 + 衬线标题，右侧帮助入口
-        LanghuanPageHeader(
-            title = stringResource(Res.string.my),
-            actions = {
-                IconButton(onClick = onHelp) {
-                    Icon(
-                        painter = painterResource(Res.drawable.ic_help),
-                        contentDescription = stringResource(Res.string.help),
-                        tint = colors.primaryText,
-                    )
-                }
-            },
-        )
+        LanghuanPageHeader(title = stringResource(Res.string.my))
         if (eInk) {
             Box(
                 Modifier
                     .fillMaxWidth()
                     .height(1.dp)
-                    .background(colors.secondaryText.copy(alpha = 0.4f))
+                    .background(AppTheme.colors.secondaryText.copy(alpha = 0.4f))
                     .align(Alignment.BottomStart),
             )
         }

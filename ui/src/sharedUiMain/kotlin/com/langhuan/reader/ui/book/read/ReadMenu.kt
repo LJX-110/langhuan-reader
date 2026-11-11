@@ -1,53 +1,15 @@
 package com.langhuan.reader.ui.book.read
 
 /*
- * 下沉自 app 端 `ReadMenu.kt`（12 个 @Composable + enums + TopMenuState + 缓动函数）。
- * app 端 `ReadMenu` 状态持有类保留（深度依赖 Activity/lifecycleScope/alert/Intent 等
- * Android 专属 API，属 L3 不可下沉），实现 shared 端 [ReadMenuState] 接口作为薄壳。
+ * 阅读菜单：顶栏 + 底栏（操作坞 / 排版 / 进度 / 书签四态）。
  *
- * # 资源访问替换
+ * 四端共用本文件的 Composable 与 [ReadMenuState]；平台端只实现状态与平台动作
+ * （Activity 生命周期、TTS、对话框路由），界面一律在这里。
  *
- * - `stringResource(R.string.xxx)` → `stringResource(Res.string.xxx)` (key-based, 跨平台)
- * - `painterResource(R.drawable.xxx)` → `rememberPainter("xxx")` (key-based, 跨平台)
- * - `colorResource(R.color.xxx)` → `rememberColor("xxx")` (key-based, 跨平台)
+ * # 资源访问
  *
- * # ResourceProvider key 需求清单
- *
- * ## Painter (drawable, 新增)
- * - ic_exchange (换源) / ic_refresh_black_24dp (刷新) / ic_download_line (离线缓存)
- * - ic_translate (设置编码)
- * - ic_auto_page (自动翻页) / ic_auto_page_stop (停止自动翻页)
- * - ic_find_replace (替换规则)
- * - ic_daytime (日间主题) / ic_brightness (夜间主题)
- * - ic_toc (目录) / ic_read_aloud (朗读)
- * - ic_interface_setting (界面设置) / ic_settings (设置)
- *   (ic_arrow_back / ic_search / ic_more_vert 已存在于 ResourceProvider.jvm.kt)
- *
- * ## String (strings.xml, 新增)
- * - change_origin, chapter_change_source, book_change_source
- * - refresh, menu_refresh_dur, menu_refresh_after, menu_refresh_all
- * - offline_cache, set_charset, bookmark_add, edit_content
- * - sync_book_progress_t, simulated_reading
- * - replace_rule_title, same_title_removed, re_segment, review
- * - del_ruby_tag, del_h_tag, image_style, update_toc
- * - open_fun, use_browser_open, search_content
- * - auto_next_page_stop, auto_next_page, dark_theme
- * - previous_chapter, next_chapter, read_aloud
- * - interface_setting, setting
- * - chapter_pay, set_source_variable, set_book_variable
- * - edit_book_source, disable_book_source
- *   (book_source / more_menu / login / help / log / chapter_list / txt_toc_rule 已存在)
- *
- * ## Color (colors.xml, 新增)
- * - divider (eInk 模式下顶/底栏分隔线)
- *
- * # 复用已下沉的 shared 组件
- *
- * - ReadLayoutConfigScreen / BgTextConfigScreen / EffectiveReplacesDialog
- *   均为下沉的配置对话框 Composable，由 app 端 DialogFragment 薄壳包装。
- *   本文件的 ReadMenu 顶/底栏 clickFont/clickSetting/clickReplaceRule 等回调
- *   通过 [ReadMenuState] 桥接到 app 端 ReadBookActivity，由其 showDialogFragment
- *   展示对应 Dialog 薄壳，不在此重复实现配置 UI。
+ * - 字符串：`rememberString("key")`（Compose Resources 按 key 查表）
+ * - 图标：`rememberPainter("key")`；色值：`rememberColor("key")`
  */
 
 import androidx.compose.animation.AnimatedVisibility
@@ -60,8 +22,11 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -82,7 +47,9 @@ import androidx.compose.material.IconButton
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -93,10 +60,12 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.langhuan.reader.constant.PageAnim
 import com.langhuan.reader.data.entities.Book
 import com.langhuan.reader.data.entities.Bookmark
 import com.langhuan.reader.help.AppWebDavShared
@@ -108,6 +77,7 @@ import com.langhuan.reader.help.config.HelpVersion
 import com.langhuan.reader.help.config.LocalConfigKeys
 import com.langhuan.reader.help.config.LocalConfigProviders
 import com.langhuan.reader.help.config.LocalConfigShared
+import com.langhuan.reader.help.config.ReadBookConfigProviders
 import com.langhuan.reader.help.config.ThemeConfigProviders
 import com.langhuan.reader.help.config.currentEInkMode
 import com.langhuan.reader.help.config.currentNightTheme
@@ -116,6 +86,7 @@ import com.langhuan.reader.help.toast.Toasters
 import com.langhuan.reader.ui.compose.component.AppDropdownMenu
 import com.langhuan.reader.ui.compose.component.AppMenuCheckbox
 import com.langhuan.reader.ui.compose.component.AppSlider
+import com.langhuan.reader.ui.compose.component.AppSwitch
 import com.langhuan.reader.ui.compose.component.blockInputWhile
 import com.langhuan.reader.ui.compose.component.listItemFocus
 import com.langhuan.reader.ui.compose.platform.BackLayerHandler
@@ -150,8 +121,11 @@ import com.langhuan.reader.ui.generated.resources.replace_rule_title
 import com.langhuan.reader.ui.generated.resources.search_content
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.roundToInt
 
 /** 复刻 View 动画默认 AccelerateDecelerateInterpolator */
 val AccelerateDecelerateEasing = Easing { x ->
@@ -163,7 +137,7 @@ enum class ReadMenuAction {
     CHANGE_SOURCE, CHAPTER_CHANGE_SOURCE, BOOK_CHANGE_SOURCE,
     REFRESH, REFRESH_DUR, REFRESH_AFTER, REFRESH_ALL,
     DOWNLOAD, TOC_REGEX, SET_CHARSET,
-    ADD_BOOKMARK, EDIT_CONTENT, SYNC_PROGRESS, SIMULATED_READING,
+    ADD_BOOKMARK, EDIT_CONTENT, SYNC_PROGRESS,
     ENABLE_REPLACE, KEYWORD_HIGHLIGHT, SAME_TITLE_REMOVED, RE_SEGMENT, REVIEW,
     DEL_RUBY_TAG, DEL_H_TAG, IMAGE_STYLE, UPDATE_TOC, LOG, HELP,
 }
@@ -239,7 +213,6 @@ interface ReadMenuState {
     val seekValue: Int
     val prevEnabled: Boolean
     val nextEnabled: Boolean
-    val autoPage: Boolean
     val isNightTheme: Boolean
 
     // ---- 动画生命周期回调 ----
@@ -263,7 +236,6 @@ interface ReadMenuState {
     fun onSeekDragStart()
     fun onSeekStop(progress: Int)
     fun clickSearch()
-    fun clickAutoPage()
     fun clickReplaceRule()
     fun clickNightTheme()
     fun clickPre()
@@ -273,6 +245,33 @@ interface ReadMenuState {
     fun longClickReadAloud()
     fun clickFont()
     fun clickSetting()
+
+    // ---- 阅读面板（书签 / 章节定位 / 进度文案）----
+
+    /** 本章进度文案（如「42%」），随翻页与开章刷新 */
+    val chapterProgressText: String
+
+    /** 目录位置文案（如「12 / 348」），随翻页与开章刷新 */
+    val chapterIndexText: String
+
+    /** 在当前阅读位置添加书签（书签对话框由 Route 层渲染） */
+    fun addBookmarkHere() {
+        onTopMenuAction(ReadMenuAction.ADD_BOOKMARK)
+    }
+
+    /** 本书书签流；null 表示书籍未就绪，面板按空态处理 */
+    fun bookmarkFlow(): Flow<List<Bookmark>>? = null
+
+    fun deleteBookmark(bookmark: Bookmark) = Unit
+
+    /** 跳转到书签位置 */
+    fun jumpToBookmark(bookmark: Bookmark) = Unit
+
+    /** 回到本章开头 */
+    fun clickChapterStart() = Unit
+
+    /** 跳到本章末尾 */
+    fun clickChapterEnd() = Unit
 
     /** 刷新当前章节 (顶栏刷新图标短按) */
     fun onRefresh()
@@ -400,8 +399,12 @@ open class BaseReadMenuState(
         protected set
     override var nextEnabled: Boolean by mutableStateOf(false)
         protected set
-    override var autoPage: Boolean by mutableStateOf(false)
     override var isNightTheme: Boolean by mutableStateOf(currentNightTheme())
+        protected set
+
+    override var chapterProgressText: String by mutableStateOf("—")
+        protected set
+    override var chapterIndexText: String by mutableStateOf("—")
         protected set
 
     /** 待执行的收起完成回调 (对照原版 ReadMenu.onMenuOutEnd) */
@@ -559,9 +562,6 @@ open class BaseReadMenuState(
             ReadMenuAction.DOWNLOAD -> screenModel.postDialogEvent(ReaderDialogEvent.Download)
             ReadMenuAction.TOC_REGEX -> navigator.push(AppRoute.TxtTocRule)
             ReadMenuAction.SET_CHARSET -> screenModel.postDialogEvent(ReaderDialogEvent.SetCharset)
-            ReadMenuAction.SIMULATED_READING -> {
-                screenModel.postDialogEvent(ReaderDialogEvent.SimulatedReading)
-            }
 
             ReadMenuAction.ENABLE_REPLACE -> {
                 screenModel.viewModel.toggleUseReplaceRule()
@@ -634,27 +634,6 @@ open class BaseReadMenuState(
         }
     }
 
-    override fun clickAutoPage() {
-        autoPage = !autoPage
-        if (autoPage) showAutoPagePanel()
-    }
-
-    /**
-     * 开启自动翻页后收菜单并弹控制面板 (面板在收起动画播完后弹出)。
-     *
-     * 原版 `fabAutoPage` 走 `runMenuOut { callBack.autoPage() }`（只收菜单不弹面板，
-     * 面板要再点一下屏幕才从 `showActionMenu` 出来），本处一次做完：收菜单 + 弹出面板。
-     *
-     * 顺序要求：调用前 [autoPage] 必须已置 true——ReaderRoute 的
-     * `LaunchedEffect(autoPageActive)` 在 autoPage=false 时会立即 clearDialogEvent，
-     * 先 post 后置位会把刚发的事件清掉。
-     */
-    protected fun showAutoPagePanel() {
-        runMenuOut {
-            screenModel.postDialogEvent(ReaderDialogEvent.AutoRead)
-        }
-    }
-
     override fun clickReplaceRule() {
         runMenuOut {
             screenModel.postDialogEvent(ReaderDialogEvent.EffectiveReplaces)
@@ -683,9 +662,7 @@ open class BaseReadMenuState(
         }
     }
 
-    override fun clickReadAloud() {
-        autoPage = false
-    }
+    override fun clickReadAloud() = Unit
 
     override fun longClickReadAloud() {
         screenModel.postDialogEvent(ReaderDialogEvent.ReadAloud)
@@ -738,6 +715,7 @@ open class BaseReadMenuState(
         chapterUrlVisible = !chapterUrl.isNullOrEmpty() && book?.isLocal == false
         prevEnabled = screenModel.viewModel.canMoveToPrevChapter()
         nextEnabled = screenModel.viewModel.canMoveToNextChapter()
+        upProgressText()
     }
 
     override fun refresh() {
@@ -750,7 +728,32 @@ open class BaseReadMenuState(
     override fun upSeekBar() {
         seekMax = (screenModel.viewModel.simulatedChapterSize - 1).coerceAtLeast(0)
         seekValue = screenModel.viewModel.durChapterIndex.value
+        upProgressText()
     }
+
+    /** 同步底栏/进度页的位置与百分比文案（翻页、开章、拖动进度条后调用） */
+    protected fun upProgressText() {
+        chapterIndexText = "${seekValue + 1} / ${seekMax + 1}"
+        val page = screenModel.viewModel.curTextPage.value
+        chapterProgressText = if (page != null && page.pageSize > 0) {
+            "${((page.index + 1) * 100 / page.pageSize).coerceIn(0, 100)}%"
+        } else {
+            "—"
+        }
+    }
+
+    override fun bookmarkFlow(): Flow<List<Bookmark>>? = screenModel.bookmarkFlow()
+
+    override fun deleteBookmark(bookmark: Bookmark) = screenModel.deleteBookmark(bookmark)
+
+    override fun jumpToBookmark(bookmark: Bookmark) {
+        screenModel.jumpToBookmark(bookmark)
+        hide()
+    }
+
+    override fun clickChapterStart() = screenModel.jumpToChapterStart()
+
+    override fun clickChapterEnd() = screenModel.jumpToChapterEnd()
 
     override fun reset() {
         upNightTheme()
@@ -772,6 +775,11 @@ fun ReadMenuOverlay(state: ReadMenuState) {
     val vs = state.visibleState
     LaunchedEffect(vs.isIdle, vs.currentState) {
         if (vs.isIdle) state.onTransitionIdle(vs.currentState)
+    }
+    // 底栏当前面板：0 操作坞 / 1 排版 / 2 进度 / 3 书签；菜单收起后复位到操作坞
+    var panel by remember { mutableStateOf(ReaderPanel.DOCK) }
+    LaunchedEffect(vs.currentState) {
+        if (!vs.currentState) panel = ReaderPanel.DOCK
     }
     if (!vs.currentState && !vs.targetState) {
         return
@@ -801,7 +809,10 @@ fun ReadMenuOverlay(state: ReadMenuState) {
             enter = slideInVertically(spec(200)) { -it },
             exit = slideOutVertically(spec(200)) { -it },
         ) {
-            ReadMenuTopBar(state)
+            ReadMenuTopBar(
+                state = state,
+                onOpenPanel = { panel = ReaderPanel.STYLE },
+            )
         }
         AnimatedVisibility(
             visibleState = vs,
@@ -809,13 +820,20 @@ fun ReadMenuOverlay(state: ReadMenuState) {
             enter = slideInVertically(spec(150)) { it },
             exit = slideOutVertically(spec(200)) { it },
         ) {
-            ReadMenuBottom(state)
+            ReadMenuBottom(
+                state = state,
+                panel = panel,
+                onPanelChange = { panel = it },
+            )
         }
     }
 }
 
 @Composable
-private fun ReadMenuTopBar(state: ReadMenuState) {
+private fun ReadMenuTopBar(
+    state: ReadMenuState,
+    onOpenPanel: () -> Unit,
+) {
     val eInk = LocalEInk.current
     // hasBgImage 四端经 ReadMenuState 桥接同源判定 (shared hasBgImageByPath)。
     // 窗口背景图语义 (原版顶栏透明) 优先于阅读背景取色, 保护原版行为;
@@ -832,25 +850,15 @@ private fun ReadMenuTopBar(state: ReadMenuState) {
     Column(
         Modifier
             .fillMaxWidth()
-            // 下缘真阴影(与底栏同源 4dp): 光源默认在上方, 阴影落在栏下方;
-            // 全宽贴屏幕顶, 左右/顶部阴影在屏外, 只露出下缘一条。
-            // E-Ink 下灰阶晕影会糊屏, 不加阴影, 用栏内 1dp 分隔线。
-            // 琅嬛阁：顶栏实色平铺，不加投影（阴影只留给底栏面板）
             .background(topBg)
             // 浮层顶栏逐帧跟随状态栏 insets (对齐原版 TitleBar insets listener 语义):
-            // 菜单滑入与系统栏显隐动画并行时 padding 平滑增长, 无离散跳变;
-            // 不逐帧跟随的事件化变体仅用于正文内容区 (占位避让, 动画期间零重排)。
+            // 菜单滑入与系统栏显隐动画并行时 padding 平滑增长, 无离散跳变。
             .platformStatusBarPadding()
     ) {
-        // toolbar 行：点击空白处打开书籍详情(原 toolbar click)
         Row(
             Modifier
                 .fillMaxWidth()
-                .heightIn(min = DesignTokens.viewHeightXl)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                ) { state.openBookInfoActivity() },
+                .heightIn(min = DesignTokens.viewHeightXl),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = { state.supportFinishAfterTransition() }) {
@@ -860,107 +868,67 @@ private fun ReadMenuTopBar(state: ReadMenuState) {
                     tint = topText,
                 )
             }
-            Text(
-                text = state.title.orEmpty(),
-                color = topText,
-                style = LanghuanType.sectionTitle.copy(fontSize = 20.sp),
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+            // 章节名为顶栏主标题；点按进目录。书名退为副标题，避免正文页顶部再出现入口堆叠。
+            Column(
+                Modifier
+                    .weight(1f)
+                    .clickable { state.clickCatalog() }
+                    .padding(horizontal = DesignTokens.spacingMd),
+            ) {
+                Text(
+                    text = state.chapterName?.takeIf { it.isNotBlank() }
+                        ?: state.title.orEmpty(),
+                    color = topText,
+                    style = LanghuanType.sectionTitle.copy(fontSize = 18.sp),
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (!state.title.isNullOrBlank() && state.title != state.chapterName) {
+                    Text(
+                        text = state.title.orEmpty(),
+                        color = chapterText,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            TopBarActionIcon(
+                iconKey = "ic_bookmark",
+                descKey = "bookmark_add",
+                tint = topText,
+                onClick = { state.addBookmarkHere() },
             )
-            val menu = state.topMenu
-            val onAction = state::onTopMenuAction
-            if (menu.onLine) {
-                TopBarActionIcon(
-                    iconKey = "ic_exchange",
-                    descKey = "change_origin",
-                    tint = topText,
-                    onClick = { onAction(ReadMenuAction.CHANGE_SOURCE) },
-                    longPressMenu = listOf(
-                        "chapter_change_source" to ReadMenuAction.CHAPTER_CHANGE_SOURCE,
-                        "book_change_source" to ReadMenuAction.BOOK_CHANGE_SOURCE,
-                    ),
-                    onAction = onAction,
-                )
-                TopBarActionIcon(
-                    iconKey = "ic_refresh_black_24dp",
-                    descKey = "refresh",
-                    tint = topText,
-                    onClick = { state.onRefresh() },
-                    longPressMenu = listOf(
-                        "menu_refresh_dur" to ReadMenuAction.REFRESH_DUR,
-                        "menu_refresh_after" to ReadMenuAction.REFRESH_AFTER,
-                        "menu_refresh_all" to ReadMenuAction.REFRESH_ALL,
-                    ),
-                    onAction = onAction,
-                )
-                TopBarActionIcon(
-                    iconKey = "ic_download_line",
-                    descKey = "offline_cache",
-                    tint = topText,
-                    onClick = { onAction(ReadMenuAction.DOWNLOAD) },
-                )
-            }
-            if (menu.isLocalTxt) {
-                TopBarActionIcon(
-                    iconKey = "ic_exchange",
-                    descKey = "txt_toc_rule",
-                    tint = topText,
-                    onClick = { onAction(ReadMenuAction.TOC_REGEX) },
-                )
-            }
-            if (!menu.onLine) {
+            TopBarActionIcon(
+                iconKey = "ic_read_aloud",
+                descKey = "read_aloud",
+                tint = topText,
+                onClick = { state.runMenuOut { state.clickReadAloud() } },
+                onLongClick = { state.longClickReadAloud() },
+            )
+            if (state.topMenu.isLocalTxt) {
                 TopBarActionIcon(
                     iconKey = "ic_translate",
                     descKey = "set_charset",
                     tint = topText,
-                    onClick = { onAction(ReadMenuAction.SET_CHARSET) },
+                    onClick = { state.onTopMenuAction(ReadMenuAction.SET_CHARSET) },
                 )
             }
-            TopOverflowMenu(state, topText)
-        }
-        if (state.titleBarAdditionVisible) {
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
+            // Aa：展开底栏的排版/进度/书签面板
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onOpenPanel),
+                contentAlignment = Alignment.Center,
             ) {
-                // 章节名 + 章节链接共用一个点击层: 整个区域一个 hover 高亮/点击行为
-                // (两文本原各自 combinedClickable, 桌面 hover 拆成两块灰色提示; 行为本就相同
-                //  —— onChapterViewClick: 在线书开 WebView 加载章节 URL, 本地书无动作)
-                Column(
-                    Modifier
-                        .weight(1f)
-                        .combinedClickable(
-                            onClick = { state.onChapterViewClick() },
-                            onLongClick = { state.onChapterViewLongClick() },
-                        )
-                        .padding(horizontal = DesignTokens.spacingLg),
-                ) {
-                    if (state.chapterNameVisible) {
-                        Text(
-                            text = state.chapterName.orEmpty(),
-                            color = chapterText,
-                            fontSize = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                    if (state.chapterUrlVisible) {
-                        Text(
-                            text = state.chapterUrl.orEmpty(),
-                            color = chapterText,
-                            fontSize = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                }
-                if (state.sourceActionVisible) {
-                    SourceActionButton(state)
-                }
+                Text(
+                    text = "Aa",
+                    color = topText,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
         }
         if (eInk) {
@@ -982,6 +950,7 @@ private fun TopBarActionIcon(
     tint: Color,
     onClick: () -> Unit,
     longPressMenu: List<Pair<String, ReadMenuAction>>? = null,
+    onLongClick: (() -> Unit)? = null,
     onAction: ((ReadMenuAction) -> Unit)? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -992,7 +961,8 @@ private fun TopBarActionIcon(
                 .clip(CircleShape)
                 .combinedClickable(
                     onClick = onClick,
-                    onLongClick = longPressMenu?.let { { expanded = true } },
+                    onLongClick = onLongClick
+                        ?: longPressMenu?.let { { expanded = true } },
                 ),
             contentAlignment = Alignment.Center,
         ) {
@@ -1020,147 +990,51 @@ private fun TopBarActionIcon(
     }
 }
 
-/** 顶栏溢出菜单(原 book_read 菜单 showAsAction=never 项) */
-@Composable
-private fun TopOverflowMenu(state: ReadMenuState, tint: Color) {
-    var expanded by remember { mutableStateOf(false) }
-    val menu = state.topMenu
-    val onAction = state::onTopMenuAction
-    Box {
-        Box(
-            Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .clickable {
-                    state.onOverflowOpened()
-                    expanded = true
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(Res.drawable.ic_more_vert),
-                contentDescription = stringResource(Res.string.more_menu),
-                tint = tint,
-                modifier = Modifier.size(24.dp),
-            )
-        }
-        AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            val click: (ReadMenuAction) -> Unit = {
-                expanded = false
-                onAction(it)
-            }
-            OverflowItem("bookmark_add") { click(ReadMenuAction.ADD_BOOKMARK) }
-            OverflowItem("edit_content") { click(ReadMenuAction.EDIT_CONTENT) }
-            if (menu.syncProgressVisible) {
-                OverflowItem("sync_book_progress_t") { click(ReadMenuAction.SYNC_PROGRESS) }
-            }
-            OverflowItem("simulated_reading") { click(ReadMenuAction.SIMULATED_READING) }
-            OverflowCheckItem("replace_rule_title", menu.enableReplaceChecked) {
-                click(ReadMenuAction.ENABLE_REPLACE)
-            }
-            OverflowItem("keyword_highlight") { click(ReadMenuAction.KEYWORD_HIGHLIGHT) }
-            OverflowCheckItem("same_title_removed", menu.sameTitleRemovedChecked) {
-                click(ReadMenuAction.SAME_TITLE_REMOVED)
-            }
-            OverflowCheckItem("re_segment", menu.reSegmentChecked) {
-                click(ReadMenuAction.RE_SEGMENT)
-            }
-            if (menu.reviewVisible) {
-                OverflowItem("review") { click(ReadMenuAction.REVIEW) }
-            }
-            if (menu.isEpub) {
-                OverflowCheckItem("del_ruby_tag", menu.delRubyChecked) {
-                    click(ReadMenuAction.DEL_RUBY_TAG)
-                }
-                OverflowCheckItem("del_h_tag", menu.delHChecked) {
-                    click(ReadMenuAction.DEL_H_TAG)
-                }
-            }
-            OverflowItem("image_style") { click(ReadMenuAction.IMAGE_STYLE) }
-            OverflowItem("update_toc") { click(ReadMenuAction.UPDATE_TOC) }
-            OverflowItem("log") { click(ReadMenuAction.LOG) }
-            OverflowItem("help") { click(ReadMenuAction.HELP) }
-        }
-    }
+private const val MIN_READER_FONT_SIZE = 17
+private const val MAX_READER_FONT_SIZE = 40
+
+/** 阅读纸色档位：只改当前样式的背景与文字色，并同步日/夜模式。 */
+private data class ReaderPaperTone(
+    val labelKey: String,
+    val bg: String,
+    val text: String,
+    val night: Boolean,
+)
+
+private val readerPaperTones = listOf(
+    ReaderPaperTone("paper_xuan", "#F5EFE3", "#2B2419", night = false),
+    ReaderPaperTone("paper_qing", "#DDE7DF", "#243027", night = false),
+    ReaderPaperTone("paper_ink", "#121514", "#EFE8DA", night = true),
+)
+
+private fun applyReaderPaperTone(tone: ReaderPaperTone) {
+    val config = ReadBookConfigProviders.get()
+    // 纸色是阅读页局部选择：不改全局日/夜模式，两套明暗字段都写同一纸色
+    config.config.setDayNightPaper(
+        bg = tone.bg,
+        text = tone.text,
+        darkStatusIcons = !tone.night,
+    )
+    config.save()
+    ReadBookEvents.postConfig(
+        listOf(
+            ReadConfigChange.BG,
+            ReadConfigChange.STYLE,
+            ReadConfigChange.SYSTEM_UI,
+            ReadConfigChange.LOAD_CONTENT,
+        )
+    )
 }
 
-@Composable
-private fun OverflowItem(textKey: String, onClick: () -> Unit) {
-    DropdownMenuItem(
-        onClick = onClick,
-    ) {
-        Text(rememberString(textKey), color = AppTheme.colors.primaryText)
-    }
-}
+/** 阅读底栏面板页：操作坞 / 排版 / 进度 / 书签 */
+private enum class ReaderPanel { DOCK, STYLE, PROGRESS, BOOKMARK }
 
 @Composable
-private fun OverflowCheckItem(textKey: String, checked: Boolean, onClick: () -> Unit) {
-    DropdownMenuItem(
-        onClick = onClick,
-    ) {
-        // MD2 无 trailingIcon 槽，用 weight(1f) 占位 + 复选框复刻 MD3 text+trailingIcon 布局
-        Text(rememberString(textKey), color = AppTheme.colors.primaryText, modifier = Modifier.weight(1f))
-        AppMenuCheckbox(checked = checked)
-    }
-}
-
-/** 书源操作按钮(原 ArcoButton Primary Small + book_read_source PopupMenu) */
-@Composable
-private fun SourceActionButton(state: ReadMenuState) {
-    var expanded by remember { mutableStateOf(false) }
-    var loginVisible by remember { mutableStateOf(false) }
-    var payVisible by remember { mutableStateOf(false) }
-    Box {
-        Box(
-            Modifier
-                .padding(end = DesignTokens.spacingLg)
-                .heightIn(min = DesignTokens.viewHeightDefault)
-                .widthIn(max = 120.dp)
-                .clip(DesignTokens.shapeDefault)
-                .background(AppTheme.colors.accent)
-                .clickable {
-                    loginVisible = state.sourceLoginVisible()
-                    payVisible = state.sourcePayVisible()
-                    expanded = true
-                }
-                .padding(horizontal = DesignTokens.spacingMd),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = state.sourceActionText,
-                color = if (ColorUtils.isColorLight(AppTheme.colors.accent.toArgb())) Color.Black else Color.White,
-                fontSize = 14.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            val click: (SourceAction) -> Unit = {
-                expanded = false
-                state.onSourceAction(it)
-            }
-            if (loginVisible) {
-                OverflowItem("login") { click(SourceAction.LOGIN) }
-            }
-            if (payVisible) {
-                OverflowItem("chapter_pay") { click(SourceAction.CHAPTER_PAY) }
-            }
-            OverflowItem("set_source_variable") {
-                click(SourceAction.SET_SOURCE_VARIABLE)
-            }
-            OverflowItem("set_book_variable") {
-                click(SourceAction.SET_BOOK_VARIABLE)
-            }
-            OverflowItem("edit_book_source") { click(SourceAction.EDIT_SOURCE) }
-            OverflowItem("disable_book_source") {
-                click(SourceAction.DISABLE_SOURCE)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReadMenuBottom(state: ReadMenuState) {
+private fun ReadMenuBottom(
+    state: ReadMenuState,
+    panel: ReaderPanel,
+    onPanelChange: (ReaderPanel) -> Unit,
+) {
     val eInk = LocalEInk.current
     // 底栏背景/文字: 沉浸式(纯色阅读背景)用阅读背景色/阅读文字色; 图片背景回落主题色;
     // E-Ink 模式统一由 [rememberReadMenuPalette] 成对固定为白底黑字, 消除白底浅色字。
@@ -1171,169 +1045,559 @@ private fun ReadMenuBottom(state: ReadMenuState) {
     )
     val bg = palette.surface
     val text = palette.onSurface
+
+    // 4dp 阴影向上: 默认 shadow 光源在上方, 先翻转 180° 加阴影再翻回,
+    // 阴影即投射到屏幕底部外侧的上方。面板内容随当前页切换，外壳只此一份。
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .graphicsLayer { rotationX = 180f }
+            .shadow(4.dp, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+            .graphicsLayer { rotationX = 180f }
+            .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+            .background(if (eInk) Color.White else bg)
+            // 浮层底栏逐帧跟随导航栏 insets (与顶栏 platformStatusBarPadding 同理)
+            .platformNavigationBarPadding(),
+    ) {
+        ReaderPanelHandle(text)
+        if (eInk) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(rememberColor("divider"))
+            )
+        }
+        if (panel != ReaderPanel.DOCK) {
+            ReaderPanelTabs(panel, text, onPanelChange)
+        }
+        when (panel) {
+            ReaderPanel.DOCK -> ReaderDockContent(state, text)
+            ReaderPanel.STYLE -> ReaderStylePanel(state, text, eInk)
+            ReaderPanel.PROGRESS -> ReaderProgressPanel(state, text)
+            ReaderPanel.BOOKMARK -> ReaderBookmarkPanel(state, text)
+        }
+    }
+}
+
+/** 底栏把手：琅嬛阁的圆角面板从一道 36x4 的短横开始 */
+@Composable
+private fun ReaderPanelHandle(text: Color) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 2.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .width(36.dp)
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(text.copy(alpha = .22f))
+        )
+    }
+}
+
+/** 面板页签：排版 / 进度 / 书签；再点当前页签或「收起」回操作坞 */
+@Composable
+private fun ReaderPanelTabs(
+    panel: ReaderPanel,
+    text: Color,
+    onPanelChange: (ReaderPanel) -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ReaderPanelTab(rememberString("reader_panel_style"), panel == ReaderPanel.STYLE, text) {
+            onPanelChange(if (panel == ReaderPanel.STYLE) ReaderPanel.DOCK else ReaderPanel.STYLE)
+        }
+        ReaderPanelTab(
+            rememberString("reader_panel_progress"),
+            panel == ReaderPanel.PROGRESS,
+            text,
+        ) {
+            onPanelChange(
+                if (panel == ReaderPanel.PROGRESS) ReaderPanel.DOCK else ReaderPanel.PROGRESS
+            )
+        }
+        ReaderPanelTab(rememberString("bookmark"), panel == ReaderPanel.BOOKMARK, text) {
+            onPanelChange(
+                if (panel == ReaderPanel.BOOKMARK) ReaderPanel.DOCK else ReaderPanel.BOOKMARK
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        Text(
+            text = rememberString("reader_panel_collapse"),
+            color = text.copy(alpha = .55f),
+            fontSize = 12.sp,
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .clickable { onPanelChange(ReaderPanel.DOCK) }
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun ReaderPanelTab(
+    label: String,
+    selected: Boolean,
+    tint: Color,
+    onClick: () -> Unit,
+) {
+    Text(
+        text = label,
+        color = if (selected) AppTheme.colors.accent else tint.copy(alpha = .6f),
+        fontSize = 13.sp,
+        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(
+                if (selected) AppTheme.colors.accent.copy(alpha = .12f) else Color.Transparent
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+    )
+}
+
+/** 操作坞：全书进度条 + 上一章/目录/下一章 + 查找/专注 */
+@Composable
+private fun ReaderDockContent(state: ReadMenuState, text: Color) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = DesignTokens.spacingLg),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = state.chapterIndexText,
+            color = text.copy(alpha = .55f),
+            fontSize = 11.sp,
+            maxLines = 1,
+        )
+        AppSlider(
+            value = state.seekValue,
+            max = state.seekMax.coerceAtLeast(1),
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = DesignTokens.spacingMd),
+            color = AppTheme.colors.accent,
+            onValueChangeFinished = { state.onSeekStop(it) },
+        )
+    }
+    Row(Modifier.fillMaxWidth()) {
+        BottomMenuItem(
+            iconKey = "ic_skip_previous",
+            labelKey = "previous_chapter",
+            tint = if (state.prevEnabled) text else text.copy(alpha = .3f),
+            modifier = Modifier.weight(1f),
+        ) { if (state.prevEnabled) state.clickPre() }
+        BottomMenuItem(
+            iconKey = "ic_toc",
+            labelKey = "chapter_list",
+            tint = text,
+            modifier = Modifier.weight(1f),
+        ) { state.clickCatalog() }
+        BottomMenuItem(
+            iconKey = "ic_skip_next",
+            labelKey = "next_chapter",
+            tint = if (state.nextEnabled) text else text.copy(alpha = .3f),
+            modifier = Modifier.weight(1f),
+        ) { if (state.nextEnabled) state.clickNext() }
+    }
+    Row(Modifier.fillMaxWidth()) {
+        BottomMenuItem("ic_search", "search_content", text, Modifier.weight(1f)) {
+            state.clickSearch()
+        }
+        BottomMenuItem(
+            iconKey = if (readerFocusMode) "ic_fullscreen_exit" else "ic_fullscreen_enter",
+            labelKey = if (readerFocusMode) "reader_focus_exit" else "reader_focus",
+            tint = text,
+            modifier = Modifier.weight(1f),
+        ) {
+            if (readerFocusMode) {
+                readerFocusMode = false
+            } else {
+                readerFocusMode = true
+                state.runMenuOut()
+            }
+        }
+    }
+}
+
+/** 面板「进度」页：本章百分比 + 目录位置 + 章首/章末跳转 */
+@Composable
+private fun ReaderProgressPanel(state: ReadMenuState, text: Color) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ReaderMetric(
+            label = rememberString("chapter_progress_short"),
+            value = state.chapterProgressText,
+            text = text,
+            modifier = Modifier.weight(1f),
+        )
+        ReaderMetric(
+            label = rememberString("chapter_list"),
+            value = state.chapterIndexText,
+            text = text,
+            modifier = Modifier.weight(1f),
+        )
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ReaderPanelAction(rememberString("reader_chapter_start"), text) {
+            state.clickChapterStart()
+        }
+        Spacer(Modifier.width(DesignTokens.spacingDefault))
+        ReaderPanelAction(rememberString("reader_chapter_end"), text) {
+            state.clickChapterEnd()
+        }
+    }
+}
+
+@Composable
+private fun ReaderMetric(
+    label: String,
+    value: String,
+    text: Color,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier) {
+        Text(text = value, color = text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        Text(text = label, color = text.copy(alpha = .55f), fontSize = 11.sp)
+    }
+}
+
+@Composable
+private fun ReaderPanelAction(label: String, text: Color, onClick: () -> Unit) {
+    Text(
+        text = label,
+        color = text,
+        fontSize = 13.sp,
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(text.copy(alpha = .08f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+}
+
+/** 面板「书签」页：当前位置加书签 + 本书书签列表（点跳转，右端删除） */
+@Composable
+private fun ReaderBookmarkPanel(state: ReadMenuState, text: Color) {
+    val bookmarks by remember(state) {
+        state.bookmarkFlow() ?: flowOf(emptyList())
+    }.collectAsState(emptyList())
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ReaderPanelAction(rememberString("bookmark_add"), text) { state.addBookmarkHere() }
+    }
+    if (bookmarks.isEmpty()) {
+        Text(
+            text = rememberString("reader_bookmark_empty"),
+            color = text.copy(alpha = .55f),
+            fontSize = 12.sp,
+            modifier = Modifier.padding(
+                horizontal = DesignTokens.spacingLg,
+                vertical = DesignTokens.spacingDefault,
+            ),
+        )
+        return
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(max = 220.dp)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        bookmarks.forEach { bookmark ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { state.jumpToBookmark(bookmark) }
+                    .padding(horizontal = DesignTokens.spacingLg, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = bookmark.chapterName.ifBlank { "第 ${bookmark.chapterIndex + 1} 章" },
+                        color = text,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    val preview = bookmark.bookText.trim().take(40)
+                    if (preview.isNotEmpty()) {
+                        Text(
+                            text = preview,
+                            color = text.copy(alpha = .55f),
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                Text(
+                    text = rememberString("delete"),
+                    color = AppTheme.colors.accent,
+                    fontSize = 12.sp,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { state.deleteBookmark(bookmark) }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
+        }
+    }
+}
+
+/** 面板「排版」页：字号/纸色/行距/翻页 + 更多排版与朗读跟随 */
+@Composable
+private fun ReaderStylePanel(
+    state: ReadMenuState,
+    text: Color,
+    eInk: Boolean,
+) {
+    val readConfig = ReadBookConfigProviders.get()
+    // 面板内即时状态：点按后先更新本地值让面板立刻响应，再写配置并通知重排/重建翻页委托。
+    var fontSize by remember { mutableIntStateOf(readConfig.textSize) }
+    var lineSpacing by remember { mutableIntStateOf(readConfig.lineSpacingExtra) }
+    var pageAnim by remember { mutableIntStateOf(readConfig.pageAnim) }
+    var paperBg by remember { mutableStateOf(readConfig.config.curBgStr()) }
+
+    fun applyFontSize(value: Int) {
+        val next = value.coerceIn(MIN_READER_FONT_SIZE, MAX_READER_FONT_SIZE)
+        if (next == fontSize) return
+        fontSize = next
+        readConfig.textSize = next
+        readConfig.save()
+        ReadBookEvents.postConfig(
+            listOf(ReadConfigChange.CHAPTER_STYLE, ReadConfigChange.LOAD_CONTENT)
+        )
+    }
+
+    fun applyLineSpacing(value: Int) {
+        val next = value.coerceIn(8, 24)
+        if (next == lineSpacing) return
+        lineSpacing = next
+        readConfig.lineSpacingExtra = next
+        readConfig.save()
+        ReadBookEvents.postConfig(
+            listOf(ReadConfigChange.CHAPTER_STYLE, ReadConfigChange.LOAD_CONTENT)
+        )
+    }
+
+    fun applyPageAnim(value: Int) {
+        if (value == pageAnim) return
+        pageAnim = value
+        readConfig.pageAnim = value
+        readConfig.save()
+        ReadBookEvents.postConfig(
+            listOf(ReadConfigChange.PAGE_ANIM, ReadConfigChange.LOAD_CONTENT)
+        )
+    }
+
     Column(Modifier.fillMaxWidth()) {
-        // 悬浮按钮行(原 ll_floating_button，透明底，空白处点击穿透到 bg 收起菜单)
+        // 字号 + 纸色：一手可调的阅读密度与纸张
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = rememberString("text_size"),
+                color = text.copy(alpha = .55f),
+                fontSize = 12.sp,
+            )
+            Spacer(Modifier.width(DesignTokens.spacingMd))
+            Text(
+                text = "A−",
+                color = if (fontSize > MIN_READER_FONT_SIZE) text else text.copy(alpha = .3f),
+                fontSize = 18.sp,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable(enabled = fontSize > MIN_READER_FONT_SIZE) {
+                        applyFontSize(fontSize - 1)
+                    }
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+            Text(
+                text = "$fontSize",
+                color = text,
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.width(30.dp),
+            )
+            Text(
+                text = "A+",
+                color = if (fontSize < MAX_READER_FONT_SIZE) text else text.copy(alpha = .3f),
+                fontSize = 18.sp,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable(enabled = fontSize < MAX_READER_FONT_SIZE) {
+                        applyFontSize(fontSize + 1)
+                    }
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+            Spacer(Modifier.weight(1f))
+            if (!eInk) {
+                Text(
+                    text = rememberString("paper_color"),
+                    color = text.copy(alpha = .55f),
+                    fontSize = 12.sp,
+                )
+                Spacer(Modifier.width(DesignTokens.spacingDefault))
+                readerPaperTones.forEach { tone ->
+                    val selected = paperBg.equals(tone.bg, ignoreCase = true)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                applyReaderPaperTone(tone)
+                                paperBg = tone.bg
+                            }
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                    ) {
+                        Box(
+                            Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .then(
+                                    if (selected) {
+                                        Modifier.border(2.dp, AppTheme.colors.accent, CircleShape)
+                                    } else {
+                                        Modifier
+                                    }
+                                )
+                                .background(Color(ColorUtils.parseColor(tone.bg)))
+                        )
+                        Text(
+                            text = rememberString(tone.labelKey),
+                            color = text.copy(alpha = .6f),
+                            fontSize = 9.sp,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+        }
+        // 行距
         Row(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = DesignTokens.spacingLg),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ReadMenuFab(
-                iconKey = "ic_search",
-                contentDescription = stringResource(Res.string.search_content),
-                bg = bg, tint = text,
-            ) { state.clickSearch() }
-            Spacer(Modifier.weight(1f))
-            ReadMenuFab(
-                iconKey = if (state.autoPage) "ic_auto_page_stop" else "ic_auto_page",
-                contentDescription = rememberString(
-                    if (state.autoPage) "auto_next_page_stop" else "auto_next_page"
-                ),
-                bg = bg, tint = text,
-            ) { state.runMenuOut { state.clickAutoPage() } }
-            Spacer(Modifier.weight(1f))
-            ReadMenuFab(
-                iconKey = "ic_find_replace",
-                contentDescription = stringResource(Res.string.replace_rule_title),
-                bg = bg, tint = text,
-            ) { state.clickReplaceRule() }
-            Spacer(Modifier.weight(1f))
-            ReadMenuFab(
-                iconKey = if (state.isNightTheme) "ic_daytime" else "ic_brightness",
-                contentDescription = stringResource(Res.string.dark_theme),
-                bg = bg, tint = text,
-            ) { state.clickNightTheme() }
+            Text(
+                text = rememberString("line_size"),
+                color = text.copy(alpha = .55f),
+                fontSize = 12.sp,
+            )
+            AppSlider(
+                value = lineSpacing,
+                min = 10,
+                max = 22,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = DesignTokens.spacingMd),
+                color = AppTheme.colors.accent,
+                onValueChangeFinished = { applyLineSpacing(it) },
+            )
         }
-        // 底部设置栏(原 ll_bottom_bg)；4dp 阴影向上: 默认 shadow 光源在上方,
-        // 先翻转 180° 加阴影再翻回, 阴影即投射到屏幕底部外侧的上方。
-        // 注: 桌面端(Skiko) spot 阴影方向不随 layer 翻转反转, 底栏阴影偏淡属平台渲染行为, 非代码错误
-        // shadow API, 保持与顶栏同源实现 (2026-08-06)。
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .graphicsLayer { rotationX = 180f }
-                .shadow(4.dp, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                .graphicsLayer { rotationX = 180f }
-                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                .background(if (eInk) Color.White else bg)
-                // 浮层底栏逐帧跟随导航栏 insets (与顶栏 platformStatusBarPadding 同理)
-                .platformNavigationBarPadding(),
-        ) {
-            // 顶部把手：琅嬛阁的圆角面板从一道 36x4 的短横开始
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp, bottom = 2.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    Modifier
-                        .width(36.dp)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(text.copy(alpha = .22f))
-                )
-            }
-            if (eInk) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(1.dp)
-                        .background(rememberColor("divider"))
-                )
-            }
-            // 章节进度行
+        // 翻页方式：只暴露滚动/覆盖；滑动、仿真等旧值在 UI 上按覆盖显示
+        if (!eInk) {
             Row(
                 Modifier
                     .fillMaxWidth()
                     .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ChapterNavText(
-                    text = stringResource(Res.string.previous_chapter),
-                    color = text,
-                    enabled = state.prevEnabled,
-                ) { state.clickPre() }
-                ReadSeekBar(state, Modifier.weight(1f))
-                ChapterNavText(
-                    text = stringResource(Res.string.next_chapter),
-                    color = text,
-                    enabled = state.nextEnabled,
-                ) { state.clickNext() }
-            }
-            // 目录/朗读/界面/设置：均分底栏(原 Spacer 1:2:2:1 居中)，扩大可点击范围，样式不变
-            Row(Modifier.fillMaxWidth()) {
-                BottomMenuItem("ic_toc", "chapter_list", text, Modifier.weight(1f)) {
-                    state.clickCatalog()
-                }
-                BottomMenuItem(
-                    "ic_read_aloud", "read_aloud", text, Modifier.weight(1f),
-                    // 短/长按均收菜单, 收起动画播完后才动作
-                    // (对照原版 llReadAloud 短/长按均包 runMenuOut)
-                    onLongClick = {
-                        state.runMenuOut { state.longClickReadAloud() }
-                    },
-                ) {
-                    state.runMenuOut { state.clickReadAloud() }
-                }
-                BottomMenuItem(
-                    "ic_interface_setting",
-                    "interface_setting",
-                    text,
-                    Modifier.weight(1f)
-                ) {
-                    state.clickFont()
-                }
-                BottomMenuItem("ic_settings", "setting", text, Modifier.weight(1f)) {
-                    state.clickSetting()
-                }
+                Text(
+                    text = rememberString("page_anim"),
+                    color = text.copy(alpha = .55f),
+                    fontSize = 12.sp,
+                )
+                Spacer(Modifier.weight(1f))
+                ReaderPageModeChip(
+                    label = rememberString("page_anim_scroll"),
+                    selected = pageAnim == PageAnim.scrollPageAnim,
+                    tint = text,
+                ) { applyPageAnim(PageAnim.scrollPageAnim) }
+                Spacer(Modifier.width(DesignTokens.spacingDefault))
+                ReaderPageModeChip(
+                    label = rememberString("page_anim_cover"),
+                    selected = pageAnim != PageAnim.scrollPageAnim,
+                    tint = text,
+                ) { applyPageAnim(PageAnim.coverPageAnim) }
             }
         }
+    }
+    // 朗读跟随 + 更多排版
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = rememberString("reader_follow_aloud"),
+            color = text,
+            fontSize = 13.sp,
+            modifier = Modifier.weight(1f),
+        )
+        AppSwitch(
+            checked = readerFollowAloud,
+            onCheckedChange = { readerFollowAloud = it },
+        )
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ReaderPanelAction(rememberString("reader_font_background"), text) { state.clickFont() }
+        Spacer(Modifier.width(DesignTokens.spacingDefault))
+        ReaderPanelAction(rememberString("reader_more_layout"), text) { state.clickSetting() }
     }
 }
 
 @Composable
-private fun ReadSeekBar(state: ReadMenuState, modifier: Modifier = Modifier) {
-    // 拖动中位置由滑条自己持有, 抬手才跳转(原 SeekBarChangeListener 语义)
-    var dragging by remember { mutableStateOf(false) }
-    AppSlider(
-        value = state.seekValue,
-        max = state.seekMax,
-        onValueChange = {
-            if (!dragging) {
-                dragging = true
-                state.onSeekDragStart()
-            }
-        },
-        onValueChangeFinished = {
-            dragging = false
-            state.onSeekStop(it)
-        },
-        modifier = modifier,
-    )
-}
-
-@Composable
-private fun ChapterNavText(
-    text: String,
-    color: Color,
-    enabled: Boolean,
+private fun ReaderPageModeChip(
+    label: String,
+    selected: Boolean,
+    tint: Color,
     onClick: () -> Unit,
 ) {
-    // 禁用时仍消费点击(原 View disabled 仍拦截触摸，不落到 bg 收起菜单)
-    val interaction = remember { MutableInteractionSource() }
     Text(
-        text = text,
-        color = color,
-        fontSize = 14.sp,
+        text = label,
+        color = if (selected) AppTheme.colors.accent else tint.copy(alpha = .6f),
+        fontSize = 13.sp,
         modifier = Modifier
-            .padding(horizontal = DesignTokens.spacingMd)
-            .clickable(
-                interactionSource = interaction,
-                indication = if (enabled) LocalIndication.current else null,
-            ) { if (enabled) onClick() }
-            .padding(vertical = DesignTokens.spacingMd),
+            .clip(RoundedCornerShape(14.dp))
+            .background(
+                if (selected) AppTheme.colors.accent.copy(alpha = .12f) else Color.Transparent
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 6.dp),
     )
 }
 

@@ -46,7 +46,7 @@ fun preferenceUpVersionStore(): UpVersionStore = object : UpVersionStore {
 /**
  * 启动版本更新弹窗 (对照原版 MainActivity.upVersion, 四端共用)。
  *
- * 版本号变化时: 首次安装弹帮助 (appHelp, key="help"), 升级安装弹更新日志
+ * 版本号变化时: 首次安装不弹任何文档; 升级安装弹更新日志
  * (updateLog, key="updateLog", 标题"更新日志")。DEBUG 构建跳过更新日志
  * (对照原版 !BuildConfig.DEBUG 门; iOS/鸿蒙无构建类型感知, 传 false)。
  * 弹窗挂起等待关闭后返回, 保持原版启动序列的串行语义。
@@ -63,15 +63,10 @@ suspend fun upVersion(
 ) {
     if (store.getSavedVersionCode() == currentVersionCode) return
     store.saveVersionCode(currentVersionCode)
-    val navigator = AppNavigatorProviders.awaitNavigator()
-    if (store.consumeFirstOpen()) {
-        // 首次安装: 弹帮助 (对照原版 appHelp 分支)
-        navigator.showOverlay(AppOverlay.Dialog(key = "help", payload = "appHelp"))
-        navigator.overlays.first { list ->
-            list.none { it.key == "help" }
-        }
-    } else if (!isDebug) {
-        // 升级安装: 弹更新日志 (对照原版 updateLog 分支)
+    // 首次安装只记录标志，不弹帮助文档
+    if (store.consumeFirstOpen()) return
+    if (!isDebug) {
+        val navigator = AppNavigatorProviders.awaitNavigator()
         navigator.showOverlay(AppOverlay.Dialog(key = updateLogDocName))
         navigator.overlays.first { list ->
             list.none { it.key == updateLogDocName }

@@ -1,301 +1,193 @@
 package com.langhuan.reader.ui.main.my
 
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
-import com.langhuan.reader.constant.PreferKey
-import com.langhuan.reader.ui.compose.preference.PreferenceScreen
-import com.langhuan.reader.ui.compose.preference.listPreference
-import com.langhuan.reader.ui.compose.preference.preference
-import com.langhuan.reader.ui.compose.preference.preferenceCategory
-import com.langhuan.reader.ui.compose.preference.switchPreference
+import androidx.compose.ui.Modifier
+import com.langhuan.reader.ui.compose.component.LanghuanSettingsDivider
+import com.langhuan.reader.ui.compose.component.LanghuanSettingsGroup
+import com.langhuan.reader.ui.compose.component.LanghuanSettingsRow
+import com.langhuan.reader.ui.compose.platform.rememberNavigationBarPaddingValues
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.about
+import com.langhuan.reader.ui.generated.resources.backup_password
 import com.langhuan.reader.ui.generated.resources.backup_restore
 import com.langhuan.reader.ui.generated.resources.book_source
 import com.langhuan.reader.ui.generated.resources.book_source_manage
-import com.langhuan.reader.ui.generated.resources.book_source_manage_desc
 import com.langhuan.reader.ui.generated.resources.bookmark
-import com.langhuan.reader.ui.generated.resources.dialog_preview
-import com.langhuan.reader.ui.generated.resources.dialog_preview_summary
-import com.langhuan.reader.ui.generated.resources.dict_rule
-import com.langhuan.reader.ui.generated.resources.ic_baseline_sort_24
+import com.langhuan.reader.ui.generated.resources.check_update
+import com.langhuan.reader.ui.generated.resources.clear_cache
+import com.langhuan.reader.ui.generated.resources.font_scale
 import com.langhuan.reader.ui.generated.resources.ic_bookmark
-import com.langhuan.reader.ui.generated.resources.ic_bug_report
 import com.langhuan.reader.ui.generated.resources.ic_cfg_about
 import com.langhuan.reader.ui.generated.resources.ic_cfg_backup
-import com.langhuan.reader.ui.generated.resources.ic_other_setting
 import com.langhuan.reader.ui.generated.resources.ic_cfg_replace
 import com.langhuan.reader.ui.generated.resources.ic_cfg_source
 import com.langhuan.reader.ui.generated.resources.ic_cfg_theme
-import com.langhuan.reader.ui.generated.resources.ic_cfg_web
+import com.langhuan.reader.ui.generated.resources.ic_clear_all
 import com.langhuan.reader.ui.generated.resources.ic_history
-import com.langhuan.reader.ui.generated.resources.ic_import
-import com.langhuan.reader.ui.generated.resources.ic_extension
-import com.langhuan.reader.ui.generated.resources.ic_layout_video
-import com.langhuan.reader.ui.generated.resources.ic_translate
-import com.langhuan.reader.ui.generated.resources.manga_extension
-import com.langhuan.reader.ui.generated.resources.manga_extension_desc
-import com.langhuan.reader.ui.generated.resources.other
-import com.langhuan.reader.ui.generated.resources.other_setting
+import com.langhuan.reader.ui.generated.resources.ic_interface_setting
+import com.langhuan.reader.ui.generated.resources.ic_lock_outline
+import com.langhuan.reader.ui.generated.resources.ic_save
+import com.langhuan.reader.ui.generated.resources.ic_toc
+import com.langhuan.reader.ui.generated.resources.ic_update
+import com.langhuan.reader.ui.generated.resources.my_group_appearance
+import com.langhuan.reader.ui.generated.resources.my_group_data
 import com.langhuan.reader.ui.generated.resources.read_record
 import com.langhuan.reader.ui.generated.resources.replace_purify
-import com.langhuan.reader.ui.generated.resources.rule_subscription
-import com.langhuan.reader.ui.generated.resources.source_filter_rule
-import com.langhuan.reader.ui.generated.resources.source_toolbox
+import com.langhuan.reader.ui.generated.resources.shrink_database
 import com.langhuan.reader.ui.generated.resources.theme_mode
-import com.langhuan.reader.ui.generated.resources.theme_mode_v
-import com.langhuan.reader.ui.generated.resources.theme_setting
-import com.langhuan.reader.ui.generated.resources.theme_setting_s
-import com.langhuan.reader.ui.generated.resources.tvbox
-import com.langhuan.reader.ui.generated.resources.tvbox_desc
 import com.langhuan.reader.ui.generated.resources.txt_toc_rule
-import com.langhuan.reader.ui.generated.resources.web_dav_set_import_old
-import com.langhuan.reader.ui.generated.resources.web_service
+import com.langhuan.reader.ui.generated.resources.version
 import org.jetbrains.compose.resources.painterResource
-import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * 我的页设置内容（迁 pref_main.xml）。逐条对齐原条目顺序/key/默认值/图标。
- * themeMode 切换后 applyDayNight、webService 开关/长按/动态 summary 由 [MyTab] 承接。
+ * 「我的」页设置面板（四组：外观 / 书源 / 数据 / 关于）。
  *
- * 下沉 shared/sharedUiMain:
- * - stringResource(R.string.xxx) → stringResource(Res.string.xxx)
- * - stringArrayResource(R.array.xxx) → stringArrayResource(Res.array.xxx)
- * - painterResource(R.drawable.xxx) → rememberPainter("xxx")
- * - 与 app 端原包名/类名一致, app/desktop 端共用。
- *
- * ## 资源 key 需求清单（需 ResourceProvider actual 命中）
- *
- * ### Painter key (drawable)
- * - `ic_cfg_theme`        主题/外观（listPreference + preference 共用）
- * - `ic_cfg_backup`       备份/恢复
- * - `ic_cfg_web`          web 服务
- * - `ic_other_setting`    其它设置入口
- * - `ic_cfg_source`       书源/目录规则
- * - `ic_cfg_replace`      替换净化
- * - `ic_baseline_sort_24` 书源过滤
- * - `ic_translate`        字典规则
- * - `ic_import`           规则订阅
- * - `ic_bookmark`         书签
- * - `ic_history`          阅读记录（已注册, 复用）
- * - `ic_bug_report`       书源工具箱（复用）
- * - `ic_cfg_about`        关于
- *
- * ### String key (string)
- * - `theme_mode`                主题模式（标题）
- * - `theme_setting` / `theme_setting_s`
- * - `backup_restore` / `web_dav_set_import_old`
- * - `web_service`
- * - `other_setting`
- * - `book_source`               分类标题
- * - `book_source_manage` / `book_source_manage_desc`
- * - `replace_purify` / `source_filter_rule` / `txt_toc_rule`
- * - `dict_rule` / `rule_subscription`
- * - `other`                     分类标题
- * - `bookmark` / `read_record` / `source_toolbox` / `about`
- *
- * ### StringArray key (string-array)
- * - `theme_mode`        主题模式名（系统/亮/暗/E-Ink）
- * - `theme_mode_v`      主题模式值（0/1/2/3）
- *
- * @see com.langhuan.reader.ui.compose.platform.ResourceProvider
+ * 只做展示与回调，弹窗与读写在 MyConfigContent 里承接。
+ * 行内不写解释性小字，右侧只放当前值（字体大小、版本号）。
  */
 @Composable
 fun MyConfigScreen(
-    webServiceChecked: Boolean,
-    webServiceSummary: String,
-    onThemeModeChange: () -> Unit,
-    onWebServiceChange: (Boolean) -> Unit,
-    onWebServiceLongClick: () -> Unit,
-    onThemeSetting: () -> Unit,
-    onWebDavSetting: () -> Unit,
-    onOtherSetting: () -> Unit,
+    fontScaleValue: String,
+    versionValue: String,
+    showCheckUpdate: Boolean,
+    checkingUpdate: Boolean,
+    onThemeMode: () -> Unit,
+    onFontScale: () -> Unit,
     onBookSourceManage: () -> Unit,
     onReplaceManage: () -> Unit,
-    onSourceFilterRuleManage: () -> Unit,
     onTxtTocRuleManage: () -> Unit,
-    onDictRuleManage: () -> Unit,
-    onRuleSubManage: () -> Unit,
+    onBackupRestore: () -> Unit,
+    onBackupPassword: () -> Unit,
     onBookmark: () -> Unit,
     onReadRecord: () -> Unit,
-    onSourceToolbox: () -> Unit,
+    onCleanCache: () -> Unit,
+    onShrinkDatabase: () -> Unit,
     onAbout: () -> Unit,
-    // 漫画插件管理 (MangaExtensionService 未注册端 null, 条目隐藏)
-    onMangaExtensionManage: (() -> Unit)? = null,
-    // 影视源 TVBox 管理 (TvBoxService 未注册端 null, 条目隐藏)
-    onTvBoxManage: (() -> Unit)? = null,
-    // 弹窗预览 (仅桌面端提供入口, 其余端 null 时条目不渲染)
-    onDialogPreview: (() -> Unit)? = null,
-    // 网络服务开关是否显示 (未注册 WebServerPlatform 的端没有该服务, 条目隐藏)
-    showWebService: Boolean = false,
+    onCheckUpdate: () -> Unit,
 ) {
-    val themeModeEntries = stringArrayResource(Res.array.theme_mode)
-    val themeModeValues = stringArrayResource(Res.array.theme_mode_v)
-
-    val titleThemeMode = stringResource(Res.string.theme_mode)
-    val titleThemeSetting = stringResource(Res.string.theme_setting)
-    val summaryThemeSetting = stringResource(Res.string.theme_setting_s)
-    val titleBackupRestore = stringResource(Res.string.backup_restore)
-    val summaryWebDav = stringResource(Res.string.web_dav_set_import_old)
-    val titleWebService = stringResource(Res.string.web_service)
-    val titleOtherSetting = stringResource(Res.string.other_setting)
-    val titleBookSource = stringResource(Res.string.book_source)
-    val titleBookSourceManage = stringResource(Res.string.book_source_manage)
-    val summaryBookSourceManage = stringResource(Res.string.book_source_manage_desc)
-    val titleReplacePurify = stringResource(Res.string.replace_purify)
-    val titleSourceFilterRule = stringResource(Res.string.source_filter_rule)
-    val titleTxtTocRule = stringResource(Res.string.txt_toc_rule)
-    val titleDictRule = stringResource(Res.string.dict_rule)
-    val titleRuleSub = stringResource(Res.string.rule_subscription)
-    val titleOther = stringResource(Res.string.other)
-    val titleBookmark = stringResource(Res.string.bookmark)
-    val titleReadRecord = stringResource(Res.string.read_record)
-    val titleSourceToolbox = stringResource(Res.string.source_toolbox)
-    val titleAbout = stringResource(Res.string.about)
-    val titleMangaExtension = stringResource(Res.string.manga_extension)
-    val summaryMangaExtension = stringResource(Res.string.manga_extension_desc)
-    val titleTvBox = stringResource(Res.string.tvbox)
-    val summaryTvBox = stringResource(Res.string.tvbox_desc)
-
-    // rememberPainter 是 @Composable，须在此层取值，不能在 LazyListScope 构建 lambda 内调用
     val iconTheme = painterResource(Res.drawable.ic_cfg_theme)
-    val iconBackup = painterResource(Res.drawable.ic_cfg_backup)
-    val iconWeb = painterResource(Res.drawable.ic_cfg_web)
-    val iconOther = painterResource(Res.drawable.ic_other_setting)
+    val iconFont = painterResource(Res.drawable.ic_interface_setting)
     val iconSource = painterResource(Res.drawable.ic_cfg_source)
     val iconReplace = painterResource(Res.drawable.ic_cfg_replace)
-    val iconFilter = painterResource(Res.drawable.ic_baseline_sort_24)
-    val iconTranslate = painterResource(Res.drawable.ic_translate)
-    val iconImport = painterResource(Res.drawable.ic_import)
+    val iconToc = painterResource(Res.drawable.ic_toc)
+    val iconBackup = painterResource(Res.drawable.ic_cfg_backup)
+    val iconPassword = painterResource(Res.drawable.ic_lock_outline)
     val iconBookmark = painterResource(Res.drawable.ic_bookmark)
     val iconHistory = painterResource(Res.drawable.ic_history)
-    val iconToolbox = painterResource(Res.drawable.ic_bug_report)
-    val iconExtension = painterResource(Res.drawable.ic_extension)
-    val iconVideo = painterResource(Res.drawable.ic_layout_video)
+    val iconClean = painterResource(Res.drawable.ic_clear_all)
+    val iconShrink = painterResource(Res.drawable.ic_save)
     val iconAbout = painterResource(Res.drawable.ic_cfg_about)
-    val titleDialogPreview = stringResource(Res.string.dialog_preview)
-    val summaryDialogPreview = stringResource(Res.string.dialog_preview_summary)
+    val iconUpdate = painterResource(Res.drawable.ic_update)
+
+    val titleAppearance = stringResource(Res.string.my_group_appearance)
+    val titleSource = stringResource(Res.string.book_source)
+    val titleData = stringResource(Res.string.my_group_data)
+    val titleAbout = stringResource(Res.string.about)
 
     AppTheme {
-        PreferenceScreen {
-            listPreference(
-                prefKey = PreferKey.themeMode,
-                title = titleThemeMode,
-                entries = themeModeEntries,
-                values = themeModeValues,
-                defaultValue = "0",
-                icon = iconTheme,
-                onValueChange = { onThemeModeChange() },
-            )
-            preference(
-                title = titleThemeSetting,
-                summary = summaryThemeSetting,
-                icon = iconTheme,
-                onClick = onThemeSetting,
-            )
-            preference(
-                title = titleBackupRestore,
-                summary = summaryWebDav,
-                icon = iconBackup,
-                onClick = onWebDavSetting,
-            )
-            // 网络服务开关: 只在注册了 WebServerPlatform 的端显示 (未注册端拨了无效)
-            if (showWebService) {
-                switchPreference(
-                    prefKey = PreferKey.webService,
-                    title = titleWebService,
-                    summary = webServiceSummary,
-                    defaultValue = false,
-                    icon = iconWeb,
-                    onCheckedChange = onWebServiceChange,
-                    onLongClick = onWebServiceLongClick,
-                    checked = webServiceChecked,
-                )
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = rememberNavigationBarPaddingValues(),
+        ) {
+            item {
+                LanghuanSettingsGroup(title = titleAppearance) {
+                    LanghuanSettingsRow(
+                        title = stringResource(Res.string.theme_mode),
+                        icon = iconTheme,
+                        onClick = onThemeMode,
+                    )
+                    LanghuanSettingsDivider()
+                    LanghuanSettingsRow(
+                        title = stringResource(Res.string.font_scale),
+                        icon = iconFont,
+                        value = fontScaleValue,
+                        onClick = onFontScale,
+                    )
+                }
             }
-            preference(
-                title = titleOtherSetting,
-                icon = iconOther,
-                onClick = onOtherSetting,
-            )
-
-            preferenceCategory(titleBookSource)
-            preference(
-                title = titleBookSourceManage,
-                summary = summaryBookSourceManage,
-                icon = iconSource,
-                onClick = onBookSourceManage,
-            )
-            if (onMangaExtensionManage != null) {
-                preference(
-                    title = titleMangaExtension,
-                    summary = summaryMangaExtension,
-                    icon = iconExtension,
-                    onClick = { onMangaExtensionManage.invoke() },
-                )
+            item {
+                LanghuanSettingsGroup(title = titleSource) {
+                    LanghuanSettingsRow(
+                        title = stringResource(Res.string.book_source_manage),
+                        icon = iconSource,
+                        onClick = onBookSourceManage,
+                    )
+                    LanghuanSettingsDivider()
+                    LanghuanSettingsRow(
+                        title = stringResource(Res.string.replace_purify),
+                        icon = iconReplace,
+                        onClick = onReplaceManage,
+                    )
+                    LanghuanSettingsDivider()
+                    LanghuanSettingsRow(
+                        title = stringResource(Res.string.txt_toc_rule),
+                        icon = iconToc,
+                        onClick = onTxtTocRuleManage,
+                    )
+                }
             }
-            if (onTvBoxManage != null) {
-                preference(
-                    title = titleTvBox,
-                    summary = summaryTvBox,
-                    icon = iconVideo,
-                    onClick = { onTvBoxManage.invoke() },
-                )
+            item {
+                LanghuanSettingsGroup(title = titleData) {
+                    LanghuanSettingsRow(
+                        title = stringResource(Res.string.backup_restore),
+                        icon = iconBackup,
+                        onClick = onBackupRestore,
+                    )
+                    LanghuanSettingsDivider()
+                    LanghuanSettingsRow(
+                        title = stringResource(Res.string.backup_password),
+                        icon = iconPassword,
+                        onClick = onBackupPassword,
+                    )
+                    LanghuanSettingsDivider()
+                    LanghuanSettingsRow(
+                        title = stringResource(Res.string.bookmark),
+                        icon = iconBookmark,
+                        onClick = onBookmark,
+                    )
+                    LanghuanSettingsDivider()
+                    LanghuanSettingsRow(
+                        title = stringResource(Res.string.read_record),
+                        icon = iconHistory,
+                        onClick = onReadRecord,
+                    )
+                    LanghuanSettingsDivider()
+                    LanghuanSettingsRow(
+                        title = stringResource(Res.string.clear_cache),
+                        icon = iconClean,
+                        onClick = onCleanCache,
+                    )
+                    LanghuanSettingsDivider()
+                    LanghuanSettingsRow(
+                        title = stringResource(Res.string.shrink_database),
+                        icon = iconShrink,
+                        onClick = onShrinkDatabase,
+                    )
+                }
             }
-            preference(
-                title = titleReplacePurify,
-                icon = iconReplace,
-                onClick = onReplaceManage,
-            )
-            preference(
-                title = titleSourceFilterRule,
-                icon = iconFilter,
-                onClick = onSourceFilterRuleManage,
-            )
-            preference(
-                title = titleTxtTocRule,
-                icon = iconSource,
-                onClick = onTxtTocRuleManage,
-            )
-            preference(
-                title = titleDictRule,
-                icon = iconTranslate,
-                onClick = onDictRuleManage,
-            )
-            preference(
-                title = titleRuleSub,
-                icon = iconImport,
-                onClick = onRuleSubManage,
-            )
-
-            preferenceCategory(titleOther)
-            preference(
-                title = titleBookmark,
-                icon = iconBookmark,
-                onClick = onBookmark,
-            )
-            preference(
-                title = titleReadRecord,
-                icon = iconHistory,
-                onClick = onReadRecord,
-            )
-            preference(
-                title = titleSourceToolbox,
-                icon = iconToolbox,
-                onClick = onSourceToolbox,
-            )
-            preference(
-                title = titleAbout,
-                icon = iconAbout,
-                onClick = onAbout,
-            )
-            if (onDialogPreview != null) {
-                preference(
-                    title = titleDialogPreview,
-                    summary = summaryDialogPreview,
-                    icon = iconToolbox,
-                    onClick = { onDialogPreview.invoke() },
-                )
+            item {
+                LanghuanSettingsGroup(title = titleAbout) {
+                    LanghuanSettingsRow(
+                        title = stringResource(Res.string.version),
+                        icon = iconAbout,
+                        value = versionValue,
+                        onClick = onAbout,
+                    )
+                    if (showCheckUpdate) {
+                        LanghuanSettingsDivider()
+                        LanghuanSettingsRow(
+                            title = stringResource(Res.string.check_update),
+                            icon = iconUpdate,
+                            showArrow = false,
+                            enabled = !checkingUpdate,
+                            onClick = onCheckUpdate,
+                        )
+                    }
+                }
             }
         }
     }

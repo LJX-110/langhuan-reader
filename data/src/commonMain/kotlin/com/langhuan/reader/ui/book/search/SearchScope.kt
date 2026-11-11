@@ -3,6 +3,7 @@ package com.langhuan.reader.ui.book.search
 import com.langhuan.reader.data.AppDbProviders
 import com.langhuan.reader.data.entities.BookSource
 import com.langhuan.reader.data.entities.BookSourcePart
+import com.langhuan.reader.help.book.isCoreReaderSupported
 import com.langhuan.reader.help.config.AppConfigProviders
 import com.langhuan.reader.help.i18n.AppStringKey
 import com.langhuan.reader.help.i18n.appString
@@ -112,7 +113,8 @@ data class SearchScope(private var scope: String) {
         // 不用 HashSet —— BookSource 字段是 var 且结构 hashCode 会随 respondTime 等回写漂移
         val list = LinkedHashMap<String, BookSource>()
         fun addAll(sources: Iterable<BookSource>) =
-            sources.forEach { s -> list.getOrPut(s.bookSourceUrl) { s } }
+            sources.filter { it.isCoreReaderSupported }
+                .forEach { s -> list.getOrPut(s.bookSourceUrl) { s } }
         if (scope.isEmpty()) {
             addAll(AppDbProviders.get().bookSourceDao.allEnabled())
         } else {

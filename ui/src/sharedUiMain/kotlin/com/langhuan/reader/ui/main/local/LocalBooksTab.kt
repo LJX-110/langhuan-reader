@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import com.langhuan.reader.data.AppDbProviders
 import com.langhuan.reader.data.entities.Book
 import com.langhuan.reader.ui.bookshelf.shelf.LanghuanShelf
+import com.langhuan.reader.ui.bookshelf.toBookItemUi
 import com.langhuan.reader.ui.compose.component.LanghuanPageHeader
 import com.langhuan.reader.ui.compose.component.LanghuanSearchEntry
 import com.langhuan.reader.ui.root.AppNavigator
@@ -41,6 +42,9 @@ internal fun LocalBooksTab(
         if (!active) return@produceState
         db.bookDao.flowLocal().collect { value = it }
     }
+    // 渲染层只吃 Ui 模型; 实体按 bookUrl 回查, 供点击跳转与封面解密
+    val bookItems = remember(books) { books.map { it.toBookItemUi() } }
+    val bookEntities = remember(books) { books.associateBy { it.bookUrl } }
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         LanghuanPageHeader(title = "本地")
         Spacer(Modifier.height(8.dp))
@@ -51,17 +55,19 @@ internal fun LocalBooksTab(
         )
         Spacer(Modifier.height(10.dp))
         LanghuanShelf(
-            books = books,
+            books = bookItems,
             modifier = Modifier.weight(1f),
-            initialBookUrl = remember(books) {
-                books.maxByOrNull { it.durChapterTime }?.bookUrl
+            coverBook = { bookEntities[it.bookUrl] },
+            initialBookUrl = remember(bookItems) {
+                bookItems.maxByOrNull { it.durChapterTime }?.bookUrl
             },
-            onOpen = { book ->
-                val route = book.copy().toReadRoute()
-                navigator.push(route)
+            onOpen = { item ->
+                bookEntities[item.bookUrl]?.let { navigator.push(it.copy().toReadRoute()) }
             },
-            onLongPress = { book ->
-                navigator.push(AppRoute.BookInfo(book.copy().toRouteRef()))
+            onLongPress = { item ->
+                bookEntities[item.bookUrl]?.let {
+                    navigator.push(AppRoute.BookInfo(it.copy().toRouteRef()))
+                }
             },
         )
     }

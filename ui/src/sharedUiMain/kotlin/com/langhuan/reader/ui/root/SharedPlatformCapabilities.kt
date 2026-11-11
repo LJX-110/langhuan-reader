@@ -30,7 +30,6 @@ import com.langhuan.reader.ui.route.encodeReviewListDialogPayload
 import com.langhuan.reader.ui.widget.dialog.WaitDialogHandle
 import com.langhuan.reader.ui.withLocalDirAccess
 import com.langhuan.reader.utils.FlowBus
-import com.langhuan.reader.web.WebServerManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
@@ -63,15 +62,6 @@ interface SharedPlatformCapabilities : PlatformCapabilities {
 
     /** 各端注入自己的协程作用域 (原各实现里的私有 `scope`)。 */
     val capabilityScope: CoroutineScope
-
-    // ===== Web 服务 =====
-
-    override fun setWebService(enabled: Boolean) {
-        capabilityScope.launch {
-            runCatching { if (enabled) WebServerManager.start() else WebServerManager.stop() }
-                .onFailure { AppLog.put("Web 服务启停失败\n${it.message}", it) }
-        }
-    }
 
     // ===== 书源 / 书籍变量弹窗 =====
 

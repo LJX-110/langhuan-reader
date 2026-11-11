@@ -225,7 +225,6 @@ private class WebView2WindowHandle(
                 request.title,
                 request.isLogin,
                 request.saveResult,
-                request.rssActions,
                 request.cookieTag,
             ),
         )
@@ -247,8 +246,6 @@ private class WebView2WindowHandle(
             created.setCookies(domain, cookie)
         }
         created.toolbar?.onAction = { action -> onToolbarAction(created, action) }
-        // RSS 收藏态反推: shared 侧书架操作完成后经 onStarChanged 更新窗口星图标
-        request.rssActions?.onStarChanged = { starred -> created.toolbar?.setStarred(starred) }
         created.onNavigationStarting = { _, _ ->
             created.toolbar?.setLoading(true)
             scheduleNavTimeout(created)
@@ -341,25 +338,6 @@ private class WebView2WindowHandle(
             ToolbarAction.OPEN_IN_BROWSER -> {
                 browseUrl(currentUrl ?: request.url)
             }
-
-            // RSS 模式按钮 (2026-08-07: RSS 阅读去页面外壳, 功能移入窗口工具栏)
-            ToolbarAction.STAR_TOGGLE -> request.rssActions?.onStarToggle()
-
-            ToolbarAction.READ_ALOUD -> request.rssActions?.onReadAloud {
-                // 页面还活着时抓 outerHTML (对照原版 readAloud 的 evaluateJavascript)
-                runCatching {
-                    unwrapScriptResult(
-                        created.executeScript(
-                            DesktopWebViewEngineBase.DEFAULT_JS,
-                            AppConst.timeLimit
-                        )
-                    )
-                }.getOrNull()
-            }
-
-            ToolbarAction.SHARE -> request.rssActions?.onShare()
-
-            ToolbarAction.LOGIN -> request.rssActions?.onLogin()
 
             ToolbarAction.OK -> onOkPressed(
                 reloadForCheck = {

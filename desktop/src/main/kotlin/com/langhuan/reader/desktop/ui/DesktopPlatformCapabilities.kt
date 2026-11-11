@@ -12,7 +12,6 @@ import com.langhuan.reader.data.entities.BookSourcePart
 import com.langhuan.reader.exception.InvalidBooksDirException
 import com.langhuan.reader.exception.NoStackTraceException
 import com.langhuan.reader.help.DirectLinkUploadRule
-import com.langhuan.reader.help.RssToolbarActions
 import com.langhuan.reader.help.book.bookLogDirOrNull
 import com.langhuan.reader.help.book.bookshelfJson
 import com.langhuan.reader.help.book.effectiveBookSaveDir
@@ -222,8 +221,6 @@ object DesktopPlatformCapabilities : SharedPlatformCapabilities {
         }
     }
 
-    override val rssDirectWindow: Boolean get() = true
-
     /**
      * 书源 URL 登录直开窗 (2026-08-07 用户拍板: 去掉登录中转界面)。
      *
@@ -272,80 +269,6 @@ object DesktopPlatformCapabilities : SharedPlatformCapabilities {
                 Toasters.get().toastLong("内置浏览器窗口打开失败, 已用系统浏览器打开登录页")
             }
             SourceVerificationHelpShared.notifyLoginFinished(sourceKey)
-        }
-        return true
-    }
-
-    /**
-     * RSS 阅读直开窗 (2026-08-07 用户拍板: RSS 阅读页去外壳, 功能移入浏览器窗口工具栏)。
-     *
-     * 独立浏览器窗口带 RSS 按钮组 (收藏/朗读/分享/登录), 动作经 [RssToolbarActions]
-     * 回调回 shared; 窗口关闭 → RSS 路由出栈, 路由出栈 → 窗口关闭 (经 onDetach, 幂等);
-     * 引擎不可用/开窗失败降级系统浏览器并提示。返回 true (桌面端不再渲染页面外壳)。
-     */
-    override fun openRssReader(
-        book: Book,
-        chapter: BookChapter?,
-        url: String,
-        html: String?,
-        headerMap: Map<String, String>,
-        actions: RssToolbarActions,
-        js: String?,
-    ): Boolean {
-        val target = url.ifBlank { book.tocUrl }
-        val engine = DesktopWebViewEngines.get(forceRefresh = true)
-        if (engine == null) {
-            browseUrl(target)
-            runCatching {
-                Toasters.get().toastLong("内置浏览器不可用, 已用系统浏览器打开: ${book.name}")
-            }
-            return true
-        }
-        // 路由/窗口双向联动: 窗口关闭 → 路由出栈; 路由先出栈 (onDetach) → 关窗 (幂等)
-        val detached = AtomicBoolean(false)
-        var handle: WebViewWindowHandle? = null
-        actions.onDetach = {
-            detached.set(true)
-            handle?.close()
-        }
-        handle = engine.openWindow(
-            WebViewWindowRequest(
-                url = url,
-                html = html,
-                title = book.name,
-                cookieTag = book.origin,
-                // RSS 窗口书源菜单: 默认 book 类型 (book/rss 同走 bookSourceDao,
-                // 禁用/删除行为与源类型无关); 确认弹窗显示书源名
-                sourceType = SourceType.book,
-                sourceName = book.originName,
-                rssActions = actions,
-                // 源注入脚本: 对照原版每次网页加载完成后执行 (正文分支与直接加载网址分支
-                // 都经这里执行), 窗口引擎在每次导航完成时回调本处, 经窗口句柄执行脚本
-                onNavigated = {
-                    val script = js
-                    if (!script.isNullOrBlank()) {
-                        scope.launch { handle?.evaluateJavascript(script) }
-                    }
-                },
-                onClosed = {
-                    // 窗口被关闭 → RSS 路由出栈; 但路由先出栈 (onDetach → close) 触发
-                    // 的 close 回调不能再 pop, 否则会误弹 RSS 之下的路由 (reviewer 2026-08-07)
-                    if (!detached.get()) {
-                        scope.launch(Dispatchers.Main) {
-                            AppNavigatorProviders.get().pop()
-                        }
-                    }
-                },
-            )
-        )
-        if (handle == null) {
-            browseUrl(target)
-            runCatching {
-                Toasters.get().toastLong("内置浏览器窗口打开失败, 已用系统浏览器打开: ${book.name}")
-            }
-        } else if (detached.get()) {
-            // 路由已先出栈: 立即关闭刚打开的窗口
-            handle.close()
         }
         return true
     }

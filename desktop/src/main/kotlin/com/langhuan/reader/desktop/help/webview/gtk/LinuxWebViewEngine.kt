@@ -222,7 +222,6 @@ private class GtkWindowHandle(
                 title = request.title,
                 toolbar = GtkToolbar(
                     onAction = { action -> onToolbarAction(action) },
-                    rssActions = request.rssActions,
                     // 确定按钮仅登录/验证模式显示 (三端对齐 Windows)
                     showOk = request.isLogin || request.saveResult,
                     // 书源 key 非空时菜单显示 禁用源/删除源 (2026-08-08)
@@ -252,8 +251,6 @@ private class GtkWindowHandle(
             GtkLoop.post { created.destroy() }
             return
         }
-        // RSS 收藏态反推: shared 侧书架操作完成后经 onStarChanged 更新窗口星图标 (同 Windows)
-        request.rssActions?.onStarChanged = { starred -> created.toolbar?.setStarred(starred) }
         GtkLoop.post {
             created.onLoadChanged = { _, event ->
                 when (event) {
@@ -336,21 +333,6 @@ private class GtkWindowHandle(
                 browseUrl(currentUrl ?: request.url)
             }
 
-            // RSS 模式按钮 (2026-08-07: RSS 阅读去页面外壳, 功能移入窗口工具栏)
-            ToolbarAction.STAR_TOGGLE -> request.rssActions?.onStarToggle()
-
-            ToolbarAction.READ_ALOUD -> request.rssActions?.onReadAloud {
-                // 页面还活着时抓 outerHTML (对照原版 readAloud 的 evaluateJavascript;
-                // GTK executeScript 返回 JS 值 toString, 非 JSON 编码, 无需 unwrapScriptResult)
-                runCatching {
-                    GtkLoop.await { target.executeScript(DesktopWebViewEngineBase.DEFAULT_JS) }
-                }.getOrNull()
-            }
-
-            ToolbarAction.SHARE -> request.rssActions?.onShare()
-
-            ToolbarAction.LOGIN -> request.rssActions?.onLogin()
-
             ToolbarAction.OK -> onOkPressed(
                 reloadForCheck = {
                     target.toolbar?.setLoading(true)
@@ -400,8 +382,6 @@ private class GtkWindowHandle(
         val target = session
         session = null
         if (target != null) {
-            // 先置 disposed 再销毁: 队列残留的 setStarred 任务直接跳过 (防悬垂句柄)
-            target.toolbar?.dispose()
             GtkLoop.post { target.destroy() }
         }
     }

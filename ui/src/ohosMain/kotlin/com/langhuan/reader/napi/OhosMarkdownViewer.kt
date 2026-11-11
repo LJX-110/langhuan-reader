@@ -1,7 +1,7 @@
 package com.langhuan.reader.napi
 
 import com.langhuan.reader.constant.AppLog
-import com.langhuan.reader.web.utils.WebAssetSources
+import com.langhuan.reader.ui.generated.resources.Res
 import kotlin.concurrent.Volatile
 import kotlinx.coroutines.runBlocking
 
@@ -10,7 +10,7 @@ import kotlinx.coroutines.runBlocking
  *
  * # 单一数据源
  * web 资源唯一数据源在 `ui/src/commonMain/composeResources/files/web/help/`
- * (Android assets / 桌面 classpath / iOS / 鸿蒙四端同一份, 见 [WebAssetSources])。
+ * (Android assets / 桌面 classpath / iOS / 鸿蒙四端同一份)。
  * 鸿蒙端 composeResources 打包进 liblanghuan_shared.so 内嵌资源, Web 组件无法直接按路径访问,
  * 故由本对象把模板 + js/css 内联拼成完整 HTML (经 [LanghuanNativeExports.buildMarkdownViewerHtml]
  * 导出给 ArkTS loadData), **不产生任何平台端资源副本**。
@@ -40,8 +40,8 @@ object OhosMarkdownViewer {
         cachedHtml?.let { return it }
         val html = runCatching {
             runBlocking {
-                val assets = WebAssetSources.get()
-                suspend fun read(path: String): String = assets.read(path).decodeToString()
+                suspend fun read(path: String): String =
+                    Res.readBytes("files/$path").decodeToString()
                 val template = read("web/help/markdown_viewer.html")
                 template
                     .replace(MARKED_PLACEHOLDER, escapeScript(read("web/help/js/marked.min.js")))

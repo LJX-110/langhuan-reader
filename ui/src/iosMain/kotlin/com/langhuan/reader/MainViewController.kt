@@ -31,13 +31,9 @@ import com.langhuan.reader.ui.IosPlatformServices
 import com.langhuan.reader.ui.IosNotificationPublisher
 import com.langhuan.reader.ui.book.audio.AudioPlayPlatformProviders
 import com.langhuan.reader.ui.book.audio.SharedAudioPlayPlatformProvider
-import com.langhuan.reader.ui.book.manga.IosMangaReaderPlatform
-import com.langhuan.reader.ui.book.manga.MangaReaderScreenModel
 import com.langhuan.reader.ui.book.read.IosReaderPlatformProvider
 import com.langhuan.reader.ui.book.read.ReaderPlatformProviders
 import com.langhuan.reader.ui.book.source.SourceUiEventBridgeHost
-import com.langhuan.reader.ui.book.video.IosVideoPlayPlatformProvider
-import com.langhuan.reader.ui.book.video.VideoPlayPlatformProviders
 import com.langhuan.reader.ui.association.DeepLinkImportHost
 import com.langhuan.reader.ui.about.notifyAppCrash
 import com.langhuan.reader.ui.about.preferenceUpVersionStore
@@ -74,14 +70,12 @@ import platform.UIKit.UIViewController
  * registerIosProviders), 本函数只补 UI 入口级平台 provider。
  */
 fun MainViewController(): UIViewController {
-    // 平台能力/服务 + 4 个媒体 Provider (对照 Android MainActivity.initializePlatform):
+    // 平台能力/服务 + 2 个媒体 Provider (对照 Android MainActivity.initializePlatform):
     // 均为 object 单例, 在组合之外注册, 系统深浅色切换重组时不重跑
     PlatformCapabilityProviders.register(IosPlatformCapabilities)
     PlatformServiceProviders.register(IosPlatformServices)
     ReaderPlatformProviders.register(IosReaderPlatformProvider)
     AudioPlayPlatformProviders.register(SharedAudioPlayPlatformProvider)
-    MangaReaderScreenModel.Providers.register(IosMangaReaderPlatform)
-    VideoPlayPlatformProviders.register(IosVideoPlayPlatformProvider)
     // 通知点击处理 (解出 userInfo 里的路由 → LaunchRequestBus 导航)。
     // 须在 UI 首帧之前挂上: 冷启动时用户点通知, 系统可能在首帧前就派发 response。
     IosNotificationPublisher.installDelegate()

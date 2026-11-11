@@ -48,13 +48,10 @@ import com.langhuan.reader.model.ActiveReadBookRegistry
 import com.langhuan.reader.model.ActiveReadBookStateProvider
 import com.langhuan.reader.model.AudioPlay
 import com.langhuan.reader.model.Debug
-import com.langhuan.reader.model.anime.VideoSourceDelegateImpl
 import com.langhuan.reader.model.fileBook.BitmapProviderImpl
 import com.langhuan.reader.model.fileBook.BitmapProviders
 import com.langhuan.reader.model.fileBook.ZipFileWrapperFactoryImpl
 import com.langhuan.reader.model.fileBook.ZipFileWrapperFactoryProviders
-import com.langhuan.reader.model.manga.MangaSourceDelegateImpl
-import com.langhuan.reader.model.webBook.PluginSourceDelegates
 import com.langhuan.reader.utils.RegexReplacer
 import com.langhuan.reader.utils.RegexReplacers
 import com.langhuan.reader.utils.RuleRegexes
@@ -583,9 +580,7 @@ fun registerAndroidWebBookProviders() {
     // BookController 下沉新增: 注册 ReadBookStateProvider (commonMain 实现读 ActiveReadBookRegistry,
     // 与 desktop/iOS/鸿蒙同一份, 供 BookController.deleteBook/saveBookProgress)
     ReadBookStateProviders.register(ActiveReadBookStateProvider)
-    // 插件虚拟源取数委派 (漫画/视频虚拟行命中时由 WebBook 四路转交; TVBox 委派由 TvBoxManager.init 追加入表)
-    PluginSourceDelegates.register(MangaSourceDelegateImpl)
-    PluginSourceDelegates.register(VideoSourceDelegateImpl)
+    // 搜索/发现/详情/目录/正文全部由通用规则引擎解析
 }
 
 /**

@@ -7,7 +7,7 @@ import java.net.URI
  * 桌面端 (JVM) 打开外链: 用 [java.awt.Desktop.browse] 启动系统默认浏览器。
  *
  * 替代 app 端 `Intent/Uri` 方式 (Android 专属); 不支持时记 [AppLog] 静默降级。
- * 下沉自桌面端 AboutScreen / ReadRssScreen 等 9+ 处重复实现。
+ * 下沉自桌面端多处重复实现。
  */
 fun browseUrl(url: String): Boolean {
     val uri = url.toBrowseUri() ?: run {

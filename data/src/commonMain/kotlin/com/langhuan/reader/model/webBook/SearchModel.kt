@@ -297,7 +297,6 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
             }
             if (!accepted) return@withLock SourcePageOutcome.Skipped
             try {
-                val filters = callBack.getPluginFilters(request.source)
                 if (!synchronized(stateLock) { isCurrentLocked(request) }) {
                     clearSourceTask(request, self)
                     return@withLock SourcePageOutcome.Skipped
@@ -334,7 +333,6 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                             }
                         },
                         optionSelections = request.selections,
-                        pluginFilters = filters,
                     )
                 }
                 if (!synchronized(stateLock) { isCurrentLocked(request) }) {
@@ -850,13 +848,6 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
 
         /** 取某源已声明选项的当前原始选择 (默认空: 不支持选项注入的实现方) */
         fun getSearchOptions(sourceUrl: String): Map<String, ExploreOptionSelection> = emptyMap()
-
-        /**
-         * 取该源页面会话筛选实例。默认实现 = 无筛选 UI 的调用方 (web API 等): 经唯一入口
-         * [pluginFilterSessionOf] 取源默认实例 (注册表就绪后新建, 不缓存)。
-         */
-        suspend fun getPluginFilters(source: BookSource): PluginFilterSession? =
-            pluginFilterSessionOf(source)
 
         /** 本轮搜索源列表就绪 (在 [search] 里与 [bookSources] 同时赋值)。 */
         fun onSearchSourcesResolved(sources: List<BookSource>) {}

@@ -289,9 +289,6 @@ fun BookSourceManageRoute(
             onSearchBook = { part ->
                 navigator.push(AppRoute.Search(searchScope = SearchScope(part).toString()))
             },
-            onDebug = { part ->
-                navigator.push(AppRoute.BookSourceDebug(part.bookSourceUrl))
-            },
             onLogin = { part ->
                 // 统一登录入口 (对照原 BookSourceAdapter: getBookSource()?.showLoginDialog()):
                 // 源对象由 showSourceLogin 内部按 url 查库, URL 登录直开全屏 WebView;

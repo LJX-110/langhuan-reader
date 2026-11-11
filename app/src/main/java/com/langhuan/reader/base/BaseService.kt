@@ -8,7 +8,6 @@ import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.langhuan.reader.help.LifecycleHelp
 import com.langhuan.reader.help.coroutine.Coroutine
-import com.langhuan.reader.help.i18n.androidAppString
 import com.langhuan.reader.lib.permission.Permissions
 import com.langhuan.reader.lib.permission.PermissionsCompat
 import com.langhuan.reader.utils.LogUtils
@@ -85,12 +84,14 @@ abstract class BaseService : LifecycleService() {
     }
 
     /**
-     * 检测通知权限和后台权限
+     * 检测通知权限和后台权限。
+     *
+     * 不再弹自定义说明窗: 未授权时直接静默降级, 前台服务照常运行,
+     * 只是通知栏控制可能不可用, 由用户自行在系统设置里开启。
      */
     private fun checkPermission() {
         PermissionsCompat.Builder()
             .addPermissions(Permissions.POST_NOTIFICATIONS)
-            .rationale(androidAppString("notification_permission_rationale"))
             .onGranted {
                 if (lifecycleScope.isActive) {
                     startForegroundNotification()
@@ -100,7 +101,6 @@ abstract class BaseService : LifecycleService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             PermissionsCompat.Builder()
                 .addPermissions(Permissions.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-                .rationale(androidAppString("ignore_battery_permission_rationale"))
                 .request()
         }
     }

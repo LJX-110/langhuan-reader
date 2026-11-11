@@ -6,13 +6,13 @@ import com.langhuan.reader.data.entities.HomeSection
 import com.langhuan.reader.data.entities.HomeTab
 import com.langhuan.reader.data.entities.SearchBook
 import com.langhuan.reader.help.HomeTabHelpShared
+import com.langhuan.reader.help.book.isCoreReaderSupported
 import com.langhuan.reader.help.coroutine.IoDispatcher
 import com.langhuan.reader.model.webBook.BookListPager
 import com.langhuan.reader.model.webBook.ExploreOptionSelectionInvalidatedException
 import com.langhuan.reader.model.webBook.ExploreOptionUiState
 import com.langhuan.reader.model.webBook.WebBook.getBookListAwait
 import com.langhuan.reader.model.webBook.mergeExploreOptionDefinitions
-import com.langhuan.reader.model.webBook.pluginFilterSessionOf
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.CoroutineScope
@@ -263,7 +263,7 @@ class HomeViewModelShared(
         val id = section.id
         try {
             val source = appDb.bookSourceDao.getBookSource(section.sourceUrl)
-            if (source == null) {
+            if (source == null || !source.isCoreReaderSupported) {
                 synchronized(state.stateLock) {
                     if (state.sectionGenerations[id] == generation) {
                         _sectionErrorChangedFlow.tryEmit(state.currentTitle to id)
@@ -299,7 +299,6 @@ class HomeViewModelShared(
                         _sectionOptionsChangedFlow.tryEmit(state.currentTitle to id)
                     }
                 },
-                pluginFilters = pluginFilterSessionOf(source),
             )
             val committed = synchronized(state.stateLock) {
                 if (state.sectionGenerations[id] != generation) return@synchronized false
@@ -477,7 +476,7 @@ class HomeViewModelShared(
         val id = section.id
         try {
             val source = appDb.bookSourceDao.getBookSource(section.sourceUrl)
-            if (source == null) {
+            if (source == null || !source.isCoreReaderSupported) {
                 val terminal = synchronized(state.stateLock) {
                     if (state.infiniteGeneration != generation) false
                     else {
@@ -540,7 +539,6 @@ class HomeViewModelShared(
                         throw ExploreOptionSelectionInvalidatedException()
                     }
                 },
-                pluginFilters = pluginFilterSessionOf(source),
             )
             val committed = synchronized(state.stateLock) {
                 if (state.infiniteGeneration != generation) return@synchronized false

@@ -44,6 +44,7 @@ import com.langhuan.reader.help.image.ReaderImageCache
 import com.langhuan.reader.ui.book.read.ReadBookEvents
 import com.langhuan.reader.ui.book.read.ReadBookViewModelShared
 import com.langhuan.reader.ui.book.read.ReadConfigChange
+import com.langhuan.reader.ui.book.read.readerFocusMode
 import com.langhuan.reader.ui.book.read.page.delegate.ScrollPageDelegateCompose
 import com.langhuan.reader.ui.book.read.page.entities.TextPage
 import com.langhuan.reader.ui.book.read.page.entities.column.TextColumn
@@ -52,6 +53,7 @@ import com.langhuan.reader.ui.book.read.page.overlay.TTSHighlightOverlay
 import com.langhuan.reader.ui.compose.platform.LocalEventBusProvider
 import com.langhuan.reader.ui.compose.platform.readerSystemBarPadding
 import com.langhuan.reader.ui.compose.platform.rememberColor
+import com.langhuan.reader.ui.compose.platform.rememberString
 import com.langhuan.reader.utils.formatTimeOfDay
 import com.langhuan.reader.utils.systemCurrentTimeMillis
 import kotlinx.coroutines.flow.collectLatest
@@ -149,8 +151,16 @@ fun PageViewComposable(
     // tipRefreshTick 作为重组驱动：tip 配置事件（STYLE/UP_CONTENT/SYSTEM_UI）到达时
     // 本层顶层重组并重新读 prefs（无 Compose 快照，靠版本号强制重读），显隐/边距变化
     // 后布局系统重新测量子节点，实测高度经 onSizeChanged 上报反哺排版。
-    val headerVisible = headerTipVisible(readTipConfig.headerMode, readBookConfig.hideStatusBar)
-    val footerVisible = readTipConfig.footerMode != 1
+    val headerVisible = !readerFocusMode &&
+        headerTipVisible(readTipConfig.headerMode, readBookConfig.hideStatusBar)
+    val footerVisible = !readerFocusMode && readTipConfig.footerMode != 1
+    // 隐藏时把实测高度归零：页眉/页脚不再组合，但坐标基准仍读上次高度会错位
+    LaunchedEffect(headerVisible) {
+        if (!headerVisible) onHeaderMeasured?.invoke(0)
+    }
+    LaunchedEffect(footerVisible) {
+        if (!footerVisible) onFooterMeasured?.invoke(0)
+    }
     // 分割线颜色：对照 app 端 PageView.upStyle 的 tipDividerColor 解析
     // (-1 主题 divider 色 / 0 正文色 / 其他 自定义色)
     val tipDividerColor = when (readTipConfig.tipDividerColor) {
@@ -249,18 +259,13 @@ fun PageViewComposable(
             if (footerVisible) {
                 FooterTip(
                     textPage = textPage,
-                    readTipConfig = readTipConfig,
                     textColor = style.tipColor,
-                    batteryLevel = batteryLevel,
-                    clockText = clockText,
-                    bookName = bookName,
                     startPaddingDp = readBookConfig.footerPaddingLeft,
                     endPaddingDp = readBookConfig.footerPaddingRight,
                     topPaddingDp = readBookConfig.footerPaddingTop,
                     bottomPaddingDp = readBookConfig.footerPaddingBottom,
                     showDivider = readBookConfig.showFooterLine,
                     dividerColor = tipDividerColor,
-                    refreshTick = tipRefreshTick,
                     modifier = Modifier
                         .fillMaxWidth()
                         .onSizeChanged { onFooterMeasured?.invoke(it.height) },
@@ -495,27 +500,20 @@ private fun TipBar(
  * 布局占位子节点（wrap 高度，含页脚分割线）。
  *
  * 显隐由调用方（[PageViewComposable]）按 [ReadTipConfigShared.footerMode] 决定
- * （0: 显示 / 1: 隐藏，对照原版 isGone）；隐藏时不组合，高度自然为 0。
- * 高度由布局系统测量（wrap = 上下内边距 + tip 文本行高 + 可选分割线），
- * 经调用方 onSizeChanged 上报反哺排版视口（单一来源，无独立预留公式）。
- *
- * @param refreshTick tip 配置刷新版本号（同 [HeaderTip]，槽位内容变更时重读 prefs）
+ * 页脚固定为「本章进度 / 全书进度」两栏，不再读取 tip 槽位配置。
+ * 隐藏时不组合，高度自然为 0；高度由布局系统测量（wrap = 上下内边距 + tip 文本行高
+ * + 可选分割线），经调用方 onSizeChanged 上报反哺排版视口。
  */
 @Composable
 private fun FooterTip(
     textPage: TextPage?,
-    readTipConfig: ReadTipConfigShared,
     textColor: Color,
-    batteryLevel: Int,
-    clockText: String,
-    bookName: String,
     startPaddingDp: Int,
     endPaddingDp: Int,
     topPaddingDp: Int,
     bottomPaddingDp: Int,
     showDivider: Boolean,
     dividerColor: Color,
-    refreshTick: Int,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
@@ -524,24 +522,49 @@ private fun FooterTip(
         if (showDivider) {
             TipDivider(color = dividerColor)
         }
-        TipBar(
-            slots = remember(refreshTick) {
-                listOf(
-                    readTipConfig.tipFooterLeft,
-                    readTipConfig.tipFooterMiddle,
-                    readTipConfig.tipFooterRight,
+        val tipLineHeight = with(LocalDensity.current) {
+            (READ_TIP_TEXT_SIZE_SP * 1.6f).sp.toDp()
+        }
+        val chapterProgress = textPage?.let { page ->
+            val total = page.pageSize
+            if (total > 0) {
+                "${((page.index + 1) * 100 / total).coerceIn(0, 100)}%"
+            } else {
+                "—"
+            }
+        } ?: "—"
+        val bookProgress = textPage?.readProgress ?: "—"
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    start = startPaddingDp.dp,
+                    top = topPaddingDp.dp,
+                    end = endPaddingDp.dp,
+                    bottom = bottomPaddingDp.dp,
                 )
-            },
-            textPage = textPage,
-            textColor = textColor,
-            batteryLevel = batteryLevel,
-            clockText = clockText,
-            bookName = bookName,
-            startPaddingDp = startPaddingDp,
-            endPaddingDp = endPaddingDp,
-            topPaddingDp = topPaddingDp,
-            bottomPaddingDp = bottomPaddingDp,
-        )
+                .heightIn(min = tipLineHeight),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = rememberString("chapter_progress_short") + " " + chapterProgress,
+                color = textColor,
+                fontSize = READ_TIP_TEXT_SIZE_SP.sp,
+                lineHeight = (READ_TIP_TEXT_SIZE_SP * 1.6f).sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = rememberString("book_progress_short") + " " + bookProgress,
+                color = textColor,
+                fontSize = READ_TIP_TEXT_SIZE_SP.sp,
+                lineHeight = (READ_TIP_TEXT_SIZE_SP * 1.6f).sp,
+                maxLines = 1,
+                textAlign = TextAlign.End,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -783,8 +806,16 @@ fun ScrollPageView(
         ).collect { tipRefreshTick++ }
     }
     val density = LocalDensity.current
-    val headerVisible = headerTipVisible(readTipConfig.headerMode, readBookConfig.hideStatusBar)
-    val footerVisible = readTipConfig.footerMode != 1
+    val headerVisible = !readerFocusMode &&
+        headerTipVisible(readTipConfig.headerMode, readBookConfig.hideStatusBar)
+    val footerVisible = !readerFocusMode && readTipConfig.footerMode != 1
+    // 同 PageViewComposable：隐藏时归零实测高度，保证命中/选择坐标基准不残留
+    LaunchedEffect(headerVisible) {
+        if (!headerVisible) onHeaderMeasured?.invoke(0)
+    }
+    LaunchedEffect(footerVisible) {
+        if (!footerVisible) onFooterMeasured?.invoke(0)
+    }
     // 分割线颜色：对照 app 端 PageView.upStyle 的 tipDividerColor 解析
     val tipDividerColor = when (readTipConfig.tipDividerColor) {
         -1 -> rememberColor("divider")
@@ -931,18 +962,13 @@ fun ScrollPageView(
             if (footerVisible) {
                 FooterTip(
                     textPage = textPage,
-                    readTipConfig = readTipConfig,
                     textColor = style.tipColor,
-                    batteryLevel = batteryLevel,
-                    clockText = clockText,
-                    bookName = bookName,
                     startPaddingDp = readBookConfig.footerPaddingLeft,
                     endPaddingDp = readBookConfig.footerPaddingRight,
                     topPaddingDp = readBookConfig.footerPaddingTop,
                     bottomPaddingDp = readBookConfig.footerPaddingBottom,
                     showDivider = readBookConfig.showFooterLine,
                     dividerColor = tipDividerColor,
-                    refreshTick = tipRefreshTick,
                     modifier = Modifier
                         .fillMaxWidth()
                         .onSizeChanged { onFooterMeasured?.invoke(it.height) },

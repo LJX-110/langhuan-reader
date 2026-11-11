@@ -28,7 +28,6 @@ import com.langhuan.reader.help.tts.OhosReadAloudHost
 import com.langhuan.reader.model.ActiveReadBookRegistry
 import com.langhuan.reader.napi.OhosNativeBridge
 import com.langhuan.reader.ui.book.read.ReadBookEvents
-import com.langhuan.reader.ui.book.read.page.AutoPagerCompose
 import com.langhuan.reader.ui.book.read.page.SelectionGeometry
 import com.langhuan.reader.ui.book.read.ReaderDialogEvent
 import com.langhuan.reader.ui.compose.platform.SharedThemeStoreProvider
@@ -112,16 +111,14 @@ object OhosReaderPlatformProvider : ReaderPlatformProvider {
         ReaderImageActionMenu.dismiss()
     }
 
-    /** 阅读页退出: 停止朗读宿主; 停止自动翻页并释放控制器/协程; 收起浮动菜单避免残留 (对照原版 onDestroy → textActionMenu.dismiss)。 */
+    /** 阅读页退出: 停止朗读宿主; 释放控制器/协程; 收起浮动菜单避免残留 (对照原版 onDestroy → textActionMenu.dismiss)。 */
     override fun onExit(screenModel: ReaderScreenModel) {
         OhosReadAloudHost.stop()
-        autoPageStop(screenModel)
         // 只放自己这条绑定 (不经模型取新控制器)
         activeMenuBinding
             ?.takeIf { it.first === screenModel }
             ?.second
             ?.let { releaseMenuController(screenModel, it) }
-        readerAutoPageActive = false
         dismissActionMenus()
         textActions = null
         BackupShared.autoBack()
@@ -230,14 +227,8 @@ object OhosReaderPlatformProvider : ReaderPlatformProvider {
         }
     }
 
-    // 自动翻页面板停止按钮 (对照 app/desktop 端 autoPageStop → stopAutoPage: 停控制器 + 复位开关)
-    override fun autoPageStop(screenModel: ReaderScreenModel) {
-        (activeMenuBinding?.takeIf { it.first === screenModel }?.second?.state as? OhosReadMenuState)
-            ?.stopAutoPage()
-    }
-
-    // 自动翻页滑条抬手 → 重新应用当前 TTS 语速 (对照 app 端 upTtsSpeechRate: 重读配置 +
-    // pause/resume 让新语速立刻作用到当前段; 本方法不写配置, 只按现配置重放)
+    // TTS 语速变更后重新应用当前语速 (重读配置 + pause/resume 让新语速立刻作用到当前段;
+    // 本方法不写配置, 只按现配置重放)
     override fun upTtsSpeechRate(screenModel: ReaderScreenModel) = OhosReadAloudHost.upSpeechRate()
 
     // 经 napi Battery 桥查询 @ohos.batteryInfo.batterySOC; 桥未就绪/超时回落 100 (用户拍板 2026-08: 电量恒显示)
@@ -278,12 +269,6 @@ private class OhosReadMenuState(
     screenModel: ReaderScreenModel,
 ) : BaseReadMenuState(navigator, screenModel) {
 
-    /** 自动翻页控制器协程作用域 (Main)。 */
-    private val autoPageScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-
-    /** 自动翻页控制器 (对照 Desktop/Android, shared AutoPagerCompose 承载)。 */
-    private var autoPager: AutoPagerCompose? = null
-
     // 菜单栏配色 (对照原版 ReadMenu.upColorConfig, 逻辑见 shared createReadMenuColors)
     private val menuTheme: ReadMenuColors
         get() = createReadMenuColors(
@@ -298,64 +283,8 @@ private class OhosReadMenuState(
     override val hasBgImage: Boolean
         get() = hasBgImageByPath(SharedThemeStoreProvider().bgImagePath)
 
-    override fun clickAutoPage() {
-        if (autoPage) {
-            stopAutoPage()
-        } else {
-            startAutoPage()
-            showAutoPagePanel()
-        }
-    }
-
-    /**
-     * 启动自动翻页: 三模式语义与 app/desktop 端一致 (E-Ink 定时整页翻 / 非 E-Ink 揭示动画覆盖层 /
-     * 滚动模式连续滚动), 由 shared [AutoPagerCompose] 驱动 [ReadBookViewModelShared].
-     * 翻到全书末尾自动停 (pager.onEnd)。
-     */
-    private fun startAutoPage() {
-        stopAutoPage()
-        autoPage = true
-        readerAutoPageActive = true
-        autoPager = AutoPagerCompose(
-            viewModel = screenModel.viewModel,
-            scope = autoPageScope,
-            // 每拍现读速度配置 (对照原版每次 postDelayed 现取 ReadBookConfig.autoReadSpeed)
-            autoReadSpeed = {
-                ReadBookConfigProviders.get().autoReadSpeed.coerceAtLeast(1)
-            },
-        ).also { pager ->
-            pager.onEnd = { stopAutoPage() }
-            pager.start()
-        }
-    }
-
-    /** 停止自动翻页: 复位控制器 + 复位开关 (对照 app/desktop 端 stopAutoPage)。 */
-    fun stopAutoPage() {
-        autoPager?.stop()
-        autoPager = null
-        autoPage = false
-        readerAutoPageActive = false
-    }
-
-    override fun clickPre() {
-        stopAutoPage()
-        super.clickPre()
-    }
-
-    override fun clickNext() {
-        stopAutoPage()
-        super.clickNext()
-    }
-
     override fun clickReadAloud() {
-        stopAutoPage()
         OhosReadAloudHost.toggle()
-    }
-
-    /** 释放自动翻页协程作用域 (阅读页退出时由 Provider 调用) */
-    fun dispose() {
-        stopAutoPage()
-        autoPageScope.cancel()
     }
 }
 

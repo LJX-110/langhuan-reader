@@ -53,7 +53,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.langhuan.reader.data.entities.Book
 import com.langhuan.reader.data.entities.BookChapter
-import com.langhuan.reader.ui.book.video.buildChapterDisplayList
 import com.langhuan.reader.data.entities.Bookmark
 import com.langhuan.reader.help.book.isLocalTxt
 import com.langhuan.reader.help.book.simulatedTotalChapterNum

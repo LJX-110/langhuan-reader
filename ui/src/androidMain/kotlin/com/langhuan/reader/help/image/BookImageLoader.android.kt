@@ -24,7 +24,6 @@ import com.langhuan.reader.help.http.OkHttpClientProviders
 import com.langhuan.reader.model.coverBakedCacheDir
 import com.langhuan.reader.model.coverOriginalDir
 import com.langhuan.reader.model.stackBlurBaked
-import com.langhuan.reader.model.manga.MangaModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -258,8 +257,7 @@ fun registerAndroidBookImageLoader(context: Context) {
  * diskCache 走双区 [buildImageDiskCache]: 书架封面落 `filesDir/covers` (与原版 Glide
  * `MultiDiskCacheFactory` 同址), 其余图片落 `cacheDir/image_cache`。
  *
- * [ExperimentalCoilApi] 来自 `MangaModelFetcher.Factory()` (Coil3 把自定义 Fetcher 工厂
- * 标成实验 API; 桌面端同链路的 [buildBookImageLoader] 已是同一写法)。
+ * [ExperimentalCoilApi] 为 Coil3 自定义 Fetcher 工厂所需。
  */
 @OptIn(ExperimentalCoilApi::class)
 internal fun buildBookImageLoader(
@@ -289,9 +287,6 @@ internal fun buildBookImageLoader(
                     },
                 )
             )
-            // 漫画页: 经 BookHelp 缓存 + AnalyzeUrl 下载 + 解密取字节 (裸 url 走不通防盗链/解密站点)
-            add(MangaModelKeyer(), MangaModel::class)
-            add(MangaModelFetcher.Factory())
             // GIF: API 28+ 用 AnimatedImageDecoder(还支持 animated WebP/HEIF), 低版本用 GifDecoder(Movie)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 add(AnimatedImageDecoder.Factory())

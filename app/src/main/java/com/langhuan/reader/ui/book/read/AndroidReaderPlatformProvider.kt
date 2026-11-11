@@ -31,7 +31,6 @@ import com.langhuan.reader.help.book.isLocal
 import com.langhuan.reader.help.book.isLocalTxt
 import com.langhuan.reader.help.book.isNotShelf
 import com.langhuan.reader.help.config.AppConfig
-import com.langhuan.reader.help.config.ReadBookConfig
 import com.langhuan.reader.help.config.ReadBookConfigProviders
 import com.langhuan.reader.help.config.ThemeConfig
 import com.langhuan.reader.help.i18n.androidAppString
@@ -39,7 +38,6 @@ import com.langhuan.reader.help.storage.Backup
 import com.langhuan.reader.lib.theme.bottomBackground
 import com.langhuan.reader.model.ReadAloud
 import com.langhuan.reader.service.BaseReadAloudService
-import com.langhuan.reader.ui.book.read.page.AutoPagerCompose
 import com.langhuan.reader.ui.book.read.page.SelectionGeometry
 import com.langhuan.reader.ui.compose.component.AppAutoCompleteField
 import com.langhuan.reader.ui.compose.dialogs.alert
@@ -87,11 +85,7 @@ class AndroidReaderPlatformProvider(
             (it.state as? AndroidReaderMenuState)?.let { state -> screenModel to state }
     }
 
-    // ===== 自动翻页面板平台动作 (对照原版 AutoReadDialog 的 CallBack + 平台副作用) =====
-
-    override fun autoPageStop(screenModel: ReaderScreenModel) {
-        activeMenuState?.takeIf { it.first === screenModel }?.second?.stopAutoPage()
-    }
+    // ===== 朗读语速同步 =====
 
     override fun upTtsSpeechRate(screenModel: ReaderScreenModel) {
         activeMenuState?.takeIf { it.first === screenModel }?.second?.upTtsSpeechRate()
@@ -220,12 +214,10 @@ class AndroidReaderPlatformProvider(
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         batteryReceiver = receiver
-        // 注册生命周期观察者: 退后台停自动翻页 + 自动备份 (对照原版 onPause 的
-        // autoPageStop / Backup.autoBack)。计时/落库/取消预下载改由 shared
-        // 本页 Lifecycle 统一驱动 (OnRouteLifecycle), 此处不再转发
+        // 注册生命周期观察者: 退后台自动备份 (对照原版 onPause 的 Backup.autoBack)。
+        // 计时/落库/取消预下载改由 shared 本页 Lifecycle 统一驱动 (OnRouteLifecycle), 此处不再转发
         val observer = object : DefaultLifecycleObserver {
             override fun onPause(owner: LifecycleOwner) {
-                activeMenuState?.second?.stopAutoPage()
                 if (!BuildConfig.DEBUG) {
                     Backup.autoBack(activity)
                 }
@@ -235,8 +227,7 @@ class AndroidReaderPlatformProvider(
         lifecycleObserver = observer
     }
 
-    /**
-     * 宿主重绑 (当前 Activity 被重建、模型仍保留) 时成对收回旧绑定: 停自动翻页与页面变化订阅,
+    /** 宿主重绑 (当前 Activity 被重建、模型仍保留) 时成对收回旧绑定: 停页面变化订阅,
      * 并清掉 activeMenuState 里的旧状态 —— 否则旧状态在 `init` 里起的订阅不停,
      * 同一 screenModel 会有两份回调 (不只多一个对象), 且旧状态仍指向已销毁的 Activity。
      */
@@ -246,7 +237,7 @@ class AndroidReaderPlatformProvider(
     ) {
         val state = (controller as? AndroidReaderMenuController)?.state as? AndroidReaderMenuState
             ?: return
-        // 本窗口的当前菜单: 平台动作 (自动翻页停止/朗读速率/电量) 按它定位
+        // 本窗口的当前菜单: 平台动作 (朗读速率/电量) 按它定位
         activeMenuState = screenModel to state
         // 页面变化订阅: 与 releaseMenuController 成对启停
         state.startPageChangedWatch()
@@ -258,23 +249,18 @@ class AndroidReaderPlatformProvider(
     ) {
         val state = (controller as? AndroidReaderMenuController)?.state as? AndroidReaderMenuState
             ?: return
-        state.stopAutoPage()
         state.stopPageChangedWatch()
         if (activeMenuState?.first === screenModel && activeMenuState?.second === state) {
             activeMenuState = null
-            readerAutoPageActive = false
         }
     }
 
     override fun onExit(screenModel: ReaderScreenModel) {
-        // 退出阅读页: 先停自动翻页 (对照原版返回键 → autoPageStop) + 停页面变化订阅,
-        // 再调 exitReaderWindow 清除常亮与系统栏状态, 避免 stopAutoPage 的常亮回落重加 FLAG_KEEP_SCREEN_ON
+        // 退出阅读页: 停页面变化订阅, 再调 exitReaderWindow 清除常亮与系统栏状态
         if (activeMenuState?.first === screenModel) {
-            activeMenuState?.second?.stopAutoPage()
             activeMenuState?.second?.stopPageChangedWatch()
             activeMenuState = null
         }
-        readerAutoPageActive = false
         activity.exitReaderWindow()
         // 与 onEnter 的幂等注销一致包 runCatching: receiver 已被别的路径注销时 unregister 会抛异常
         batteryReceiver?.let { runCatching { activity.unregisterReceiver(it) } }
@@ -421,9 +407,6 @@ private class AndroidReaderMenuState(
 
     override var titleBarAdditionVisible by mutableStateOf(AppConfig.showReadTitleBarAddition)
 
-    // 自动翻页控制器 (对照 app 端 ReadView.autoPager 的 AutoPager; 由 shared AutoPagerCompose 承载)
-    private var autoPager: AutoPagerCompose? = null
-
     // 滚动模式朗读重定位: 暂停期间页面是否变化 (对照原版 ReadBookActivity.pageChanged)
     private var aloudPageChanged = false
 
@@ -453,8 +436,6 @@ private class AndroidReaderMenuState(
     }
 
     override fun show() {
-        // 自动翻页运行时点屏幕的菜单重定向已上移 shared (ReaderScreenModel.showMenu:
-        // autoPage → ReaderDialogEvent.AutoRead → ReaderRoute 渲染 AutoReadPanelDialogHost)
         showNormalMenu()
     }
 
@@ -515,70 +496,7 @@ private class AndroidReaderMenuState(
     // onTopMenuAction/upSourceAction/upTopMenu/onSourceAction/onSeekStop 等与父类同实现或
     // 已由 shared 对话框承接, 全部统一走父类 (含 KEYWORD_HIGHLIGHT: 收菜单后进关键词高亮管理页)
 
-    // 自动翻页: 切换状态 + 停止朗读 (对照 app 端 ReadBookActivity.autoPage)
-    override fun clickAutoPage() {
-        if (autoPage) {
-            stopAutoPage()
-        } else {
-            // 开启前先停朗读 (对照原版 autoPage() 第一行 ReadAloud.stop)
-            ReadAloud.stop(activity)
-            startAutoPage()
-        }
-    }
-
-    /**
-     * 启动自动翻页: 对照原版 AutoPager 三模式——
-     * - E-Ink: 定时整页翻
-     * - 非 E-Ink 翻页模式: clip 揭示动画 + accent 色 1px 进度线 (ReadViewComposable 覆盖层绘制)
-     * - 滚动模式: 连续滚动 (每拍小步长推进, 经 delegate.onAutoScrollBy 行级折算驱动)
-     * 翻到全书末尾自动停; 手势翻页期间由 delegate 钩子暂停/恢复/复位 (对照原版 onScrollAnimStart/Stop)
-     */
-    private fun startAutoPage() {
-        stopAutoPage()
-        autoPage = true
-        readerAutoPageActive = true
-        autoPager = AutoPagerCompose(
-            viewModel = screenModel.viewModel,
-            scope = activity.lifecycleScope,
-            // 每拍现读速度配置 (对照原版每次 postDelayed 现取 ReadBookConfig.autoReadSpeed)
-            autoReadSpeed = { ReadBookConfig.autoReadSpeed.coerceAtLeast(1) },
-        ).also { pager ->
-            pager.onEnd = { stopAutoPage() }
-            pager.start()
-        }
-        // 自动翻页期间强制常亮 (对照原版 autoPage(): screenTimeOut = -1L + screenOffTimerStart)
-        activity.setReaderAutoPageKeepScreenOn(true)
-        // 收菜单 + 弹控制面板 (基类实现; 顶层 autoPage 已置 true, 不会被路由层 clear 吃掉)
-        showAutoPagePanel()
-    }
-
-    /** 停止自动翻页: 复位控制器 + 收起控制面板 */
-    fun stopAutoPage() {
-        val wasRunning = autoPager != null
-        autoPager?.stop()
-        autoPager = null
-        autoPage = false
-        readerAutoPageActive = false
-        // 恢复 keepLight 配置的常亮计时 (对照原版 autoPageStop(): upScreenTimeOut)
-        if (wasRunning) activity.setReaderAutoPageKeepScreenOn(false)
-    }
-
-    override fun clickPre() {
-        // 手动切章时停自动翻页
-        stopAutoPage()
-        super.clickPre()
-    }
-
-    override fun clickNext() {
-        // 手动切章时停自动翻页
-        stopAutoPage()
-        super.clickNext()
-    }
-
-    // 朗读: 未运行→开始, 暂停→恢复, 运行→暂停 (对照 app 端 ReadBookActivity.onClickReadAloud)
     override fun clickReadAloud() {
-        // 对照原版 onClickReadAloud 第一行 autoPageStop()
-        stopAutoPage()
         when {
             !BaseReadAloudService.isRun -> {
                 ReadAloud.upReadAloudClass()
@@ -636,10 +554,6 @@ private class AndroidReaderMenuState(
     // 翻页动画选择器已删除: 原版该选择器回调忽略索引 (selector { _, _ -> success() }),
     // 选完不写任何动画值, 仅发 PAGE_ANIM + LOAD_CONTENT —— 属于无效的死 UI。
     // 翻页动画统一在界面设置弹窗 (ReadStyleScreen 的 5 个单选项) 配置。
-
-    // 自动翻页控制面板 (对照原版 AutoReadDialog: 速度滑条 + 目录/主菜单/停止/设置)
-    // 已上移 shared: 面板由 ReaderRoute 渲染 AutoReadPanelDialogHost,
-    // 本端只需提供 autoPageStop / upTtsSpeechRate 平台动作 (见 Provider 覆写)
 
     // 对照原版 ReadAloudDialog.upTtsSpeechRate: 新语速要 pause+resume 才作用到当前段
     fun upTtsSpeechRate() {

@@ -13,8 +13,6 @@ import com.langhuan.reader.data.entities.BookSource
 import com.langhuan.reader.data.entities.SearchBook
 import com.langhuan.reader.help.book.addType
 import com.langhuan.reader.help.book.isAudio
-import com.langhuan.reader.help.book.isRss
-import com.langhuan.reader.help.book.isVideo
 import com.langhuan.reader.help.config.AppConfigProviders
 import com.langhuan.reader.help.showSourceLogin
 import com.langhuan.reader.help.toast.Toasters
@@ -22,11 +20,11 @@ import com.langhuan.reader.ui.book.explore.ExploreShowScreen
 import com.langhuan.reader.ui.book.explore.ExploreShowScreenModel
 import com.langhuan.reader.ui.book.explore.ExploreShowUiActions
 import com.langhuan.reader.ui.book.explore.ExploreShowUiEvent
-import com.langhuan.reader.ui.book.explore.PluginFilterSource
 import com.langhuan.reader.ui.book.search.SearchScope
 import com.langhuan.reader.ui.bookshelf.LocalBookCoverSlot
 import com.langhuan.reader.ui.bookshelf.LocalCoverRatioLayout
 import com.langhuan.reader.ui.bookshelf.ShelfVideoItem
+import com.langhuan.reader.ui.book.search.toBookItemUi
 import com.langhuan.reader.ui.bookshelf.toCoverBook
 import com.langhuan.reader.ui.compose.component.ExploreOptionsRow
 import com.langhuan.reader.ui.dialog.NumberPickerDialog
@@ -174,21 +172,6 @@ fun ExploreShowRoute(
             )
         }
     }
-    // 筛选入口目标与实例 (实例被替换时同样重发): 仅"筛选"分类页推源, 其余分类/非插件源推 null;
-    // 实例缺失 (服务未注册/未声明筛选器) 时推 null 实例, 入口行零行。
-    LaunchedEffect(vm) {
-        vm.pluginFiltersVersion.collect {
-            screenModel.dispatch(
-                ExploreShowUiEvent.PluginFilterSourceChanged(
-                    vm.bookSource
-                        ?.takeIf { vm.isPluginFilterKind }
-                        ?.let { PluginFilterSource(it.bookSourceUrl, it.bookSourceName) },
-                    vm.pluginExploreFilters,
-                )
-            )
-        }
-    }
-
     val state by screenModel.state.collectAsState()
 
     // 错误详情对话框状态 (对照 Activity.onFooterClickImpl 的 alert)
@@ -290,8 +273,6 @@ fun ExploreShowRoute(
                     return
                 }
                 when {
-                    book.isVideo -> navigator.push(AppRoute.VideoPlay(book.toRouteRef()))
-                    book.isRss -> navigator.push(AppRoute.ReadRss(book.toRouteRef()))
                     // 音频书直达播放页 (与书架 startActivityForBook 分流一致)
                     book.isAudio -> navigator.push(
                         AppRoute.AudioPlay(book.toRouteRef()),
@@ -315,18 +296,6 @@ fun ExploreShowRoute(
                 vm.explore(true)
             }
 
-            // 入口行"重置": 换新默认会话实例 (实例经 pluginFiltersVersion 重新下发) 后重载第 1 页
-            override fun onPluginFiltersReset() {
-                vmScope.launch {
-                    vm.resetPluginExploreFilters()
-                    screenModel.dispatch(ExploreShowUiEvent.ClearBooks)
-                    vm.explore(true)
-                }
-            }
-
-            override fun onPluginFilterEditingChanged(editing: Boolean) {
-                if (editing) vm.pausePagination() else vm.resumePagination()
-            }
         }
     }
 
@@ -386,14 +355,15 @@ fun ExploreShowRoute(
             },
             // 视频卡: 复用 ShelfVideoItem (item_explore_video 的 shared Compose 版), 封面走 LocalBookCoverSlot
             videoItemSlot = { book, inBookshelf, onClick, onLongClick ->
+                val coverBook = remember(book, inBookshelf) { book.toCoverBook(inBookshelf) }
                 ShelfVideoItem(
-                    book = book.toCoverBook(inBookshelf),
+                    book = book.toBookItemUi(),
                     coverReloadTick = state.bookshelfVersion,
                     onClick = onClick,
                     onLongClick = onLongClick,
                     inBookshelf = inBookshelf,
-                    coverSlot = { b, modifier, coverRatio, coverReloadTick ->
-                        LocalBookCoverSlot.current(b, modifier, coverRatio, coverReloadTick)
+                    coverSlot = { _, modifier, coverRatio, coverReloadTick ->
+                        LocalBookCoverSlot.current(coverBook, modifier, coverRatio, coverReloadTick)
                     },
                 )
             },

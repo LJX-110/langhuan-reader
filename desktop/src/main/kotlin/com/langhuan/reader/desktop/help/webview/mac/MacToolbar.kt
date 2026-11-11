@@ -1,7 +1,6 @@
 package com.langhuan.reader.desktop.help.webview.mac
 
 import com.sun.jna.Pointer
-import com.langhuan.reader.help.RssToolbarActions
 import com.langhuan.reader.desktop.help.webview.BrowserToolbar
 import com.langhuan.reader.desktop.help.webview.ToolbarAction
 import com.langhuan.reader.desktop.help.webview.mac.ObjC.NSRect
@@ -11,26 +10,22 @@ import com.langhuan.reader.desktop.help.webview.mac.ObjC.sel
 import com.langhuan.reader.desktop.help.webview.mac.ObjC.void
 
 /**
- * AppKit 工具栏 (NSView 手工 frame 布局): 返回/前进/刷新/确定 (+RSS 组 收藏/朗读/分享/登录)
+ * AppKit 工具栏 (NSView 手工 frame 布局): 返回/前进/刷新/确定
  * + 菜单按钮 (⋯) + 细进度条。
  *
  * 行为对照 Windows [com.langhuan.reader.desktop.help.webview.win.WebView2Toolbar] (2026-08-07 三端一致):
- * - 按钮全部图标 (Mac 保持符号字符风格): ← → ⟳ ✓ ★/☆ ♪ ⤴ ✉ ⋯;
+ * - 按钮全部图标 (Mac 保持符号字符风格): ← → ⟳ ✓ ⋯;
  * - 菜单按钮右对齐窗口右缘 (NSViewMinXMargin), 左组按钮靠左顺序排列 (NSViewMaxXMargin);
  * - 菜单无刷新项 (工具栏已有刷新按钮), 仅 浏览器打开/拷贝 URL;
  *   + sourceKey 非空时额外显示 禁用源/删除源 (对照原版 web_view.xml, 2026-08-08);
- * - RSS 模式 (rssActions 非空): 额外显示 收藏/朗读/分享/登录 按钮, 动作回调回 shared,
- *   星收藏态经 [setStarred] 由 shared 侧 onStarChanged 反推更新。目录不入工具栏
- *   (目录弹层是主窗口 Compose 弹层, 会被 RSS 独立窗口遮挡)。
  *
  * 按钮经 target-action 回调 (动态子类); 菜单按钮 action 回调内直接
  * [NSMenu popUpMenuPositioningItem:atLocation:inView:] 弹出 (macOS 10.6+, 左键可用);
  * 窗口 resize 时用 autoresizingMask 自适应。
- * **方法必须在主线程 (EDT) 调用** ([setStarred] 除外: 任意线程, 内部经 [CocoaLoop] 归队)。
+ * **方法必须在主线程 (EDT) 调用**。
  */
 internal class MacToolbar(
     override var onAction: ((ToolbarAction) -> Unit)?,
-    private val rssActions: RssToolbarActions? = null,
     private val showOk: Boolean = true,
     /** 书源 key (cookieTag): 非空时溢出菜单显示 禁用源/删除源 (对照原版 web_view.xml, 2026-08-08)。 */
     private val sourceKey: String? = null,
@@ -46,13 +41,6 @@ internal class MacToolbar(
     private val forwardBtn: Pointer
     private val refreshBtn: Pointer
     private val okBtn: Pointer?
-
-    /** RSS 收藏按钮 (仅 rssActions 非空时存在)。 */
-    private val starBtn: Pointer?
-
-    /** 窗口销毁后置位: 队列里残留的状态任务直接跳过, 防悬垂句柄 (2026-08-07)。 */
-    @Volatile
-    private var disposed = false
 
     /** 菜单按钮 (⋯, 右对齐窗口右缘)。 */
     private val menuBtn: Pointer
@@ -124,45 +112,6 @@ internal class MacToolbar(
         okBtn = if (showOk) {
             button("\u2713", 116.0, BTN_Y, BTN_W, BTN_H, ToolbarAction.OK, NSViewMaxXMargin)
         } else null
-
-        // RSS 模式按钮组 (2026-08-07: RSS 阅读去页面外壳, 功能移入窗口工具栏);
-        // 无确定按钮时 RSS 组从 116 起排, 不留空位
-        val rssStartX = if (showOk) 152.0 else 116.0
-        starBtn = if (rssActions != null) {
-            button(
-                if (rssActions.starred) "\u2605" else "\u2606", rssStartX, BTN_Y, BTN_W, BTN_H,
-                ToolbarAction.STAR_TOGGLE, NSViewMaxXMargin,
-            )
-        } else null
-        if (rssActions != null) {
-            button(
-                "\u266A",
-                rssStartX + 36.0,
-                BTN_Y,
-                BTN_W,
-                BTN_H,
-                ToolbarAction.READ_ALOUD,
-                NSViewMaxXMargin
-            )
-            button(
-                "\u2934",
-                rssStartX + 72.0,
-                BTN_Y,
-                BTN_W,
-                BTN_H,
-                ToolbarAction.SHARE,
-                NSViewMaxXMargin
-            )
-            button(
-                "\u2709",
-                rssStartX + 108.0,
-                BTN_Y,
-                BTN_W,
-                BTN_H,
-                ToolbarAction.LOGIN,
-                NSViewMaxXMargin
-            )
-        }
 
         // 菜单按钮 (⋯) 右对齐窗口右缘 (假想宽 1000: 1000 - MARGIN - BTN_W = 960)
         menuBtn = menuButton()
@@ -266,21 +215,6 @@ internal class MacToolbar(
     /** 加载状态: 进度条显示/隐藏。 */
     override fun setLoading(value: Boolean) {
         void(progress, "setHidden", if (value) 0L else 1L)
-    }
-
-    /** RSS 收藏态: 星图标 ★/☆ 切换 (任意线程可调, 经 [CocoaLoop] 归队到 EDT)。 */
-    override fun setStarred(starred: Boolean) {
-        val btn = starBtn ?: return
-        CocoaLoop.post {
-            // 销毁后入队的任务直接跳过 (防悬垂 NSButton)
-            if (disposed) return@post
-            void(btn, "setTitle:", ns(if (starred) "\u2605" else "\u2606"))
-        }
-    }
-
-    /** 窗口销毁时由引擎调用: 置位后 setStarred 队列任务不再触碰已释放控件。 */
-    override fun dispose() {
-        disposed = true
     }
 
     /** 进度 0.0~1.0。 */

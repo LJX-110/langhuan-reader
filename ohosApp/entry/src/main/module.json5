@@ -152,35 +152,9 @@
               {
                 "type": "text/xml"
               },
-              // 视频投递入口: 逐条列具体 MIME (本 SDK modulecheck 将 skills.uris[].type 定义为
-              // 自由字符串, 无通配匹配依据, 不用 video/* 通配)。申报以播放链承诺为界:
-              // 文件容器按本机 SDK @ohos.multimedia.media.d.ts AVPlayer.url/fdSrc 明文
-              // "The video formats MP4, MPEG-TS, and MKV are supported" 申报 video/mp4 /
-              // video/x-matroska / video/mp2t; 同段明文 "WebM is no longer supported since
-              // API version 11", webm 不申报; mov/flv/avi 不在承诺的容器清单, 不申报。
-              // m3u8 仅限 http/https 两条 (官方隐式 Want 匹配契约: want 的 uri 与 type 双非空
-              // 时条目内 scheme 与 type 须均匹配): 网络 HLS 进播放链 (SDK
-              // createMediaSourceWithUrl 明文支持 HLS), 本地 .m3u8 播放列表文本不在文件容器
-              // 承诺内, 不申报本地入口。
+              // 视频播放已移除, 不再申报视频 MIME 入口。
               // 上面的 application/octet-stream 保留不动: 投递方报不出具体类型时靠它兜底,
-              // 命不命中视频由 KMP 侧按扩展名 / want.type 再判一次。
-              {
-                "type": "video/mp4"
-              },
-              {
-                "type": "video/x-matroska"
-              },
-              {
-                "type": "video/mp2t"
-              },
-              {
-                "scheme": "http",
-                "type": "application/vnd.apple.mpegurl"
-              },
-              {
-                "scheme": "https",
-                "type": "application/vnd.apple.mpegurl"
-              }
+              // 视频等不支持类型由 KMP 侧按扩展名拒绝并提示。
             ]
           },
           // 接收其它应用分享的内容 (官方「应用内处理分享内容」契约): actions 配
@@ -203,8 +177,7 @@
           // - 压缩 general.zip-archive / general.tar-archive / org.gnu.gnu-zip-archive /
           //   org.gnu.gnu-zip-tar-archive (共有解包实现支持的四类; rar/7z/bz2/xz/lzma
           //   无 native 解码, 不申报)。
-          // - 视频 general.mpeg-4 / org.matroska.mkv / general.ts (AVPlayer 承诺的三个
-          //   文件容器; general.video 大类与 mov/flv/webm 不在承诺内, 不申报)。
+          // 视频播放已移除, 不再申报视频 UTD。
           // 不配 entities: 官方分享接收示例只给 actions+uris, 多声明一个无法确认会被满足的
           // required entity 反而可能匹配不上。
           {
@@ -260,21 +233,6 @@
               {
                 "scheme": "file",
                 "utd": "org.gnu.gnu-zip-tar-archive",
-                "maxFileSupported": 1
-              },
-              {
-                "scheme": "file",
-                "utd": "general.mpeg-4",
-                "maxFileSupported": 1
-              },
-              {
-                "scheme": "file",
-                "utd": "org.matroska.mkv",
-                "maxFileSupported": 1
-              },
-              {
-                "scheme": "file",
-                "utd": "general.ts",
                 "maxFileSupported": 1
               }
             ]

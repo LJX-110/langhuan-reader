@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -27,37 +28,54 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.langhuan.reader.constant.PreferKey
+import com.langhuan.reader.help.config.PreferenceProviders
 import com.langhuan.reader.ui.compose.component.AppDialogScaffold
 import com.langhuan.reader.ui.compose.component.AppTextButton
 import com.langhuan.reader.ui.compose.component.LanghuanDivider
-import com.langhuan.reader.ui.compose.platform.LocalEventBusProvider
+import com.langhuan.reader.ui.compose.component.LanghuanSegmentedControl
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
 import com.langhuan.reader.ui.compose.theme.LanghuanThemePreset
 import com.langhuan.reader.ui.compose.theme.LanghuanThemes
+import com.langhuan.reader.ui.root.PlatformCapabilityProviders
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.cancel
 import com.langhuan.reader.ui.generated.resources.langhuan_skin
-import com.langhuan.reader.ui.generated.resources.langhuan_skin_summary
 import com.langhuan.reader.ui.generated.resources.ok
+import com.langhuan.reader.ui.generated.resources.theme_mode_dark
+import com.langhuan.reader.ui.generated.resources.theme_mode_follow
+import com.langhuan.reader.ui.generated.resources.theme_mode_light
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * 皮肤选择：12 套双色主题，点「确定」后写库并重建主题生效（点选行只改选中态）。
+ * 皮肤面板：顶部三段明暗档位，下方 12 套双色主题。
  *
- * 只写入皮肤下标并触发主题重建，不碰读者的正文纸张设置——
- * 换肤永远不应该改变正在读的那一页的颜色。
+ * 点「确定」后先写明暗档位与皮肤下标，再走平台 applyDayNight 重算主题并广播重建。
+ * 只写入皮肤与明暗，不碰读者的正文纸张设置——换肤永远不应该改变正在读的那一页的颜色。
  */
 @Composable
 fun LanghuanSkinDialog(onDismiss: () -> Unit) {
     val colors = AppTheme.colors
-    val eventBus = LocalEventBusProvider.current
     var selected by remember { mutableIntStateOf(LanghuanThemes.currentIndex()) }
+    var selectedMode by remember {
+        mutableIntStateOf(
+            when (PreferenceProviders.get().getStringOrNull(PreferKey.themeMode)) {
+                "0" -> 0
+                "2" -> 2
+                else -> 1
+            }
+        )
+    }
+    val modeOptions = listOf(
+        stringResource(Res.string.theme_mode_follow),
+        stringResource(Res.string.theme_mode_light),
+        stringResource(Res.string.theme_mode_dark),
+    )
 
     AppDialogScaffold(
         onDismissRequest = onDismiss,
         title = stringResource(Res.string.langhuan_skin),
-        subtitle = stringResource(Res.string.langhuan_skin_summary),
         bottomBar = {
             Spacer(Modifier.weight(1f))
             AppTextButton(
@@ -68,12 +86,20 @@ fun LanghuanSkinDialog(onDismiss: () -> Unit) {
             Spacer(Modifier.width(DesignTokens.spacingDefault))
             AppTextButton(text = stringResource(Res.string.ok)) {
                 LanghuanThemes.select(selected)
-                // 主题色在 AppTheme 读取层解析，写库后广播重建才能即时换肤
-                eventBus.emitRecreate()
+                PreferenceProviders.get().putString(PreferKey.themeMode, selectedMode.toString())
+                // 明暗档位与皮肤一起落库后重算主题并广播重建，避免两次重建
+                PlatformCapabilityProviders.get().applyDayNight()
                 onDismiss()
             }
         },
     ) {
+        LanghuanSegmentedControl(
+            options = modeOptions,
+            selectedIndex = selectedMode,
+            onSelect = { selectedMode = it },
+            modifier = Modifier.padding(horizontal = DesignTokens.spacingDefault),
+        )
+        Spacer(Modifier.height(DesignTokens.spacingDefault))
         LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false)) {
             itemsIndexed(LanghuanThemes.all) { index, preset ->
                 SkinRow(

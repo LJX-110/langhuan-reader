@@ -274,20 +274,9 @@ dependencies {
     // room-ktx 2.8.4 不发布 jvm 变体 (Android 专属), 桌面端改用 room-runtime 的 useWriterTransaction
     // shared.commonMain 已 api(libs.room.runtime), 桌面端通过传递依赖可见, 无需显式声明
 
-    // ===== 桌面扩展加载 (extension loader 依赖, 坐标经 Suwayomi-Server 实证) =====
-    // APK 安装包解析链: manifest 二进制 XML (apk-parser) + v1/v2/v3 签名校验 (apksig,
-    // 8.x/9.x 只发布在 Google Maven, settings 已配 google(); Central 停在 2.3.0)。
-    implementation(libs.apk.parser)
-    implementation(libs.apksig)
-    // dex→jar 转换 (DexJarConverter / CtorSiteFixer): dex2jar + ASM
-    implementation(libs.dex.translator)
-    implementation(libs.dex.tools)
-    implementation(libs.asm)
-
-    // 测试: WebView2 消息泵/环境/窗口创建闭环验证 (修复"startBrowser 首次调用打不开")
+    // ===== 测试 =====
+    // WebView2 消息泵/环境/窗口创建闭环验证 (修复"startBrowser 首次调用打不开")
     testImplementation(libs.junit)
-    // 扫站排查用例直接构造/解析 TVBox 站点结果 JSON (与 :data jvm 侧同源构件)
-    testImplementation(libs.json)
     // Compose UI 测试 (compose.desktop.uiTestJUnit4 已弃用转 error, 直接声明同版本坐标;
     // 版本跟 composeMultiplatform 走, 与插件展开值一致)
     testImplementation(
@@ -298,16 +287,11 @@ dependencies {
 }
 
 // 测试 JVM 读的是自身的系统属性: 命令行 -D / 环境变量只到 Gradle 进程, 不转发则测试里
-// 一律读到默认值 (TestNetwork 联网闸门静默 skip, 扫测参数静默失效)。需转发的键集中登记。
+// 一律读到默认值 (TestNetwork 联网闸门静默 skip)。需转发的键集中登记。
 val forwardedTestProps = listOf(
     "langhuan.networkTests",
     "langhuan.debug",
     "langhuan.desktop.debug",
-    "langhuan.tvbox.sweep.configUrl",
-    "langhuan.tvbox.sweep.sites",
-    "langhuan.tvbox.sweep.parallelism",
-    "langhuan.tvbox.sweep.timeoutMs",
-    "langhuan.tvbox.sweep.searchKeys",
 )
 
 /** `langhuan.networkTests` → `LANGHUAN_NETWORK_TESTS` (与环境变量形式的闸门开关同名)。 */
@@ -332,7 +316,7 @@ tasks.withType<Test>().configureEach {
             systemProperty(key, provider.get())
         }
     }
-    // 全站扫测多路并行, 单站点大响应 JSON 解析峰值高于默认 512m
+    // 集成测试的大响应 JSON 解析峰值高于默认 512m
     maxHeapSize = "2g"
 }
 

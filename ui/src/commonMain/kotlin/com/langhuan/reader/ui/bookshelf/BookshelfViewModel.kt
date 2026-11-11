@@ -6,6 +6,7 @@ import com.langhuan.reader.data.AppDbProviders
 import com.langhuan.reader.data.entities.Book
 import com.langhuan.reader.data.entities.BookGroup
 import com.langhuan.reader.data.entities.getRealBookSort
+import com.langhuan.reader.help.book.isCoreReaderSupported
 import com.langhuan.reader.help.book.isLocal
 import com.langhuan.reader.help.casUpdate
 import com.langhuan.reader.help.config.AppConfigProviders
@@ -14,6 +15,7 @@ import com.langhuan.reader.help.service.UpdateBookCallback
 import com.langhuan.reader.help.service.UpdateBookCallbacks
 import com.langhuan.reader.help.service.UpdateBookShared
 import com.langhuan.reader.ui.root.screenModelScope
+import com.langhuan.reader.uimodel.ShelfStateUi
 import com.langhuan.reader.utils.FlowBus
 import com.langhuan.reader.utils.cnCompare
 import kotlinx.atomicfu.atomic
@@ -21,15 +23,18 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlin.concurrent.Volatile
 
@@ -143,6 +148,43 @@ class BookshelfViewModel {
     // 正在刷新书籍的 url 集合 (对照 app 端 BaseBookshelfState.isRefreshing/bookUrlRefreshList)
     private val _refreshingUrls = MutableStateFlow<Set<String>>(emptySet())
     val refreshingUrls: StateFlow<Set<String>> = _refreshingUrls.asStateFlow()
+
+    /**
+     * 书架页面展示状态 (P3): 页面只订阅这一份 [ShelfStateUi],
+     * 不再直接接触 Book/BookGroup 实体。
+     */
+    val shelfState: StateFlow<ShelfStateUi> = combine(
+        _bookGroups,
+        _currentGroupId,
+        _books,
+        _booksCache,
+        _refreshingUrls,
+    ) { groups, currentId, books, cache, refreshing ->
+        ShelfStateUi(
+            groups = groups.map { it.toGroupUi(cache[it.groupId]?.size) },
+            currentGroupId = currentId,
+            books = books.map { it.toBookItemUi() },
+            booksByGroup = cache.mapValues { (_, list) -> list.map { it.toBookItemUi() } },
+            refreshingBookUrls = refreshing,
+        )
+    }.combine(isRefreshing) { state, refreshing ->
+        state.copy(isRefreshing = refreshing)
+    }.combine(progressText) { state, text ->
+        state.copy(progressText = text)
+    }.stateIn(scope, SharingStarted.Eagerly, ShelfStateUi())
+
+    /**
+     * 过渡查询流: 展示模型 → 实体 (P3 书架切片)。
+     *
+     * 页面只在边界 (封面 slot / 点击长按回调) 按 bookUrl 回查 [Book], 条目组件只消费
+     * [com.langhuan.reader.uimodel.BookItemUi]; 各页迁移完成后随本文件一并移除。
+     */
+    val bookEntities: StateFlow<Map<String, Book>> = combine(_books, _booksCache) { books, cache ->
+        buildMap {
+            cache.values.forEach { list -> list.forEach { put(it.bookUrl, it) } }
+            books.forEach { put(it.bookUrl, it) }
+        }
+    }.stateIn(scope, SharingStarted.Eagerly, emptyMap())
 
     /** 当前分组对象 (currentGroupId 在 bookGroups 中的查找结果), 用于顶栏标题/排序回退 */
     val currentGroup: BookGroup?
@@ -276,7 +318,10 @@ class BookshelfViewModel {
                     // catch 是终结性操作: 捕获后流结束、job 摘除, 此后由下次流重启
                     // (selectGroup/upSort/setBookshelfActive) 恢复订阅 (对齐原版 catch 打日志语义)
                     AppLog.put("书架书籍数据加载出错 groupId=$groupId", it)
-                }.map { list -> sortBooks(list, sortOf(groupId)) }
+                }.map { list ->
+                    // 视频/图片/RSS 已裁剪: 旧数据仍在库里, 书架不再展示
+                    sortBooks(list.filter { it.isCoreReaderSupported }, sortOf(groupId))
+                }
                     // debounce(100) 与拆分前完全一致: 曾试过"首发射直通 + 后续 100ms 聚合",
                     // 但实测对启动那 470ms 首绘没有可测影响, 而本文件是桌面/iOS/鸿蒙三端共用的
                     // 书架数据链 → 拿不到三端回归就不留未证实的行为改动。

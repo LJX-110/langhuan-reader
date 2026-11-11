@@ -145,9 +145,6 @@ abstract class HorizontalPageDelegateCompose(
     override fun abortAnim() {
         // 与 app 端 HorizontalPageDelegate.abortAnim 对应:
         // 动画进行中(animJob 未完成)按下/翻页抢跑时, 取消动画协程并立即补页(fillPage)
-        // 不在此处暂停自动翻页: 原版横向翻页全程不碰 autoPager (只在真正换页时 reset),
-        // 而 onDown 首行就调 abortAnim —— 在这里 pause 会让未过 slop 的纯点击
-        // (handledAsTap 早退, 不走任何动画收尾) 永久悬挂 isPausing, 自动翻页再不推进。
         val dir = mDirection
         val wasRunning = animJob?.isActive == true
         animJob?.cancel()
@@ -166,8 +163,6 @@ abstract class HorizontalPageDelegateCompose(
                 PageDirectionShared.PREV -> if (!viewModel.prevPage()) viewModel.moveToPrevChapter()
                 PageDirectionShared.NONE -> {}
             }
-            // 实际换页：自动翻页进度归零重开 (对照原版 onPageChange → autoPager.reset)
-            autoPager?.reset()
         }
     }
 
@@ -213,8 +208,6 @@ abstract class HorizontalPageDelegateCompose(
                     }
                     else -> Unit
                 }
-                // 实际换页：自动翻页进度归零重开 (对照原版 onPageChange → autoPager.reset)
-                autoPager?.reset()
             }
         } finally {
             // 重置状态（与 app 端 stopScroll 行为对应）

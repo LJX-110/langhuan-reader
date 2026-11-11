@@ -16,7 +16,6 @@ import com.langhuan.reader.constant.LOG_DIR_NAME
 import com.langhuan.reader.constant.appInfo
 import com.langhuan.reader.constant.AppConst.channelIdDownload
 import com.langhuan.reader.constant.AppConst.channelIdReadAloud
-import com.langhuan.reader.constant.AppConst.channelIdWeb
 import com.langhuan.reader.constant.PreferKey
 import com.langhuan.reader.constant.registerAndroidAppLogHost
 import com.langhuan.reader.model.ImageErrorBytesProviders
@@ -79,28 +78,18 @@ import com.langhuan.reader.help.ui.registerAndroidOpenUrlProvider
 import com.langhuan.reader.help.config.PreferenceProviders
 import com.langhuan.reader.help.ui.registerAndroidUserAgentProvider
 import com.langhuan.reader.help.update.registerAndroidAppUpdate
-import com.langhuan.reader.help.image.MangaPluginImageFetcherProviders
 import com.langhuan.reader.model.BookCoverShared
 import com.langhuan.reader.model.CacheBook
 import com.langhuan.reader.model.fileBook.registerAndroidAuthorizedFileBookAccessor
 import com.langhuan.reader.model.fileBook.registerAndroidFileBookProviders
 import com.langhuan.reader.model.fileBook.registerEpubApplicationContext
-import com.langhuan.reader.model.manga.JvmMangaPluginImageFetcher
 import com.langhuan.reader.model.registerAndroidAudioPlayProviders
 import com.langhuan.reader.model.registerAndroidReadBookPlatform
 import com.langhuan.reader.model.registerAndroidRealScreen
 import com.langhuan.reader.model.script.JsEngines
 import com.langhuan.reader.model.script.registerAndroidJsEngines
 import com.langhuan.reader.model.webBook.registerAndroidBookInfoRefresher
-import com.langhuan.reader.help.tvbox.AndroidTvBoxHostPlatform
-import com.langhuan.reader.help.tvbox.AndroidTvBoxSniffer
-import com.langhuan.reader.help.registerComposeResourceBytesProvider
-import com.langhuan.reader.help.tvbox.TvBoxPlatforms
-import com.langhuan.reader.help.tvbox.TvBoxSniffPlatforms
-import com.langhuan.reader.model.tvbox.TvBoxManager
 import com.langhuan.reader.model.webBook.registerAndroidWebBookProviders
-import com.langhuan.reader.service.WebService
-import com.langhuan.reader.ui.association.registerUiRuleSubAutoUpdateHook
 import com.langhuan.reader.ui.book.changesource.registerAndroidChangeBookSourcePlatform
 import com.langhuan.reader.ui.book.manage.registerAndroidBookshelfManagePlatform
 import com.langhuan.reader.ui.browser.configureWebViewStartUpMode
@@ -117,9 +106,6 @@ import com.langhuan.reader.utils.registerAndroidACacheDirProvider
 import com.langhuan.reader.utils.registerAndroidRegexErrorHandler
 import com.langhuan.reader.utils.registerAndroidScreenInfoProvider
 import com.langhuan.reader.utils.removePref
-import com.langhuan.reader.web.registerAndroidWebServerPlatform
-import com.langhuan.reader.web.utils.registerAndroidWebStrings
-import com.langhuan.reader.web.utils.registerComposeWebAssetSource
 import kotlinx.coroutines.launch
 import java.net.URL
 
@@ -151,8 +137,6 @@ class App : Application() {
         registerAndroidDebugState(this)
         // 注册 shared 模块的 ApplicationContext, 供 commonMain 的 stringRes(resId) 使用
         registerSharedAppContext(this)
-        // 注册漫画扩展 (eu.kanade.tachiyomi.*) 兼容层运行时绑定 (Injekt: Application/Json/NetworkHelper)
-        eu.kanade.tachiyomi.registerExtensionCompat(this)
         // 注册图片加载失败兜底图字节 (image_loading_error.png 单点持于 :ui composeResources)
         ImageErrorBytesProviders.register {
             runBlocking { Res.readBytes("drawable/image_loading_error.png") }
@@ -174,8 +158,6 @@ class App : Application() {
         // AppContextWrapper.wrap 已设置
         warmAppStringCache()
         registerComposeStringProviders()
-        // 规则订阅每日自动更新的导入实现 (复用 :ui 的导入链, 见 RuleSubAutoUpdateHook)
-        registerUiRuleSubAutoUpdateHook()
         registerAndroidAppLogHost()
         // 注册 ScreenInfoProvider (供 SystemUtils.screenWidthPx/screenHeightPx 委托读取),
         // 须在任何 SystemUtils 屏幕尺寸访问之前 (PDF 书渲染等)
@@ -202,11 +184,6 @@ class App : Application() {
         LocalBookLocators.register(AndroidLocalBookLocator())
         // 注册 PDF 渲染后端 (PdfFileShared 编排骨架经 PdfRenderProviders 调本实现, PdfRenderer)
         PdfRenderProviders.register(AndroidPdfRenderPort)
-        // 注册插件源图片获取 (commonMain MangaImageBytesLoader 的插件源分支经
-        // MangaPluginImageFetcherProviders 委托扩展自身 client 下载图片, 扩展拦截器
-        // — 禁漫图片分割重排等 — 才能生效); 须在 MangaExtensionManager 源注册表
-        // 可用之后, 图片加载首次触发之前 (实现 JVM+Android 共用, 桌面端同构注册)
-        MangaPluginImageFetcherProviders.register(JvmMangaPluginImageFetcher())
         // 注册 RegexErrorHandler (longToastOnUi/saveCrashInfo2File/restart),
         // 供 shared androidMain 的 AndroidRegexReplacer 在替换超时分支调用;
         // 须在 registerAndroidWebBookProviders 之前 (任何 RegexReplacers.get().replace 之前)
@@ -226,15 +203,6 @@ class App : Application() {
         // 须在 CookieStoreProvider 之后 (bridge 通过 CookieStoreProviders.get() 间接访问存储)
         registerSharedCookieJarBridge()
         registerAndroidWebBookProviders()
-        // TVBox 影视源宿主: 平台钩子 (jar 类加载/上下文) 与网页嗅探 (WebView)
-        // 先注册, 再幂等 init (重载已持久化配置 + 注册 TVBox 取数委派; 与漫画/视频插件
-        // 委派并列, 各实现身份互斥, 与注册顺序无关)
-        TvBoxPlatforms.register(AndroidTvBoxHostPlatform(this))
-        // TVBox JS 引导脚本走 composeResources 单一数据源 (与 DefaultData 同款 provider 注入:
-        // 读取实现由界面侧注册, 数据层只依赖 PackagedResourceBytesProviders 契约)
-        registerComposeResourceBytesProvider()
-        TvBoxSniffPlatforms.register(AndroidTvBoxSniffer)
-        TvBoxManager.init()
         // 注册 Coil3 BookImageLoader (Compose 图片加载, 替代 Glide 迁移批 1 共享面接线)
         // 依赖 OkHttpClientProviders (上一步 registerAndroidWebBookProviders 已注册),
         // ImageLoader 内部 lazy 构建故注册本身不触发网络栈初始化
@@ -245,7 +213,6 @@ class App : Application() {
         // Coil3 批 2: 设置 SingletonImageLoader.Factory, 让 app 端 AsyncImage / imageView.load 默认走
         // fetcher 层注册防盗链 header 注入 + 共享 OkHttpClient 的 ImageLoader;
         // 走 androidBookImageLoader 单例, 与 BookImageLoaders 同一实例 (磁盘缓存同目录不可多实例)
-        // MangaModelFetcher 已随漫画图片链路下沉到 buildBookImageLoader 内部注册
         coil3.SingletonImageLoader.setSafe {
             com.langhuan.reader.help.image.androidBookImageLoader(it)
         }
@@ -263,14 +230,6 @@ class App : Application() {
         // 刷新引擎 (书架菜单/下拉刷新、自动更新、条目转圈状态、进度通知均依赖它;
         // iOS/鸿蒙端在 registerNativeUpdateBookCallback 注册, 桌面端在 Main.kt 注册)
         UpdateBookCallbacks.registerDefault(AndroidUpdateBookCallback)
-        // 注册 Web 服务 provider (commonMain WebServerManager 调用 WebServerPlatform/WebAssetSource/WebStrings)
-        // - WebServerPlatform: HttpServer+WebSocketServer 起停 + serve 回调拉起 WebService 续命 wakelock
-        // - WebAssetSource: composeResources 读 web 静态资源 (单一数据源 commonMain/composeResources/files/web)
-        // - WebStrings: cannot_empty 文案注入 WebSocketServer
-        // 须在任何 WebServerManager.start()/stop() 之前注册 (用户触发 Web 服务开关时)
-        registerAndroidWebServerPlatform { WebService.serve() }
-        registerComposeWebAssetSource()
-        registerAndroidWebStrings(androidAppString("cannot_empty"))
         // 注册 AudioPlay 平台 provider (commonMain AudioPlayShared 调用
         // AudioPlayCommanders 派发 Service 命令,
         // 须在 registerAndroidWebBookProviders 之后, 因 AudioPlayShared 依赖 AppDbProviders)
@@ -465,23 +424,11 @@ class App : Application() {
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         }
 
-        val webChannel = NotificationChannel(
-            channelIdWeb,
-            androidAppString("web_service"),
-            NotificationManager.IMPORTANCE_DEFAULT
-        ).apply {
-            enableLights(false)
-            enableVibration(false)
-            setSound(null, null)
-            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-        }
-
         //向notification manager 提交channel
         notificationManager.createNotificationChannels(
             listOf(
                 downloadChannel,
-                readAloudChannel,
-                webChannel
+                readAloudChannel
             )
         )
     }

@@ -16,18 +16,13 @@ import com.langhuan.reader.ui.compose.platform.syncGetString
 import com.langhuan.reader.model.webBook.ExploreOption
 import com.langhuan.reader.model.webBook.ExploreOptionSelection
 import com.langhuan.reader.model.webBook.ExploreOptionUiState
-import com.langhuan.reader.model.webBook.PluginFilterSession
 import com.langhuan.reader.model.webBook.SearchModel
 import com.langhuan.reader.model.webBook.SourceSearchGroup
 import com.langhuan.reader.model.webBook.mergeExploreOptionDefinitions
-import com.langhuan.reader.model.webBook.pluginFilterSessionOf
 import com.langhuan.reader.ui.root.screenModelScope
-import com.langhuan.reader.utils.concurrent.newConcurrentMap
 import com.langhuan.reader.utils.concurrent.newConcurrentSet
 import com.langhuan.reader.utils.systemCurrentTimeMillis
 import com.langhuan.reader.utils.throttleLatest
-import kotlinx.atomicfu.locks.SynchronizedObject
-import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
@@ -52,8 +47,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 /**
  * 搜索 ViewModel (KMP 版)。
@@ -207,83 +200,12 @@ class SearchViewModel {
         searchModel.restartSource(source.bookSourceUrl)
     }
 
-    /** 筛选器编辑开始: 暂停该源分页并作废在飞请求。 */
-    fun pauseSourcePagination(sourceUrl: String) {
-        searchModel.pauseSource(sourceUrl)
-    }
-
-    /** 筛选器编辑结束且未改动: 恢复该源后续分页。 */
-    fun resumeSourcePagination(sourceUrl: String) {
-        searchModel.resumeSource(sourceUrl)
-    }
-
-    /** 重置指定源筛选会话为源默认并重搜该源 (入口行"重置")。 */
-    fun resetSourceFilters(source: BookSource) {
-        scope.launch {
-            resetPluginFilterSession(source)
-            searchModel.restartSource(source.bookSourceUrl)
-        }
-    }
-
-    /**
-     * 页面会话的插件源筛选实例 (key=bookSourceUrl): 同一实例同时供筛选 UI 与取数委派使用,
-     * 随本 VM (页面) 销毁即丢, 不经任何全局缓存。
-     */
-    private val pluginFilterSessions = newConcurrentMap<String, PluginFilterSession>()
-
-    /** 同源会话新建互斥: 页面内多个入口同时等待时只建一份。 */
-    private val filterSessionMutexes = newConcurrentMap<String, Mutex>()
-    private val filterSessionMutexLock = SynchronizedObject()
-
-    private fun filterMutex(url: String): Mutex = synchronized(filterSessionMutexLock) {
-        filterSessionMutexes.getOrPut(url) { Mutex() }
-    }
-
-    /** 筛选会话建立/替换版本 (面板据此重读实例)。 */
-    private val _pluginFiltersVersion = MutableStateFlow(0)
-    val pluginFiltersVersion = _pluginFiltersVersion.asStateFlow()
-
-    /** 取该源已建立的筛选会话; 未建立返回 null。 */
-    fun getPluginFilterSession(sourceUrl: String): PluginFilterSession? =
-        pluginFilterSessions[sourceUrl]
-
     /**
      * 本轮搜索源列表 (搜索开始时随 [SearchModel] 重建)。
-     * 聚簇布局的单源顶部筛选入口与"是否只搜一个源"判定都从这里派生。
+     * "是否只搜一个源"判定从这里派生。
      */
     private val _searchSources = MutableStateFlow<List<BookSource>>(emptyList())
     val searchSources = _searchSources.asStateFlow()
-
-    /**
-     * 取/建该源筛选会话。空筛选器也是合法会话 (取数委派要求携带实例), 由 UI 按 isEmpty
-     * 决定是否显示入口; 本端没有插件实例时返回 null, 不缓存为"没有筛选器"。
-     */
-    suspend fun ensurePluginFilterSession(source: BookSource): PluginFilterSession? {
-        val url = source.bookSourceUrl
-        val mutex = filterMutex(url)
-        return mutex.withLock {
-            pluginFilterSessions[url] ?: pluginFilterSessionOf(source)?.also {
-                pluginFilterSessions[url] = it
-                _pluginFiltersVersion.update { it + 1 }
-            }
-        }
-    }
-
-    /**
-     * 重置该源筛选会话为源默认 (新建实例替换), 返回新会话供 UI 回填。
-     * 入口行"重置"调用; 调用方随后重搜该源。
-     */
-    suspend fun resetPluginFilterSession(source: BookSource): PluginFilterSession? {
-        val url = source.bookSourceUrl
-        val mutex = filterMutex(url)
-        return mutex.withLock {
-            pluginFilterSessions.remove(url)
-            val session = pluginFilterSessionOf(source)
-            if (session != null) pluginFilterSessions[url] = session
-            _pluginFiltersVersion.update { it + 1 }
-            session
-        }
-    }
 
     /** 按源参数定义 (key=bookSourceUrl): 定义与选择变化都经单一状态 CAS 发布。 */
     private fun mergeSourceOptions(
@@ -427,9 +349,6 @@ class SearchViewModel {
         override fun getSearchOptions(sourceUrl: String): Map<String, ExploreOptionSelection> =
             _sourceSearchOptions.value[sourceUrl].orEmpty()
                 .associate { it.name to it.selectionSnapshot() }
-
-        override suspend fun getPluginFilters(source: BookSource): PluginFilterSession? =
-            ensurePluginFilterSession(source)
 
         override fun onSearchSourcesResolved(sources: List<BookSource>) {
             _searchSources.value = sources

@@ -666,13 +666,18 @@ class ReadBookViewModelShared(
      *
      * 对照 app 端 ReadBookActivity 的 TTS_PROGRESS 观察者
      * (`ReadBook.durChapterPos = chapterStart` + upContent): 朗读推进到某段时把阅读位置
-     * 拉到该段。滚动模式下与原版一致地把拼接基准页换成当前段所在页并归零滚动偏移 ——
-     * 基准页换了偏移却不归零, 当前段就会被视口上下裁切甚至整个落在视口外。
+     * 拉到该段。滚动模式下只在跨页时归零滚动偏移（基准页换了偏移却不归零, 当前段就会被
+     * 视口上下裁切）；同页内保留偏移, 由跟随滚动按安全区平滑对齐。
      */
     fun updateReadPosition(pos: Int) {
+        val pageBefore = _curTextPage.value
         readBook.updateDurChapterPosByReadAloud(pos)
         syncPageFlows()
-        if (isScrollPageAnim) resetScrollOffset()
+        // 只有跨页才归零偏移；同页内朗读推进保留当前滚动位置，交给跟随滚动
+        // (ScrollPageDelegateCompose.revealChapterPosition) 按安全区平滑对齐。
+        if (isScrollPageAnim && _curTextPage.value !== pageBefore) {
+            resetScrollOffset()
+        }
     }
 
     // endregion
@@ -1917,8 +1922,7 @@ class ReadBookViewModelShared(
     /**
      * 切换朗读播放/暂停 (对照 app 端 MEDIA_BUTTON isDown=false 分支 `ReadBook.readAloud(!BaseReadAloudService.pause)`)。
      *
-     * 由 ReaderScreenModel 在媒体键事件中先停自动翻页 (autoPageStop) 再调本方法,
-     * 对齐 app 端 ReadBookActivity.onClickReadAloud 的 autoPageStop + 朗读切换顺序。
+     * 由 ReaderScreenModel 在媒体键事件中切换朗读。
      * 滚动模式未运行时从可视区首行定位起点 (旧语义: getReadAloudPos → durChapterPos +
      * openChapter → readAloud(startPos))。
      */

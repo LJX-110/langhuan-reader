@@ -64,6 +64,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
@@ -81,17 +82,23 @@ import kotlinx.coroutines.withContext
 import kotlin.concurrent.Volatile
 
 /**
- * 阅读页自动翻页活动状态（由各平台自动翻页控制器/Provider 置位，统一聚合入阅读页窗口常亮策略）。
- * 桌面端等无后台计时的平台以此为单一真相源驱动窗口常亮，杜绝自动翻页与窗口策略多头双写覆盖（拍板 4a）。
- */
-var readerAutoPageActive: Boolean by mutableStateOf(false)
-
-/**
  * 阅读页菜单布局可见状态（阅读菜单 || 搜索底部菜单 || 底部弹层；对照原版 menuLayoutIsVisible），
  * 由阅读页系统栏外观效果写入，根层窗口策略统一消费（readerSystemBarsPolicy 的 menuVisible 入参），
  * 菜单显示时状态栏/导航栏一律显示（对照原版 upSystemUiVisibility）。
  */
 var readerMenuLayoutVisible: Boolean by mutableStateOf(false)
+
+/**
+ * 专注阅读状态：为 true 时隐藏页眉/页脚，并在菜单未显示时隐藏系统状态栏/导航栏，
+ * 只留正文。由阅读底栏「专注」切换，退出阅读页时复位（[ReaderScreenModel.onCleared]）。
+ */
+var readerFocusMode: Boolean by mutableStateOf(false)
+
+/**
+ * 朗读跟随：为 true 时朗读游标推进会把当前段滚入滚动模式视口安全区。
+ * 由阅读面板「排版」页的开关切换，进程内有效（同 [readerFocusMode]，不落盘）。
+ */
+var readerFollowAloud: Boolean by mutableStateOf(true)
 
 /**
  * 阅读页平台能力注入接口。
@@ -193,25 +200,9 @@ interface ReaderPlatformProvider {
     fun onResume(screenModel: ReaderScreenModel) {}
 
     /**
-     * 自动翻页面板的平台动作桥 (对照原版 AutoReadDialog 的 CallBack + 平台侧副作用)。
-     * 默认 no-op: 未实现的端面板仍可调速度, 但停止/设置/语速动作降级为空。
+     * 朗读语速变更后的平台同步钩子（TTS 面板滑条 / 朗读配置）。
+     * 默认 no-op，未实现的端只保留共享层语速。
      */
-    fun autoPageStop(screenModel: ReaderScreenModel) {}
-
-    /**
-     * 页面离开可见期但仍在栈内时挂起自动翻页 (退到后台 / 被别的页面盖住)。
-     *
-     * 默认按原语义停止 (未实现挂起的端行为不变); 桌面端覆写为挂起: 开关保持, 只停推进,
-     * 回到可见期由 [autoPageResume] 接着推进。真正离开阅读页仍走 [autoPageStop]。
-     */
-    fun autoPagePause(screenModel: ReaderScreenModel) {
-        autoPageStop(screenModel)
-    }
-
-    /** 页面重新可见时恢复自动翻页 (仅与 [autoPagePause] 成对; 未实现挂起的端 no-op)。 */
-    fun autoPageResume(screenModel: ReaderScreenModel) {}
-
-    /** 自动翻页滑条抬手后同步 TTS 语速 (对照原版 AutoReadDialog upTtsSpeechRate) */
     fun upTtsSpeechRate(screenModel: ReaderScreenModel) {}
 
     /**
@@ -463,7 +454,6 @@ class ReaderScreenModel(
                         postDialogEvent(ReaderDialogEvent.ReadAloud)
                     } else {
                         // 无 UI 绑定 (组合间隙/已释放) 也照常切换朗读: 业务不因读不到菜单被吞
-                        if (menu?.autoPage == true) menu.clickAutoPage()
                         viewModel.toggleReadAloud()
                     }
                 }
@@ -772,6 +762,8 @@ class ReaderScreenModel(
         chapterPos: Int? = null,
         isSearchBook: Boolean = false,
     ) {
+        // 新书/新会话从常规阅读态开始，不继承上一本的专注状态
+        readerFocusMode = false
         // 整段在可取消任务内按序执行: [ReadBookShared.loadBook] 读章节总数会同步查库,
         // 组合期直接调用会在 UI 线程上做 DB IO (对照原版 initData 在 execute 的 IO 协程内)。
         // 顺序不变: 装载书籍状态 → 存跳转前进度快照 → 装载目标章 → 云进度/自动换源。
@@ -1016,14 +1008,13 @@ class ReaderScreenModel(
     // endregion
 
     /** 显示阅读菜单（对照 app 端 ReadBookActivity.showActionMenu:749-755 的四段顺序：
-     *  朗读运行中 → 朗读面板；自动翻页 → AutoRead 面板；搜索态 → 搜索菜单；否则常规菜单） */
+     *  朗读运行中 → 朗读面板；搜索态 → 搜索菜单；否则常规菜单） */
     fun showMenu() {
         val controller = acceptedController ?: return
         when {
             ReadBookPlatforms.get().isReadAloudRun ->
                 postDialogEvent(ReaderDialogEvent.ReadAloud)
 
-            controller.state.autoPage -> postDialogEvent(ReaderDialogEvent.AutoRead)
             isShowingSearchResult -> searchMenuState.runMenuIn()
             else -> controller.showMenu()
         }
@@ -1040,6 +1031,35 @@ class ReaderScreenModel(
         // 走 VM.openChapter (对照原版 ReadBookActivity 的 viewModel.openChapter): 跳章位置
         // 与装载一起进 VM, 由装载任务在装载前落位; 直调 loadChapter 会丢这条语义
         viewModel.openChapter(index, durChapterPos = pos ?: 0)
+    }
+
+    /** 本书书签流（按书名 + 作者过滤）；书籍未就绪返回 null，面板按空态处理。 */
+    fun bookmarkFlow(): Flow<List<Bookmark>>? {
+        val book = viewModel.book.value ?: return null
+        return AppDbProviders.get().bookmarkDao.flowByBook(book.name, book.author)
+    }
+
+    /** 删除书签（DAO 删除后由 [bookmarkFlow] 自动刷新列表）。 */
+    fun deleteBookmark(bookmark: Bookmark) {
+        scope.launch {
+            runCatching { AppDbProviders.get().bookmarkDao.delete(bookmark) }
+        }
+    }
+
+    /** 跳到书签位置；跳转成功后收起菜单（对照原版书签列表点击即关闭弹层）。 */
+    fun jumpToBookmark(bookmark: Bookmark) {
+        openChapter(bookmark.chapterIndex, bookmark.chapterPos)
+    }
+
+    /** 回到本章开头。 */
+    fun jumpToChapterStart() {
+        openChapter(viewModel.durChapterIndex.value, 0)
+    }
+
+    /** 跳到本章末尾（最后一个字符位置）。 */
+    fun jumpToChapterEnd() {
+        val page = viewModel.curTextPage.value ?: return
+        openChapter(page.chapterIndex, (page.chapterSize - 1).coerceAtLeast(0))
     }
 
     override fun onPreRemoved() {
@@ -1064,6 +1084,7 @@ class ReaderScreenModel(
         // 阅读计时与朗读计时独立 (朗读期由朗读侧另记 READ_ALOUD), 朗读豁免期同样立即结束,
         // 避免页面退出后阅读时长虚增
         readerMenuLayoutVisible = false
+        readerFocusMode = false
         ReadTimeRecorder.endImmediately(ReadTimeRecorder.Source.READ_BOOK)
         viewModel.onCleared(pageCleanup = {
             ActiveReadBookRegistry.detach(readBook)
@@ -1398,16 +1419,10 @@ sealed interface ReaderDialogEvent {
     /** 整书换源 (对照原版 换源按钮 → ChangeBookSourceDialog, 全高底部弹窗) */
     object ChangeSource : ReaderDialogEvent
 
-    /** 自动翻页控制面板 (对照原版 自动翻页运行时点屏幕 → AutoReadDialog: 速度滑条面板) */
-    object AutoRead : ReaderDialogEvent
-
     /** 章节换源 (对照原版 换源图标长按 → ChangeChapterSourceDialog, 全高底部弹窗) */
     object ChangeChapterSource : ReaderDialogEvent
 
     // ===== 溢出菜单选择器 (iOS/鸿蒙/desktop 共用, 对照 app 端 ReadMenu 的 selector/alert 弹窗) =====
-
-    /** 模拟追读配置 (对照原版 menu_simulated_reading → showSimulatedReading) */
-    data object SimulatedReading : ReaderDialogEvent
 
     /** 图片样式 4 项选择器 (对照原版 menu_image_style) */
     data object ImageStyle : ReaderDialogEvent

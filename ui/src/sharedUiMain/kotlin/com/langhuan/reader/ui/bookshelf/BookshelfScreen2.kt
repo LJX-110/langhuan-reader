@@ -18,7 +18,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
-import com.langhuan.reader.data.entities.Book
 import com.langhuan.reader.data.entities.BookGroup
 import com.langhuan.reader.help.config.AppConfigProviders
 import com.langhuan.reader.help.config.resolveImagePath
@@ -26,6 +25,8 @@ import com.langhuan.reader.ui.compose.platform.AppBackHandler
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.LocalEInk
 import com.langhuan.reader.ui.root.LocalPlatformCapabilities
+import com.langhuan.reader.uimodel.BookItemUi
+import com.langhuan.reader.uimodel.GroupUi
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.back
 import com.langhuan.reader.ui.generated.resources.bookshelf
@@ -37,7 +38,7 @@ import org.jetbrains.compose.resources.stringResource
  * 书架样式2 (KMP 版, 对照 app 端 `style2/BookshelfFragment2`)。
  *
  * 与样式1 (分组 tab + HorizontalPager) 的区别: 单个列表 + 分组下钻。
- * 根级 (groupId = [BookGroup.IdRoot]) 混装"分组条目 + 未分组书籍" (对照 getItems:
+ * 根级 (groupId = [GroupUi.IdRoot]) 混装"分组条目 + 未分组书籍" (对照 getItems:
  * bookGroups + books), 点分组进入该分组后只显示书籍, 系统返回键回根级。
  *
  * 条目渲染复用 [ShelfBooksContent] 的 BookGroup 分支 (GroupListItem/GroupGridItem/GroupVideoItem),
@@ -50,13 +51,13 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun BookshelfScreen2(
     viewModel: BookshelfViewModel,
-    onBookClick: (Book, String?) -> Unit,
-    onBookLongClick: (Book, String?) -> Unit,
-    onGroupLongClick: (BookGroup) -> Unit,
+    onBookClick: (BookItemUi, String?) -> Unit,
+    onBookLongClick: (BookItemUi, String?) -> Unit,
+    onGroupLongClick: (GroupUi) -> Unit,
     actions: @Composable RowScope.() -> Unit,
     modifier: Modifier = Modifier,
     tier: BookshelfTier? = null,
-    coverSlot: (@Composable (Book, Modifier, CoverSlotRatio, Int) -> Unit)? = null,
+    coverSlot: (@Composable (BookItemUi, Modifier, CoverSlotRatio, Int) -> Unit)? = null,
     scrollState: ShelfScrollState = remember { ShelfScrollState() },
     gotoTopTick: Int = 0,
     configTick: Int = 0,
@@ -66,38 +67,57 @@ internal fun BookshelfScreen2(
 ) {
     val eInk = LocalEInk.current
     val appConfig = remember { AppConfigProviders.get() }
-    val bookCoverSlot = coverSlot ?: LocalBookCoverSlot.current
+    // 页面只读展示状态 + 过渡回查表: 实体只在边界 (封面 slot / 分组开关) 使用
+    val state by viewModel.shelfState.collectAsState()
+    val bookEntities by viewModel.bookEntities.collectAsState()
+    val currentBookEntities = rememberUpdatedState(bookEntities)
+    // 上层已注入的展示模型封面槽; 未注入时退回默认实体封面槽 (按 bookUrl 回查 Book)
+    val currentCoverSlot = rememberUpdatedState(coverSlot)
+    val currentDefaultCoverSlot = rememberUpdatedState(LocalBookCoverSlot.current)
+    val bookCoverSlot: @Composable (BookItemUi, Modifier, CoverSlotRatio, Int) -> Unit = remember {
+        { item, m, ratio, tick ->
+            val injected = currentCoverSlot.value
+            if (injected != null) {
+                injected(item, m, ratio, tick)
+            } else {
+                currentBookEntities.value[item.bookUrl]?.let { book ->
+                    currentDefaultCoverSlot.value(book, m, ratio, tick)
+                }
+            }
+        }
+    }
     // LocalGroupCoverSlot 组合期读取值随宿主重组变化, 稳定化引用避免条目层全量重组合
     val currentGroupCoverSlot = rememberUpdatedState(LocalGroupCoverSlot.current)
-    val groupCoverSlot: @Composable (BookGroup, Modifier, CoverSlotRatio, Int) -> Unit = remember {
+    val groupCoverSlot: @Composable (GroupUi, Modifier, CoverSlotRatio, Int) -> Unit = remember {
         { group, m, coverRatio, tick ->
-            currentGroupCoverSlot.value(group, m, coverRatio, tick)
+            viewModel.bookGroups.value.find { it.groupId == group.groupId }
+                ?.let { currentGroupCoverSlot.value(it, m, coverRatio, tick) }
         }
     }
     val layoutSpec = rememberBookshelfLayoutSpec(tier)
     // 标题是否拼接书籍数量 (对照 app 端 AppConfig.bookshelfShowGroupCount)
     val showGroupCount = remember(configTick) { appConfig.bookshelfShowGroupCount }
-    val groups by viewModel.bookGroups.collectAsState()
-    val refreshingUrls by viewModel.refreshingUrls.collectAsState()
+    val groups = state.groups
+    val refreshingUrls = state.refreshingBookUrls
     val engineUpTocUrls by viewModel.engineUpTocUrls.collectAsState()
     // 无系统返回通道的端 (iOS) 需在分组内常驻可见退出口, 见下方顶栏
     val capabilities = LocalPlatformCapabilities.current
-    // 单一数据源: 根级=IdRoot 未分组书, 分组内=该组书 (读 VM 缓存切片, 无独立 Room 流)
-    val booksCache by viewModel.booksCache.collectAsState()
+    // 单一数据源: 根级=IdRoot 未分组书, 分组内=该组书 (读 [ShelfStateUi] 快照, 无独立 Room 流)
+    val booksByGroup = state.booksByGroup
     // 封面比例收敛: 活跃集合与样式1同口径 (全量分组书籍+分组封面), 下钻/返回层级不清理
     // 仍保留的资源比例; 持有者由路由层下发
     val coverRatioState = LocalCoverRatioLayout.current
-    val activeCoverResources = remember(groups, booksCache) {
-        shelfActiveCoverResources(groups, booksCache)
+    val activeCoverResources = remember(groups, booksByGroup) {
+        shelfActiveCoverResources(groups, booksByGroup)
     }
     SideEffect { coverRatioState?.updateActiveResources(activeCoverResources) }
 
     // 当前层级: IdRoot=根级, 其他=已进入的分组 (对照 BookshelfFragment2.groupId)
     // rememberSaveable: 页面脱离组合 (进入详情页) 与重建出栈时保留已进入的分组
-    var groupId by rememberSaveable { mutableStateOf(BookGroup.IdRoot) }
+    var groupId by rememberSaveable { mutableStateOf(GroupUi.IdRoot) }
     // 各层级独立保存滚动状态: 根级复用外部 scrollState, 各具体分组用独立 rememberSaveable
     val currentScrollState = rememberSaveable(groupId, saver = ShelfScrollState.Saver) {
-        if (groupId == BookGroup.IdRoot) scrollState else ShelfScrollState()
+        if (groupId == GroupUi.IdRoot) scrollState else ShelfScrollState()
     }
     // 层级变化驱动 VM 切换当前分组 (排序配置由 VM.upSort 重启时重读);
     // 样式2 是单页导航: 切换时释放旧分组流 (不持有历史分组, 对齐原版单流重启)
@@ -105,31 +125,35 @@ internal fun BookshelfScreen2(
     DisposableEffect(groupId) {
         onDispose { viewModel.releaseGroupFlow(groupId) }
     }
-    val books = booksCache[groupId].orEmpty()
+    val books = booksByGroup[groupId].orEmpty()
     // 稳定化透传回调: 引用恒定, 避免本屏重组 → 条目层全量重组合 (同 BookshelfScreen 策略);
     // onRefresh 内部经 rememberUpdatedState 读最新 books (捕获旧引用会刷旧书)
     val currentBooks = rememberUpdatedState(books)
-    val stableOnRefresh: () -> Unit = remember { { viewModel.upToc(currentBooks.value) } }
+    val stableOnRefresh: () -> Unit = remember {
+        // 刷新引擎吃实体, 在边界按 bookUrl 回查 (展示模型不带刷新所需字段)
+        { viewModel.upToc(currentBooks.value.mapNotNull { currentBookEntities.value[it.bookUrl] }) }
+    }
     // groupId 是 remember 的 delegate 引用, lambda 捕获后恒定, 可一次创建
-    val stableOnGroupClick: (BookGroup) -> Unit = remember { { groupId = it.groupId } }
+    val stableOnGroupClick: (GroupUi) -> Unit = remember { { groupId = it.groupId } }
 
     // 对照 getItems(): 根级 = 分组 + 未分组书籍, 分组内 = 只有书籍
     val items: List<Any> = remember(groupId, groups, books) {
-        if (groupId != BookGroup.IdRoot) books else groups + books
+        if (groupId != GroupUi.IdRoot) books else groups + books
     }
     // 对照 applyGroupState: 分组内取分组名, 根级取"书架"; 下拉刷新跟随分组开关且空列表禁用
     val group = groups.find { it.groupId == groupId }
     val rootTitle = stringResource(Res.string.bookshelf)
     val baseTitle = group?.groupName ?: rootTitle
     val title = if (showGroupCount) "$baseTitle (${books.size})" else baseTitle
-    val refreshEnabled = (group?.enableRefresh ?: true) && items.isNotEmpty()
+    val enableRefresh = group?.enableRefresh ?: true
+    val refreshEnabled = enableRefresh && items.isNotEmpty()
 
     // 对照 BookshelfFragment2.back(): 分组内消费返回事件回根级, 根级不消费 (交给宿主双击退出)。
     // isRootTop 门控: 栈内页面保持同一 Composition, 压栈页面打开时不可见书架页仍注册着本拦截器;
     // 若无门控, 从分组打开的页面 (无自身拦截器的详情/已入架书阅读器等) 第一下返回会被静默消费
     // (分组重置回根, 画面无变化), 第二下才真正退出——表现为"返回键要按两次"
-    AppBackHandler(enabled = groupId != BookGroup.IdRoot && isRootTop) {
-        groupId = BookGroup.IdRoot
+    AppBackHandler(enabled = groupId != GroupUi.IdRoot && isRootTop) {
+        groupId = GroupUi.IdRoot
     }
 
     // tab 双击滚顶 (对照 BookshelfFragment2.gotoTop), 档位与 layoutSpec 同源
@@ -143,8 +167,8 @@ internal fun BookshelfScreen2(
             // 无系统返回通道的端 (iOS) 的返回手势只作用于页面栈 (主界面是栈底, 退不出分组),
             // 分组内必须给出可见退出口;
             // 有返回通道的端 (Android/鸿蒙系统返回键, 桌面 ESC) 保持原版顶栏形态
-            if (!capabilities.supportsSystemBack && groupId != BookGroup.IdRoot) {
-                IconButton(onClick = { groupId = BookGroup.IdRoot }) {
+            if (!capabilities.supportsSystemBack && groupId != GroupUi.IdRoot) {
+                IconButton(onClick = { groupId = GroupUi.IdRoot }) {
                     Icon(
                         painter = painterResource(Res.drawable.ic_arrow_back),
                         contentDescription = stringResource(Res.string.back),

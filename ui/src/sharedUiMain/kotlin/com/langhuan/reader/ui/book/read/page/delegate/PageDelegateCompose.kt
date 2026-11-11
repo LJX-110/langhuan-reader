@@ -13,7 +13,6 @@ import com.langhuan.reader.help.i18n.AppStringKey
 import com.langhuan.reader.help.i18n.appString
 import com.langhuan.reader.help.toast.Toasters
 import com.langhuan.reader.ui.book.read.ReadBookViewModelShared
-import com.langhuan.reader.ui.book.read.page.AutoPagerCompose
 import com.langhuan.reader.ui.book.read.page.MouseDragDelegate
 import com.langhuan.reader.ui.book.read.page.PageDelegateShared
 import com.langhuan.reader.ui.book.read.page.entities.PageDirectionShared
@@ -207,8 +206,7 @@ abstract class PageDelegateCompose(
     override fun hasNext(): Boolean {
         // 本章节有下一页 或 有下一章可切（由 viewModel.canMoveToNextChapter 兜底）
         val hasNext = viewModel.nextTextPage.value != null || viewModel.canMoveToNextChapter()
-        // 对照原版 PageDelegate.hasNext: 无下一页时长 toast 提示 (原版顺带 autoPageStop,
-        // KMP 版自动翻页走 AutoPagerCompose.turnPage 不经本方法, 无需重复停止)
+        // 对照原版 PageDelegate.hasNext: 无下一页时长 toast 提示
         if (!hasNext) {
             Toasters.get().toastLong(appString(AppStringKey.no_next_page))
         }
@@ -266,35 +264,6 @@ abstract class PageDelegateCompose(
     protected open fun onAnimOffsetChanged(offset: Float) = Unit
 
     /**
-     * 自动翻页控制器（由 [com.langhuan.reader.ui.book.read.page.AutoPagerCompose] 挂载）。
-     *
-     * 手势暂停/恢复/翻页复位钩子：手势按下（[abortAnim]）→ pause，动画结束
-     * （[resetState]）→ resume，实际换页（onAnimStop/abortAnim 补页分支）→ reset。
-     * 用 `mutableStateOf` 承载，渲染侧（ReadViewComposable 揭示覆盖层）订阅变化。
-     */
-    var autoPager: AutoPagerCompose? by mutableStateOf(null)
-
-    /**
-     * 自动翻页连续滚动驱动（滚动模式）：按推进量滚动（px，正值 = 内容上移露出下一页）。
-     *
-     * 基类默认忽略（非滚动模式由 AutoPagerCompose 的揭示动画覆盖层承担）；
-     * [ScrollPageDelegateCompose] 覆写为走行级 scroll 折算（页边界翻页/钳制，
-     * 对照旧 AutoPager 每帧 curPage.scroll(-scrollOffset)）。
-     *
-     * @return false = 命中硬边界（书首/书末），调用方应停止自动翻页
-     */
-    open fun onAutoScrollBy(deltaPx: Float): Boolean = true
-
-    /** 滚动视口高度（px），自动翻页按 height / autoReadSpeed 秒换算每拍推进量 */
-    open val autoScrollHeight: Int get() = viewHeight
-
-    /**
-     * 自动翻页结束复位：清除滚动驱动留下的状态（由 [AutoPagerCompose.stop] 调用）。
-     * 基类默认空实现；需要回滚偏移的子类覆写。
-     */
-    open fun onAutoScrollEnd() {}
-
-    /**
      * 抬手/取消（触摸统一分发器在 UP/CANCEL 且 [isMoved] 时调用；对照原版
      * PageDelegate.onTouch 的 ACTION_UP/ACTION_CANCEL 分支 → onAnimStart）。
      *
@@ -308,7 +277,6 @@ abstract class PageDelegateCompose(
      * 重置状态字段（与 app 端 stopScroll 行为对应）。
      *
      * 子类 [onAnimStop] 在 finally 块中调用，确保动画结束后状态归零。
-     * 动画结束同时恢复自动翻页推进（对照原版 onScrollAnimStop → autoPager.resume）。
      */
     protected fun resetState() {
         isStarted = false
@@ -318,7 +286,6 @@ abstract class PageDelegateCompose(
         mDirection = PageDirectionShared.NONE
         _currentOffset = 0f
         animJob = null
-        autoPager?.resume()
     }
 
     // endregion

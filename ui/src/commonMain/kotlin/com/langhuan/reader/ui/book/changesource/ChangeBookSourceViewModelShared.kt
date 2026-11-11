@@ -17,7 +17,6 @@ import com.langhuan.reader.help.coroutine.closeIfCloseable
 import com.langhuan.reader.help.coroutine.newFixedThreadPoolDispatcher
 import com.langhuan.reader.help.source.SourceHelp
 import com.langhuan.reader.model.webBook.WebBook
-import com.langhuan.reader.model.webBook.pluginFilterSessionOf
 import com.langhuan.reader.utils.concurrent.newConcurrentMap
 import com.langhuan.reader.utils.concurrent.newSynchronizedList
 import com.langhuan.reader.utils.internString
@@ -517,7 +516,7 @@ class ChangeBookSourceViewModelShared(
         val resultBooks = WebBook.getBookListAwait(
             source, name, filter = { fName, fAuthor ->
                 fName == name && (!checkAuthor || fAuthor.contains(author))
-            }, pluginFilters = pluginFilterSessionOf(source)).books
+            }).books
         resultBooks.forEach { searchBook ->
             when {
                 loadInfo || loadToc || loadWordCount -> {

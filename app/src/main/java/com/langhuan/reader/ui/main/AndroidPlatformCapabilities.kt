@@ -71,7 +71,6 @@ import com.langhuan.reader.model.Debug
 import com.langhuan.reader.model.ReadAloud
 import com.langhuan.reader.model.fileBook.FileBook
 import com.langhuan.reader.service.BaseReadAloudService
-import com.langhuan.reader.service.WebService
 import com.langhuan.reader.service.defaultTtsEngineConfig
 import com.langhuan.reader.ui.association.AssociationActivity
 import com.langhuan.reader.ui.book.import.ImportFileItem
@@ -540,11 +539,6 @@ class AndroidPlatformCapabilities(
                 }
             }
         }
-    }
-
-    // 起停走 Android Service 壳; 运行态/地址由 PlatformCapabilities 默认实现回读 WebServerManager
-    override fun setWebService(enabled: Boolean) {
-        if (enabled) WebService.start(activity) else WebService.stop(activity)
     }
 
     // 换封面源 / 段评列表 / 默认封面图集: 走 shared Overlay (与桌面/iOS/鸿蒙同一实现,

@@ -9,7 +9,6 @@ import com.langhuan.reader.data.entities.BookSource
 import com.langhuan.reader.help.IntentData
 import com.langhuan.reader.help.coroutine.IoDispatcher
 import com.langhuan.reader.model.fileBook.FileBook
-import com.langhuan.reader.model.webBook.PluginSourceDelegates
 import com.langhuan.reader.model.webBook.WebBook
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
@@ -210,7 +209,7 @@ object BookChapterLoader {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            AppLog.put(tocFailMessage(source, e), e)
+            AppLog.put(tocFailMessage(e), e)
             throw e
         }
 
@@ -235,11 +234,6 @@ object BookChapterLoader {
         return list
     }
 
-    /** 目录失败日志唯一记录点: 委派源由委派给出带来源标识的文案, 其余用通用文案。 */
-    private fun tocFailMessage(source: BookSource?, e: Throwable): String {
-        if (source != null) {
-            PluginSourceDelegates.resolve(source)?.tocFailMessage(source, e)?.let { return it }
-        }
-        return "获取目录失败\n${e.message}"
-    }
+    /** 目录失败日志唯一记录点。 */
+    private fun tocFailMessage(e: Throwable): String = "获取目录失败\n${e.message}"
 }

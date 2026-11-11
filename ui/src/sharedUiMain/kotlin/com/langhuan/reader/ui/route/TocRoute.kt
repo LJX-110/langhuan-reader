@@ -72,8 +72,8 @@ fun TocRoute(
                     )
                 )
             } else {
-                // 按书类型分流 (对照原版 startReadActivity 的 when(book.isAudio/isVideo/isImage/isRss));
-                // 上一版写死 AppRoute.Reader → RSS/漫画/音视频书会被错开成文本阅读器
+                // 按书类型分流 (对照原版 startReadActivity 的 when(book.isAudio));
+                // 上一版写死 AppRoute.Reader → RSS/音频书会被错开成文本阅读器
                 navigator.push(route.book.toReadRoute(chapterIndex, chapterPos))
             }
         },

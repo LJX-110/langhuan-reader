@@ -13,8 +13,6 @@ import com.langhuan.reader.help.book.simulatedTotalChapterNum
 import com.langhuan.reader.help.config.AppConfigProviders
 import com.langhuan.reader.help.coroutine.IoDispatcher
 import com.langhuan.reader.model.ActiveReadBookRegistry
-import com.langhuan.reader.ui.book.video.buildChapterDisplayList
-import com.langhuan.reader.ui.book.video.defaultCollapsedVolumes
 import com.langhuan.reader.ui.root.ScreenModel
 import com.langhuan.reader.ui.root.screenModelScope
 import com.langhuan.reader.utils.postEvent
@@ -364,4 +362,31 @@ sealed interface TocUiEvent {
 
     /** 更新书籍 TOC 规则并刷新章节 (对照 Activity.upBookAndToc)。 */
     data class UpBookTocRule(val book: Book) : TocUiEvent
+}
+
+/**
+ * 默认收合集合: 只展开当前章所在分组, 其余卷头收起; 无当前章 (durIndex 无效) 时展开
+ * 第一个分组; 无卷头返回空集 (全展开)。
+ */
+internal fun defaultCollapsedVolumes(chapters: List<BookChapter>, durIndex: Int): Set<Int> {
+    val volumes = chapters.mapNotNull { chapter -> chapter.index.takeIf { chapter.isVolume } }
+    if (volumes.isEmpty()) return emptySet()
+    val keep = volumes.lastOrNull { it <= durIndex } ?: volumes.first()
+    return (volumes - keep).toSet()
+}
+
+/** 卷收合显示列表: 卷头 (isVolume) 按 [collapsed] 收起其后同级章节, 卷头本身恒显示。 */
+internal fun buildChapterDisplayList(all: List<BookChapter>, collapsed: Set<Int>): List<BookChapter> {
+    if (collapsed.isEmpty()) return all
+    val out = ArrayList<BookChapter>(all.size)
+    var hide = false
+    for (item in all) {
+        if (item.isVolume) {
+            hide = item.index in collapsed
+            out.add(item)
+        } else if (!hide) {
+            out.add(item)
+        }
+    }
+    return out
 }

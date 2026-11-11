@@ -113,6 +113,17 @@ fun TextChapterShared.getLastParagraphPosition(): Int {
 }
 
 /**
+ * 按章内字符位置取所在段落（含标题段）。
+ *
+ * 段落偏移来自排版产物 [TextParagraph.startOffset]/[TextParagraph.endOffset]，与
+ * durChapterPos、书签、朗读游标共用同一份字符账本；用于跟随滚动时把游标稳定到段首，
+ * 避免按句推进时目标行在视口里逐字漂移。
+ */
+fun TextChapterShared.paragraphAt(chapterPos: Int): TextParagraph? {
+    return paragraphs.firstOrNull { chapterPos in it.startOffset until it.endOffset }
+}
+
+/**
  * 尝试就地为 [TextChapterShared] 打补丁添加/更新段评气泡（Patch 快速通道）。
  *
  * 逻辑：

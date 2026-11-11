@@ -21,8 +21,6 @@ import com.langhuan.reader.data.entities.BookSource
 import com.langhuan.reader.data.entities.SearchBook
 import com.langhuan.reader.help.book.addType
 import com.langhuan.reader.help.book.isAudio
-import com.langhuan.reader.help.book.isRss
-import com.langhuan.reader.help.book.isVideo
 import com.langhuan.reader.help.config.AppConfigProviders
 import com.langhuan.reader.ui.about.AppLogDialog
 import com.langhuan.reader.ui.book.search.SearchNavCallbacks
@@ -117,7 +115,7 @@ fun SearchRoute(
             // 对照 SearchActivity.onBookClick + showBookInfo:
             // - 不在书架补 notShelf type
             // - bookUrl 含 "::" 是探索结果, 按 book.origin 查 BookSource 后跳 ExploreShow
-            // - longClick || !devFeat 直接进详情; 否则按 isVideo/isRss/isAudio/默认 分流
+            // - longClick || !devFeat 直接进详情; 否则按 isAudio/默认 分流
             override fun onBookClick(
                 book: BaseBook,
                 longClick: Boolean,
@@ -157,8 +155,6 @@ fun SearchRoute(
                     return
                 }
                 when {
-                    book.isVideo -> navigator.push(AppRoute.VideoPlay(ref))
-                    book.isRss -> navigator.push(AppRoute.ReadRss(ref))
                     // 音频书直达播放页 (与书架 startActivityForBook 分流一致)
                     book.isAudio -> navigator.push(
                         AppRoute.AudioPlay(ref),

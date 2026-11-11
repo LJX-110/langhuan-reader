@@ -13,37 +13,25 @@ import com.langhuan.reader.ui.route.BookSourceEditRoute
 import com.langhuan.reader.ui.route.BookSourceManageRoute
 import com.langhuan.reader.ui.route.BookmarkRoute
 import com.langhuan.reader.ui.route.BookshelfManageRoute
-import com.langhuan.reader.ui.route.CoverConfigRoute
 import com.langhuan.reader.ui.route.DictRuleRoute
 import com.langhuan.reader.ui.route.ExploreShowRoute
 import com.langhuan.reader.ui.route.ImportBookRoute
 import com.langhuan.reader.ui.route.MainRoute
-import com.langhuan.reader.ui.route.MangaExtensionReposRoute
-import com.langhuan.reader.ui.route.MangaExtensionRoute
-import com.langhuan.reader.ui.route.MangaReaderRoute
 import com.langhuan.reader.ui.route.MyConfigRoute
-import com.langhuan.reader.ui.route.OtherConfigRoute
 import com.langhuan.reader.ui.route.ReadRecordRoute
-import com.langhuan.reader.ui.route.ReadRssRoute
 import com.langhuan.reader.ui.route.ReaderRoute
 import com.langhuan.reader.ui.route.RemoteBookRoute
 import com.langhuan.reader.ui.route.ReplaceEditRoute
 import com.langhuan.reader.ui.route.ReplaceRuleRoute
 import com.langhuan.reader.ui.route.ReviewListRoute
-import com.langhuan.reader.ui.route.RuleSubRoute
 import com.langhuan.reader.ui.route.KeywordHighlightRoute
 import com.langhuan.reader.ui.route.SearchContentRoute
 import com.langhuan.reader.ui.route.SearchRoute
 import com.langhuan.reader.ui.debug.DialogPreviewScreen
 import com.langhuan.reader.ui.route.SourceFilterRuleRoute
-import com.langhuan.reader.ui.route.SourceToolboxRoute
-import com.langhuan.reader.ui.route.ThemeConfigRoute
-import com.langhuan.reader.ui.route.TvBoxRoute
 import com.langhuan.reader.ui.route.TocRoute
 import com.langhuan.reader.ui.route.TxtTocRuleRoute
-import com.langhuan.reader.ui.route.VideoPlayRoute
 import com.langhuan.reader.ui.route.WebViewRoute
-import com.langhuan.reader.ui.route.WelcomeConfigRoute
 
 /**
  * shared 统一路由内容分发 (零薄壳方案)。
@@ -95,27 +83,12 @@ fun RouteContent(
             true
         }
 
-        is AppRoute.MangaExtension -> {
-            MangaExtensionRoute(entry, navigator, screenModelStore)
-            true
-        }
-
-        is AppRoute.MangaExtensionRepos -> {
-            MangaExtensionReposRoute(entry, navigator, screenModelStore)
-            true
-        }
-
         is AppRoute.Bookmark -> {
             BookmarkRoute(entry, navigator, screenModelStore)
             true
         }
         is AppRoute.BookshelfManage -> {
             BookshelfManageRoute(entry, navigator, screenModelStore)
-            true
-        }
-
-        is AppRoute.CoverConfig -> {
-            CoverConfigRoute(entry, navigator, screenModelStore)
             true
         }
 
@@ -162,18 +135,8 @@ fun RouteContent(
             true
         }
 
-        is AppRoute.OtherConfig -> {
-            OtherConfigRoute(entry, navigator, screenModelStore)
-            true
-        }
-
         is AppRoute.ReadRecord -> {
             ReadRecordRoute(entry, navigator, screenModelStore)
-            true
-        }
-
-        is AppRoute.SourceToolbox -> {
-            SourceToolboxRoute(entry, navigator, screenModelStore)
             true
         }
 
@@ -189,11 +152,6 @@ fun RouteContent(
 
         is AppRoute.ReplaceRule -> {
             ReplaceRuleRoute(entry, navigator, screenModelStore)
-            true
-        }
-
-        is AppRoute.RuleSub -> {
-            RuleSubRoute(entry, navigator, screenModelStore)
             true
         }
 
@@ -217,11 +175,6 @@ fun RouteContent(
             true
         }
 
-        is AppRoute.ThemeConfig -> {
-            ThemeConfigRoute(entry, navigator, screenModelStore)
-            true
-        }
-
         is AppRoute.Toc -> {
             TocRoute(entry, navigator)
             true
@@ -229,16 +182,6 @@ fun RouteContent(
 
         is AppRoute.TxtTocRule -> {
             TxtTocRuleRoute(entry, navigator, screenModelStore)
-            true
-        }
-
-        is AppRoute.TvBox -> {
-            TvBoxRoute(entry, navigator, screenModelStore)
-            true
-        }
-
-        is AppRoute.WelcomeConfig -> {
-            WelcomeConfigRoute(entry, navigator, screenModelStore)
             true
         }
 
@@ -250,21 +193,6 @@ fun RouteContent(
 
         is AppRoute.AudioPlay -> {
             AudioPlayRoute(entry, navigator, screenModelStore)
-            true
-        }
-
-        is AppRoute.VideoPlay -> {
-            VideoPlayRoute(entry, navigator, screenModelStore)
-            true
-        }
-
-        is AppRoute.MangaReader -> {
-            MangaReaderRoute(entry, navigator, screenModelStore)
-            true
-        }
-
-        is AppRoute.ReadRss -> {
-            ReadRssRoute(entry, navigator, screenModelStore)
             true
         }
 

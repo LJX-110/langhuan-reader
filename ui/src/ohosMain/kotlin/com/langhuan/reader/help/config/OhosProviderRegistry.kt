@@ -37,7 +37,6 @@ import com.langhuan.reader.help.registerOhosMainThread
 import com.langhuan.reader.help.service.registerNativeUpdateBookCallback
 import com.langhuan.reader.help.service.registerOhosCacheBookServiceNotifications
 import com.langhuan.reader.help.service.registerOhosServiceLauncher
-import com.langhuan.reader.help.service.registerOhosWebServiceNotifications
 import com.langhuan.reader.help.source.registerNativeSourceHelpAccessor
 import com.langhuan.reader.help.source.registerNativeSourceProviders
 import com.langhuan.reader.help.source.registerNativeVerificationUiProvider
@@ -45,7 +44,6 @@ import com.langhuan.reader.help.toast.registerOhosToaster
 import com.langhuan.reader.help.tts.OhosHttpTtsPlayer
 import com.langhuan.reader.help.tts.TtsEngineProvider
 import com.langhuan.reader.help.tts.registerOhosSystemTtsEngine
-import com.langhuan.reader.ui.association.registerUiRuleSubAutoUpdateHook
 import com.langhuan.reader.ui.compose.platform.registerComposeStringProviders
 import com.langhuan.reader.help.ui.registerOhosOpenUrlProvider
 import com.langhuan.reader.help.ui.registerNativeUserAgentProvider
@@ -68,9 +66,6 @@ import com.langhuan.reader.utils.registerRuleRegexForJsonPath
 import kotlinx.serialization.decodeFromString
 import com.langhuan.reader.ui.book.manage.registerNativeBookshelfManagePlatform
 import com.langhuan.reader.ui.book.read.page.provider.registerSkiaTextMeasurer
-import com.langhuan.reader.web.registerNativeWebServerPlatform
-import com.langhuan.reader.web.utils.registerComposeWebAssetSource
-import com.langhuan.reader.web.utils.registerNativeWebStrings
 import kotlin.concurrent.Volatile
 
 @Volatile
@@ -167,8 +162,6 @@ fun registerOhosProviders() {
     // (EntryAbility 的 want.uri) 在本函数返回后即可能取串, 等首帧组合才注册会落到 key 名兜底。
     // 排在 1.06 Preference 之前与平台无关, 只须在任何取值调用之前)
     registerComposeStringProviders()
-    // 规则订阅每日自动更新的导入实现 (复用 :ui 的导入链, 见 RuleSubAutoUpdateHook)
-    registerUiRuleSubAutoUpdateHook()
 
     // 1.06 Preference provider (须在 AppLog 宿主之前: 宿主的 recordLog 门直读 PreferenceProviders,
     // 晚注册则这中间的 AppLog.put 全按 recordLog=false 走, 不落盘)
@@ -312,7 +305,6 @@ fun registerOhosProviders() {
     // Web 服务: EventBus.WEB_SERVICE), 不新造调度。缓存那个要包一层已注册的 ServiceLauncher,
     // 故必须在其之后; Web 服务那个须早于任何一次服务启停 (用户操作触发)。
     registerOhosCacheBookServiceNotifications()
-    registerOhosWebServiceNotifications()
     // 注册业务层 CookieStoreProvider (commonMain SharedCookieStore, Room cookieDao 持久化)
     // 与 desktop registerDefaultJvmCookieStoreProvider / app registerAndroidCookieStoreProvider
     // / iOS registerDefaultIosCookieStoreProvider 对齐
@@ -370,12 +362,6 @@ fun registerOhosProviders() {
     // 返回 null, 排版静默跳过图片 —— 此前两端漏注册, 图片全部不显示)
     registerReaderImageResolver()
 
-    // 9. Web 服务 provider (WebAssetSource + WebStrings + WebServerPlatform, iOS/鸿蒙共用 Ktor server 壳)
-    // 仅注册平台实现, 不启动服务 (WebServerManager.start 由用户操作触发)
-    registerComposeWebAssetSource()
-    registerNativeWebStrings()
-    // BookController 图片/阅读状态 provider (/cover /image 直出缓存字节, /deleteBook /saveBookProgress
-    // 经 NativeReadBookStateProvider 桥接阅读页挂接的 ReadBookShared)
+    // 9. BookController 图片/阅读状态 provider
     registerNativeBookControllerProviders()
-    registerNativeWebServerPlatform()
 }

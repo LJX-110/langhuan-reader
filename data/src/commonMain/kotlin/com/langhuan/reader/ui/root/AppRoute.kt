@@ -5,9 +5,6 @@ import com.langhuan.reader.data.entities.Book
 import com.langhuan.reader.data.entities.BookSource
 import com.langhuan.reader.data.entities.SearchBook
 import com.langhuan.reader.help.book.isAudio
-import com.langhuan.reader.help.book.isImage
-import com.langhuan.reader.help.book.isRss
-import com.langhuan.reader.help.book.isVideo
 import com.langhuan.reader.ui.book.searchContent.SearchResult
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -42,20 +39,6 @@ sealed interface AppRoute {
     @Serializable
     @SerialName("book_source")
     data object BookSourceManage : AppRoute
-
-    // 漫画插件管理 (取数走 PluginSourceDelegates 委派; 服务未注册端入口隐藏)
-    @Serializable
-    @SerialName("manga_extension")
-    data object MangaExtension : AppRoute
-
-    // TVBox 影视源管理 (站点以虚拟书源行进入书源体系; 服务未注册端入口隐藏)
-    @Serializable
-    @SerialName("tvbox")
-    data object TvBox : AppRoute
-
-    @Serializable
-    @SerialName("manga_extension_repos")
-    data object MangaExtensionRepos : AppRoute
 
     @Serializable
     @SerialName("explore_show")
@@ -109,7 +92,7 @@ sealed interface AppRoute {
         val scope: String? = null,
     ) : AppRoute
 
-    // 三端合并: 书籍阅读类 (音频/视频/漫画/RSS/目录/换源/书签/书评/信息编辑)
+    // 三端合并: 书籍阅读类 (音频/RSS/目录/换源/书签/书评/信息编辑)
     @Serializable
     @SerialName("audio_play")
     data class AudioPlay(
@@ -119,76 +102,8 @@ sealed interface AppRoute {
     ) : AppRoute
 
     @Serializable
-    @SerialName("video_play")
-    data class VideoPlay(
-        val target: VideoPlayTarget? = null,
-        /**
-         * 旧快照字段: origin/master 及更早的版本只写 `book`。已发布版本的 saveable state
-         * (Android 进程被杀重建 / 窗口恢复) 恢复时会走到这里，只用于读出，新快照不再写出。
-         * 不能把它当“可选就完事”: 缺字段会让整份快照解码抛 MissingFieldException，所以这里
-         * 必须能容纳旧形态，否则更新后回到前台整个导航栈会弹回书架。
-         *
-         * 旧形态恒为“由书进入” → 等价于 [VideoPlayTarget.FromBook] (见 [playTarget])。
-         */
-        @SerialName("book")
-        val legacyBook: BookRef? = null,
-        val chapterIndex: Int? = null,
-        val chapterPos: Int? = null,
-    ) : AppRoute {
-        init {
-            // 两个字段都没有 = 快照被写坏/伪造 (本项目两个 writer 都必带 target)。
-            // 在解码期就抛, 让 decodeSnapshot 的 runCatching 接住并回落初始路由,
-            // 而不是等到渲染时在 [playTarget] 里抛——那会是进页即崩
-            require(target != null || legacyBook != null) { "video_play 快照既无 target 也无 book" }
-        }
-
-        /**
-         * 归一后的播放目标: 新快照走 [target], 旧快照 (只有 [legacyBook]) 等价于
-         * [VideoPlayTarget.FromBook]。非空由上面的 init 保证。
-         */
-        val playTarget: VideoPlayTarget
-            get() = target ?: VideoPlayTarget.FromBook(legacyBook!!)
-
-        /**
-         * 由书进入时的书籍引用; 外部直投 ([VideoPlayTarget.Direct]) 没有书, 返回 null。
-         *
-         * 转场身份等"需要书"的逻辑读到 null 即自然不参与 (外部播放器不是书卡片)。
-         */
-        val book: BookRef? get() = (playTarget as? VideoPlayTarget.FromBook)?.book
-
-        companion object {
-            /**
-             * 书籍入口的既有构造形态 (等价于 [VideoPlay] + [VideoPlayTarget.FromBook]):
-             * 阅读类分流 ([BookRef.toReadRoute]) 与详情页/搜索/发现等 8 处入口都只有一本
-             * 书, 不该在调用点重复包一层 FromBook。
-             */
-            operator fun invoke(
-                book: BookRef,
-                chapterIndex: Int? = null,
-                chapterPos: Int? = null,
-            ): VideoPlay = VideoPlay(
-                target = VideoPlayTarget.FromBook(book),
-                chapterIndex = chapterIndex,
-                chapterPos = chapterPos,
-            )
-        }
-    }
-
-    @Serializable
-    @SerialName("manga_reader")
-    data class MangaReader(
-        val book: BookRef,
-        val chapterIndex: Int? = null,
-        val chapterPos: Int? = null,
-    ) : AppRoute
-
-    @Serializable
     @SerialName("toc")
     data class Toc(val book: BookRef) : AppRoute
-
-    @Serializable
-    @SerialName("read_rss")
-    data class ReadRss(val book: BookRef) : AppRoute
 
     @Serializable
     @SerialName("book_info_edit")
@@ -233,10 +148,6 @@ sealed interface AppRoute {
     @SerialName("keyword_highlight")
     data class KeywordHighlight(val book: BookRef? = null) : AppRoute
 
-    @Serializable
-    @SerialName("rule_sub")
-    data object RuleSub : AppRoute
-
     /**
      * 弹窗预览: 逐个列出全部对话框/弹层形制并就地弹出, 供改界面时逐项对照。
      *
@@ -277,30 +188,9 @@ sealed interface AppRoute {
     @SerialName("read_record")
     data object ReadRecord : AppRoute
 
-    // 书源工具箱: 请求特殊格式 URL + 按阶段绑定书源环境跑规则/JS, 编写书源的调试工作台
-    @Serializable
-    @SerialName("source_toolbox")
-    data object SourceToolbox : AppRoute
-
     @Serializable
     @SerialName("backup_config")
     data object BackupConfig : AppRoute
-
-    @Serializable
-    @SerialName("other_config")
-    data object OtherConfig : AppRoute
-
-    @Serializable
-    @SerialName("theme_config")
-    data object ThemeConfig : AppRoute
-
-    @Serializable
-    @SerialName("cover_config")
-    data object CoverConfig : AppRoute
-
-    @Serializable
-    @SerialName("welcome_config")
-    data object WelcomeConfig : AppRoute
 
     // 三端合并: 工具类 (WebView/登录/JS/关联)
     // 字段对应原 app 端 WebViewActivity 的 intent extras:
@@ -320,48 +210,6 @@ sealed interface AppRoute {
         val refetchAfterSuccess: Boolean = true,
     ) : AppRoute
 
-}
-
-/**
- * 视频播放页的播放目标 (对照 [AppRoute.VideoPlay])。
- *
- * - [FromBook]: 书源体系内的视频书 —— 必须有书 + 书源 + 章节目录, 装载链走
- *   [com.langhuan.reader.help.book.BookChapterLoader] (原路径, 行为零变化)。
- * - [Direct]: 外部交给我们的**已经可播的地址** (直链 / 本地文件 / content URI) ——
- *   没有书、不查书源、不拉目录、不落进度、不写书签, 页面按"最小播放器"渲染。
- *   需要书源规则解析的网页地址不走这里 (那条路必须先进书, 见
- *   [com.langhuan.reader.ui.association.SchemeImportOps.resolveRoute])。
- */
-@Serializable
-sealed interface VideoPlayTarget {
-
-    @Serializable
-    @SerialName("book")
-    data class FromBook(val book: BookRef) : VideoPlayTarget
-
-    @Serializable
-    @SerialName("direct")
-    data class Direct(
-        /** 已归一化的可播地址 (带 scheme: http/https/file/content) */
-        val url: String,
-        /** 起播请求头 (Referer/Cookie/UA 等), 由四端渲染层带给播放器 */
-        val headers: Map<String, String> = emptyMap(),
-        /** 外部给的显示标题 (文件名/分享文案), 空则从 [url] 推导 */
-        val title: String? = null,
-        /**
-         * 资源格式 MIME 线索, 供播放器选媒体源 (无后缀地址的格式依据), 未提供为 null。
-         * 来源可为外部投递声明或对真实文件类型的确认, 不保证是投递原串 (平台可能归一)。
-         */
-        val mime: String? = null,
-    ) : VideoPlayTarget {
-        /** 标题栏显示名: 显式标题优先, 否则取地址末段 (先切掉 fragment/query) */
-        val displayTitle: String
-            get() = title?.takeIf { it.isNotBlank() }
-                ?: url.substringBefore('#').substringBefore('?')
-                    .substringAfterLast('/').substringAfterLast('\\')
-                    .takeIf { it.isNotBlank() }
-                ?: url
-    }
 }
 
 @Serializable
@@ -401,7 +249,7 @@ sealed interface BookRef {
 fun Book.toRouteRef(): BookRef = BookRef.Stored(this)
 fun SearchBook.toRouteRef(): BookRef = BookRef.Search(this)
 
-// 按 app 端 startActivityForBook 逻辑分流阅读类路由 (Audio/Video/Manga/Rss/Reader)
+// 按 app 端 startActivityForBook 逻辑分流阅读类路由 (音频/目录/正文)
 fun Book.toReadRoute(): AppRoute = toRouteRef().toReadRoute()
 
 // 由 BookRef 构造阅读类路由, 保留 chapterIndex/chapterPos (供 OpenBook/OpenReader 外部启动定位章节)
@@ -409,9 +257,6 @@ fun BookRef.toReadRoute(chapterIndex: Int? = null, chapterPos: Int? = null): App
     val book = asBook()
     return when {
         book.isAudio -> AppRoute.AudioPlay(this, chapterIndex, chapterPos)
-        book.isVideo -> AppRoute.VideoPlay(this, chapterIndex, chapterPos)
-        book.isImage -> AppRoute.MangaReader(this, chapterIndex, chapterPos)
-        book.isRss -> AppRoute.ReadRss(this)
         else -> AppRoute.Reader(this, chapterIndex, chapterPos)
     }
 }

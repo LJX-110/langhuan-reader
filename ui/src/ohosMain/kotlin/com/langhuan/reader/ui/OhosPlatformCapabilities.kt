@@ -1,7 +1,7 @@
 package com.langhuan.reader.ui
 
-import com.langhuan.reader.ui.video.VideoDirect
 import com.langhuan.reader.constant.AppLog
+import com.langhuan.reader.constant.AppPattern
 import kotlin.concurrent.Volatile
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
@@ -33,7 +33,6 @@ import com.langhuan.reader.help.readFromClipboard
 import com.langhuan.reader.help.openURL
 import com.langhuan.reader.help.notification.cancelOhosUpdateBookRefresh
 import com.langhuan.reader.help.service.OhosCacheBookNotifications
-import com.langhuan.reader.help.service.OhosWebServiceNotifications
 import com.langhuan.reader.help.source.OhosCheckSource
 import com.langhuan.reader.help.DirectLinkUploadNativePrimitives
 import com.langhuan.reader.help.toast.Toasters
@@ -73,7 +72,6 @@ import com.langhuan.reader.utils.KS_JSON
 import com.langhuan.reader.utils.ScreenInfoProviders
 import com.langhuan.reader.utils.systemCurrentTimeMillis
 import com.langhuan.reader.utils.toExportJsonText
-import com.langhuan.reader.web.WebServerManager
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -284,8 +282,6 @@ object OhosPlatformCapabilities : NativePlatformCapabilities {
         return smallestVp >= TABLET_MIN_SMALLEST_WIDTH_VP
     }
 
-    // ===== Web 服务 (WebServerManager + NativeWebServerPlatform 已下沉并在 OhosProviderRegistry 注册) =====
-
     // ===== 关于页 =====
 
     // ===== 书籍详情页 =====
@@ -467,26 +463,7 @@ object OhosPlatformCapabilities : NativePlatformCapabilities {
 
             NotificationId.CheckSourceService ->
                 if (action == IntentAction.stop) cancelCheckSource()
-
-            NotificationId.WebService -> when (action) {
-                // 对照原版 WebService.onStartCommand 的 IntentAction.stop → stopSelf()
-                IntentAction.stop -> setWebService(false)
-                OhosWebServiceNotifications.ACTION_COPY_HOST_ADDRESS -> copyWebServiceAddress()
-            }
         }
-    }
-
-    /**
-     * 通知点击 → 复制服务地址 (对照 app 端 `WebService.onStartCommand` 的 "copyHostAddress"
-     * 分支: `sendToClip(hostAddress)`)。
-     */
-    private fun copyWebServiceAddress() {
-        val address = WebServerManager.hostAddress
-        if (address.isEmpty()) {
-            AppLog.put("Web 服务地址为空, 未复制")
-            return
-        }
-        copyToClipboard(address)
     }
 
     /**
@@ -805,10 +782,10 @@ object OhosPlatformCapabilities : NativePlatformCapabilities {
                     // 系统投递的文件只有临时读许可 (未持久化, 无法 activatePermission): 按本次导入登记成
                     // 进程内临时访问; 普通书先复制进沙盒再分发, 长期引用不指向临时许可 (重启/退后台后必失效)
                     val fileName = mountPath.substringAfterLast('/')
-                    val isVideo = VideoDirect.targetFor(mountPath, title = fileName) != null
+                    val isVideo = fileName.matches(AppPattern.videoFileRegex)
                     if (isVideo) {
-                        // 视频体积大且播放链直接使用地址: 不执行 K 侧字节读取, 无需登记
-                        // OhosTransientFileAccess (该表只服务 FileBookAccessor 的授权旁路)
+                        // 视频已不支持且体积大: 不复制进沙盒, 直接交分发链报不支持
+                        // (分发链按扩展名拒绝, 不读取字节, 也无需登记 OhosTransientFileAccess)
                         FileAssociationDispatch.dispatch(
                             mountPath,
                             onUnknownFile = { name ->

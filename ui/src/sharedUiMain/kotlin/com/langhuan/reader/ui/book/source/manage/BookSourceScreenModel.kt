@@ -4,12 +4,10 @@ import com.langhuan.reader.constant.AppLog
 import com.langhuan.reader.constant.PreferKey
 import com.langhuan.reader.data.AppDbProviders
 import com.langhuan.reader.data.entities.BookSourcePart
-import com.langhuan.reader.data.entities.isVirtualPluginSource
 import com.langhuan.reader.help.config.PreferenceProviders
 import com.langhuan.reader.help.coroutine.IoDispatcher
 import com.langhuan.reader.help.source.SourceHelp
 import com.langhuan.reader.model.Debug
-import com.langhuan.reader.ui.book.manga.extension.MangaExtensionServiceProviders
 import com.langhuan.reader.ui.book.source.BookSourceListState
 import com.langhuan.reader.ui.book.source.BookSourceSort
 import com.langhuan.reader.ui.book.source.ShowSourceIconDefault
@@ -58,7 +56,6 @@ class BookSourceScreenModel(
 
     private var sourceFlowJob: Job? = null
     private var groupsJob: Job? = null
-    private var pluginsJob: Job? = null
 
     // 域名缓存, 不随数据变化失效
     private val hostMap = hashMapOf<String, String>()
@@ -66,7 +63,6 @@ class BookSourceScreenModel(
     init {
         upBookSource(_state.value.searchKey)
         observeGroups()
-        observePluginSources()
     }
 
     fun getSourceHost(origin: String): String =
@@ -90,44 +86,6 @@ class BookSourceScreenModel(
         }
     }
 
-    /**
-     * 插件装载状态变化后重取列表: 插件源虚拟行的图标由归属插件包给出, 注册表就绪或插件版本
-     * 变化时行里的旧图标要跟着换 (卸载时虚拟行本身由同步删除, 无需在此处理)。
-     * 只在包名与版本的集合变化时重取, 安装进度/仓库刷新等发射不触发列表重建。
-     *
-     * 订阅时的当前快照同样重取: 列表可能建于注册表就绪之前 (图标落回首字占位), 只看后续
-     * 变化会漏掉「就绪结果已在当前快照里」这一情形, 冷启动先开书源管理就停在占位。
-     */
-    private fun observePluginSources() {
-        val service = MangaExtensionServiceProviders.getOrNull() ?: return
-        pluginsJob?.cancel()
-        pluginsJob = scope.launch {
-            service.state
-                .map { extState -> extState.installed.map { it.pkgName to it.versionCode } }
-                .distinctUntilChanged()
-                .collect { upBookSource(_state.value.searchKey) }
-        }
-    }
-
-    /**
-     * 插件源虚拟行的行首图标并入行数据: 行内没有图标字段的插件源按归属插件包取图
-     * (首次读包并落盘缓存, 之后命中缓存)。本端没有插件宿主 (iOS/鸿蒙) 时 provider 未注册,
-     * 直接原样返回 (行内图标字段为空, 界面回落首字占位)。
-     *
-     * 图标字段始终随数据下发, 与行首图标开关无关: 该开关只决定列表是否渲染这一格。
-     */
-    private fun withPluginSourceIcons(data: List<BookSourcePart>): List<BookSourcePart> {
-        val service = MangaExtensionServiceProviders.getOrNull() ?: return data
-        return data.map { part ->
-            if (part.isVirtualPluginSource() && part.bookSourceIcon.isNullOrBlank()) {
-                service.sourceIconPath(part.bookSourceUrl)?.let { part.copy(bookSourceIcon = it) }
-                    ?: part
-            } else {
-                part
-            }
-        }
-    }
-
     private fun upBookSource(searchKey: String) {
         sourceFlowJob?.cancel()
         sourceFlowJob = scope.launch {
@@ -144,7 +102,7 @@ class BookSourceScreenModel(
                 is SourceFilter.Search -> appDb.bookSourceDao.flowSearch(filter.key)
             }
             base.map { data ->
-                withPluginSourceIcons(sortedSources(data))
+                sortedSources(data)
             }
                 .catch { AppLog.put("书源界面更新书源出错", it) }
                 .flowOn(IoDispatcher)

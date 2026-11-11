@@ -69,7 +69,7 @@ import com.langhuan.reader.ui.book.group.GroupViewModelShared
 import com.langhuan.reader.ui.book.read.HeadlessReadAloud
 import com.langhuan.reader.ui.book.read.ReadBookEvents
 import com.langhuan.reader.ui.book.read.ReadConfigChange
-import com.langhuan.reader.ui.book.read.readerAutoPageActive
+import com.langhuan.reader.ui.book.read.readerFocusMode
 import com.langhuan.reader.ui.book.read.readerMenuLayoutVisible
 import com.langhuan.reader.ui.bookshelf.CoverSlotRatio
 import com.langhuan.reader.ui.bookshelf.LocalBookCoverSlot
@@ -99,7 +99,6 @@ import com.langhuan.reader.ui.config.MODE_EDIT_PREFS
 import com.langhuan.reader.ui.config.ThemeCustomizeDialog
 import com.langhuan.reader.ui.config.ThemeListDialog
 import com.langhuan.reader.ui.route.ReviewListOverlayDialogContent
-import com.langhuan.reader.ui.video.VideoDirect
 import com.langhuan.reader.ui.widget.dialog.PhotoViewOverlayDialog
 import com.langhuan.reader.ui.widget.dialog.decodePhotoOverlayPayload
 import com.langhuan.reader.ui.widget.dialog.photoOverlayTextColor
@@ -221,17 +220,15 @@ fun LanghuanApp(
         val windowPolicy = currentRoute?.let { route ->
             if (route is AppRoute.Reader) {
                 WindowPolicies.Reader.copy(
-                    systemBars = readerSystemBarsPolicy(menuVisible = readerMenuLayoutVisible),
+                    systemBars = readerSystemBarsPolicy(
+                        menuVisible = readerMenuLayoutVisible,
+                        focusMode = readerFocusMode,
+                    ),
                     orientation = readerOrientationPolicy(),
                     // Android 阅读页不直接作用（MainActivity.applyWindowKeepScreenOn 改走
                     // keepLight 计时管理），桌面/移动端按 keepLight 直接驱动平台常亮
-                    keepScreenOn = readerKeepScreenOnPolicy() || readerAutoPageActive,
+                    keepScreenOn = readerKeepScreenOnPolicy(),
                 )
-            } else if (route is AppRoute.MangaReader) {
-                // 漫画页跟随"屏幕方向"设置 (对照原版 ReadMangaActivity 继承 BaseReadActivity 的
-                // setOrientation: 同样把 AppConfig.screenOrientation 的 "0"~"4" 映射成系统方向)。
-                // 只覆盖方向, 其余字段 (fullscreen/keepScreenOn/systemBars) 沿用 WindowPolicies.Manga。
-                WindowPolicies.Manga.copy(orientation = readerOrientationPolicy())
             } else {
                 WindowPolicies.forRoute(route)
             }
@@ -258,15 +255,13 @@ fun LanghuanApp(
             val route = currentRouteState.value
             val policy = if (route is AppRoute.Reader) {
                 WindowPolicies.Reader.copy(
-                    systemBars = readerSystemBarsPolicy(menuVisible = readerMenuLayoutVisible),
+                    systemBars = readerSystemBarsPolicy(
+                        menuVisible = readerMenuLayoutVisible,
+                        focusMode = readerFocusMode,
+                    ),
                     orientation = readerOrientationPolicy(),
-                    keepScreenOn = readerKeepScreenOnPolicy() || readerAutoPageActive,
+                    keepScreenOn = readerKeepScreenOnPolicy(),
                 )
-            } else if (route is AppRoute.MangaReader) {
-                // 漫画页跟随"屏幕方向"设置 (对照原版 ReadMangaActivity 继承 BaseReadActivity 的
-                // setOrientation: 同样把 AppConfig.screenOrientation 的 "0"~"4" 映射成系统方向)。
-                // 只覆盖方向, 其余字段 (fullscreen/keepScreenOn/systemBars) 沿用 WindowPolicies.Manga。
-                WindowPolicies.Manga.copy(orientation = readerOrientationPolicy())
             } else {
                 route?.let { WindowPolicies.forRoute(it) } ?: WindowPolicies.Default
             }
@@ -771,16 +766,10 @@ private suspend fun handleLaunchRequest(
             navigator.push(AppRoute.Search(key = it, submit = true))
         }
 
-        // 外部投来的文件: 视频直接进播放页 (不是“书”, 不得先去导入页转一手),
-        // 其余直接交平台文件关联分发 (JSON 弹导入框 / 书籍文件开阅读 / 压缩包解包分发;
-        // 对照原版透明壳承载, 不落“导入本地书”页当背景)
+        // 外部投来的文件: 直接交平台文件关联分发 (JSON 弹导入框 / 书籍文件开阅读 /
+        // 压缩包解包分发 / 视频等不支持类型提示; 对照原版透明壳承载, 不落"导入本地书"页当背景)
         is LaunchRequest.ImportFile -> {
-            val direct = VideoDirect.targetFor(request.filePath)
-            if (direct != null) {
-                navigator.pushIfNeeded(AppRoute.VideoPlay(direct))
-            } else {
-                capabilities.openImportFile(request.filePath)
-            }
+            capabilities.openImportFile(request.filePath)
         }
         // 进程内直投的完整路由 (透明壳深链 / 文件关联 / 直达入口): 载荷即引用, 不查库不反序列化。
         // asRoot 只在首次组合期 seed 初始路由时有意义 (见 MainActivity.Content), 到这里一律 push。
@@ -867,9 +856,6 @@ private fun DialogOverlayContent(overlay: AppOverlay.Dialog, navigator: AppNavig
         "photo" -> PhotoOverlayDialogContent(overlay, navigator)
         "group_select" -> GroupSelectDialogContent(overlay, navigator)
         "sourceLogin" -> SourceLoginOverlayContent(overlay, navigator)
-        // 插件虚拟源登录直达: 单扩展自带设置弹窗 (payload=归属扩展包名, 见
-        // ExtensionPrefOverlayDialog.kt; 不进插件管理页)
-        "extensionPref" -> ExtensionPrefOverlayContent(overlay, navigator)
         // 源/书变量编辑 (对照原版 VariableDialog; payload 携带实体, 见 VariableOverlayDialog.kt)
         "sourceVariable" -> SourceVariableOverlayDialogContent(overlay, navigator)
         "bookVariable" -> BookVariableOverlayDialogContent(overlay, navigator)

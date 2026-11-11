@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import com.langhuan.reader.help.config.ReadBookConfigProviders
 import com.langhuan.reader.ui.book.read.ReadBookEvents
 import com.langhuan.reader.ui.book.read.ReadConfigChange
+import com.langhuan.reader.ui.book.read.readerFocusMode
 import kotlinx.coroutines.flow.filter
 
 // ---- 系统栏避让: 全 app 唯一数据源 = "该栏应当占的高度" ----
@@ -114,10 +115,12 @@ private fun readerBarConfig(): Pair<Boolean, Boolean> {
             .collect { configTick++ }
     }
     // configTick 作 remember 键: prefs 直读无 Compose 快照, 靠事件自增强制重读
-    // (同 PageViewComposable 的 tipRefreshTick 用法)
-    return remember(configTick) {
+    // (同 PageViewComposable 的 tipRefreshTick 用法)。专注模式下系统栏由窗口策略隐藏,
+    // 正文避让同步归零, 否则会留下两条空白边。
+    return remember(configTick, readerFocusMode) {
         val cfg = ReadBookConfigProviders.getOrNull()
-        (cfg?.hideStatusBar == true) to (cfg?.hideNavigationBar == true)
+        (cfg?.hideStatusBar == true || readerFocusMode) to
+            (cfg?.hideNavigationBar == true || readerFocusMode)
     }
 }
 

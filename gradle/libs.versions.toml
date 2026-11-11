@@ -116,27 +116,11 @@ hutool = "5.8.22"
 bouncycastle = "1.79"
 quickChineseTransfer = "0.2.16"
 
-# ===== 嵌入式服务 / JSON =====
-nanoHttpd = "2.3.1"
+# ===== JSON =====
 json = "20260814"
 
 # ===== 桌面 JVM 专属 =====
 jna = "5.19.1"
-
-# ===== 桌面扩展加载 (APK 安装包解析 / dex→jar 字节码转换) =====
-# 坐标经 Suwayomi-Server 实证; 2026-10-04 逐一核对远端仓库元数据:
-# - dex2jar (de.femtopedia fork): Maven Central 最新即 2.4.38 (dex-translator/dex-tools 同版发布)
-# - apk-parser: 2.6.10 即最终版 (2019-11 后未再发版), Central 在售
-# - apksig: Maven Central 停在 2.3.0 (2017), 8.x/9.x 只发布在 Google Maven;
-#   settings.gradle.kts 已配 google(), 9.4.0 与项目 AGP 9.4.1 同代 (9.4.1 也在售)
-# - asm: Dex2Jar 2.4.38 的 POM 传递 asm-tree/asm-util/asm-commons 9.10.1,
-#   asm-tree 再传递 asm:asm:9.10.1, Gradle 冲突消解 (最新版胜出) 会把显式钉的
-#   更低版本静默抬到 9.10.1 —— 故直接钉 Dex2Jar 2.4.38 POM 实际配套的 9.10.1
-#   (任务书给的 9.9.1 对 2.4.38 不成立, 详见桌面扩展加载汇报)
-dex2jar = "2.4.38"
-asm = "9.10.1"
-apkParser = "2.6.10"
-apksig = "9.4.0"
 
 # ===== UI 组件 =====
 reorderable = "3.1.0"
@@ -185,9 +169,6 @@ kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-atomicfu = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "atomicfu" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
-# 扩展按 compileOnly 引用 kotlinx.serialization.json.okio 包, 运行时委派宿主, 官方宿主 serialization bundle 同含此工件
-kotlinx-serialization-json-okio = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json-okio", version.ref = "kotlinxSerializationJson" }
-kotlinx-serialization-protobuf = { module = "org.jetbrains.kotlinx:kotlinx-serialization-protobuf", version.ref = "kotlinxSerializationJson" }
 jetbrains-kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test" }
 runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "cmp" }
 runtime-jvm = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "composeMultiplatform-jvm" }
@@ -226,12 +207,6 @@ androidx-uiautomator = { module = "androidx.test.uiautomator:uiautomator", versi
 
 # ===== 网络栈 =====
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
-# 漫画扩展按 compileOnly 引用 okhttp3.zstd.Zstd / okhttp3.brotli.Brotli(BrotliInterceptor)与
-# com.squareup.zstd.okio.OkioZstd, 运行时委派宿主; okhttp-zstd 传递 zstd-kmp-okio(0.4.0,
-# Android 变体为 AAR 含全 ABI libzstd-kmp.so, JVM 变体 jar 含 /jni/ 全平台 native),
-# okhttp-brotli 传递 org.brotli:dec(0.1.2, 纯类 jar)
-okhttp-zstd = { module = "com.squareup.okhttp3:okhttp-zstd", version.ref = "okhttp" }
-okhttp-brotli = { module = "com.squareup.okhttp3:okhttp-brotli", version.ref = "okhttp" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
 kmp-zip-okio = { module = "no.synth:kmp-zip-okio", version.ref = "kmp-zip" }
@@ -271,21 +246,12 @@ hutool-crypto = { module = "cn.hutool:hutool-crypto", version.ref = "hutool" }
 bcprov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 quick-chinese-transfer-core = { module = "com.github.liuyueyi.quick-chinese-transfer:quick-transfer-core", version.ref = "quickChineseTransfer" }
 
-# ===== 嵌入式服务 / JSON =====
-nanohttpd-nanohttpd = { module = "org.nanohttpd:nanohttpd", version.ref = "nanoHttpd" }
-nanohttpd-websocket = { module = "org.nanohttpd:nanohttpd-websocket", version.ref = "nanoHttpd" }
+# ===== JSON =====
 json = { module = "org.json:json", version.ref = "json" }
 
 # ===== 桌面 JVM 专属 =====
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
-
-# ===== 桌面扩展加载 =====
-dex-translator = { module = "de.femtopedia.dex2jar:dex-translator", version.ref = "dex2jar" }
-dex-tools = { module = "de.femtopedia.dex2jar:dex-tools", version.ref = "dex2jar" }
-asm = { module = "org.ow2.asm:asm", version.ref = "asm" }
-apk-parser = { module = "net.dongliu:apk-parser", version.ref = "apkParser" }
-apksig = { module = "com.android.tools.build:apksig", version.ref = "apksig" }
 
 # ===== 测试 =====
 junit = { module = "junit:junit", version.ref = "junit" }

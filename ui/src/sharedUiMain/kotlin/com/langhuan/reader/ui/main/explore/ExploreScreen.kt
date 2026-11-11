@@ -62,6 +62,7 @@ import com.langhuan.reader.ui.compose.component.AppSearchField
 import com.langhuan.reader.ui.compose.component.LanghuanPageHeader
 import com.langhuan.reader.ui.compose.component.LanghuanSectionTitle
 import com.langhuan.reader.ui.compose.component.GridPackLayout
+import com.langhuan.reader.ui.compose.component.GridPackSpec
 import com.langhuan.reader.ui.compose.component.estimateGridHeight
 import com.langhuan.reader.ui.compose.component.listItemFocus
 import com.langhuan.reader.ui.compose.component.toGridPackSpec
@@ -70,6 +71,9 @@ import com.langhuan.reader.ui.compose.platform.platformStatusBarPadding
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
 import com.langhuan.reader.ui.compose.theme.LocalEInk
+import com.langhuan.reader.uimodel.KindItemUi
+import com.langhuan.reader.uimodel.PinnedItemUi
+import com.langhuan.reader.uimodel.SourceItemUi
 import kotlinx.coroutines.delay
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.delete
@@ -258,6 +262,16 @@ fun ExploreScreen(
         Box(Modifier.fillMaxSize()) {
             val sources = state.sources
             val pinned = state.pinned
+            // 边界适配: 子组件只消费 Ui 模型, 点击再按 key/url 回查实体交给 actions
+            val sourceItems = remember(sources) { sources.map { it.toSourceItemUi() } }
+            val pinnedItems = remember(pinned) { pinned.map { it.toPinnedItemUi() } }
+            val sourceByUrl = remember(sources) { sources.associateBy { it.bookSourceUrl } }
+            val pinnedByKey = remember(pinned) {
+                pinned.associateBy { pinnedKey(it.sourceUrl, it.categoryUrl) }
+            }
+            val kindByKey = remember(state.expandedKinds) {
+                state.expandedKinds.associateBy { it.title to it.url }
+            }
             if (sources.isEmpty() && state.searchKey.isEmpty()) {
                 Text(
                     text = stringResource(Res.string.explore_empty),
@@ -274,17 +288,65 @@ fun ExploreScreen(
                     bottom = navBarBottom
                 ),
             ) {
-                if (pinned.isNotEmpty()) {
+                if (pinnedItems.isNotEmpty()) {
                     item(key = "__pinned__", contentType = "pinned") {
-                        PinnedSection(pinned, actions)
+                        PinnedSection(
+                            pinned = pinnedItems,
+                            onOpen = { ui ->
+                                pinnedByKey[pinnedKey(ui.sourceUrl, ui.categoryUrl)]
+                                    ?.let { actions.onOpenPinned(it) }
+                            },
+                            onRemove = { ui ->
+                                pinnedByKey[pinnedKey(ui.sourceUrl, ui.categoryUrl)]
+                                    ?.let { actions.onRemovePinned(it) }
+                            },
+                        )
                     }
                 }
                 items(
-                    sources,
+                    sourceItems,
                     key = { it.bookSourceUrl },
                     contentType = { if (state.expandedUrl == it.bookSourceUrl) "expanded" else "collapsed" },
                 ) { item ->
-                    ExploreSourceItem(state, actions, item, expanded = state.expandedUrl == item.bookSourceUrl)
+                    val expanded = state.expandedUrl == item.bookSourceUrl
+                    val kinds = if (expanded && state.expandedSource != null) {
+                        state.expandedKinds.map { it.toKindItemUi() }
+                    } else {
+                        null
+                    }
+                    ExploreSourceItem(
+                        item = item,
+                        expanded = expanded,
+                        loading = state.loadingUrl == item.bookSourceUrl,
+                        kinds = kinds,
+                        onToggleExpand = {
+                            sourceByUrl[item.bookSourceUrl]?.let { actions.onToggleExpand(it) }
+                        },
+                        onEdit = { actions.onEditSource(item.bookSourceUrl) },
+                        onToTop = { sourceByUrl[item.bookSourceUrl]?.let { actions.onToTop(it) } },
+                        onLogin = { sourceByUrl[item.bookSourceUrl]?.let { actions.onLogin(it) } },
+                        onSearchBook = {
+                            sourceByUrl[item.bookSourceUrl]?.let { actions.onSearchBook(it) }
+                        },
+                        onRefresh = {
+                            sourceByUrl[item.bookSourceUrl]?.let { actions.onRefreshSource(it) }
+                        },
+                        onDelete = {
+                            sourceByUrl[item.bookSourceUrl]?.let { actions.onDeleteSource(it) }
+                        },
+                        onKindClick = { kind ->
+                            val kindUrl = kind.url
+                            when {
+                                kindUrl.isNullOrBlank() -> {}
+                                kind.isError -> kindByKey[kind.title to kindUrl]
+                                    ?.let { actions.onShowKindError(it) }
+                                kind.isButton -> state.expandedSource
+                                    ?.let { actions.onRunKindJs(it, kindUrl) }
+                                else -> state.expandedSource
+                                    ?.let { actions.onOpenExplore(it, kind.title, kindUrl) }
+                            }
+                        },
+                    )
                 }
             }
             // ===== 展开并行预滚 =====
@@ -396,10 +458,44 @@ private suspend fun ensureExpandedItemVisible(
     if (dy != 0) listState.animateScrollBy(dy.toFloat())
 }
 
+/** 收藏项在 Ui 与实体之间的回查 key (复用 app 端"书源 + 分类"唯一定位口径)。 */
+private fun pinnedKey(sourceUrl: String, categoryUrl: String) = sourceUrl + "\u0000" + categoryUrl
+
+private fun BookSourcePart.toSourceItemUi() = SourceItemUi(
+    bookSourceUrl = bookSourceUrl,
+    bookSourceName = bookSourceName,
+    bookSourceGroup = bookSourceGroup,
+    hasLoginUrl = hasLoginUrl,
+)
+
+private fun PinnedExplore.toPinnedItemUi() = PinnedItemUi(
+    sourceUrl = sourceUrl,
+    sourceName = sourceName,
+    categoryName = categoryName,
+    categoryUrl = categoryUrl,
+    searchKey = searchKey,
+)
+
+private fun ExploreKind.toKindItemUi(): KindItemUi {
+    val spec = style().toGridPackSpec()
+    return KindItemUi(
+        title = title,
+        url = url,
+        isError = title.startsWith("ERROR:"),
+        isButton = type == RowUi.Type.button,
+        colSpan = spec.colSpan,
+        rowSpan = spec.rowSpan,
+    )
+}
+
 /** 收藏区 (替原 flexbox header): 标题 + 收藏项流式标签, 长按删除。 */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PinnedSection(pinned: List<PinnedExplore>, actions: ExploreUiActions) {
+private fun PinnedSection(
+    pinned: List<PinnedItemUi>,
+    onOpen: (PinnedItemUi) -> Unit,
+    onRemove: (PinnedItemUi) -> Unit,
+) {
     Column(Modifier.fillMaxWidth().padding(top = DesignTokens.spacingXs)) {
         LanghuanSectionTitle(
             text = stringResource(Res.string.favorite),
@@ -408,9 +504,9 @@ private fun PinnedSection(pinned: List<PinnedExplore>, actions: ExploreUiActions
         FlowRow(Modifier.fillMaxWidth()) {
             pinned.forEach { pin ->
                 AppFilletTextButton(
-                    text = "${pin.sourceName}-${pin.categoryName}",
-                    onClick = { actions.onOpenPinned(pin) },
-                    onLongClick = { actions.onRemovePinned(pin) },
+                    text = pin.label,
+                    onClick = { onOpen(pin) },
+                    onLongClick = { onRemove(pin) },
                 )
             }
         }
@@ -419,22 +515,28 @@ private fun PinnedSection(pinned: List<PinnedExplore>, actions: ExploreUiActions
 
 @Composable
 private fun ExploreSourceItem(
-    state: ExploreUiState,
-    actions: ExploreUiActions,
-    item: BookSourcePart,
+    item: SourceItemUi,
     expanded: Boolean,
+    loading: Boolean,
+    kinds: List<KindItemUi>?,
+    onToggleExpand: () -> Unit,
+    onEdit: () -> Unit,
+    onToTop: () -> Unit,
+    onLogin: () -> Unit,
+    onSearchBook: () -> Unit,
+    onRefresh: () -> Unit,
+    onDelete: () -> Unit,
+    onKindClick: (KindItemUi) -> Unit,
 ) {
     val colors = AppTheme.colors
     val eInk = LocalEInk.current
     var showMenu by remember { mutableStateOf(false) }
     val url = item.bookSourceUrl
-    val current: Pair<BookSource, List<ExploreKind>>? =
-        if (state.expandedUrl == url) state.expandedSource?.let { it to state.expandedKinds } else null
+    val current: List<KindItemUi>? = kinds
     // 退出动画最后一帧: 按 item 局部冻结 (仅供本行动画期间渲染), 不写回 state、
     // 也不参与"是否需要重新加载"的判定 - 数据新鲜度由每次展开现取保证
     var shown by remember(url) { mutableStateOf(current) }
     LaunchedEffect(current) { if (current != null) shown = current }
-    val loading = state.loadingUrl == url
     // 箭头 right→down 用旋转 90° 过渡 (原版直接换图, Compose 补动画)
     val arrowRotation by animateFloatAsState(
         targetValue = if (expanded) 90f else 0f,
@@ -461,7 +563,7 @@ private fun ExploreSourceItem(
                     .clip(DesignTokens.shapeDefault)
                     .background(transparent10())
                     .combinedClickable(
-                        onClick = { actions.onToggleExpand(item) },
+                        onClick = { onToggleExpand() },
                         onLongClick = { showMenu = true },
                     )
                     .padding(DesignTokens.spacingDefault),
@@ -497,16 +599,26 @@ private fun ExploreSourceItem(
                 )
             }
             // 锚点对齐 llTitle 左上角 (复刻原 PopupMenu(view=llTitle) 行为)
-            ExploreItemMenu(actions, item, showMenu) { showMenu = false }
+            ExploreItemMenu(
+                item = item,
+                expanded = showMenu,
+                onDismiss = { showMenu = false },
+                onEdit = onEdit,
+                onToTop = onToTop,
+                onLogin = onLogin,
+                onSearchBook = onSearchBook,
+                onRefresh = onRefresh,
+                onDelete = onDelete,
+            )
         }
         // 分类区外框: 恒定 paddingTop=4dp (对照原 FrameLayout - GridLayout 收起仅 gone,
         // 外框始终占 4dp)。收起态相邻项间距 = 本项尾 4dp + 下项根 paddingTop 4dp = 8dp
         Column(Modifier.fillMaxWidth().padding(top = DesignTokens.spacingXs)) {
             val kindContent: @Composable () -> Unit = {
                 val data = current ?: shown
-                if (data != null && data.second.isNotEmpty()) {
+                if (data != null && data.isNotEmpty()) {
                     Box(Modifier.fillMaxWidth()) {
-                        KindFlow(actions, data.first, data.second)
+                        KindFlow(data, onKindClick)
                     }
                 }
             }
@@ -566,9 +678,9 @@ private fun ExploreSourceItem(
  * cols→列跨度、rows→纵跨行数, 纵跨项占住的列后续标签绕开填空, 而非流式换行挤到更下方。
  */
 @Composable
-private fun KindFlow(actions: ExploreUiActions, source: BookSource, kinds: List<ExploreKind>) {
+private fun KindFlow(kinds: List<KindItemUi>, onKindClick: (KindItemUi) -> Unit) {
     // 占格规格随 kinds 走, 别每次重组重建一遍列表
-    val specs = remember(kinds) { kinds.map { it.style().toGridPackSpec() } }
+    val specs = remember(kinds) { kinds.map { GridPackSpec(it.colSpan, it.rowSpan) } }
     GridPackLayout(
         specs = specs,
         rowUnitMinHeight = KIND_ROW_MIN_HEIGHT, // 原 tv.minimumHeight = 40dp × rows (viewHeight.large)
@@ -577,15 +689,7 @@ private fun KindFlow(actions: ExploreUiActions, source: BookSource, kinds: List<
         kinds.forEach { kind ->
             AppFilletTextButton(
                 text = kind.title,
-                onClick = {
-                    val kindUrl = kind.url
-                    when {
-                        kindUrl.isNullOrBlank() -> {}
-                        kind.title.startsWith("ERROR:") -> actions.onShowKindError(kind)
-                        kind.type == RowUi.Type.button -> actions.onRunKindJs(source, kindUrl)
-                        else -> actions.onOpenExplore(source, kind.title, kindUrl)
-                    }
-                },
+                onClick = { onKindClick(kind) },
             )
         }
     }
@@ -593,42 +697,47 @@ private fun KindFlow(actions: ExploreUiActions, source: BookSource, kinds: List<
 
 @Composable
 private fun ExploreItemMenu(
-    actions: ExploreUiActions,
-    item: BookSourcePart,
+    item: SourceItemUi,
     expanded: Boolean,
     onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    onToTop: () -> Unit,
+    onLogin: () -> Unit,
+    onSearchBook: () -> Unit,
+    onRefresh: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     val colors = AppTheme.colors
     AppDropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         DropdownMenuItem(
-            onClick = { onDismiss(); actions.onEditSource(item.bookSourceUrl) },
+            onClick = { onDismiss(); onEdit() },
         ) {
             Text(stringResource(Res.string.edit), color = colors.primaryText)
         }
         DropdownMenuItem(
-            onClick = { onDismiss(); actions.onToTop(item) },
+            onClick = { onDismiss(); onToTop() },
         ) {
             Text(stringResource(Res.string.to_top), color = colors.primaryText)
         }
         if (item.hasLoginUrl) {
             DropdownMenuItem(
-                onClick = { onDismiss(); actions.onLogin(item) },
+                onClick = { onDismiss(); onLogin() },
             ) {
                 Text(stringResource(Res.string.login), color = colors.primaryText)
             }
         }
         DropdownMenuItem(
-            onClick = { onDismiss(); actions.onSearchBook(item) },
+            onClick = { onDismiss(); onSearchBook() },
         ) {
             Text(stringResource(Res.string.search), color = colors.primaryText)
         }
         DropdownMenuItem(
-            onClick = { onDismiss(); actions.onRefreshSource(item) },
+            onClick = { onDismiss(); onRefresh() },
         ) {
             Text(stringResource(Res.string.refresh), color = colors.primaryText)
         }
         DropdownMenuItem(
-            onClick = { onDismiss(); actions.onDeleteSource(item) },
+            onClick = { onDismiss(); onDelete() },
         ) {
             Text(stringResource(Res.string.delete), color = colors.primaryText)
         }

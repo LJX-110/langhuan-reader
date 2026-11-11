@@ -10,7 +10,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
 import com.langhuan.reader.constant.BookSourceType
 import com.langhuan.reader.data.entities.BookSource
-import com.langhuan.reader.data.entities.ruleEditable
 import com.langhuan.reader.help.IntentData
 import com.langhuan.reader.help.config.HelpVersion
 import com.langhuan.reader.help.config.LocalConfigKeys
@@ -183,15 +182,6 @@ fun BookSourceEditRoute(
                 screenModel.dispatch(BookSourceEditUiEvent.Save(source) { saved ->
                     IntentData.source = saved
                     navigator.pop(RouteResultPayload.BookSourceEdit(saved))
-                })
-            },
-            onDebug = {
-                // 对照 app 端 debugSource: viewModel.save(getSource()) { startActivity<BookSourceDebugActivity> { IntentData.source = source } }
-                // 传编辑器内存对象而非只传 url: 调试页优先用它, 保证调的是当前编辑结果
-                val source = screenModel.getSource(editState)
-                screenModel.dispatch(BookSourceEditUiEvent.Save(source) { saved ->
-                    IntentData.source = saved
-                    navigator.push(AppRoute.BookSourceDebug(saved.bookSourceUrl))
                 })
             },
             onLogin = {
@@ -369,10 +359,6 @@ private fun bookSourceTypeToIndex(type: Int): Int = when (type) {
 // 从 BookSource 同步 header 表单状态 (对照 app 端 upSourceView header 部分)
 // 实体列表由 ScreenModel.upSourceView 重建, 这里仅同步 editState 的 header 字段 + sourceVersion++
 private fun applySourceToEditState(bs: BookSource, editState: BookSourceEditState) {
-    // 规则字段可编辑判定唯一出处: data 层 BookSource.ruleEditable; Init 与粘贴源两条刷表单路径都过这里
-    editState.ruleEditable = bs.ruleEditable
-    // 粘贴源可在非首 tab 触发: 只读源只剩基本信息 tab, 当前 tab 一并归位
-    if (!editState.ruleEditable) editState.currentTab = 0
     editState.bookSourceTypeIndex = bookSourceTypeToIndex(bs.bookSourceType)
     editState.enabled = bs.enabled
     editState.enabledCookieJar = bs.enabledCookieJar == true

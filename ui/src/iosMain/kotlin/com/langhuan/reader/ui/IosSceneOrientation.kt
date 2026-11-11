@@ -15,8 +15,8 @@ import platform.UIKit.UIDevice
 import platform.UIKit.UIUserInterfaceIdiomPad
 import platform.UIKit.UIWindowScene
 
-// iOS 方向请求共用件: 视频页锁横屏 (IosVideoPlayPlatformProvider.applySystemFullScreen) 与
-// 阅读页/漫画页方向锁 (IosWindowController.setOrientation) 共用同一份, 不各写一遍。
+// iOS 方向请求共用件: 阅读页/漫画页方向锁 (IosWindowController.setOrientation) 的唯一实现,
+// 不各写一遍。
 //
 // iOS 没有"写死方向"的公开通道, 只有这一条官方请求通道:
 // `UIWindowScene.requestGeometryUpdateWithPreferences:errorHandler:` 配

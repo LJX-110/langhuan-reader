@@ -46,7 +46,6 @@ import androidx.compose.ui.unit.sp
 import com.langhuan.reader.data.entities.Book
 import com.langhuan.reader.data.entities.BookSource
 import com.langhuan.reader.data.entities.SearchBook
-import com.langhuan.reader.model.webBook.PluginFilterSession
 import com.langhuan.reader.ui.bookshelf.BookshelfBadge
 import com.langhuan.reader.ui.bookshelf.CoverSlotRatio
 import com.langhuan.reader.ui.bookshelf.KindLabels
@@ -55,6 +54,7 @@ import com.langhuan.reader.ui.bookshelf.ShelfExploreListItem
 import com.langhuan.reader.ui.bookshelf.ShelfGridItem
 import com.langhuan.reader.ui.bookshelf.coverResourceKey
 import com.langhuan.reader.ui.bookshelf.shelfCoverHeightDp
+import com.langhuan.reader.ui.book.search.toBookItemUi
 import com.langhuan.reader.ui.bookshelf.toCoverBook
 import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
 import com.langhuan.reader.ui.root.LocalSharedCoverBinding
@@ -163,7 +163,6 @@ private sealed interface ExplorePreloadSignal {
  * - [canLogin]: 书源带登录入口 (对照原 hasLoginUrl), 菜单"书源登录"显隐
  * - [bookshelfVersion]: 书架增删时递增驱动重组刷新绿点/徽标
  * - [scrollTopEpoch]: 标题栏点击回顶信号, >0 时触发列表 animateScrollToItem(0)
- * - [pluginFilterSource]: 插件源筛选入口目标 (非插件源为 null), 驱动 [PluginExploreFilterRow]
  */
 data class ExploreShowUiState(
     val title: String,
@@ -179,18 +178,6 @@ data class ExploreShowUiState(
     val scrollTopEpoch: Int,
     val footerLoading: Boolean,
     val footerText: String?,
-    val pluginFilterSource: PluginFilterSource? = null,
-    /** 筛选分类页的会话筛选实例 (漫画 [com.langhuan.reader.model.webBook.MangaFilterSession] /
-     * 视频 [com.langhuan.reader.model.webBook.AnimeFilterSession], 随页面销毁)。 */
-    val pluginExploreFilters: PluginFilterSession? = null,
-)
-
-/**
- * 插件源筛选入口目标 (仅"筛选"分类页推送): 源 url 供取筛选会话, 源名供 chip 文案。
- */
-data class PluginFilterSource(
-    val sourceUrl: String,
-    val sourceName: String,
 )
 
 /**
@@ -243,13 +230,6 @@ interface ExploreShowUiActions {
     /** 参数 chip 变化 (宿主清空 books + 重新 explore) */
     fun onExploreOptionChanged()
 
-    /**
-     * 筛选重置 (入口行"重置"): 宿主换新默认会话实例、同步 UiState 并重载第 1 页, 仍停留筛选面。
-     */
-    fun onPluginFiltersReset() {}
-
-    /** 筛选面板打开/关闭: 编辑期间暂停翻页, 关闭未改动时恢复。 */
-    fun onPluginFilterEditingChanged(editing: Boolean) {}
 }
 
 /**
@@ -304,14 +284,6 @@ fun ExploreShowScreen(
             actions = { ExploreActions(state, actions) },
         )
         optionsRowSlot()
-        // 插件源筛选面板 (仅"筛选"分类页; 会话实例挂 VM 随页面销毁, 不持久化)
-        PluginExploreFilterRow(
-            target = state.pluginFilterSource,
-            filters = state.pluginExploreFilters,
-            onFiltersApplied = actions::onExploreOptionChanged,
-            onResetFilters = actions::onPluginFiltersReset,
-            onEditingChanged = actions::onPluginFilterEditingChanged,
-        )
         ResultArea(state, actions, videoItemSlot, coverSlot, Modifier.weight(1f))
     }
 }
@@ -361,11 +333,6 @@ private fun ExploreActions(state: ExploreShowUiState, actions: ExploreShowUiActi
             ) {
                 Text(stringResource(Res.string.login), color = colors.primaryText)
             }
-        }
-        DropdownMenuItem(
-            onClick = { dismiss(); actions.onShowSourceFilterRule() },
-        ) {
-            Text(stringResource(Res.string.source_filter_rule), color = colors.primaryText)
         }
     }
 }
@@ -494,7 +461,7 @@ private fun ResultArea(
                         spanCount == 1 -> {
                             val isVideoStyle = cols == 0 && isVideo
                             ShelfExploreListItem(
-                                book = book,
+                                book = book.toBookItemUi(),
                                 isVideoStyle = isVideoStyle,
                                 inBookshelf = actions.isInBookshelf(book),
                                 onClick = { actions.onBookClick(book, false, binding.pageToken) },
@@ -512,17 +479,14 @@ private fun ResultArea(
                         }
 
                         else -> {
-                            val displayBook = remember(book, actions.isInBookshelf(book)) {
-                                book.toCoverBook(actions.isInBookshelf(book))
-                            }
                             ShelfGridItem(
-                                book = displayBook,
+                                book = book.toBookItemUi(),
                                 coverReloadTick = 0,
                                 refreshingUrls = emptySet(),
                                 onClick = { actions.onBookClick(book, false, binding.pageToken) },
                                 onLongClick = { actions.onBookClick(book, true, binding.pageToken) },
                                 inBookshelf = actions.isInBookshelf(book),
-                                coverSlot = { b, modifier, coverRatio, _ ->
+                                coverSlot = { _, modifier, coverRatio, _ ->
                                     coverSlot(book, actions.isInBookshelf(book), coverRatio, modifier)
                                 },
                             )

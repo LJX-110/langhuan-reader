@@ -8,7 +8,10 @@ import com.langhuan.reader.data.entities.BookSourcePart
 import com.langhuan.reader.data.entities.PinnedExplore
 import com.langhuan.reader.data.entities.rule.ExploreKind
 import com.langhuan.reader.help.PinnedExploreHelp
+import com.langhuan.reader.help.book.isCoreReaderSupported
 import com.langhuan.reader.help.coroutine.IoDispatcher
+import com.langhuan.reader.help.toast.Toasters
+import com.langhuan.reader.ui.compose.platform.syncGetString
 import com.langhuan.reader.help.source.clearExploreKindsCache
 import com.langhuan.reader.help.source.exploreKinds
 import com.langhuan.reader.model.script.runScriptWithContext
@@ -198,6 +201,19 @@ class ExploreScreenModel : ScreenModel {
                         source to (source?.exploreKinds() ?: emptyList())
                     }
                 }.getOrDefault(null to emptyList())
+                // 旧数据里的视频/图片/RSS 源已不在核心闭环内: 提示后收起, 不进入空白分类页
+                if (source != null && !source.isCoreReaderSupported) {
+                    Toasters.get().toast(syncGetString("book_type_unsupported"))
+                    _state.update {
+                        it.copy(
+                            expandedUrl = null,
+                            expandedSource = null,
+                            expandedKinds = emptyList(),
+                            loadingUrl = null,
+                        )
+                    }
+                    return@launch
+                }
                 // 归属校验: 仅当 url 仍是当前展开行才写槽 (恢复原版 ExploreAdapter.handleRefresh
                 // 回写前 "pos 未变才写" 的保护): 防收起/切到别的行后 A 的慢查询后到,
                 // 把 A 的源/分类覆盖成展开中 B 行的数据并点分类跳错发现页;

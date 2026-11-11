@@ -32,7 +32,6 @@ import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
 /**
  * 阅读菜单选择器对话框集 (iOS/鸿蒙/desktop 共用, 对照 app 端 ReadMenu 的
  * activity.selector / activity.alert 弹窗):
- * - [SimulatedReadingDialog]: 模拟追读配置 (开关 + 起始日期 + 起始章节 + 每日章节)
  * - [ImageStyleDialog]: 图片样式 4 项选择器
  * - [DownloadDialog]: 离线缓存起止章节号
  * - [CharsetDialog]: 文本编码选择器
@@ -40,107 +39,6 @@ import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
  * 对话框只负责收集输入 + 改 [Book.config], 落库/重载由调用方 (ReaderRoute) 的
  * onApply 回调执行 (需要 viewModel/DAO 上下文)。
  */
-
-/** 模拟追读配置对话框 (对照 app 端 ReadMenu.showSimulatedReading 的 customView)。 */
-@Composable
-fun SimulatedReadingDialog(
-    book: Book,
-    onApply: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val config = book.config
-    var enabled by remember { mutableStateOf(config.readSimulating) }
-    // 日期预填: 已配置用现有值, 否则今天 (yyyy-MM-dd)
-    var dateText by remember {
-        mutableStateOf(
-            config.startDate?.let { date ->
-                val (y, m, d) = date.toYearMonthDay()
-                "${y.toString().padStart(4, '0')}-${m.toString().padStart(2, '0')}-${
-                    d.toString().padStart(2, '0')
-                }"
-            } ?: ""
-        )
-    }
-    var startChapter by remember { mutableStateOf(book.getStartChapter().toString()) }
-    var dailyChapters by remember { mutableStateOf(config.dailyChapters.toString()) }
-
-    AppAlertDialog(
-        onDismissRequest = onDismiss,
-        title = "模拟追读",
-        okButton = com.langhuan.reader.ui.compose.component.AlertButton(
-            text = "确认",
-            onClick = {
-                // 空白=今天 (与预填语义一致); 非法输入保留原值, 不静默改写成今天 (会重置解锁进度)
-                config.startDate = parseStartDate(dateText) ?: config.startDate
-                config.readSimulating = enabled
-                config.startChapter = startChapter.toIntOrNull() ?: 0
-                config.dailyChapters = dailyChapters.toIntOrNull() ?: book.totalChapterNum
-                onApply()
-            },
-        ),
-        cancelButton = com.langhuan.reader.ui.compose.component.AlertButton(text = "取消"),
-    ) {
-        Column(Modifier.padding(horizontal = DesignTokens.spacingDefault)) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = DesignTokens.spacingDefault),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "启用",
-                    color = AppTheme.colors.primaryText,
-                    fontSize = 16.sp,
-                    modifier = Modifier.weight(1f),
-                )
-                AppSwitch(checked = enabled, onCheckedChange = { enabled = it })
-            }
-            Text("起始日期 (yyyy-MM-dd)", color = AppTheme.colors.secondaryText, fontSize = 13.sp)
-            AppTextField(
-                value = dateText,
-                onValueChange = { dateText = it },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = DesignTokens.spacingDefault),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "起始章节",
-                    color = AppTheme.colors.primaryText,
-                    fontSize = 16.sp,
-                    modifier = Modifier.weight(1f),
-                )
-                AppNumberField(
-                    value = startChapter,
-                    onValueChange = { startChapter = it },
-                    modifier = Modifier.width(96.dp),
-                )
-            }
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = DesignTokens.spacingDefault),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "每日章节",
-                    color = AppTheme.colors.primaryText,
-                    fontSize = 16.sp,
-                    modifier = Modifier.weight(1f),
-                )
-                AppNumberField(
-                    value = dailyChapters,
-                    onValueChange = { dailyChapters = it },
-                    modifier = Modifier.width(96.dp),
-                )
-            }
-        }
-    }
-}
 
 /** 图片样式选择器 (对照 app 端 menu_image_style 的 4 项 selector)。 */
 @Composable
@@ -246,9 +144,3 @@ fun CharsetDialog(
     )
 }
 
-/** 解析 yyyy-MM-dd: 空白按今天 (与日期框预填语义一致); 格式非法或日期不存在返回 null。 */
-private fun parseStartDate(text: String): LocalDate? {
-    val trimmed = text.trim()
-    if (trimmed.isEmpty()) return localDateNow()
-    return localDateParseOrNull(trimmed)
-}

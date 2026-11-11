@@ -41,6 +41,7 @@ import com.langhuan.reader.data.entities.Bookmark
 import com.langhuan.reader.model.analyzeRule.AnalyzeRuleFactories
 import com.langhuan.reader.ui.book.read.ReadBookEvents
 import com.langhuan.reader.ui.book.read.ReadBookViewModelShared
+import com.langhuan.reader.ui.book.read.readerFollowAloud
 import com.langhuan.reader.ui.book.read.page.delegate.ScrollPageDelegateCompose
 import com.langhuan.reader.ui.book.read.page.delegate.rememberPageDelegate
 import com.langhuan.reader.ui.book.read.page.entities.PageDirectionShared
@@ -109,10 +110,7 @@ private const val LONG_PRESS_TIMEOUT = 600L
  *
  * # 自动翻页揭示动画覆盖层（对照原版 AutoPager.onDraw）
  *
- * 非 E-Ink 非滚动模式时，[AutoPagerCompose] 推进 [AutoPagerCompose.progress]，
- * 本层把下一页自顶向下 clip 揭示（graphicsLayer clipRect 只更新层属性、不重绘页内容）
- * 并叠加 accent 色 1px 进度线；滚动模式由委托的 [onAutoScrollBy] 连续滚动，
- * 无需覆盖层。手势翻页期间的暂停/恢复/复位由 delegate 钩子完成。
+ * 自动翻页功能已在 P5 删除；本层不再承载揭示动画覆盖层。
  *
  * # 坐标空间（触摸/鼠标全窗坐标 → 内容区坐标）
  *
@@ -184,6 +182,20 @@ fun ReadViewComposable(
     val chapterHighlights by viewModel.chapterHighlights.collectAsState()
     // 按 ReadBookConfig.pageAnim 取翻页委托，配置变更时重建（对照原版 ReadView.upPageAnim）
     val composeDelegate = rememberPageDelegate(viewModel)
+    // 朗读跟随滚动：TTS 游标变化或重排后页对象变化时，把当前段滚入视口安全区。
+    // 非滚动模式 / 非当前章直接跳过；revealChapterPosition 内部再处理安全区与用户拖拽让位。
+    // readerFollowAloud 是阅读面板的开关，关闭后游标推进只换高亮、不挪视口。
+    val followAloud = readerFollowAloud
+    LaunchedEffect(ttsHighlight, curTextPage, followAloud) {
+        if (!followAloud) return@LaunchedEffect
+        val highlight = ttsHighlight ?: return@LaunchedEffect
+        val scrollDelegate = composeDelegate as? ScrollPageDelegateCompose
+            ?: return@LaunchedEffect
+        if (highlight.chapterIndex != viewModel.durChapterIndex.value) {
+            return@LaunchedEffect
+        }
+        scrollDelegate.revealChapterPosition(highlight.chapterPos)
+    }
     val tapScope = rememberCoroutineScope()
     // 长按/游标触感: Compose 手势不像 View.performLongClick 自带触感, 原版阅读页亦无, 此处补齐
     val haptic = LocalHapticFeedback.current
@@ -240,15 +252,12 @@ fun ReadViewComposable(
         if (selection.imageMenuShowing) {
             selection.cancel()
         }
-        // 选择被页切换中断后恢复自动翻页（激活选择时已暂停）
-        composeDelegate.autoPager?.resume()
     }
     // 平台侧文本操作菜单关闭/动作完成后取消选择（对照旧 TextActionMenu.onMenuActionFinally
     // → readView.cancelSelect()）；未激活时无操作
     LaunchedEffect(Unit) {
         ReadBookEvents.selectionCancel.collect {
             selection.cancel()
-            composeDelegate.autoPager?.resume()
         }
     }
     // 选区消失 → 通知平台关闭浮动文本操作菜单（对照旧 ContentTextView.cancelSelect →
@@ -381,9 +390,6 @@ fun ReadViewComposable(
             if (hit != null && hit.column is TextColumn) {
                 if (selection.longPressStart(x, contentY)) {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    // 选择激活期间暂停自动翻页（对照旧手势按下 → autoPager.pause），
-                    // 避免翻页打断选择；选择取消时在分发器/页切换处恢复
-                    latestDelegate.autoPager?.pause()
                 }
             } else if (hit?.column is ImageColumn) {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -485,27 +491,6 @@ fun ReadViewComposable(
             )
         }
 
-        // 自动翻页揭示动画覆盖层（对照原版 AutoPager.onDraw 的非 E-Ink 分支）
-        composeDelegate.autoPager?.let { autoPager ->
-            if (autoPager.isRunning && !autoPager.isEInkMode && !autoPager.scrollMode) {
-                AutoPageRevealOverlay(
-                    autoPager = autoPager,
-                    nextTextPage = nextTextPage,
-                    pageHeightPx = pageHeightPx,
-                    batteryLevel = batteryLevel,
-                    clockText = clockText,
-                    bookName = currentBookName,
-                    onClick = onClick,
-                    drawTick = pageDrawTick,
-                    selection = selection,
-                    ttsHighlight = ttsHighlight,
-                    chapterHighlights = chapterHighlights,
-                    onHeaderMeasured = { headerTipMeasured = it },
-                    onFooterMeasured = { footerTipMeasured = it },
-                )
-            }
-        }
-
         // 选区手柄覆盖层（对照原版 activity_book_read.xml 的 cursor_left/cursor_right
         // ImageView：24dp 半圆光标 + accentColor 着色）。绘制期读 selection.tick 建立
         // 快照订阅（同 PageContentCanvas 的 draw 阶段读法），拖拽热路径只重绘不重组；
@@ -590,7 +575,6 @@ fun ReadViewComposable(
             val text = selection.selectedText()
             if (text.isBlank()) {
                 selection.cancel()
-                latestDelegate.autoPager?.resume()
             } else {
                 selectionGeometrySnapshot()?.let { latestOnSelectionMenu(text, it) }
             }
@@ -699,7 +683,6 @@ fun ReadViewComposable(
                                 // 2~5 帧的"菜单完整闪一下再消失"；事件链兜底仍会再触发一次，
                                 // 平台 dismiss 幂等，重复调用安全）
                                 latestOnDismissSelectionMenu()
-                                latestDelegate.autoPager?.resume()
                                 pressOnTextSelected = true
                             }
                         } else {
@@ -863,16 +846,13 @@ fun ReadViewComposable(
                                 // 手柄抓取时 CANCEL：原版手柄 OnTouchListener 无 CANCEL
                                 // 分支（无操作；反转标志留待下次手柄 UP 复位），照搬
                             } else {
-                                // ACTION_CANCEL 分支：无单击路径，只走选择菜单/翻页后半段，
-                                // 并恢复自动翻页（对照原版 CANCEL 分支 + autoPager.resume；
-                                // 原版本就无 else 互斥，此分支结构正确，仅传参坐标一并修正）
+                                // ACTION_CANCEL 分支：无单击路径，只走选择菜单/翻页后半段。
                                 if (selection.isActive) {
                                     latestShowSelectionMenu()
                                 } else if (latestDelegate.isMoved) {
                                     latestDelegate.onTouchUp(lastX, lastY, tracker.calculateVelocity().y)
                                 }
                                 pressOnTextSelected = false
-                                latestDelegate.autoPager?.resume()
                             }
                         } else {
                             // ACTION_UP 分支（对照原版 UP 分支的贯穿结构）：
@@ -923,10 +903,9 @@ fun ReadViewComposable(
                         isTextSelected = { selection.isActive || selection.imageMenuShowing },
                         cancelSelection = {
                             selection.cancel()
-                            // 点按取消选择：同步直调平台关菜单 + 恢复自动翻页（同触摸分发器
-                            // DOWN 分支；事件链兜底仍会再触发一次，平台 dismiss 幂等）
+                            // 点按取消选择：同步直调平台关菜单（同触摸分发器 DOWN 分支；
+                            // 事件链兜底仍会再触发一次，平台 dismiss 幂等）
                             latestOnDismissSelectionMenu()
-                            composeDelegate.autoPager?.resume()
                         },
                         menuVisible = menuVisible,
                         // 选择激活期间拖动扩选：坐标换算与统一分发器触摸扩选段完全一致（原样照搬）
@@ -1167,81 +1146,6 @@ private class ReaderSelectionPageSource(
             1 -> offset + (viewModel.curTextPage.value?.height ?: 0f)
             else -> offset + (viewModel.curTextPage.value?.height ?: 0f) +
                 (viewModel.nextTextPage.value?.height ?: 0f)
-        }
-    }
-}
-
-/**
- * 自动翻页揭示动画覆盖层（对照原版 AutoPager.onDraw 非 E-Ink 分支）：
- *
- * - 下一页自顶向下 clip 揭示：`drawWithContent { clipRect(bottom = height * progress) }`
- *   绘制期裁剪（Compose 1.9 的 GraphicsLayerScope 无 clipRect API，无法走层属性裁剪）
- * - accent 色 1px 进度线（原版 `paint.color = ThemeStore.accentColor` + drawRect）
- *
- * progress 每帧由 [AutoPagerCompose] 推进（约 60fps），本层仅在 progress 变化时重组。
- */
-@Composable
-private fun AutoPageRevealOverlay(
-    autoPager: AutoPagerCompose,
-    nextTextPage: TextPage?,
-    pageHeightPx: Float,
-    batteryLevel: Int,
-    clockText: String,
-    bookName: String,
-    onClick: (TextColumn?) -> Unit,
-    drawTick: Int,
-    selection: PageSelectionState? = null,
-    ttsHighlight: TTSHighlightOverlay? = null,
-    chapterHighlights: List<HighlightOverlay> = emptyList(),
-    onHeaderMeasured: ((Int) -> Unit)? = null,
-    onFooterMeasured: ((Int) -> Unit)? = null,
-) {
-    val progress = autoPager.progress // 读取状态触发重组（仅本覆盖层范围）
-    val revealHeight = pageHeightPx * progress
-    val style = rememberReaderDrawStyle()
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        // 下一页：自顶向下 clip 揭示（未到末页时才有内容；末页时下一页为 null 只走进度线）。
-        // 2026-08 回退: 曾加 revealLayer 录制缓存 (record), 但 record 内执行子节点
-        // PageViewComposable 的 Canvas onDraw 会与外层 scope 的 fontScale 委托互相递归
-        // → StackOverflowError (同 PageContentCanvas 白屏根因), 恢复直接绘制 + clipRect
-        nextTextPage?.let { page ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .drawWithContent {
-                        clipRect(bottom = revealHeight.coerceIn(0f, size.height)) {
-                            this@drawWithContent.drawContent()
-                        }
-                    },
-            ) {
-                PageViewComposable(
-                    textPage = page,
-                    modifier = Modifier.fillMaxSize(),
-                    batteryLevel = batteryLevel,
-                    clockText = clockText,
-                    bookName = bookName,
-                    onClick = onClick,
-                    drawTick = drawTick,
-                    selection = selection,
-                    ttsHighlight = ttsHighlight,
-                    chapterHighlights = chapterHighlights,
-                    pagePos = 1,
-                    onHeaderMeasured = onHeaderMeasured,
-                    onFooterMeasured = onFooterMeasured,
-                )
-            }
-        }
-        // accent 色 1px 进度线（对照原版 drawRect(0, bottom-1, width, bottom)）
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            if (revealHeight > 0f && revealHeight <= size.height) {
-                val lineWidth = 1.dp.toPx()
-                drawRect(
-                    color = style.accentColor,
-                    topLeft = Offset(0f, revealHeight - lineWidth),
-                    size = Size(size.width, lineWidth),
-                )
-            }
         }
     }
 }

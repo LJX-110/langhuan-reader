@@ -5,10 +5,10 @@ import com.langhuan.reader.data.AppDbProviders
 import com.langhuan.reader.data.entities.Book
 import com.langhuan.reader.data.entities.BookChapter
 import com.langhuan.reader.data.entities.BookSource
+import com.langhuan.reader.help.book.BookImageDownloadShared
 import com.langhuan.reader.help.book.isLocal
 import com.langhuan.reader.help.file.desktopResolveStoredRef
 import com.langhuan.reader.help.http.OkHttpClientProviders
-import com.langhuan.reader.help.image.MangaImageBytesLoader
 import com.langhuan.reader.utils.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -18,7 +18,7 @@ import com.langhuan.reader.ui.generated.resources.Res
 /**
  * desktop 端 [ImageControllerProvider] 真实实现 (封面/插图字节流)。
  *
- * 漫画插图链路直接复用四端统一的 [MangaImageBytesLoader] (带书源 header/防盗链下载,
+ * 插图链路复用四端统一的 [BookImageDownloadShared] (带书源 header/防盗链下载,
  * 并跑 ImageUtils.decode 执行反爬切片重排与落盘缓存, 与 Android 原版 BookHelp 对齐)。
  */
 class DesktopImageControllerProvider : ImageControllerProvider {
@@ -40,7 +40,8 @@ class DesktopImageControllerProvider : ImageControllerProvider {
         val cached = resolveBookAndSource(bookUrl) ?: return@runCatching null
         runBlocking {
             withContext(Dispatchers.IO) {
-                MangaImageBytesLoader.load(src, cached.book, cached.source, coroutineContext)
+                val chapter = placeholderImageChapter(src, bookUrl)
+                BookImageDownloadShared.loadImageBytes(cached.source, cached.book, src, chapter)
             }
         }
     }.getOrNull()

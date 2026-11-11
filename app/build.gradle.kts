@@ -179,7 +179,6 @@ android {
         resources.excludes.add("META-INF/androidx/**")
         resources.excludes.add("META-INF/jsoup/**")
         resources.excludes.add("META-INF/native-image/**")
-        resources.excludes.add("google/protobuf/**")
         resources.excludes.add("kotlin/**")
         resources.excludes.add("META-INF/versions/**")
         // quick-transfer-core 的 tc 词典(1.2MB)运行时不读: 走 RemoteAssetsUtils 缓存/远程下载
@@ -265,12 +264,7 @@ androidComponents {
 
 dependencies {
     testImplementation(libs.junit)
-    // JVM 单测解析 TvBox json/聚合返回体需要真实 org.json (android.jar 的 org.json 在单测里是 stub)
-    testImplementation(libs.json)
     androidTestImplementation(libs.bundles.androidTest)
-    // 仪器化测试的 TvBox 端到端用例直接起本地 Web 服务器 (Web 实现在 core/data, 运行时经它们入包)
-    androidTestImplementation(libs.nanohttpd.nanohttpd)
-    androidTestImplementation(libs.nanohttpd.websocket)
 
     implementation(libs.kotlin.stdlib)
     implementation(libs.bundles.coroutines)
@@ -309,22 +303,12 @@ dependencies {
 
     implementation(libs.ksoup)
     implementation(libs.kotlinx.serialization.json)
-    // 扩展(compileOnly kotlinx-serialization-json-okio)运行时委派宿主, 官方宿主 serialization bundle 同含此工件
-    implementation(libs.kotlinx.serialization.json.okio)
-    // keiyoushi index.pb (Mihon index_v2) 声明式解析; 与 json 同版本
-    implementation(libs.kotlinx.serialization.protobuf)
 
-    // 漫画扩展 (eu.kanade.tachiyomi.*) 兼容层的 Injekt 绑定 (fork 含 uy.kohesive.injekt.api 包面, 见 catalog 注释)
-    implementation(libs.injekt.core)
     implementation(project(":ui"))
     implementation(project(":modules:quickjs"))
     ksp(project(":modules:quickjs-processor"))
 
     implementation(libs.okhttp)
-    // TVBox spider jar 的壳面 (com.github.catvod.utils.Json / bean.Header 及 jar 自带 Gson 调用)
-    implementation(libs.gson)
-    // jar 级 Init 后台任务 (配置中心二维码) 引用 zxing, FongMi 宿主同样内置
-    implementation("com.google.zxing:core:3.5.3")
     implementation(libs.okio)
     implementation(libs.play.services.cronet)
     implementation(libs.cronet.api)

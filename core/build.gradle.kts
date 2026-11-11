@@ -25,8 +25,6 @@ fun KotlinDependencyHandler.sharedJvmAndroidDeps() {
     api(project(":modules:quickjs"))
     api(sharedLibs.findLibrary("okhttp").get())
     implementation(sharedLibs.findLibrary("coil3-network-okhttp").get())
-    implementation(sharedLibs.findLibrary("nanohttpd-nanohttpd").get())
-    implementation(sharedLibs.findLibrary("nanohttpd-websocket").get())
 }
 
 kotlin {

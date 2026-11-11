@@ -20,9 +20,7 @@ import com.langhuan.reader.ui.association.detectJsonType
 import com.langhuan.reader.ui.association.toDeepLinkImportType
 import com.langhuan.reader.ui.compose.platform.syncGetString
 import com.langhuan.reader.ui.root.AppNavigatorProviders
-import com.langhuan.reader.ui.root.AppRoute
 import com.langhuan.reader.ui.root.toReadRoute
-import com.langhuan.reader.ui.video.VideoDirect
 import com.langhuan.reader.utils.isJson
 import com.langhuan.reader.utils.systemCurrentTimeMillis
 import kotlinx.atomicfu.atomic
@@ -34,7 +32,7 @@ import okio.Path.Companion.toPath
  * 文件关联导入分发链 (iOS/鸿蒙/桌面共用, 各端逻辑完全一致)。
  *
  * 对照 app 端 `FileAssociationViewModel.dispatchIntent` / `dispatch`:
- * 0. 视频文件 (videoFileRegex) → 播放页直投态 (不建书、不查书源);
+ * 0. 视频文件 (videoFileRegex) → 提示该类型已不支持 (播放功能已移除, 不建书、不查书源);
  * 1. 压缩包 (archiveFileRegex) → 解压后只把包内的**书籍文件**逐个交回 [dispatchFile]
  *    (包内视频不在本层放行, 原因见 [dispatch]);
  * 2. JSON → [detectJsonType] 识别类型, 经 [LanghuanDeepLinkHandler.enqueue] 交
@@ -144,23 +142,23 @@ object FileAssociationDispatch {
         val path = filePath.toLocalFilePath()
         val fileName = path.fileName()
         if (fileName.matches(AppPattern.archiveFileRegex)) return false
-        if (VideoDirect.targetFor(path, title = fileName) != null) return false
+        // 视频已不支持: 不再弹"按书籍导入"确认, 由 [dispatchFile] 直接报不支持
+        if (fileName.matches(AppPattern.videoFileRegex)) return false
         if (fileName.matches(AppPattern.bookFileRegex)) return false
         return !runCatching { probeIsJson(path) }.getOrDefault(false)
     }
 
-    /** 单文件分发 (对照原版 dispatch: 先试视频, 再试 JSON, 再试书籍文件, 其余待用户确认)。 */
+    /** 单文件分发 (对照原版 dispatch: 先拒视频, 再试 JSON, 再试书籍文件, 其余待用户确认)。 */
     private suspend fun dispatchFile(
         path: String,
         onUnknownFile: suspend (fileName: String) -> Boolean,
         navigate: Boolean = true,
     ): Book? {
         val fileName = path.fileName()
-        // 视频文件优先判定: 它们既不是 JSON 也不是书, 且动辄上百 MB —— 不能先走 JSON 探字节
-        // 再落回“不支持”。判据与 Android/iOS/鸿蒙 入口共用 [VideoDirect] 一份。
-        VideoDirect.targetFor(path, title = fileName)?.let { target ->
-            // getOrNull: 文件关联可能在 UI 就绪前就把路径投进来 (navigator 未注册)
-            AppNavigatorProviders.getOrNull()?.push(AppRoute.VideoPlay(target))
+        // 视频文件最先判定: 它们既不是 JSON 也不是书, 且动辄上百 MB —— 不能先走 JSON 探字节
+        // 再落回"不支持"。播放功能已移除, 这里只报类型不支持并终止。
+        if (fileName.matches(AppPattern.videoFileRegex)) {
+            Toasters.get().toast(syncGetString("book_type_unsupported"))
             return null
         }
         // 先试 JSON: 与 app 端 InputStream.isJson() 一样只探首尾 128 字节, 命中才全量读

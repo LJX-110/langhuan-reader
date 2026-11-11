@@ -16,7 +16,7 @@ import okhttp3.OkHttpClient
  *   (与原桌面裁剪版行为一致)。
  * - UA: shared HttpHelper 内 `UserAgentProviders.get()` 由桌面
  *   `registerDesktopSourceProviders` 注册 (PreferKey.userAgent 空 → AppConst.DEFAULT_USER_AGENT)。
- * - ProgressResponseBody 包装: 桌面端 MangaReaderPlatform.Image 已注册
+ * - ProgressResponseBody 包装: 桌面端阅读器图片链路已注册
  *   `ProgressManager.addListener(url)` (转圈环心显示下载百分比), 有监听器时
  *   `ProgressManager.getProgressListener(url)` 非空, 包装分支触发并逐字节回调;
  * - cookieJar: 桌面端经 `registerDesktopHttpProvider` 注册 [DesktopCookieJarBridge]

@@ -110,22 +110,6 @@ data class AppMultiChoiceField(
     val definitionKey: Any? = null,
 ) : AppOptionField
 
-@Composable
-fun AppChoiceRowGroup(
-    fields: List<AppChoiceField>,
-    modifier: Modifier = Modifier,
-) {
-    ChoiceRows(modifier = modifier, rows = fields.map { it.toChoiceRow() })
-}
-
-@Composable
-fun AppMultiChoiceRowGroup(
-    fields: List<AppMultiChoiceField>,
-    modifier: Modifier = Modifier,
-) {
-    ChoiceRows(modifier = modifier, rows = fields.map { it.toChoiceRow() })
-}
-
 /** 单选/多选混排入口: 全部字段一次传入, 相邻同类聚段与 chip/下拉裁决都在 [buildChoiceGroups] 单点。 */
 @Composable
 fun AppMixedChoiceRowGroup(

@@ -15,7 +15,6 @@ import coil3.size.Scale
 import coil3.toBitmap
 import com.langhuan.reader.help.file.desktopAppCacheDir
 import com.langhuan.reader.help.http.OkHttpClientProviders
-import com.langhuan.reader.model.manga.MangaModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -44,12 +43,6 @@ internal val jvmBookImageLoader: ImageLoader by lazy {
             // JS 改写后的 url 由 SourceHeaderNetworkClient 在 Coil3 磁盘查询之后注入;
             // SourceHeaderNetworkClient 响应原地解密对齐 Glide DATA; ImageGuardNetworkClient 包最外层
             // 按原始 url 拦 failUrls)
-            // 漫画页: 经图片缓存 + AnalyzeUrl 下载 + 解密取字节 (与 app 端同一条链路)
-            add(MangaModelKeyer(), MangaModel::class)
-            add(MangaModelFetcher.Factory())
-            // 漫画页解码: 走共享解码面 (动图 Skia Codec / 静图采样解码), 结果包成
-            // MangaPageImage 进 Coil 内存缓存, 预载与翻页共用同一条缓存 (见 MangaPageCoil.kt)
-            add(MangaPageDecoder.Factory())
             add(
                 // 守卫网络客户端: 同 androidMain, failUrls 必须真正接进网络链路
                 NetworkFetcher.Factory(

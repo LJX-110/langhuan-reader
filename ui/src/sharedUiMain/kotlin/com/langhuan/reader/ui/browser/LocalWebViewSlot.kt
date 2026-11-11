@@ -111,7 +111,7 @@ class WebViewCallbacks {
  *
  * 宿主端用 [CompositionLocalProvider] 覆盖注入 Android WebView、iOS WKWebView、
  * desktop 系统浏览器或鸿蒙 NAPI Web 能力,
- * 供 shared 路由 (登录 Overlay / [com.langhuan.reader.ui.route.ReadRssRoute] /
+ * 供 shared 路由 (登录 Overlay /
  * [com.langhuan.reader.ui.route.WebViewRoute]) 渲染 WebView, 避免 shared 路由硬编码平台 WebView 组件。
  *
  * 签名 `(WebViewConfig, Modifier, WebViewCallbacks) -> Unit`: 待加载 URL/header/html 配置

@@ -929,10 +929,10 @@ data class ReadStyleConfig(
     var pageAnimEInk: Int = PageAnim.noAnim,
     var textFont: String = "",// 字体
     var textBold: Int = 0,// 是否粗体字 0:正常 1:粗体 2:细体
-    var textSize: Int = 24,// 文字大小
+    var textSize: Int = 17,// 文字大小（琅嬛阁正文 17sp 起）
     var letterSpacing: Float = 0f,// 字间距（em）；0 = 密排，对应 clreq 6.3.1 「字符外框彼此紧贴」
-    var lineSpacingExtra: Int = 10,// 行高乘数 ×10（行距 = 行盒高 × 本值/10）
-    var paragraphSpacing: Int = 6,// 段距 ×10（额外留白 = 行盒高 × 本值/10）
+    var lineSpacingExtra: Int = 15,// 行高乘数 ×10（行距 ≈ 1.75 倍字号，见 ReaderRoute.buildLayoutConfig）
+    var paragraphSpacing: Int = 6,// 段距 ×10（额外留白 = 行盒高 × 0.6）
     var titleMode: Int = 0,// 标题位置 0:居左 1:居中 2:隐藏
     var titleSize: Int = 4,// 标题字号增量（sp，叠在正文字号上）
     var titleTopSpacing: Int = 0,
@@ -940,8 +940,8 @@ data class ReadStyleConfig(
     var paragraphIndent: String = "　　",// 段落缩进（clreq 6.2.1.1：中文出版以两个汉字为标准）
     var underline: Boolean = false,// 下划线
     var paddingBottom: Int = 4,
-    var paddingLeft: Int = 22,
-    var paddingRight: Int = 22,
+    var paddingLeft: Int = 20,
+    var paddingRight: Int = 20,
     var paddingTop: Int = 5,
     var headerPaddingBottom: Int = 0,
     var headerPaddingLeft: Int = 19,
@@ -1024,6 +1024,24 @@ data class ReadStyleConfig(
                 textColor = color
             }
         }
+    }
+
+    /**
+     * 阅读纸色档位：同时写白天/夜间两套背景与文字色，并刷新颜色缓存。
+     *
+     * 纸色是阅读页的局部选择，不改全局日/夜模式；两套模式写成同一纸色后，
+     * 以后切换系统明暗也不会把阅读页拉回旧配色。E-Ink 字段保持不变。
+     */
+    fun setDayNightPaper(bg: String, text: String, darkStatusIcons: Boolean) {
+        bgType = 0
+        bgTypeNight = 0
+        bgStr = bg
+        bgStrNight = bg
+        textColorStr = text
+        textColorStrNight = text
+        darkStatusIcon = darkStatusIcons
+        darkStatusIconNight = darkStatusIcons
+        initColorInt()
     }
 
     /** 当前是否暗色状态栏图标。 */

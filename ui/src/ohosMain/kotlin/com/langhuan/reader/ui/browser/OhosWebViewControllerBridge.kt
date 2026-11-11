@@ -34,7 +34,7 @@ import kotlin.native.CName
  * # 与后台 WebView 桥的分工
  * `WebViewBridgeHandler.ets` + `langhuan.webViewCallback` 服务的是**后台抓取** (书源 webView 规则,
  * 隐藏 Web 组件, 单实例 FIFO 串行)。本桥服务的是 **Compose 前台 WebView slot**
- * (`WebViewRoute` / `ReadRssRoute` / 登录 Overlay, 见 [OhosWebViewSlot]), 由 ArkTS 侧以**可见**
+ * (`WebViewRoute` / 登录 Overlay, 见 [OhosWebViewSlot]), 由 ArkTS 侧以**可见**
  * Web 组件承载并直接挂到屏幕 (K/N 无法在 Compose 树内实例化 ArkUI Web), Kotlin 侧只做透明占位与
  * 显示/隐藏控制。两条链各有独立的 tsfn 与 napi 回调, 互不抢占 Web 实例。
  *

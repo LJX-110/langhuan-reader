@@ -17,10 +17,8 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
-import androidx.media3.common.MimeTypes
 import com.langhuan.reader.App
 import com.langhuan.reader.constant.AppLog
-import com.langhuan.reader.constant.AppPattern
 import com.langhuan.reader.constant.DirUsage
 import com.langhuan.reader.constant.LOG_DIR_NAME
 import com.langhuan.reader.constant.PreferKey
@@ -32,8 +30,6 @@ import com.langhuan.reader.model.bakeCoverImageFile
 import com.langhuan.reader.model.bakedImagePath
 import com.langhuan.reader.model.deleteImageIfUnreferenced
 import com.langhuan.reader.notificationManager
-import com.langhuan.reader.ui.book.video.ExternalVideoHandle
-import com.langhuan.reader.ui.root.AppRoute
 import com.langhuan.reader.ui.root.BrowserService
 import com.langhuan.reader.ui.root.CrashLogProvider
 import com.langhuan.reader.ui.root.ExternalRequestService
@@ -52,22 +48,18 @@ import com.langhuan.reader.ui.root.PageSystemBarAppearance
 import com.langhuan.reader.ui.root.ShareService
 import com.langhuan.reader.ui.root.SoftInputPolicy
 import com.langhuan.reader.ui.root.SystemBarsPolicy
-import com.langhuan.reader.ui.root.VideoPlayTarget
 import com.langhuan.reader.ui.root.WindowController
 import com.langhuan.reader.ui.root.importImageSetFile
 import com.langhuan.reader.ui.root.navigateToRoute
 import com.langhuan.reader.ui.root.SavedRef
-import com.langhuan.reader.ui.video.VideoDirect
 import com.langhuan.reader.utils.ActivityResultLauncherAwait
 import com.langhuan.reader.utils.FileDoc
 import com.langhuan.reader.utils.FileUtils
 import com.langhuan.reader.utils.checkWrite
 import com.langhuan.reader.utils.copyToDocumentAtomically
 import com.langhuan.reader.utils.delete
-import com.langhuan.reader.utils.displayName
 import com.langhuan.reader.utils.find
 import com.langhuan.reader.utils.getFile
-import com.langhuan.reader.utils.hasPlayableScheme
 import com.langhuan.reader.utils.list
 import com.langhuan.reader.utils.openUrl
 import com.langhuan.reader.utils.realScreenSize
@@ -707,8 +699,6 @@ private class AndroidExternalRequestService : ExternalRequestService {
  * 解析外部 Intent 为 [LaunchRequest]: 覆盖 VIEW(deep link / 文件关联) 与 PROCESS_TEXT / SEND。
  *
  * scheme 区分:
- * - 视频直投 (content/file/http(s) 命中 MIME 或视频扩展名) → [LaunchRequest.OpenRoute] 播放页
- *   (**排在下面书籍分流之前**, 见 [videoDirectTarget]; mp4 不是书, 落到 ImportFile 会被导入流程判不支持)
  * - content/file/app → [LaunchRequest.ImportFile] (消费侧直接交平台文件关联分发)
  * - langhuan/yuedu/其他 → [LaunchRequest.DeepLink] (langhuan 系由 [LanghuanDeepLinkHandler] 进一步接管导入对话框)
  *
@@ -773,10 +763,6 @@ fun Intent.toLaunchRequest(): LaunchRequest? {
     }
     when (action) {
         Intent.ACTION_VIEW -> {
-            // 视频排在书籍分流之前: 外部给的 mp4/mkv/m3u8 已是可播地址, 不是书也不是书源网页
-            videoDirectTarget()?.let {
-                return LaunchRequest.OpenRoute(AppRoute.VideoPlay(it))
-            }
             dataString?.let { url ->
                 // scheme 按 RFC 3986 大小写不敏感 (iOS/鸿蒙两端都已 lowercase): 旧写法拿原始
                 // scheme 比, 大写 scheme 的 URI 会落 DeepLink 而非文件导入
@@ -791,10 +777,6 @@ fun Intent.toLaunchRequest(): LaunchRequest? {
             getStringExtra(Intent.EXTRA_PROCESS_TEXT)?.let { return LaunchRequest.ProcessText(it) }
 
         Intent.ACTION_SEND -> {
-            // 分享的可播地址排在文本分流之前: 它已经是能播的东西, 不是书也不是搜索词
-            videoDirectTarget()?.let {
-                return LaunchRequest.OpenRoute(AppRoute.VideoPlay(it))
-            }
             @Suppress("DEPRECATION")
             getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let {
                 return LaunchRequest.ImportFile(it.toString())
@@ -805,79 +787,6 @@ fun Intent.toLaunchRequest(): LaunchRequest? {
     // 无法识别: 返回 null。不回落 IntentData.book —— 它取一次即失效, 而每个 MainActivity
     // intent (含普通启动 intent) 都过一遍本函数, 回落等于让无关 intent 取走别处刚寄存的书。
     return null
-}
-
-/**
- * 外部投递的视频 → 播放页直投载荷 (判据唯一来源: shared [VideoDirect], 四端共用一份)。
- *
- * 覆盖两种投递形态:
- * - `ACTION_VIEW`: [data] 是 content/file/http(s) URI (文件管理器"打开方式"、浏览器点直链)
- * - `ACTION_SEND`: [Intent.EXTRA_STREAM] 是视频 URI (分享面板), 或 [Intent.EXTRA_TEXT]
- *   本身就是一条带视频后缀的 http(s) 直链
- *
- * # 为什么不能只信 `intent.type`
- * 不少文件管理器给 mp4 报的是 `application/octet-stream` 甚至主/次类型全星号的通配 (它们本来就命中透明壳上
- * 那条 octet-stream filter); 反过来 `content://media/.../video/123` 的末段是数字 id 而不是
- * `x.mp4`, 那种只有 MIME 能认。两条判据缺一不可, 所以这里把 `type` 与查到的 `DISPLAY_NAME`
- * 合成一个 `mimeIsVideo` 交给 [VideoDirect] (扩展名那条它自己按地址末段判)。
- *
- * @return null = 这不是可直接播放的视频, 调用方继续按书 / JSON / 文本原链路处理
- */
-fun Intent.videoDirectTarget(): VideoPlayTarget.Direct? {
-    val mimeIsVideo = VideoDirect.isVideoMime(type)
-    return when (action) {
-        Intent.ACTION_VIEW -> data?.let { videoTargetOfUri(it, mimeIsVideo, type) }
-
-        Intent.ACTION_SEND -> {
-            @Suppress("DEPRECATION")
-            val stream = getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
-            if (stream != null) {
-                videoTargetOfUri(stream, mimeIsVideo, type)
-            } else {
-                // 分享的是纯文本: 只有整条就是一个可播地址 (结尾 .m3u8/.mp4 等) 才截给播放页,
-                // 否则保持原语义 (交 ProcessText 分流), 不得把书名/普通文案当链接去播
-                getStringExtra(Intent.EXTRA_TEXT)?.trim()
-                    ?.takeIf { it.hasPlayableScheme() }
-                    ?.let { VideoDirect.targetFor(it, mimeIsVideo, mime = hlsFormatMimeOf(type, null)) }
-            }
-        }
-
-        else -> null
-    }
-}
-
-/**
- * 意图携带的 HLS 格式线索: 投递类型被 [VideoDirect.isHlsMime] 分类命中, 或真实显示名以
- * .m3u8 结尾 (大小写不敏感)。octet-stream 等泛类型不产生线索, 也不覆盖显示名后缀;
- * 泛显示标题不臆测。归一为 media3 的 HLS 媒体源常量 (Direct.mime 是资源格式线索, 非原始串)。
- */
-private fun hlsFormatMimeOf(type: String?, displayName: String?): String? = when {
-    VideoDirect.isHlsMime(type) -> MimeTypes.APPLICATION_M3U8
-    displayName?.endsWith(".m3u8", ignoreCase = true) == true -> MimeTypes.APPLICATION_M3U8
-    else -> null
-}
-
-/** URI → 直投载荷: 补显示名 (标题 + 扩展名判据) 与格式线索, 其余判定全在 [VideoDirect]。 */
-private fun videoTargetOfUri(
-    uri: Uri,
-    mimeIsVideo: Boolean,
-    declaredType: String?,
-): VideoPlayTarget.Direct? {
-    val address = uri.toString()
-    if (!address.hasPlayableScheme()) return null
-    val displayName = uri.displayName(App.instance)
-    val target = VideoDirect.targetFor(
-        address = address,
-        // DISPLAY_NAME 命中视频后缀 等同于 MIME 命中 (content URI 的末段常不是文件名)
-        mimeIsVideo = mimeIsVideo || displayName?.matches(AppPattern.videoFileRegex) == true,
-        title = displayName,
-        mime = hlsFormatMimeOf(declaredType, displayName),
-    ) ?: return null
-    // content:// 地址在此刻打开并持有句柄
-    if (address.startsWith("content://", ignoreCase = true)) {
-        ExternalVideoHandle.hold(App.instance, address)
-    }
-    return target
 }
 
 /**

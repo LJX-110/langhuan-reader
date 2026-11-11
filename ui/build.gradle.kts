@@ -153,6 +153,7 @@ kotlin {
             dependencies {
                 implementation(libs.kotlin.stdlib)
                 api(project(":foundation"))
+                api(project(":ui-model"))
                 api(project(":data"))
                 implementation(project(":modules:rjpath"))
                 api(project(":core"))

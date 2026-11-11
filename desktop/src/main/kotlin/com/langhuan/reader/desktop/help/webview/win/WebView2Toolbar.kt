@@ -5,7 +5,6 @@ import com.sun.jna.Pointer
 import com.sun.jna.platform.win32.User32
 import com.sun.jna.platform.win32.WinDef
 import com.sun.jna.platform.win32.WinUser
-import com.langhuan.reader.help.RssToolbarActions
 import com.langhuan.reader.desktop.help.webview.BrowserToolbar
 import com.langhuan.reader.desktop.help.webview.ToolbarAction
 import com.langhuan.reader.desktop.help.win.ComCtl32
@@ -21,16 +20,13 @@ import com.langhuan.reader.desktop.help.win.ComCtl32
  *
  * 2026-08-07 用户拍板 (三端一致):
  * - **按钮全部图标化**: 按钮文本 = Segoe MDL2 Assets 字体图标字符 (系统自带字体,
- *   码点已在本机逐一渲染验证非空: 返回 E72B/前进 E72A/刷新 E72C/确定 E73E/菜单 E712/
- *   星 E734·E735/朗读 E15D/分享 E72D/登录 E77B), 创建逻辑字体后 WM_SETFONT 到按钮;
- * - **菜单按钮右对齐**窗口右缘, 返回/前进/刷新/确定/RSS 按钮组靠左;
+ *   码点已在本机逐一渲染验证非空: 返回 E72B/前进 E72A/刷新 E72C/确定 E73E/菜单 E712),
+ *   创建逻辑字体后 WM_SETFONT 到按钮;
+ * - **菜单按钮右对齐**窗口右缘, 返回/前进/刷新/确定按钮组靠左;
  * - **菜单无刷新项** (工具栏已有刷新按钮), 仅 浏览器打开/拷贝 URL;
  *   + sourceKey 非空时额外显示 禁用源/删除源 (对照原版 web_view.xml, 2026-08-08);
- * - RSS 模式 (rssActions 非空): 额外显示 收藏/朗读/分享/登录 按钮, 动作回调回 shared。
- *   目录不入工具栏: 目录弹层是主窗口 Compose 弹层, 会被 RSS 独立窗口遮挡
- *   (同收藏删除确认弹窗的取舍)。
  *
- * - 按钮: 返回/前进/刷新 (+验证/登录模式"确定") (+RSS 模式 收藏/朗读/分享/登录) + 菜单;
+ * - 按钮: 返回/前进/刷新 (+验证/登录模式"确定") + 菜单;
  * - 菜单: 按钮点击 → TrackPopupMenu (AppendMenuW 中文正常, 需先 SetForegroundWindow);
  * - 进度条: msctls_progress32 不确定模式 (PBM_SETMARQUEE), 细条贴工具栏底部;
  * - 事件: 按钮点击 → WM_COMMAND (控件 ID 在 LOWORD) → 宿主 hook 转发 [onCommand];
@@ -44,7 +40,6 @@ internal class WebView2Toolbar(
     initialTitle: String,
     isLogin: Boolean,
     saveResult: Boolean,
-    private val rssActions: RssToolbarActions? = null,
     /** 书源 key (cookieTag): 非空时溢出菜单显示 禁用源/删除源 (对照原版 web_view.xml, 2026-08-08)。 */
     private val sourceKey: String? = null,
 ) : BrowserToolbar {
@@ -63,8 +58,6 @@ internal class WebView2Toolbar(
     private var iconFont: Pointer? = null
 
     private val showOk = isLogin || saveResult
-
-    private val showRss = rssActions != null
 
     private var width = 0
 
@@ -167,12 +160,6 @@ internal class WebView2Toolbar(
         add(ID_BACK)
         add(ID_FORWARD)
         add(ID_REFRESH)
-        if (showRss) {
-            add(ID_STAR)
-            add(ID_READ_ALOUD)
-            add(ID_SHARE)
-            add(ID_LOGIN)
-        }
         if (showOk) add(ID_OK)
         add(ID_MENU)
     }
@@ -183,10 +170,6 @@ internal class WebView2Toolbar(
         ID_FORWARD -> "\uE72A"    // Forward
         ID_REFRESH -> "\uE72C"    // Refresh
         ID_OK -> "\uE73E"         // CheckMark (确定)
-        ID_STAR -> if (rssActions?.starred == true) "\uE735" else "\uE734" // FavoriteStarFill/FavoriteStar
-        ID_READ_ALOUD -> "\uE15D" // Volume (朗读)
-        ID_SHARE -> "\uE72D"      // Share
-        ID_LOGIN -> "\uE77B"      // Contact (登录)
         ID_MENU -> "\uE712"       // More (菜单, 三点)
         else -> ""
     }
@@ -203,10 +186,6 @@ internal class WebView2Toolbar(
             ID_FORWARD -> fire(ToolbarAction.FORWARD)
             ID_REFRESH -> fire(ToolbarAction.REFRESH)
             ID_OK -> fire(ToolbarAction.OK)
-            ID_STAR -> fire(ToolbarAction.STAR_TOGGLE)
-            ID_READ_ALOUD -> fire(ToolbarAction.READ_ALOUD)
-            ID_SHARE -> fire(ToolbarAction.SHARE)
-            ID_LOGIN -> fire(ToolbarAction.LOGIN)
             ID_MENU -> showMenu()
             else -> return false
         }
@@ -268,18 +247,6 @@ internal class WebView2Toolbar(
         }
     }
 
-    /** RSS 收藏态: 星图标实心/空心切换 (2026-08-07)。 */
-    override fun setStarred(starred: Boolean) {
-        WebView2Loop.post {
-            buttons[ID_STAR]?.let {
-                menuUser32.SetWindowTextW(
-                    it,
-                    if (starred) "\uE735" else "\uE734"
-                )
-            }
-        }
-    }
-
     /** 页面标题: 仅同步 OS 窗口标题栏 (工具栏不绘制标题)。 */
     fun updateTitle(value: String) {
         menuUser32.SetWindowTextW(hwnd, value)
@@ -323,10 +290,6 @@ internal class WebView2Toolbar(
         private const val ID_REFRESH = 3
         private const val ID_OK = 4
         private const val ID_MENU = 5
-        private const val ID_STAR = 6
-        private const val ID_READ_ALOUD = 7
-        private const val ID_SHARE = 8
-        private const val ID_LOGIN = 9
 
         // 菜单项 ID (TrackPopupMenu 返回值); 无刷新项 (2026-08-07: 工具栏已有刷新按钮)
         private const val MENU_ID_BROWSER = 102

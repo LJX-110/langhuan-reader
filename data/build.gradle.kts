@@ -318,26 +318,17 @@ private val sharedLibs = extensions.getByType<VersionCatalogsExtension>().named(
 fun KotlinDependencyHandler.sharedJvmAndroidDeps() {
     api(sharedLibs.findLibrary("quick-chinese-transfer-core").get())
     implementation(sharedLibs.findLibrary("hutool-crypto").get())
-    // TVBox catvod 壳类 (bean/utils) 的 Gson 反序列化; 版本与 app 模块声明一致
+    // 书源 JS 经 Packages.com.google.gson.* 使用宿主 Gson (modules/quickjs 的
+    // JavaObjectBridge 类名白名单), 运行期经本模块传递到各端 classpath
     implementation(sharedLibs.findLibrary("gson").get())
     api(project(":modules:quickjs"))
     api(sharedLibs.findLibrary("okhttp").get())
-    // 扩展 dex 按 FQCN 直调 okhttp3.zstd.Zstd / okhttp3.brotli.Brotli(BrotliInterceptor)与
-    // com.squareup.zstd.okio.OkioZstd.zstdCompress/zstdDecompress, 宿主源码零直调, 只靠依赖
-    // 传递进两端 classpath; 与 okhttp 本体同属宿主向扩展暴露的类路径契约面, 故 api
-    // (Android 变体自动选 zstd-kmp-okio-android AAR; JVM 变体选 zstd-kmp-okio-jvm jar)
-    api(sharedLibs.findLibrary("okhttp-zstd").get())
-    api(sharedLibs.findLibrary("okhttp-brotli").get())
     implementation(sharedLibs.findLibrary("coil3-network-okhttp").get())
-    // catvod 壳类 (com.github.catvod.net.OkHttp) 的 ArrayMap 契约面; 原先靠 coil3 传递引入,
-    // 上游 Coil 变更即编译断裂, 显式声明与 app 同版本
+    // ImageProvider.android 的 BitmapLruCache 继承 androidx.collection.LruCache;
+    // 原先靠 coil3 传递引入, 上游 Coil 变更即编译断裂, 显式声明与 app 同版本
     implementation(sharedLibs.findLibrary("androidx-collection").get())
-    implementation(sharedLibs.findLibrary("nanohttpd-nanohttpd").get())
-    implementation(sharedLibs.findLibrary("nanohttpd-websocket").get())
-    // Mihon index.pb (index_v2) 仓库索引解析 (help.extension.repo.RepoHelper)
-    implementation(sharedLibs.findLibrary("kotlinx-serialization-protobuf").get())
-    // keiyoushi 扩展兼容层 (eu.kanade.tachiyomi.*) 的 DI; 扩展 dex 运行时按宿主 classpath 解析 Injekt,
-    // 桌面端加载器亦需, 故 api (catalog 注释: fork 含 uy.kohesive.injekt.api 包面)
+    // eu.kanade.tachiyomi.network.NetworkHelper (书源 HTTP 链) 用 injectLazy;
+    // 桌面端同源实现也解析这些类, 故 api (catalog 注释: fork 含 uy.kohesive.injekt.api 包面)
     api(sharedLibs.findLibrary("injekt-core").get())
 }
 

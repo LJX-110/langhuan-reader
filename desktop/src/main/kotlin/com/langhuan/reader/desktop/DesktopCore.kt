@@ -24,10 +24,8 @@ import com.langhuan.reader.help.file.desktopResolveStoredRef
 import com.langhuan.reader.help.file.registerDesktopAppFilesDir
 import com.langhuan.reader.help.file.registerDesktopFileDownloader
 import com.langhuan.reader.help.http.OkHttpClientProviders
-import com.langhuan.reader.help.image.MangaPluginImageFetcherProviders
 import com.langhuan.reader.help.notification.registerDesktopNotificationProgress
 import com.langhuan.reader.help.registerComposeDefaultDataResourceProvider
-import com.langhuan.reader.help.registerComposeResourceBytesProvider
 import com.langhuan.reader.help.service.DesktopUpdateBookCallback
 import com.langhuan.reader.help.service.UpdateBookCallbacks
 import com.langhuan.reader.help.service.registerDesktopServiceLauncher
@@ -36,22 +34,9 @@ import com.langhuan.reader.help.source.SourceHelpAccessors
 import com.langhuan.reader.help.storage.registerJvmDataStorage
 import com.langhuan.reader.help.toast.registerDesktopToaster
 import com.langhuan.reader.help.tts.TtsEngineProvider
-import com.langhuan.reader.model.anime.VideoSourceDelegateImpl
 import com.langhuan.reader.model.fileBook.ZipFileWrapperFactoryProviders
-import com.langhuan.reader.model.manga.JvmMangaPluginImageFetcher
-import com.langhuan.reader.model.webBook.PluginSourceDelegates
-import com.langhuan.reader.model.manga.MangaSourceDelegateImpl
-import com.langhuan.reader.model.manga.SharedMangaExtensionPlatform
-import com.langhuan.reader.model.manga.SharedMangaSourceConfig
 import com.langhuan.reader.ui.book.changecover.CoverStorageServiceProviders
-import com.langhuan.reader.ui.book.manga.extension.DesktopMangaPrefTextEditor
-import com.langhuan.reader.ui.book.manga.extension.MangaExtensionServiceProviders
-import com.langhuan.reader.ui.book.manga.extension.MangaPrefTextEditorSlot
-import com.langhuan.reader.ui.association.registerUiRuleSubAutoUpdateHook
 import com.langhuan.reader.ui.compose.platform.registerComposeStringProviders
-import com.langhuan.reader.web.registerDesktopWebServerPlatform
-import com.langhuan.reader.web.utils.registerComposeWebAssetSource
-import com.langhuan.reader.web.utils.registerDesktopWebStrings
 import com.langhuan.reader.desktop.DesktopCore.initRuntimeEnvironment
 import com.langhuan.reader.desktop.DesktopCore.registerCoreProviders
 import com.langhuan.reader.desktop.DesktopCore.registerSecondaryCoreProviders
@@ -77,8 +62,6 @@ import com.langhuan.reader.desktop.help.registerDesktopRegexErrorHandler
 import com.langhuan.reader.desktop.help.source.DesktopSourceHelpAccessor
 import com.langhuan.reader.desktop.help.source.registerDesktopSourceProviders
 import com.langhuan.reader.desktop.help.storage.registerDesktopBackupRestoreHook
-import com.langhuan.reader.desktop.extension.registerDesktopExtensionCompat
-import com.langhuan.reader.desktop.help.tvbox.registerDesktopTvBoxProviders
 import com.langhuan.reader.desktop.help.ui.registerDesktopUserAgentProvider
 import com.langhuan.reader.desktop.http.registerDesktopHttpProvider
 import com.langhuan.reader.desktop.js.registerDesktopJsEngines
@@ -227,8 +210,6 @@ object DesktopCore {
         // 字符串通道 (syncGetString 与 appString, 同源同一份实现): 未注册时两者均 fallback
         // 返回 key 名, 故须先于任何取值调用; 两个入口共用本函数
         registerComposeStringProviders()
-        // 规则订阅每日自动更新的导入实现 (复用 :ui 的导入链, 见 RuleSubAutoUpdateHook)
-        registerUiRuleSubAutoUpdateHook()
         // 注入机器标识到 AndroidIdHolder (对照 app 端 JsEnginesAndroid 注入 ANDROID_ID)。
         // 默认值 "null" 只有 4 字符, BaseSource 登录信息 AES 密钥取前 16 字节会越界被吞,
         // 表现为桌面端书源登录信息无法持久化; 必须在任何 getLoginInfo/putLoginInfo 之前注入
@@ -294,9 +275,6 @@ object DesktopCore {
         // (首次建库 dbCallback.onCreate → DefaultData.keyboardAssists → DefaultDataResourceProviders
         // .get().readResource("keyboardAssists.json")), 否则首次建库时 keyboardAssists 表无默认数据
         registerComposeDefaultDataResourceProvider()
-        // 注册打包资源字节原语 (:ui 的 ComposeResourceBytesProvider, 经 Res.readBytes 取数):
-        // TVBox JS 引导脚本读取 (数据层契约 PackagedResourceBytesProviders) 依赖它已注册
-        registerComposeResourceBytesProvider()
         // 注册桌面端 AppDatabase provider (BundledDatabaseDriver 用 Room.databaseBuilder +
         // BundledSQLiteDriver 构造 AppDatabase, 同一实例经 AppDatabaseProviders 共享)
         val dbDriver = BundledDatabaseDriver()
@@ -315,36 +293,6 @@ object DesktopCore {
         registerDesktopReadBookPlatform()
         // 封面选图持久化 (对齐 Android 原版 externalFiles/covers, 落桌面应用数据根目录 covers/)
         CoverStorageServiceProviders.register(DesktopCoverStorageService())
-        // 14. Tachiyomi 漫画插件栈 (对照 app 端 App.onCreate registerExtensionCompat +
-        //     WebBookProvidersImpl 委派注册 + MainActivity 插件服务注册):
-        //     - 兼容层 Injekt 绑定必须先于任何扩展类加载 (keiyoushi.utils 顶层属性 <clinit> Injekt.get)
-        //     - 委派/图片获取为无状态注册; 服务是「我的」页入口显隐判据, 同步注册保证首组合可见;
-        //       装载由启动 init (桌面 Main.kt 宿主注册后触发) 驱动
-        registerDesktopExtensionCompat()
-        PluginSourceDelegates.register(MangaSourceDelegateImpl)
-        PluginSourceDelegates.register(VideoSourceDelegateImpl)
-        MangaPluginImageFetcherProviders.register(JvmMangaPluginImageFetcher())
-        // 插件服务构造期即启动一份长命状态收集器 (SharedMangaExtensionPlatform.init), 重复注册会
-        // 留下第二份永不取消的收集器; 与 app 端进程级单例同语义: 已有实例就不再新建
-        if (MangaExtensionServiceProviders.getOrNull() == null) {
-            val context = Context()
-            val config = SharedMangaSourceConfig(context)
-            // 编辑弹窗槽捕获同一个配置桥所在端的编辑 Context (兼容层控件需要非空 context)
-            MangaPrefTextEditorSlot.editor = { request -> DesktopMangaPrefTextEditor(request, context) }
-            MangaExtensionServiceProviders.register(
-                SharedMangaExtensionPlatform(config)
-            )
-        }
-        // Web 服务 provider (NanoHTTPD 独立, 不依赖其他 provider):
-        // - WebServerPlatform: HttpServer+WebSocketServer 起停 (JvmWebServerPlatform 共用逻辑)
-        // - WebAssetSource: composeResources 读 commonMain/composeResources/files/web/ 静态资源
-        // - WebStrings: 硬编码中文文案 (后续接入 i18n 资源后替换)
-        // 「我的」页网络服务开关的显隐判据就是 WebServerPlatforms.getOrNull(), 与同一页的漫画/
-        // 影视源服务入口一样必须同步注册 (挂到阶段3异步注册会让启动后立刻进该页看不到开关);
-        // 开关一旦可见马上就会被点到, 故三项都要在任何 WebServerManager.start()/stop() 之前就绪
-        registerDesktopWebServerPlatform()
-        registerComposeWebAssetSource()
-        registerDesktopWebStrings()
         // Room 开库预热 (与首帧组合并行; 上一轮我误删了它, 实测把 273ms 开库成本又退回主链路上)。
         // 实测: 注册 provider 只要 1~2ms, 真正开库 (加载 sqliteJni 原生库 + 建/打开 db 与 -wal/-shm
         // + Room schema 校验 + InvalidationTracker 启动) 要 224~282ms, 而它拖到首次 DAO 访问 ——
@@ -430,12 +378,6 @@ object DesktopCore {
             //     Web 服务封面/插图 provider (DesktopImageControllerProvider)
             //     由 desktop Main.kt 的 registerDesktopSecondaryProviders 注册
             registerDesktopWebBookProviders()
-            // 11d. TVBox 影视源宿主 (jar 经 JVM URLClassLoader + 壳类, JS 经 QuickJS;
-            //      配置/站点开关落 {dataRoot}/files/tvbox, 目录布局与 Android filesDir/tvbox 一致)。
-            //      须在 registerDesktopWebBookProviders 之后 (委派注册表单实现覆盖语义,
-            //      TVBox 要包裹既有委派); 网页嗅探经 DesktopTvBoxSniffer (:desktop Main.kt 注册,
-            //      走 DesktopWebViewEngine), 引擎缺失时嗅探报错, 直链与 json 解析不受影响
-            registerDesktopTvBoxProviders()
             // 11b. JS 扩展回调 provider (UserAgent, 供 JsExtensionsCommon 回调,
             //      必须在 JS 引擎首次 eval 之前注册); OpenUrl 确认框 provider (DesktopDialogs) 留 :desktop
             registerDesktopUserAgentProvider()

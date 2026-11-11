@@ -20,7 +20,6 @@ import com.langhuan.reader.model.webBook.WebBook.getChapterListAwait
 import com.langhuan.reader.model.webBook.WebBook.getContentAwait
 import com.langhuan.reader.model.webBook.ExploreOption
 import com.langhuan.reader.model.webBook.ExploreOptionSelection
-import com.langhuan.reader.model.webBook.pluginFilterSessionOf
 import com.langhuan.reader.utils.HtmlFormatter
 import com.langhuan.reader.utils.isAbsUrl
 import com.langhuan.reader.utils.isDataUrl
@@ -380,7 +379,6 @@ object Debug {
                         )
                     }
                 },
-                pluginFilters = pluginFilterSessionOf(bookSource),
             )
         }.onSuccess { page ->
             val exploreBooks = page.books
@@ -447,7 +445,6 @@ object Debug {
                         )
                     }
                 },
-                pluginFilters = pluginFilterSessionOf(bookSource),
             )
         }.onSuccess { page ->
             val searchBooks = page.books

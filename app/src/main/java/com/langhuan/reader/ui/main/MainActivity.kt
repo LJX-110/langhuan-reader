@@ -1,11 +1,7 @@
 package com.langhuan.reader.ui.main
 
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
-import android.content.res.Configuration
-import androidx.core.content.ContextCompat
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
@@ -60,11 +56,7 @@ import com.langhuan.reader.help.image.registerReaderImageResolver
 import com.langhuan.reader.help.storage.Backup
 import com.langhuan.reader.model.ActiveReadBookRegistry
 import com.langhuan.reader.model.fileBook.FileBook
-import com.langhuan.reader.help.extension.AndroidMangaExtensionHost
-import com.langhuan.reader.help.extension.MangaExtensionHostProviders
-import com.langhuan.reader.help.extension.MangaExtensionManager
 import com.langhuan.reader.help.file.AndroidDirAuthorizations
-import com.langhuan.reader.model.manga.AndroidMangaExtensionPlatform
 import com.langhuan.reader.receiver.MediaButtonReceiver
 import com.langhuan.reader.service.BaseReadAloudService
 import com.langhuan.reader.service.ExportBookService
@@ -82,12 +74,7 @@ import com.langhuan.reader.ui.book.info.BookInfoBlurCoverBg
 import com.langhuan.reader.ui.book.info.BookInfoIntroImage
 import com.langhuan.reader.ui.book.info.LocalBlurCoverBgSlot
 import com.langhuan.reader.ui.book.info.LocalIntroImageSlot
-import com.langhuan.reader.ui.book.manga.AndroidMangaReaderPlatform
-import com.langhuan.reader.ui.book.manga.MangaReaderScreenModel
-import com.langhuan.reader.ui.book.manga.extension.MangaExtensionServiceProviders
 import com.langhuan.reader.ui.book.read.AndroidReaderPlatformProvider
-import com.langhuan.reader.ui.book.tvbox.JvmTvBoxPlatform
-import com.langhuan.reader.ui.book.tvbox.TvBoxServiceProviders
 import com.langhuan.reader.ui.book.read.ReaderPlatformProviders
 import com.langhuan.reader.ui.book.read.ReaderScreenModelRegistry
 import com.langhuan.reader.ui.book.read.page.provider.AndroidTextMeasurer
@@ -95,8 +82,6 @@ import com.langhuan.reader.ui.book.read.page.provider.TextMeasurerProviders
 import com.langhuan.reader.ui.book.read.page.readerLayoutTypeface
 import com.langhuan.reader.ui.book.read.refreshReaderImage
 import com.langhuan.reader.ui.book.source.SourceUiEventBridgeHost
-import com.langhuan.reader.ui.book.video.AndroidVideoPlayPlatformProvider
-import com.langhuan.reader.ui.book.video.VideoPlayPlatformProviders
 import com.langhuan.reader.ui.browser.AndroidWebView
 import com.langhuan.reader.ui.browser.LocalWebViewSlot
 import com.langhuan.reader.ui.compose.dialogs.alert
@@ -128,7 +113,7 @@ import com.langhuan.reader.utils.registerForActivityResult
 import com.langhuan.reader.utils.startService
 import com.langhuan.reader.utils.sysScreenOffTime
 import com.langhuan.reader.utils.toastOnUi
-import com.langhuan.reader.web.utils.WebAssetSources
+import com.langhuan.reader.ui.generated.resources.Res
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
@@ -143,19 +128,6 @@ import kotlin.coroutines.resume
 class MainActivity : BaseComposeActivity(imageBg = false) {
 
     val viewModel by viewModels<MainViewModel>()
-
-    /** 视频画中画 provider: PiP 模式切换回调由此转发到共享层渲染状态。 */
-    private var videoPlayProvider: AndroidVideoPlayPlatformProvider? = null
-
-    /** 画中画小窗内遥控 RemoteAction 的广播接收 (onCreate 注册, onDestroy 注销) */
-    private val pipControlReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action != AndroidVideoPlayPlatformProvider.ACTION_MEDIA_CONTROL) return
-            videoPlayProvider?.onPipControl(
-                intent.getIntExtra(AndroidVideoPlayPlatformProvider.EXTRA_CONTROL_TYPE, 0)
-            )
-        }
-    }
 
     /** 换封面源回调暂存: 由 [AndroidPlatformCapabilities.showChangeCoverDialog] 写入,
      *  ChangeCoverDialog 触发 [coverChangeTo] 时消费。 */
@@ -195,14 +167,6 @@ class MainActivity : BaseComposeActivity(imageBg = false) {
     }
     private var readerWindowActive = false
     private var readerScreenTimeOut = 0L
-
-    /**
-     * 自动翻页期间的强制常亮标记 (对照原版 autoPage() 里直写 screenTimeOut = -1L,
-     * autoPageStop() 里用 upScreenTimeOut() 恢复 keepLight 配置值)。
-     * 单独标记而不直接写 [readerScreenTimeOut]：常亮计时会被 keepLight 变更/
-     * 窗口策略重应用重算多次, 靠标记才能在重算后仍保住自动翻页的强制常亮。
-     */
-    private var readerAutoPageKeepScreenOn = false
 
     // 平台能力与服务: onActivityCreated 同步创建并注册, 修复 LaunchedEffect 异步注册时序问题
     private lateinit var capabilities: AndroidPlatformCapabilities
@@ -413,8 +377,6 @@ class MainActivity : BaseComposeActivity(imageBg = false) {
 
     fun exitReaderWindow() {
         readerWindowActive = false
-        // 退出阅读页一律清自动翻页常亮标记, 避免下次进阅读页残留强制常亮
-        readerAutoPageKeepScreenOn = false
         keepScreenOnHandler.removeCallbacks(screenOffRunnable)
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         services.window.setSystemBars(com.langhuan.reader.ui.root.SystemBarsPolicy.Default)
@@ -426,19 +388,8 @@ class MainActivity : BaseComposeActivity(imageBg = false) {
      */
     fun upScreenTimeOut() {
         val keepLightPrefer = runCatching { (AppConfig.keepLight ?: "0").toInt() }.getOrDefault(0)
-        // 自动翻页期间永不熄屏 (对照原版 screenTimeOut = -1L), 否则按 keepLight 配置
-        readerScreenTimeOut = if (readerAutoPageKeepScreenOn) -1L else keepLightPrefer * 1000L
+        readerScreenTimeOut = keepLightPrefer * 1000L
         screenOffTimerStart()
-    }
-
-    /**
-     * 自动翻页开启/停止时切换强制常亮 (对照原版 autoPage() 的
-     * screenTimeOut = -1L + screenOffTimerStart, autoPageStop() 的 upScreenTimeOut)。
-     */
-    fun setReaderAutoPageKeepScreenOn(enabled: Boolean) {
-        if (readerAutoPageKeepScreenOn == enabled) return
-        readerAutoPageKeepScreenOn = enabled
-        upScreenTimeOut()
     }
 
     /**
@@ -532,7 +483,7 @@ class MainActivity : BaseComposeActivity(imageBg = false) {
             // 封面渲染不再注入 app 端 View 实现, 各端统一走 shared 默认 SharedBookCover
             CompositionLocalProvider(
                 LocalReadConfigProviders provides readConfigProviders,
-                // 注入 app 端 AndroidWebView 到 shared 路由 (Login/ReadRss/WebView), 覆盖 LocalWebViewSlot 兜底
+                // 注入 app 端 AndroidWebView 到 shared 路由 (Login/WebView), 覆盖 LocalWebViewSlot 兜底
                 LocalWebViewSlot provides { config, modifier, callbacks ->
                     AndroidWebView(config, modifier, callbacks)
                 },
@@ -612,29 +563,6 @@ class MainActivity : BaseComposeActivity(imageBg = false) {
         readerPlatform = AndroidReaderPlatformProvider(this)
         ReaderPlatformProviders.register(readerPlatform)
         AudioPlayPlatformProviders.register(SharedAudioPlayPlatformProvider)
-        MangaReaderScreenModel.Providers.register(AndroidMangaReaderPlatform)
-        // 漫画插件服务 (管理页/搜索筛选条; 状态组装已下沉 ui 层 SharedMangaExtensionPlatform,
-        // 平台面经 MangaExtensionHostProviders 注入 PackageManager 装载/安装/广播)
-        // 进程级单例 (只持 applicationContext): Activity 重建不得新建, 否则旧实例的
-        // 状态流收集器与进行中的安装任务会成为孤儿
-        MangaExtensionHostProviders.register(AndroidMangaExtensionHost.get(applicationContext))
-        MangaExtensionServiceProviders.register(AndroidMangaExtensionPlatform.get(applicationContext))
-        // 启动即装载扩展注册表 (后台异步): 虚拟行同步/登录标记/取数委派都依赖注册表内存态,
-        // 不能等首次进插件管理页才装载 (2026-10-05 用户拍板回归启动装载)
-        MangaExtensionManager.init()
-        // 影视源服务 (管理页; 桥接 TvBoxManager, jvmAndAndroidMain 实现 Android/桌面共用,
-        // 平台差异经 TvBoxPlatforms 钩子注入)
-        TvBoxServiceProviders.register(JvmTvBoxPlatform())
-        videoPlayProvider = AndroidVideoPlayPlatformProvider(this)
-            .also { VideoPlayPlatformProviders.register(it) }
-        // 小窗内播放/暂停钮的广播通道 (系统 RemoteAction 触发); setPackage 限定自身,
-        // 否则 NOT_EXPORTED receiver 收不到隐式广播
-        ContextCompat.registerReceiver(
-            this,
-            pipControlReceiver,
-            IntentFilter(AndroidVideoPlayPlatformProvider.ACTION_MEDIA_CONTROL),
-            ContextCompat.RECEIVER_NOT_EXPORTED,
-        )
         // 排版度量走真实字形（对照 TextStyleProvider.getPaints 的 contentPaint）
         TextMeasurerProviders.register { textSizePx, letterSpacingPx, fontPath, weight ->
             AndroidTextMeasurer(TextPaint().apply {
@@ -668,16 +596,6 @@ class MainActivity : BaseComposeActivity(imageBg = false) {
         super.onNewIntent(intent)
         // warm launch: singleTask 复用已运行实例, 新 VIEW intent 经 onNewIntent 派发
         handleExternalIntent(intent, isNewIntent = true)
-    }
-
-    // 进入/退出系统画中画 (API 26+, 仅在 PiP 模式变化时回调): 两参重载自 API 26 才有,
-    // 低版本永不触发, 无需版本门控。只转发平台态, 渲染分切换由共享层读 provider 状态完成。
-    override fun onPictureInPictureModeChanged(
-        isInPictureInPictureMode: Boolean,
-        newConfig: Configuration,
-    ) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        videoPlayProvider?.onPipModeChanged(isInPictureInPictureMode)
     }
 
     /**
@@ -775,11 +693,6 @@ class MainActivity : BaseComposeActivity(imageBg = false) {
     override fun onResume() {
         super.onResume()
         AppForegroundState.set(true)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // 按系统真实态校正画中画标志: 关闭小窗的 onPictureInPictureModeChanged(false)
-            // 在部分场景不送达/迟到, 残留 true 会让视频页停在“纯画面”渲染, 控制器全部不显示
-            videoPlayProvider?.onPipModeChanged(isInPictureInPictureMode)
-        }
     }
 
     override fun onPause() {
@@ -790,9 +703,6 @@ class MainActivity : BaseComposeActivity(imageBg = false) {
     override fun onStop() {
         super.onStop()
         viewModel.isActivityVisible = false
-        // 官方 PiP 指南钦定模式 (视频只在可见时播放): onStop 即暂停,
-        // 无需判断是否处于/离开画中画。
-        videoPlayProvider?.onActivityStopped()
         if (isFinishing) {
             // 退出应用时取消刷新任务, 避免弹出通知
             viewModel.cancelRefreshJobs()
@@ -849,11 +759,11 @@ class MainActivity : BaseComposeActivity(imageBg = false) {
     private suspend fun privacyPolicy(): Boolean {
         if (LocalConfig.privacyPolicyOk) return true
         // privacyPolicy.md 统一存于 shared composeResources files/md (四端共享一份),
-        // 经 WebAssetSources 读 (四端同一 composeResources 取数路径, 与关于页文档弹窗同源)。
+        // 经 Res.readBytes 读 (与关于页文档弹窗同源)。
         // 不吞读取异常: 该文件随包分发, 读不到只可能是打包/改名错 (构建期事实), 降级成空正文
         // 会把构建错误伪装成"协议是空的"
         val privacyPolicy = withContext(IO) {
-            WebAssetSources.get().read("md/privacyPolicy.md").decodeToString()
+            Res.readBytes("files/md/privacyPolicy.md").decodeToString()
         }
         return suspendCancellableCoroutine sc@{ block ->
             alert(androidAppString("privacy_policy"), privacyPolicy) {
@@ -923,7 +833,6 @@ class MainActivity : BaseComposeActivity(imageBg = false) {
 
     override fun onDestroy() {
         super.onDestroy()
-        unregisterReceiver(pipControlReceiver)
         if (!BuildConfig.DEBUG) {
             Backup.autoBack(this)
         }

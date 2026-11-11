@@ -64,7 +64,6 @@ import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.add_book_source
 import com.langhuan.reader.ui.generated.resources.book_source
 import com.langhuan.reader.ui.generated.resources.cancel
-import com.langhuan.reader.ui.generated.resources.debug
 import com.langhuan.reader.ui.generated.resources.delete
 import com.langhuan.reader.ui.generated.resources.disable_explore
 import com.langhuan.reader.ui.generated.resources.disabled
@@ -299,7 +298,6 @@ data class BookSourceListCallbacks(
     val onToTop: (BookSourcePart) -> Unit = {},
     val onToBottom: (BookSourcePart) -> Unit = {},
     val onSearchBook: (BookSourcePart) -> Unit = {},
-    val onDebug: (BookSourcePart) -> Unit = {},
     val onLogin: (BookSourcePart) -> Unit = {},
     val onDel: (BookSourcePart) -> Unit = {},
     val onDelSelection: () -> Unit = {},
@@ -473,7 +471,6 @@ private fun ReorderableCollectionItemScope.BookSourceItem(
     val strToBottom = stringResource(Res.string.to_bottom)
     val strLogin = stringResource(Res.string.login)
     val strSearch = stringResource(Res.string.search)
-    val strDebug = stringResource(Res.string.debug)
     val strDelete = stringResource(Res.string.delete)
     val strEnableExplore = stringResource(Res.string.enable_explore)
     val strDisableExplore = stringResource(Res.string.disable_explore)
@@ -558,7 +555,6 @@ private fun ReorderableCollectionItemScope.BookSourceItem(
                     strToBottom = strToBottom,
                     strLogin = strLogin,
                     strSearch = strSearch,
-                    strDebug = strDebug,
                     strDelete = strDelete,
                     strEnableExplore = strEnableExplore,
                     strDisableExplore = strDisableExplore,
@@ -598,7 +594,6 @@ private fun BookSourceItemMenu(
     strToBottom: String,
     strLogin: String,
     strSearch: String,
-    strDebug: String,
     strDelete: String,
     strEnableExplore: String,
     strDisableExplore: String,
@@ -622,9 +617,6 @@ private fun BookSourceItemMenu(
         }
         DropdownMenuItem(onClick = { onDismiss(); callbacks.onSearchBook(item) }) {
             Text(strSearch, color = colors.primaryText)
-        }
-        DropdownMenuItem(onClick = { onDismiss(); callbacks.onDebug(item) }) {
-            Text(strDebug, color = colors.primaryText)
         }
         DropdownMenuItem(onClick = { onDismiss(); callbacks.onDel(item) }) {
             Text(strDelete, color = colors.primaryText)
