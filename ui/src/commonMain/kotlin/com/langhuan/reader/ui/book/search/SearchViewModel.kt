@@ -320,7 +320,7 @@ class SearchViewModel {
         override fun onSearchCancel(exception: Throwable?) {
             _isSearching.value = false
             exception?.let {
-                runCatching { Toasters.get().toast(it.message ?: "") }
+                runCatching { Toasters.get().toast("搜索已取消") }
             }
         }
 
@@ -339,7 +339,7 @@ class SearchViewModel {
         }
 
         override fun onSearchSourceError(sourceUrl: String, error: Throwable) {
-            runCatching { Toasters.get().toast(error.message ?: "书源搜索出错") }
+            runCatching { Toasters.get().toast("书源搜索出错，请稍后重试") }
         }
 
         override fun onSearchHasMoreChanged(hasMore: Boolean) {

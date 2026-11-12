@@ -227,12 +227,12 @@ fun AppSwitch(
 
     val trackColor = when {
         !enabled -> trackDisabled
-        checked -> colors.accent.copy(alpha = 0.5f) // compatSwitch track alpha 0.5
+        checked -> colors.companion.copy(alpha = 0.5f) // 辅助色：开关轨道
         else -> trackNormal
     }
     val thumbColor = when {
         !enabled -> thumbDisabled
-        checked -> colors.accent
+        checked -> colors.companion
         else -> thumbNormal
     }
 

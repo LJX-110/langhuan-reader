@@ -107,7 +107,6 @@ private fun HttpTtsEditOverlayForm(overlay: AppOverlay.Dialog, navigator: AppNav
         onTestSpeak = { oneShotTts.speakWith(formData(), OneShotTts.TEST_TEXT) },
         onCopySource = { capabilities.copyToClipboard(KS_JSON.encodeToString(HttpTTS.serializer(), formData())) },
         onPasteSource = { vm.importFromClip(::initForm) },
-        onShowHelp = { navigator.showOverlay(AppOverlay.Dialog("help", payload = "httpTTSHelp")) },
     )
 }
 

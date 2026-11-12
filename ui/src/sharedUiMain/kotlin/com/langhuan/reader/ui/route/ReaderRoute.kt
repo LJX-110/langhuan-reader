@@ -39,10 +39,6 @@ import com.langhuan.reader.help.book.BookStorageProviders
 import com.langhuan.reader.help.book.isLocal
 import com.langhuan.reader.help.book.isNotShelf
 import com.langhuan.reader.help.config.AppConfigProviders
-import com.langhuan.reader.help.config.HelpVersion
-import com.langhuan.reader.help.config.LocalConfigKeys
-import com.langhuan.reader.help.config.LocalConfigProviders
-import com.langhuan.reader.help.config.LocalConfigShared
 import com.langhuan.reader.help.config.LocalReadConfigProviders
 import com.langhuan.reader.help.config.ReadBookConfigProviders
 import com.langhuan.reader.help.config.ReadBookConfigShared
@@ -81,8 +77,6 @@ import com.langhuan.reader.ui.book.read.ReaderUiActions
 import com.langhuan.reader.ui.book.read.ReaderUiState
 import com.langhuan.reader.ui.book.read.UnderlineNoteBubbleHost
 import com.langhuan.reader.ui.book.read.config.ChineseConverterSelectorDialog
-import com.langhuan.reader.ui.book.read.config.ClickRegionalConfigDialogHost
-import com.langhuan.reader.ui.book.read.config.CustomPageKeyDialogHost
 import com.langhuan.reader.ui.book.read.config.ReadAloudDialog
 import com.langhuan.reader.ui.book.read.page.SelectionGeometry
 import com.langhuan.reader.ui.book.read.page.TITLE_SIZE_EXTRA_SP
@@ -112,7 +106,6 @@ import com.langhuan.reader.ui.root.RouteResults
 import com.langhuan.reader.ui.root.ScreenModelStore
 import com.langhuan.reader.ui.root.asBook
 import com.langhuan.reader.ui.root.toRouteRef
-import com.langhuan.reader.ui.widget.dialog.HelpDialog
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.langhuan.reader.ui.generated.resources.Res
@@ -693,33 +686,6 @@ fun ReaderRoute(
         }
     }
 
-    // 阅读页首启引导 (对照原版 BaseReadBookActivity.onActivityCreated:
-    // `if (!LocalConfig.readHelpVersionIsLast) { if (isTv) showCustomPageKeyConfig() else showClickRegionalConfig() }`)
-    // 版本标记由 isLastVersion 在判定时写入 (与原版同一时机: 每次进阅读页判定, 首启写标记后不再弹)
-    var showReadHelpGuide by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        val local = LocalConfigProviders.get()
-        val isLastHelp = LocalConfigShared.isLastVersion(
-            lastVersion = HelpVersion.readHelp,
-            versionKey = LocalConfigKeys.readHelpVersion,
-            firstOpenKey = LocalConfigKeys.firstRead,
-            getInt = local::getInt,
-            getBoolean = local::getBoolean,
-            putInt = local::putInt,
-        )
-        if (!isLastHelp) showReadHelpGuide = true
-    }
-
-    // 首启引导: 电视形态配翻页按键, 其余配点击区域 (对照 app 端 isTv 分支)。
-    // 不占对话框槽位: 引导与启动期的其它对话框可各自独立显示, 互不顶掉
-    if (showReadHelpGuide) {
-        if (PlatformCapabilityProviders.get().isTelevision()) {
-            CustomPageKeyDialogHost(onDismiss = { showReadHelpGuide = false })
-        } else {
-            ClickRegionalConfigDialogHost(onDismiss = { showReadHelpGuide = false })
-        }
-    }
-
     // 云进度同步确认对话框 (对照 app 端 ReadBookActivity.sureNewProgress)
     var syncProgress by remember { mutableStateOf<BookProgress?>(null) }
     LaunchedEffect(screenModel) {
@@ -987,22 +953,9 @@ fun ReaderRoute(
             AppLogDialog(onDismiss = { closeDialog() })
         }
 
-        // 首启阅读菜单帮助 (对照原版 ReadBookActivity.showHelp: TextDialog 读
-        // assets 的 web/help/md/readMenuHelp.md; 本文档已随其它帮助文档下沉 composeResources)
-        is ReaderDialogEvent.ReadMenuHelp -> {
-            HelpDialog("readMenuHelp") { closeDialog() }
-        }
-
         // 更多设置 (对照原版 设置按钮 → MoreConfigDialog 底部弹窗)
         is ReaderDialogEvent.MoreConfig -> {
             MoreConfigDialogHost(
-                onDismiss = { closeDialog() },
-            )
-        }
-
-        // 界面/样式设置 (对照原版 界面按钮 → ReadStyleDialog 底部弹窗; 子配置在弹窗内叠层)
-        is ReaderDialogEvent.ReadStyle -> {
-            ReadStyleDialogHost(
                 onDismiss = { closeDialog() },
             )
         }

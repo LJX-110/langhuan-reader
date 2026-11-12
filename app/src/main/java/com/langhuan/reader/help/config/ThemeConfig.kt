@@ -138,6 +138,7 @@ object ThemeConfig {
                 isNightTheme = false,
                 primaryColor = "#${dayBg.hexString}",
                 accentColor = "#${dayAccent.hexString}",
+                secondaryColor = "#${dayAccent.hexString}",
                 backgroundColor = "#${dayBg.hexString}",
                 bottomBackground = "#${dayBbg.hexString}"
             ).apply { isBuiltin = true },
@@ -146,6 +147,7 @@ object ThemeConfig {
                 isNightTheme = true,
                 primaryColor = "#${nightBg.hexString}",
                 accentColor = "#${nightAccent.hexString}",
+                secondaryColor = "#${nightAccent.hexString}",
                 backgroundColor = "#${nightBg.hexString}",
                 bottomBackground = "#${nightBbg.hexString}"
             ).apply { isBuiltin = true }
@@ -160,6 +162,7 @@ object ThemeConfig {
         MonetColorExtract.abandonFollowIfActive(context)
         if (isNight) {
             context.removePref(PreferKey.cNAccent)
+            context.removePref(PreferKey.cNSecondary)
             context.removePref(PreferKey.cNBackground)
             context.removePref(PreferKey.cNBBackground)
             context.removePref(PreferKey.cNPrimary)
@@ -167,6 +170,7 @@ object ThemeConfig {
             context.removePref(PreferKey.bgImageNBlurring)
         } else {
             context.removePref(PreferKey.cAccent)
+            context.removePref(PreferKey.cSecondary)
             context.removePref(PreferKey.cBackground)
             context.removePref(PreferKey.cBBackground)
             context.removePref(PreferKey.cPrimary)
@@ -337,6 +341,7 @@ object ThemeConfig {
         try {
             config.primaryColor.toColorInt()
             config.accentColor.toColorInt()
+            if (!config.secondaryColor.isNullOrBlank()) config.secondaryColor.toColorInt()
             config.backgroundColor.toColorInt()
             config.bottomBackground.toColorInt()
             return true
@@ -350,25 +355,34 @@ object ThemeConfig {
 
     /** Config ↔ ThemeConfigData 字段一一对应, 仅用于走 shared 的读写实现 */
     private fun Config.toThemeConfigData() = ThemeConfigData(
-        themeName, isNightTheme, primaryColor, accentColor, backgroundColor, bottomBackground
+        themeName, isNightTheme, primaryColor, accentColor, backgroundColor, bottomBackground,
+        secondaryColor,
     )
 
     private fun ThemeConfigData.toConfig() = Config(
-        themeName, isNightTheme, primaryColor, accentColor, backgroundColor, bottomBackground
+        themeName, isNightTheme, primaryColor, accentColor, backgroundColor, bottomBackground,
+        secondaryColor,
     )
 
     private fun applyConfigToPrefs(context: Context, config: Config) {
         val accent = config.accentColor.toColorInt()
+        val secondary = if (config.secondaryColor.isNullOrBlank()) {
+            accent
+        } else {
+            config.secondaryColor.toColorInt()
+        }
         val background = config.backgroundColor.toColorInt()
         val bBackground = config.bottomBackground.toColorInt()
         if (config.isNightTheme) {
             context.putPrefInt(PreferKey.cNPrimary, background)
             context.putPrefInt(PreferKey.cNAccent, accent)
+            context.putPrefInt(PreferKey.cNSecondary, secondary)
             context.putPrefInt(PreferKey.cNBackground, background)
             context.putPrefInt(PreferKey.cNBBackground, bBackground)
         } else {
             context.putPrefInt(PreferKey.cPrimary, background)
             context.putPrefInt(PreferKey.cAccent, accent)
+            context.putPrefInt(PreferKey.cSecondary, secondary)
             context.putPrefInt(PreferKey.cBackground, background)
             context.putPrefInt(PreferKey.cBBackground, bBackground)
         }
@@ -394,7 +408,9 @@ object ThemeConfig {
         var primaryColor: String,
         var accentColor: String,
         var backgroundColor: String,
-        var bottomBackground: String
+        var bottomBackground: String,
+        /** 辅助色；旧 JSON 缺省为空，由 ThemeConfigStore 加载时一次性补齐。 */
+        var secondaryColor: String = "",
     ) {
 
         @Transient
@@ -412,6 +428,7 @@ object ThemeConfig {
                         && other.isNightTheme == isNightTheme
                         && other.primaryColor == primaryColor
                         && other.accentColor == accentColor
+                        && other.secondaryColor == secondaryColor
                         && other.backgroundColor == backgroundColor
                         && other.bottomBackground == bottomBackground
             }

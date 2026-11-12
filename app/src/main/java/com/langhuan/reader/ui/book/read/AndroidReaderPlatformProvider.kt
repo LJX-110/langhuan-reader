@@ -553,7 +553,7 @@ private class AndroidReaderMenuState(
 
     // 翻页动画选择器已删除: 原版该选择器回调忽略索引 (selector { _, _ -> success() }),
     // 选完不写任何动画值, 仅发 PAGE_ANIM + LOAD_CONTENT —— 属于无效的死 UI。
-    // 翻页动画统一在界面设置弹窗 (ReadStyleScreen 的 5 个单选项) 配置。
+    // 翻页动画统一在阅读菜单的「排版」面板 (滚动 / 覆盖) 配置。
 
     // 对照原版 ReadAloudDialog.upTtsSpeechRate: 新语速要 pause+resume 才作用到当前段
     fun upTtsSpeechRate() {

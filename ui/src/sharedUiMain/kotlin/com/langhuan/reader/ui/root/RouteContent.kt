@@ -8,12 +8,10 @@ import com.langhuan.reader.ui.route.AudioPlayRoute
 import com.langhuan.reader.ui.route.BackupConfigRoute
 import com.langhuan.reader.ui.route.BookInfoEditRoute
 import com.langhuan.reader.ui.route.BookInfoRoute
-import com.langhuan.reader.ui.route.BookSourceDebugRoute
 import com.langhuan.reader.ui.route.BookSourceEditRoute
 import com.langhuan.reader.ui.route.BookSourceManageRoute
 import com.langhuan.reader.ui.route.BookmarkRoute
 import com.langhuan.reader.ui.route.BookshelfManageRoute
-import com.langhuan.reader.ui.route.DictRuleRoute
 import com.langhuan.reader.ui.route.ExploreShowRoute
 import com.langhuan.reader.ui.route.ImportBookRoute
 import com.langhuan.reader.ui.route.MainRoute
@@ -68,11 +66,6 @@ fun RouteContent(
             true
         }
 
-        is AppRoute.BookSourceDebug -> {
-            BookSourceDebugRoute(entry, navigator, screenModelStore)
-            true
-        }
-
         is AppRoute.BookSourceEdit -> {
             BookSourceEditRoute(entry, navigator, screenModelStore)
             true
@@ -94,11 +87,6 @@ fun RouteContent(
 
         is AppRoute.DialogPreview -> {
             DialogPreviewScreen(navigator)
-            true
-        }
-
-        is AppRoute.DictRule -> {
-            DictRuleRoute(entry, navigator, screenModelStore)
             true
         }
 

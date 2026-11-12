@@ -6,7 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.langhuan.reader.ui.compose.theme.AppTheme
 
-/** 单选钮：accent 选中色对齐 AppCompatRadioButton 主题着色（形态与 MD2 一致，仅中和取色） */
+/** 单选钮：选中色取辅助色 (companion)，形态与 MD2 一致 */
 @Composable
 fun AppRadioButton(
     selected: Boolean,
@@ -21,7 +21,7 @@ fun AppRadioButton(
         modifier = modifier,
         enabled = enabled,
         colors = RadioButtonDefaults.colors(
-            selectedColor = colors.accent,
+            selectedColor = colors.companion,
             unselectedColor = colors.secondaryText,
         ),
     )

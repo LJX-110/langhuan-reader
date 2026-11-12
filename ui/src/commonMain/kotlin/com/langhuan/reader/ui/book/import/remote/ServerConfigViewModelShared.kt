@@ -92,7 +92,7 @@ class ServerConfigViewModelShared(
             } catch (e: Throwable) {
                 // 替代 context.toastOnUi("保存出错\n${it.message}"),
                 // Toasters.get() 已下沉 commonMain, androidMain 注册的实现内部切主线程
-                Toasters.get().toast("保存出错\n${e.message}")
+                Toasters.get().toast("保存失败")
             }
         }
     }

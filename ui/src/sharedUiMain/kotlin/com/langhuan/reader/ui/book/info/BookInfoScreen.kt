@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.text.selection.DisableSelection
@@ -91,10 +92,12 @@ import com.langhuan.reader.ui.generated.resources.book_info
 import com.langhuan.reader.ui.generated.resources.book_intro
 import com.langhuan.reader.ui.generated.resources.book_name
 import com.langhuan.reader.ui.generated.resources.clear_cache
+import com.langhuan.reader.ui.generated.resources.collapse
 import com.langhuan.reader.ui.generated.resources.copy_book_url
 import com.langhuan.reader.ui.generated.resources.copy_toc_url
 import com.langhuan.reader.ui.generated.resources.download_to_local
 import com.langhuan.reader.ui.generated.resources.edit
+import com.langhuan.reader.ui.generated.resources.expand
 import com.langhuan.reader.ui.generated.resources.ic_arrow_back
 import com.langhuan.reader.ui.generated.resources.ic_book_last
 import com.langhuan.reader.ui.generated.resources.ic_edit
@@ -949,34 +952,81 @@ private fun IntroSection(
     modifier: Modifier,
 ) {
     val intro = state.book?.getDisplayIntro()
+    // 简介默认折叠，避免长简介把整页撑满并压到下方操作栏
+    var expanded by remember(intro) { mutableStateOf(false) }
+    val plainPreview = remember(intro) {
+        intro?.let { Ksoup.parseBodyFragment(it).text().trim() }.orEmpty()
+    }
+    val foldable = plainPreview.length > INTRO_PREVIEW_LENGTH
+
     if (intro.isNullOrBlank() || !intro.contains('<')) {
         SelectionContainer(modifier.fillMaxWidth()) {
-            Text(
-                text = intro ?: stringResource(Res.string.book_intro),
-                color = AppTheme.colors.secondaryText,
-                fontSize = 14.sp,
-            )
+            Column(Modifier.fillMaxWidth()) {
+                Text(
+                    text = intro ?: stringResource(Res.string.book_intro),
+                    color = AppTheme.colors.secondaryText,
+                    fontSize = 14.sp,
+                    maxLines = if (expanded) Int.MAX_VALUE else INTRO_COLLAPSED_LINES,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (foldable) {
+                    IntroExpandToggle(expanded) { expanded = !expanded }
+                }
+            }
         }
         return
     }
     val parts = remember(intro) { parseIntro(intro) }
     SelectionContainer(modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth()) {
-            parts.forEach { part ->
-                when (part) {
-                    is IntroTextPart -> IntroRichText(part) { actions.onDispatchIntroAction(it) }
-                    is IntroImagePart -> {
-                        // 源站自定义 onclick: 与 button 同通道执行 evalJS; 无则查看大图
-                        if (!part.onclick.isNullOrBlank()) {
-                            introImageSlot(part.src) { actions.onDispatchIntroAction(part.onclick) }
-                        } else {
-                            introImageSlot(part.src) { actions.onShowPhoto(part.src) }
+            if (expanded) {
+                parts.forEach { part ->
+                    when (part) {
+                        is IntroTextPart -> IntroRichText(part) { actions.onDispatchIntroAction(it) }
+                        is IntroImagePart -> {
+                            // 源站自定义 onclick: 与 button 同通道执行 evalJS; 无则查看大图
+                            if (!part.onclick.isNullOrBlank()) {
+                                introImageSlot(part.src) { actions.onDispatchIntroAction(part.onclick) }
+                            } else {
+                                introImageSlot(part.src) { actions.onShowPhoto(part.src) }
+                            }
                         }
                     }
                 }
+            } else {
+                Text(
+                    text = plainPreview,
+                    color = AppTheme.colors.secondaryText,
+                    fontSize = 14.sp,
+                    maxLines = INTRO_COLLAPSED_LINES,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (foldable) {
+                IntroExpandToggle(expanded) { expanded = !expanded }
             }
         }
     }
+}
+
+private const val INTRO_PREVIEW_LENGTH = 140
+private const val INTRO_COLLAPSED_LINES = 6
+
+/** 简介展开/收起按钮 */
+@Composable
+private fun IntroExpandToggle(expanded: Boolean, onToggle: () -> Unit) {
+    Text(
+        text = stringResource(
+            if (expanded) Res.string.collapse else Res.string.expand
+        ),
+        color = AppTheme.colors.accent,
+        fontSize = 13.sp,
+        modifier = Modifier
+            .padding(top = 6.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+    )
 }
 
 private fun parseIntro(intro: String): List<IntroPart> {

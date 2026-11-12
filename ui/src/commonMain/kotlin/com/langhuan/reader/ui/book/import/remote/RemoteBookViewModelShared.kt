@@ -128,7 +128,7 @@ class RemoteBookViewModelShared(
             } catch (e: Throwable) {
                 if (e is CancellationException) throw e
                 AppLog.put("初始化webDav出错\n${e.message}", e)
-                Toasters.get().toast("初始化webDav出错:${e.message}")
+                Toasters.get().toast("连接网盘失败")
             }
         }
     }
@@ -167,8 +167,8 @@ class RemoteBookViewModelShared(
             } catch (e: Throwable) {
                 if (e is CancellationException) throw e
                 AppLog.put("获取webDav书籍出错\n${e.message}", e)
-                Toasters.get().toast("获取webDav书籍出错\n${e.message}")
-                _error.value = e.message
+                Toasters.get().toast("获取网盘书籍失败")
+                _error.value = "获取网盘书籍失败"
             } finally {
                 _isLoading.value = false
             }

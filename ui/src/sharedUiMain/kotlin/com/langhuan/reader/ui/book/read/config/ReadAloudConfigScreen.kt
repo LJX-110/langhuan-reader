@@ -7,19 +7,13 @@ import com.langhuan.reader.ui.compose.preference.preference
 import com.langhuan.reader.ui.compose.preference.switchPreference
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.generated.resources.Res
-import com.langhuan.reader.ui.generated.resources.pause_read_aloud_while_phone_calls_summary
 import com.langhuan.reader.ui.generated.resources.pause_read_aloud_while_phone_calls_title
 import com.langhuan.reader.ui.generated.resources.pref_media_button_per_next
-import com.langhuan.reader.ui.generated.resources.pref_media_button_per_next_summary
 import com.langhuan.reader.ui.generated.resources.read_aloud_by_page
-import com.langhuan.reader.ui.generated.resources.read_aloud_by_page_summary
 import com.langhuan.reader.ui.generated.resources.read_aloud_wake_lock
-import com.langhuan.reader.ui.generated.resources.read_aloud_wake_lock_summary
 import com.langhuan.reader.ui.generated.resources.speak_engine
 import com.langhuan.reader.ui.generated.resources.stream_read_aloud_audio
-import com.langhuan.reader.ui.generated.resources.stream_read_aloud_audio_summary
 import com.langhuan.reader.ui.generated.resources.sys_tts_config
-import com.langhuan.reader.ui.generated.resources.sys_tts_config_summary
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -43,19 +37,12 @@ fun ReadAloudConfigScreen(
     onSysTtsConfig: () -> Unit,
 ) {
     val titlePausePhoneCalls = stringResource(Res.string.pause_read_aloud_while_phone_calls_title)
-    val summaryPausePhoneCalls =
-        stringResource(Res.string.pause_read_aloud_while_phone_calls_summary)
     val titleWakeLock = stringResource(Res.string.read_aloud_wake_lock)
-    val summaryWakeLock = stringResource(Res.string.read_aloud_wake_lock_summary)
     val titleMediaButtonPerNext = stringResource(Res.string.pref_media_button_per_next)
-    val summaryMediaButtonPerNext = stringResource(Res.string.pref_media_button_per_next_summary)
     val titleReadAloudByPage = stringResource(Res.string.read_aloud_by_page)
-    val summaryReadAloudByPage = stringResource(Res.string.read_aloud_by_page_summary)
     val titleStreamReadAloud = stringResource(Res.string.stream_read_aloud_audio)
-    val summaryStreamReadAloud = stringResource(Res.string.stream_read_aloud_audio_summary)
     val titleSpeakEngine = stringResource(Res.string.speak_engine)
     val titleSysTtsConfig = stringResource(Res.string.sys_tts_config)
-    val summarySysTtsConfig = stringResource(Res.string.sys_tts_config_summary)
 
     AppTheme {
         PreferenceScreen {
@@ -65,32 +52,27 @@ fun ReadAloudConfigScreen(
             switchPreference(
                 prefKey = PreferKey.pauseReadAloudWhilePhoneCalls,
                 title = titlePausePhoneCalls,
-                summary = summaryPausePhoneCalls,
                 defaultValue = false,
                 enabled = pausePhoneCallsEnabled,
             )
             switchPreference(
                 prefKey = PreferKey.readAloudWakeLock,
                 title = titleWakeLock,
-                summary = summaryWakeLock,
                 defaultValue = false,
             )
             switchPreference(
                 prefKey = "mediaButtonPerNext",
                 title = titleMediaButtonPerNext,
-                summary = summaryMediaButtonPerNext,
                 defaultValue = false,
             )
             switchPreference(
                 prefKey = PreferKey.readAloudByPage,
                 title = titleReadAloudByPage,
-                summary = summaryReadAloudByPage,
                 defaultValue = false,
             )
             switchPreference(
                 prefKey = PreferKey.streamReadAloudAudio,
                 title = titleStreamReadAloud,
-                summary = summaryStreamReadAloud,
                 defaultValue = false,
             )
             preference(
@@ -100,7 +82,6 @@ fun ReadAloudConfigScreen(
             )
             preference(
                 title = titleSysTtsConfig,
-                summary = summarySysTtsConfig,
                 onClick = onSysTtsConfig,
             )
         }

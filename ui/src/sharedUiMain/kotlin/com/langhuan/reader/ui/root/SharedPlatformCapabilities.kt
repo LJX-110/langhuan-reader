@@ -114,7 +114,10 @@ interface SharedPlatformCapabilities : PlatformCapabilities {
                 return@launch
             }
             runCatching { source.evalJS(action) { this["book"] = book } }
-                .onFailure { Toasters.get().toast(it.message ?: it::class.simpleName.orEmpty()) }
+                .onFailure {
+                    AppLog.put("执行书源操作失败\n${it.message}", it)
+                    Toasters.get().toast("执行书源操作失败")
+                }
         }
     }
 
@@ -214,7 +217,7 @@ interface SharedPlatformCapabilities : PlatformCapabilities {
             } catch (pickerError: Throwable) {
                 // 选目录真实失败 (不是用户取消): 用户可见提示 + 如实记一次, 并把**选择器原异常**
                 // 交回原等待者 —— 不再拿旧的 InvalidBooksDirException 顶替它
-                Toasters.get().toast(pickerError.message ?: "选择书籍目录失败")
+                Toasters.get().toast("选择书籍目录失败")
                 AppLog.put("选择书籍目录失败", pickerError)
                 throw pickerError
             }

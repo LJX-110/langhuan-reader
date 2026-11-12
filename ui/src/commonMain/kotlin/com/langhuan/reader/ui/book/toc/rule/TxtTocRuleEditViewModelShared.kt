@@ -104,7 +104,7 @@ class TxtTocRuleEditViewModelShared(
             success.invoke(it)
         }.onError {
             // 替代 context.toastOnUi(msg), Toasters.get() 已下沉 commonMain
-            Toasters.get().toast(it.message ?: "Error")
+            Toasters.get().toast("保存目录规则失败")
             it.printStackTraceOnDebug()
         }
     }

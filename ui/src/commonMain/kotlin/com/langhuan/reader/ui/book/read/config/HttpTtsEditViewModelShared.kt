@@ -180,7 +180,7 @@ class HttpTtsEditViewModelShared(
             onSuccess.invoke(it)
         }.onError {
             // 替代 context.toastOnUi(it.message), Toasters.get() 已下沉 commonMain
-            Toasters.get().toast(it.message ?: "Error")
+            Toasters.get().toast("保存朗读配置失败")
         }
     }
 }

@@ -875,10 +875,6 @@ private fun DialogOverlayContent(overlay: AppOverlay.Dialog, navigator: AppNavig
         // 默认封面图集管理 (对照 app 端 DefaultCoverGalleryDialog; payload "1"=夜间, 其余=日间)
         "default_cover_gallery" -> DefaultCoverGalleryOverlayDialogContent(overlay, navigator)
 
-        // 帮助: key="help" 时 payload 为 md 文件名, dictRuleHelp 为固定文档
-        "help" -> HelpDialogContent(overlay, navigator, overlay.payload.orEmpty())
-        "dictRuleHelp" -> HelpDialogContent(overlay, navigator, "dictRuleHelp")
-
         // 升级更新日志 (对照原版 upVersion updateLog 分支)
         "updateLog" -> UpdateLogOverlayDialogContent(overlay, navigator)
 

@@ -11,10 +11,6 @@ import androidx.compose.ui.text.TextRange
 import com.langhuan.reader.constant.BookSourceType
 import com.langhuan.reader.data.entities.BookSource
 import com.langhuan.reader.help.IntentData
-import com.langhuan.reader.help.config.HelpVersion
-import com.langhuan.reader.help.config.LocalConfigKeys
-import com.langhuan.reader.help.config.LocalConfigProviders
-import com.langhuan.reader.help.config.LocalConfigShared
 import com.langhuan.reader.help.config.SourceConfig
 import com.langhuan.reader.help.http.CookieStoreProviders
 import com.langhuan.reader.help.showSourceLogin
@@ -37,7 +33,6 @@ import com.langhuan.reader.ui.root.PlatformCapabilityProviders
 import com.langhuan.reader.ui.root.RouteEntry
 import com.langhuan.reader.ui.root.RouteResultPayload
 import com.langhuan.reader.ui.root.ScreenModelStore
-import com.langhuan.reader.ui.widget.dialog.HelpDialog
 import com.langhuan.reader.ui.widget.text.EditEntity
 import com.langhuan.reader.utils.CodeFormatter
 import com.langhuan.reader.utils.GSON
@@ -114,8 +109,7 @@ fun BookSourceEditRoute(
     val activeField =
         remember(editState.sourceVersion) { mutableStateOf<Pair<String, EditEntity>?>(null) }
 
-    // 对话框状态 (对照 app 端 Activity 内 showHelp / alert 调用)
-    var helpFileName by remember { mutableStateOf<String?>(null) }
+    // 对话框状态 (对照 app 端 Activity 内 alert 调用)
     var showDangerousApiConfirm by remember { mutableStateOf(false) }
     // 退出确认对话框 (对照 app 端 finish() 内 alert: source 变更未保存时询问)
     var showExitConfirm by remember { mutableStateOf(false) }
@@ -129,20 +123,6 @@ fun BookSourceEditRoute(
             // 早先写成 `?.let` 使这条路径下 sourceVersion 不自增, 整页字段停在 Init 前的空列表上
             applySourceToEditState(screenModel.bookSource ?: BookSource(), editState)
         })
-    }
-
-    // 首次打开规则帮助引导 (对照原版 onPostCreate: !LocalConfig.ruleHelpVersionIsLast)
-    LaunchedEffect(Unit) {
-        // 版本标记存 "local" prefs (LocalConfigStore), 与原版 LocalConfig 同存储
-        val local = LocalConfigProviders.get()
-        val isLastHelp = LocalConfigShared.isLastVersion(
-            lastVersion = HelpVersion.ruleHelp,
-            versionKey = LocalConfigKeys.ruleHelpVersion,
-            getInt = local::getInt,
-            getBoolean = local::getBoolean,
-            putInt = local::putInt,
-        )
-        if (!isLastHelp) helpFileName = "ruleHelp"
     }
 
     // 退出请求 (对照 app 端 finish() 覆写): source 变更未保存时弹确认, 未变更直接退出。
@@ -251,10 +231,6 @@ fun BookSourceEditRoute(
                 val source = screenModel.getSource(editState)
                 PlatformCapabilityProviders.get().shareText(GSON.toJson(source))
             },
-            onHelp = { fileName ->
-                // 对照 app 端 help: showHelp(fileName)
-                helpFileName = fileName
-            },
             hasLogin = {
                 // 对照 app 端 hasLogin: getSource().hasLogin()
                 screenModel.getSource(editState).hasLogin()
@@ -293,11 +269,6 @@ fun BookSourceEditRoute(
             navigator.showOverlay(AppOverlay.Dialog("keyboardAssistsConfig"))
         },
     )
-
-    // 帮助对话框 (对照 app 端 showHelp(fileName))
-    helpFileName?.let { fileName ->
-        HelpDialog(fileName) { helpFileName = null }
-    }
 
     // 危险 API 确认对话框 (对照 app 端 onDangerousApiClick 内 alert)
     // dismissOnClick=false: 按钮点击不触发 onDismissRequest, 手动关闭; onDismissRequest 仅在外部点击/返回时触发

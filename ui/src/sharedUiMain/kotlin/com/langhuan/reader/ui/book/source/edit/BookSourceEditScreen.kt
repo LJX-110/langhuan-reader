@@ -294,7 +294,6 @@ data class BookSourceEditCallbacks(
     val onAutoIndent: () -> Unit = {},
     val onSetSourceVariable: () -> Unit = {},
     val onShareSourceStr: () -> Unit = {},
-    val onHelp: (String) -> Unit = {},
     /** 当前源是否有登录入口 (对齐 View 版 onMenuOpened 每次展开计算) */
     val hasLogin: () -> Boolean = { false },
     val onBookSourceTypeChange: (Int) -> Unit = {},
@@ -335,29 +334,16 @@ private fun EditActions(state: BookSourceEditState, callbacks: BookSourceEditCal
         // 对齐 View 版 onMenuOpened 的登录项可见性: 每次展开时计算 (DropdownMenu content
         // 在 expanded 时新组合, remember 无 key 等价每次展开重新求值)
         val hasLogin = remember { callbacks.hasLogin() }
-        // 「帮助」二级菜单: 同一 Popup 内用 if/else 切换内容(对照 BookshelfManageScreen),
-        // 避免嵌套 DropdownMenu/Popup 导致桌面端卡死; 菜单关闭随 Popup 释放状态, 下次打开回到一级
-        var showHelpSubmenu by remember { mutableStateOf(false) }
-        if (showHelpSubmenu) {
-            MenuItem(stringResource(Res.string.book_source_tutorial)) {
-                dismiss(); callbacks.onHelp("ruleHelp")
-            }
-            MenuItem(stringResource(Res.string.js_tutorial)) {
-                dismiss(); callbacks.onHelp("jsHelp")
-            }
-        } else {
-            if (hasLogin) {
-                MenuItem(stringResource(Res.string.login)) { dismiss(); callbacks.onLogin() }
-            }
-            MenuItem(stringResource(Res.string.search)) { dismiss(); callbacks.onSearch() }
-            MenuItem(stringResource(Res.string.cookie)) { dismiss(); callbacks.onClearCookie() }
-            MenuItem(stringResource(Res.string.copy_source)) { dismiss(); callbacks.onCopySource() }
-            MenuItem(stringResource(Res.string.paste_source)) { dismiss(); callbacks.onPasteSource() }
-            MenuItem(stringResource(Res.string.auto_indent)) { dismiss(); callbacks.onAutoIndent() }
-            MenuItem(stringResource(Res.string.set_source_variable)) { dismiss(); callbacks.onSetSourceVariable() }
-            MenuItem(stringResource(Res.string.str_share)) { dismiss(); callbacks.onShareSourceStr() }
-            MenuItem(stringResource(Res.string.help)) { showHelpSubmenu = true }
+        if (hasLogin) {
+            MenuItem(stringResource(Res.string.login)) { dismiss(); callbacks.onLogin() }
         }
+        MenuItem(stringResource(Res.string.search)) { dismiss(); callbacks.onSearch() }
+        MenuItem(stringResource(Res.string.cookie)) { dismiss(); callbacks.onClearCookie() }
+        MenuItem(stringResource(Res.string.copy_source)) { dismiss(); callbacks.onCopySource() }
+        MenuItem(stringResource(Res.string.paste_source)) { dismiss(); callbacks.onPasteSource() }
+        MenuItem(stringResource(Res.string.auto_indent)) { dismiss(); callbacks.onAutoIndent() }
+        MenuItem(stringResource(Res.string.set_source_variable)) { dismiss(); callbacks.onSetSourceVariable() }
+        MenuItem(stringResource(Res.string.str_share)) { dismiss(); callbacks.onShareSourceStr() }
     }
 }
 

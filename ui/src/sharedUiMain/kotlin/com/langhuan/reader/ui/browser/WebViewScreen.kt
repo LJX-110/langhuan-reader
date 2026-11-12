@@ -17,6 +17,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.langhuan.reader.constant.AppLog
 import com.langhuan.reader.help.coroutine.IoDispatcher
 import com.langhuan.reader.help.source.SourceHelp
 import com.langhuan.reader.help.source.SourceVerificationHelpShared
@@ -130,7 +131,10 @@ internal fun WebViewScreen(
             }
         }
             .onSuccess { loadState = it }
-            .onFailure { e -> loadError = e.message ?: "error" }
+            .onFailure { e ->
+                AppLog.put("加载网页失败\n${e.message}", e)
+                loadError = "加载失败，请稍后重试"
+            }
     }
 
     // 验证完成回传 (原 WebViewModel.saveVerificationResult)

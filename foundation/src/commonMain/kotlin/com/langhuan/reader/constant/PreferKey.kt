@@ -188,6 +188,7 @@ object PreferKey {
 
     const val cPrimary = "colorPrimary"
     const val cAccent = "colorAccent"
+    const val cSecondary = "colorSecondary"
     const val cBackground = "colorBackground"
     const val cBBackground = "colorBottomBackground"
     const val bgImage = "backgroundImage"
@@ -195,6 +196,7 @@ object PreferKey {
 
     const val cNPrimary = "colorPrimaryNight"
     const val cNAccent = "colorAccentNight"
+    const val cNSecondary = "colorSecondaryNight"
     const val cNBackground = "colorBackgroundNight"
     const val cNBBackground = "colorBottomBackgroundNight"
     const val bgImageN = "backgroundImageNight"

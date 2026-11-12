@@ -153,7 +153,8 @@ fun PageViewComposable(
     // 后布局系统重新测量子节点，实测高度经 onSizeChanged 上报反哺排版。
     val headerVisible = !readerFocusMode &&
         headerTipVisible(readTipConfig.headerMode, readBookConfig.hideStatusBar)
-    val footerVisible = !readerFocusMode && readTipConfig.footerMode != 1
+    // 底栏（本章/全书进度）已移除，始终不显示
+    val footerVisible = false
     // 隐藏时把实测高度归零：页眉/页脚不再组合，但坐标基准仍读上次高度会错位
     LaunchedEffect(headerVisible) {
         if (!headerVisible) onHeaderMeasured?.invoke(0)
@@ -808,7 +809,8 @@ fun ScrollPageView(
     val density = LocalDensity.current
     val headerVisible = !readerFocusMode &&
         headerTipVisible(readTipConfig.headerMode, readBookConfig.hideStatusBar)
-    val footerVisible = !readerFocusMode && readTipConfig.footerMode != 1
+    // 底栏（本章/全书进度）已移除，始终不显示
+    val footerVisible = false
     // 同 PageViewComposable：隐藏时归零实测高度，保证命中/选择坐标基准不残留
     LaunchedEffect(headerVisible) {
         if (!headerVisible) onHeaderMeasured?.invoke(0)

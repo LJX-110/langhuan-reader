@@ -526,6 +526,7 @@ object WebBookProvidersImpl :
             isNightTheme = isNightTheme,
             primaryColor = primaryColor,
             accentColor = accentColor,
+            secondaryColor = secondaryColor,
             backgroundColor = backgroundColor,
             bottomBackground = bottomBackground,
         ).also { it.isBuiltin = isBuiltin }
@@ -537,6 +538,7 @@ object WebBookProvidersImpl :
             isNightTheme = isNightTheme,
             primaryColor = primaryColor,
             accentColor = accentColor,
+            secondaryColor = secondaryColor,
             backgroundColor = backgroundColor,
             bottomBackground = bottomBackground,
         ).also { it.isBuiltin = isBuiltin }

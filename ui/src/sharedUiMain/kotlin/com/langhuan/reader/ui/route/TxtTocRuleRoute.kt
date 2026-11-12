@@ -66,7 +66,6 @@ import com.langhuan.reader.ui.generated.resources.create
 import com.langhuan.reader.ui.generated.resources.delete
 import com.langhuan.reader.ui.generated.resources.draw
 import com.langhuan.reader.ui.generated.resources.edit
-import com.langhuan.reader.ui.generated.resources.help
 import com.langhuan.reader.ui.generated.resources.ic_add
 import com.langhuan.reader.ui.generated.resources.ic_clear_all
 import com.langhuan.reader.ui.generated.resources.ic_edit
@@ -117,10 +116,6 @@ fun TxtTocRuleRoute(
 
             override fun onImportOnline() {
                 navigator.showOverlay(AppOverlay.Dialog(key = "txtTocRuleImportOnline"))
-            }
-
-            override fun onHelp() {
-                navigator.showOverlay(AppOverlay.Dialog(key = "help", payload = "txtTocRuleHelp"))
             }
 
             // dispatch 类: 状态与数据操作全部委托 ScreenModel
@@ -298,16 +293,6 @@ private fun TxtTocRuleDialogContent(
                             stringResource(Res.string.import_default_rule),
                             color = colors.primaryText,
                         )
-                    }
-                    DropdownMenuItem(
-                        onClick = {
-                            dismiss()
-                            navigator.showOverlay(
-                                AppOverlay.Dialog(key = "help", payload = "txtTocRuleHelp")
-                            )
-                        },
-                    ) {
-                        Text(stringResource(Res.string.help), color = colors.primaryText)
                     }
                 }
             },

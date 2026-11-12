@@ -74,7 +74,7 @@ class ReplaceEditScreenModel(
                 }.onSuccess {
                     event.onSuccess()
                 }.onError {
-                    Toasters.get().toast("save error, ${it.message}")
+                    Toasters.get().toast("保存替换规则失败")
                     it.printStackTraceOnDebug()
                 }
             }
@@ -105,7 +105,7 @@ class ReplaceEditScreenModel(
                     )
                     event.onSuccess(rule)
                 }.onError {
-                    Toasters.get().toast(it.message ?: "Error")
+                    Toasters.get().toast("读取替换规则失败")
                     it.printStackTraceOnDebug()
                 }
             }

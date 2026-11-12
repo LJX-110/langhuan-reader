@@ -47,7 +47,6 @@ import com.langhuan.reader.ui.root.pushExportDispatch
 import com.langhuan.reader.ui.root.RouteEntry
 import com.langhuan.reader.ui.root.OnRouteLifecycle
 import com.langhuan.reader.ui.root.ScreenModelStore
-import com.langhuan.reader.ui.widget.dialog.HelpDialog
 import com.langhuan.reader.ui.widget.dialog.OnlineImportUrlDialog
 import com.langhuan.reader.utils.toExportJsonText
 import kotlinx.coroutines.launch
@@ -97,7 +96,6 @@ fun ReplaceRuleRoute(
     val groups by viewModel.groups.collectAsState()
 
     // 对话框状态
-    var showHelp by remember { mutableStateOf(false) }
     var showGroupManage by remember { mutableStateOf(false) }
     var showUrlInput by remember { mutableStateOf(false) }
     var importVm by remember { mutableStateOf<ImportReplaceRuleViewModelShared?>(null) }
@@ -142,7 +140,6 @@ fun ReplaceRuleRoute(
             }
         },
         onImportOnline = { showUrlInput = true },
-        onHelp = { showHelp = true },
         onGroupManage = { showGroupManage = true },
         onExport = { rules ->
             pushExportDispatch(
@@ -152,11 +149,6 @@ fun ReplaceRuleRoute(
             )
         },
     )
-
-    // 帮助对话框
-    if (showHelp) {
-        HelpDialog("replaceRuleHelp") { showHelp = false }
-    }
 
     // 分组管理对话框 (替换规则分组为字符串标签, 非 BookGroup)
     if (showGroupManage) {

@@ -6,17 +6,21 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -49,11 +53,6 @@ import com.langhuan.reader.ui.book.read.ReadConfigChange
 import com.langhuan.reader.ui.book.read.config.ChineseConverterSelectorDialog
 import com.langhuan.reader.ui.book.read.config.FontItem
 import com.langhuan.reader.ui.book.read.config.FontSelectDialog
-import com.langhuan.reader.ui.book.read.config.ReadStyleActions
-import com.langhuan.reader.ui.book.read.config.ReadStyleController
-import com.langhuan.reader.ui.book.read.config.ReadStyleScreen
-import com.langhuan.reader.ui.compose.component.AppBottomSheetDialog
-import com.langhuan.reader.ui.compose.component.AppSheetSurface
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
 import com.langhuan.reader.ui.root.FileFilter
@@ -63,71 +62,26 @@ import com.langhuan.reader.utils.ColorUtils
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.langhuan.reader.ui.generated.resources.Res
+import com.langhuan.reader.ui.generated.resources.ic_add
 import com.langhuan.reader.ui.generated.resources.other_folder
 import com.langhuan.reader.ui.generated.resources.select_font_file
+import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * 阅读样式设置底部弹窗形态 (对照原版 ReadStyleDialog: BaseBottomDialogFragment, 无标题栏)。
- * 由阅读菜单"界面"按钮弹起; 内嵌子配置在此打开, 不再 push 整屏路由: 版面 (边距+提示信息
- * 合并)/背景文字弹窗打开期间本弹窗隐藏 (对照原版 tvPadding / showBgTextConfig 先
- * dismissAllowingStateLoss; 提示弹窗原版 tvTip 为子对话框叠层, 与边距合并后统一隐藏)。
+ * 阅读排版的三个子面板（原「界面设置」底部弹窗拆出的独立入口）。
+ *
+ * 排版面板（[com.langhuan.reader.ui.book.read.ReadMenu] 的 STYLE 页）直接内嵌字号/字距/行距/段距
+ * 滑条、纸色与翻页方式；这里只保留滑条放不下的三项：
+ * - [FontSelectDialogHost]：字体选择（含扫描/导入）
+ * - [ChineseConverterDialogHost]：简繁转换
+ * - [ReadStyleSwatchRow]：配色板（点选切换样式、长按编辑背景与文字、末尾加号新建）
  */
+
+/** 字体选择弹窗（对照原 FontSelectDialog 入口：扫描字体 + 从文件导入 + 换扫描目录） */
 @Composable
-fun ReadStyleDialogHost(
-    onDismiss: () -> Unit,
-) {
-    var subConfig by remember { mutableStateOf(ReadStyleSubConfig.NONE) }
-    // 版面/背景文字弹窗打开期间不显示本弹窗 (对照原版 tvPadding / showBgTextConfig 先
-    // dismissAllowingStateLoss 再弹子对话框), 关掉后 subConfig 复位 NONE 本弹窗即恢复,
-    // 恢复时整棵重组自然读到新配置 —— 显隐由 subConfig 单一状态派生, 不另设无人复位
-    // 的独立开关 (重蹈"关掉后呼不出来"的覆辙)
-    if (subConfig == ReadStyleSubConfig.NONE) {
-        AppBottomSheetDialog(
-            onDismissRequest = onDismiss,
-        ) {
-            AppTheme {
-                // 原版 BaseBottomDialogFragment: 窗口 MATCH_PARENT 全宽贴底 + Gravity.BOTTOM + WRAP_CONTENT,
-                // 底色 bottomBackground (原版 filletBackground); 圆角收口于半屏弹层统一规格
-                // (AppSheetSurface: 顶角 16dp, 随上拉展开收平);
-                // 内容横向 8dp 间距由 ReadStyleScreen 内部 padding(horizontal=spacingDefault) 提供
-                // (arco_spacing_default; 原 XML root 为 lg)。
-                AppSheetSurface(
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    ReadStyleContent(
-                        onShowLayoutConfig = { subConfig = ReadStyleSubConfig.LAYOUT },
-                        onShowBgTextConfig = { subConfig = ReadStyleSubConfig.BG_TEXT },
-                    )
-                }
-            }
-        }
-    }
-    when (subConfig) {
-        // 版面弹窗 (边距+提示信息合并) 独占屏幕 (本弹窗已隐藏, 见上方 if), 关掉即恢复
-        ReadStyleSubConfig.LAYOUT ->
-            ReadLayoutConfigDialogHost(onDismiss = { subConfig = ReadStyleSubConfig.NONE })
-
-        // 背景文字弹窗独占屏幕 (本弹窗已隐藏, 见上方 if), 关掉即恢复
-        ReadStyleSubConfig.BG_TEXT ->
-            BgTextConfigDialogHost(onDismiss = { subConfig = ReadStyleSubConfig.NONE })
-
-        ReadStyleSubConfig.NONE -> Unit
-    }
-}
-
-/** 界面设置弹窗内打开的子配置 (对照原版 边距/提示/背景文字 三个对话框, 前两者合并为版面)。 */
-private enum class ReadStyleSubConfig { NONE, LAYOUT, BG_TEXT }
-
-/** 阅读样式正文 (Screen + 内嵌对话框), 路由/弹窗两形态共用 */
-@Composable
-private fun ReadStyleContent(
-    onShowLayoutConfig: () -> Unit,
-    onShowBgTextConfig: (Int) -> Unit,
-) {
+fun FontSelectDialogHost(onDismiss: () -> Unit) {
     val readBookConfig = ReadBookConfigProviders.get()
-    var showFontSelect by remember { mutableStateOf(false) }
-    var showChineseConverter by remember { mutableStateOf(false) }
     val colors = AppTheme.colors
     val scope = rememberCoroutineScope()
     // 组合期捕获，供事件回调内写 fontFolder（CompositionLocal 只能在组合期读取）
@@ -146,223 +100,170 @@ private fun ReadStyleContent(
         rescanFontItems()
     }
 
-    // 退出时持久化 (对齐 app 端 ReadStyleDialog.onDismiss -> ReadBookConfig.save())
-    DisposableEffect(Unit) {
-        onDispose { readBookConfig.save() }
+    fun selectFont(path: String) {
+        readBookConfig.textFont = path
+        readBookConfig.save()
+        ReadBookEvents.postConfig(listOf(ReadConfigChange.STYLE, ReadConfigChange.LOAD_CONTENT))
     }
-
-    val controller = remember {
-        object : ReadStyleController {
-            override var textBold: Int
-                get() = readBookConfig.textBold
-                set(value) {
-                    readBookConfig.textBold = value
-                }
-            override var chineseType: Int
-                get() = AppConfigProviders.get().chineseConverterType
-                set(value) {
-                    AppConfigProviders.get().chineseConverterType = value
-                }
-            override var pageAnim: Int
-                get() = readBookConfig.pageAnim
-                set(value) {
-                    readBookConfig.pageAnim = value
-                }
-            override var shareLayout: Boolean
-                get() = readBookConfig.shareLayout
-                set(value) {
-                    readBookConfig.shareLayout = value
-                }
-            override var textSize: Int
-                get() = readBookConfig.textSize
-                set(value) {
-                    readBookConfig.textSize = value
-                }
-            override var letterSpacing: Float
-                get() = readBookConfig.letterSpacing
-                set(value) {
-                    readBookConfig.letterSpacing = value
-                }
-            override var lineSpacingExtra: Int
-                get() = readBookConfig.lineSpacingExtra
-                set(value) {
-                    readBookConfig.lineSpacingExtra = value
-                }
-            override var paragraphSpacing: Int
-                get() = readBookConfig.paragraphSpacing
-                set(value) {
-                    readBookConfig.paragraphSpacing = value
-                }
-            override var styleSelect: Int
-                get() = readBookConfig.styleSelect
-                set(value) {
-                    readBookConfig.styleSelect = value
-                }
-            override var paragraphIndent: String
-                get() = readBookConfig.paragraphIndent
-                set(value) {
-                    readBookConfig.paragraphIndent = value
-                }
-            override val configList: List<ReadStyleConfig> = readBookConfig.configList
-            override fun curTextColor(): Int = readBookConfig.config.curTextColor()
-            override fun addStyle(): Int {
-                readBookConfig.configList.add(ReadConfigDefaults.newStyleFrom(readBookConfig.config))
-                return readBookConfig.configList.lastIndex
-            }
-
-            override fun save() = readBookConfig.save()
-        }
-    }
-
-    val actions = object : ReadStyleActions {
-        override fun showFontSelect() {
-            showFontSelect = true
-        }
-
-        override fun showChineseConverter() {
-            showChineseConverter = true
-        }
-
-        override fun showLayoutConfig() {
-            onShowLayoutConfig()
-        }
-
-        override fun showBgTextConfig(index: Int) {
-            onShowBgTextConfig(index)
-        }
-
-        override fun onUpPageAnim() {
-            // 对照 app 端 callBack.upPageAnim() + ReadBook.loadContent(false)
-            ReadBookEvents.postConfig(
-                ReadConfigChange.PAGE_ANIM, ReadConfigChange.LOAD_CONTENT
-            )
-        }
-
-        override fun onPostConfig(changes: List<ReadConfigChange>) {
-            ReadBookEvents.postConfig(changes)
-        }
-
-        override fun onPostActionBarChange() {
-            // 对照原版 postEvent(UPDATE_READ_ACTION_BAR, true) → readMenu.reset()
-            ReadBookEvents.postActionBarChange()
-        }
-    }
-
-    ReadStyleScreen(
-        controller = controller,
-        actions = actions,
-        bgPreviewSlot = { config, selected, onClick, onLongClick ->
-            ReadStylePreviewSlot(
-                config = config,
-                selected = selected,
-                onClick = onClick,
-                onLongClick = onLongClick,
-            )
-        },
-    )
 
     // 字体选择对话框 (fontItems 由平台 [PlatformCapabilityProviders] 扫描注入)
-    if (showFontSelect) {
-        FontSelectDialog(
-            fontItems = fontItems,
-            curFontPath = readBookConfig.textFont,
-            // 对照 app 端 FontSelectDialog: URLDecoder.decode(curFontPath) 后再取文件名 (P3)
-            curFontName = urlDecodePath(readBookConfig.textFont).substringAfterLast('/'),
-            onSelectFont = { path ->
-                readBookConfig.textFont = path
-                actions.onPostConfig(listOf(ReadConfigChange.STYLE, ReadConfigChange.LOAD_CONTENT))
-            },
-            onSelectDefault = {
-                readBookConfig.textFont = ""
-                actions.onPostConfig(listOf(ReadConfigChange.STYLE, ReadConfigChange.LOAD_CONTENT))
-            },
-            onDismiss = { showFontSelect = false },
-            // "其它目录"/"选择字体文件"两个入口: 目录入口走平台目录选择能力 (Android SAF
-            // OpenDocumentTree / iOS·鸿蒙文档选择器), 选完写 fontFolder pref + 重扫列表
-            // (对照 app 端 FontSelectDialog.openFolder → AppConfig.fontFolder);
-            // 文件入口把选定字体复制进内置字体目录 —— 字体在提供方根目录/云盘这类位置时,
-            // 选目录选不到也读不稳, 复制进内置目录后扫描与加载都只认沙盒内文件
-            topBarTrailing = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(Res.string.select_font_file),
-                        color = colors.primaryText,
-                        fontSize = 15.sp,
-                        modifier = Modifier
-                            .clickable {
-                                scope.launch {
-                                    val picked = withContext(IoDispatcher) {
-                                        PlatformServiceProviders.get().files
-                                            .pickFiles(FileFilter.Fonts)
-                                    }
-                                    if (picked.isEmpty()) return@launch
-                                    val (supported, unsupported) =
-                                        picked.partition { it.name.matches(AppPattern.fontFileRegex) }
-                                    unsupported.forEach {
-                                        Toasters.get().toast("不支持的文件: ${it.name}")
-                                    }
-                                    if (supported.isEmpty()) return@launch
-                                    val imported = withContext(IoDispatcher) {
-                                        PlatformCapabilityProviders.get()
-                                            .importPickedFontFiles(supported)
-                                    }
-                                    val failed = supported.size - imported.size
-                                    if (failed > 0) {
-                                        AppLog.put("字体导入失败 $failed 个 (共 ${supported.size} 个)")
-                                        Toasters.get().toast("$failed 个字体导入失败")
-                                    } else {
-                                        Toasters.get().toast("已导入 ${imported.size} 个字体")
-                                    }
-                                    rescanFontItems()
+    FontSelectDialog(
+        fontItems = fontItems,
+        curFontPath = readBookConfig.textFont,
+        // 对照 app 端 FontSelectDialog: URLDecoder.decode(curFontPath) 后再取文件名 (P3)
+        curFontName = urlDecodePath(readBookConfig.textFont).substringAfterLast('/'),
+        onSelectFont = { path -> selectFont(path) },
+        onSelectDefault = { selectFont("") },
+        onDismiss = onDismiss,
+        // "其它目录"/"选择字体文件"两个入口: 目录入口走平台目录选择能力 (Android SAF
+        // OpenDocumentTree / iOS·鸿蒙文档选择器), 选完写 fontFolder pref + 重扫列表
+        // (对照 app 端 FontSelectDialog.openFolder → AppConfig.fontFolder);
+        // 文件入口把选定字体复制进内置字体目录 —— 字体在提供方根目录/云盘这类位置时,
+        // 选目录选不到也读不稳, 复制进内置目录后扫描与加载都只认沙盒内文件
+        topBarTrailing = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(Res.string.select_font_file),
+                    color = colors.primaryText,
+                    fontSize = 15.sp,
+                    modifier = Modifier
+                        .clickable {
+                            scope.launch {
+                                val picked = withContext(IoDispatcher) {
+                                    PlatformServiceProviders.get().files
+                                        .pickFiles(FileFilter.Fonts)
                                 }
-                            }
-                            .padding(vertical = DesignTokens.spacingDefault, horizontal = DesignTokens.spacingMd),
-                    )
-                    Text(
-                        text = stringResource(Res.string.other_folder),
-                        color = colors.primaryText,
-                        fontSize = 15.sp,
-                        modifier = Modifier
-                            .clickable {
-                                scope.launch {
-                                    val path = withContext(IoDispatcher) {
-                                        PlatformServiceProviders.get().files.pickDirectory(DirUsage.Font)
-                                    } ?: return@launch
-                                    prefs.putString(PreferKey.fontFolder, path)
-                                    rescanFontItems()
+                                if (picked.isEmpty()) return@launch
+                                val (supported, unsupported) =
+                                    picked.partition { it.name.matches(AppPattern.fontFileRegex) }
+                                unsupported.forEach {
+                                    Toasters.get().toast("不支持的文件: ${it.name}")
                                 }
+                                if (supported.isEmpty()) return@launch
+                                val imported = withContext(IoDispatcher) {
+                                    PlatformCapabilityProviders.get()
+                                        .importPickedFontFiles(supported)
+                                }
+                                val failed = supported.size - imported.size
+                                if (failed > 0) {
+                                    AppLog.put("字体导入失败 $failed 个 (共 ${supported.size} 个)")
+                                    Toasters.get().toast("$failed 个字体导入失败")
+                                } else {
+                                    Toasters.get().toast("已导入 ${imported.size} 个字体")
+                                }
+                                rescanFontItems()
                             }
-                            .padding(vertical = DesignTokens.spacingDefault, horizontal = DesignTokens.spacingMd),
-                    )
-                }
-            },
-        )
-    }
+                        }
+                        .padding(vertical = DesignTokens.spacingDefault, horizontal = DesignTokens.spacingMd),
+                )
+                Text(
+                    text = stringResource(Res.string.other_folder),
+                    color = colors.primaryText,
+                    fontSize = 15.sp,
+                    modifier = Modifier
+                        .clickable {
+                            scope.launch {
+                                val path = withContext(IoDispatcher) {
+                                    PlatformServiceProviders.get().files.pickDirectory(DirUsage.Font)
+                                } ?: return@launch
+                                prefs.putString(PreferKey.fontFolder, path)
+                                rescanFontItems()
+                            }
+                        }
+                        .padding(vertical = DesignTokens.spacingDefault, horizontal = DesignTokens.spacingMd),
+                )
+            }
+        },
+    )
+}
 
-    // 简繁转换选择器 (自包含: 内部写 AppConfigProviders)
-    if (showChineseConverter) {
-        ChineseConverterSelectorDialog(
-            currentType = AppConfigProviders.get().chineseConverterType,
-            onChanged = {
-                actions.onPostConfig(listOf(ReadConfigChange.LOAD_CONTENT))
-            },
-            onDismiss = { showChineseConverter = false },
-        )
-    }
+/** 简繁转换选择器（自包含：内部写 AppConfigProviders） */
+@Composable
+fun ChineseConverterDialogHost(onDismiss: () -> Unit) {
+    ChineseConverterSelectorDialog(
+        currentType = AppConfigProviders.get().chineseConverterType,
+        onChanged = {
+            ReadBookEvents.postConfig(listOf(ReadConfigChange.LOAD_CONTENT))
+        },
+        onDismiss = onDismiss,
+    )
 }
 
 /**
- * 阅读样式组合预览。
+ * 配色板：横向圆形色块，点按切换当前样式，长按编辑该样式的背景与文字，末尾加号新建样式。
  *
- * 原版由 [ReadStyleConfig.curBgDrawable] 生成背景缩略图（颜色或真实背景图，centerCrop
- * 到 100x150）；shared UI 没有 Drawable，这里渲染真实缩略图：用户图（本地路径）优先
- * 烘焙产物加载（[resolveBakedReadingBgSource]，缺失现场重烘焙），按槽位像素采样解码。
- * 加载中/失败时回落背景代表色（[ReadStyleConfig.bgMeanColor]），避免列表退化成空槽位。
- *
- * 背景源变化（换背景）时 LaunchedEffect key 重建重新加载。
+ * @param refreshKey 外部版本号：背景文字配置改完返回后 +1，强制重读样式（样式对象是就地修改的）
+ * @param onEditStyle 长按/新建后打开背景文字配置
  */
 @Composable
-private fun ReadStylePreviewSlot(
+fun ReadStyleSwatchRow(
+    refreshKey: Int = 0,
+    onEditStyle: () -> Unit,
+) {
+    val readBookConfig = ReadBookConfigProviders.get()
+    var refresh by remember { mutableIntStateOf(0) }
+
+    fun switchTo(index: Int) {
+        if (readBookConfig.styleSelect == index) return
+        readBookConfig.styleSelect = index
+        readBookConfig.save()
+        ReadBookEvents.postConfig(
+            listOf(
+                ReadConfigChange.BG,
+                ReadConfigChange.STYLE,
+                // pageAnim 属于样式自身配置 (shareLayout=false 时 config=configList[styleSelect]),
+                // 换样式即换生效动画值, 必须重建翻页委托。
+                ReadConfigChange.PAGE_ANIM,
+                ReadConfigChange.LOAD_CONTENT,
+            )
+        )
+        ReadBookEvents.postActionBarChange()
+        refresh++
+    }
+
+    key(refreshKey, refresh) {
+        LazyRow(
+            Modifier.fillMaxWidth().padding(vertical = DesignTokens.spacingXs),
+            contentPadding = PaddingValues(horizontal = DesignTokens.spacingXs),
+        ) {
+            items(readBookConfig.configList.size) { index ->
+                ReadStyleSwatch(
+                    config = readBookConfig.configList[index],
+                    selected = readBookConfig.styleSelect == index,
+                    onClick = { switchTo(index) },
+                    onLongClick = {
+                        switchTo(index)
+                        onEditStyle()
+                    },
+                )
+            }
+            item {
+                AddStyleSwatch {
+                    readBookConfig.configList.add(
+                        ReadConfigDefaults.newStyleFrom(readBookConfig.config)
+                    )
+                    readBookConfig.save()
+                    val index = readBookConfig.configList.lastIndex
+                    readBookConfig.styleSelect = index
+                    ReadBookEvents.postConfig(
+                        listOf(
+                            ReadConfigChange.BG,
+                            ReadConfigChange.STYLE,
+                            ReadConfigChange.PAGE_ANIM,
+                            ReadConfigChange.LOAD_CONTENT,
+                        )
+                    )
+                    refresh++
+                    onEditStyle()
+                }
+            }
+        }
+    }
+}
+
+/** 单个样式色块：背景缩略图 + 居中样式名，选中描边用 accent 色。 */
+@Composable
+private fun ReadStyleSwatch(
     config: ReadStyleConfig,
     selected: Boolean,
     onClick: () -> Unit,
@@ -370,10 +271,8 @@ private fun ReadStylePreviewSlot(
 ) {
     val colors = AppTheme.colors
     val bgSource = config.curBgImageSource()
-    // I4: 预览槽位实际显示尺寸 (48dp 正圆), 解码按槽位像素采样 + 进程级位图 LRU
-    // (ImageBitmapLoader 内部, 同尺寸二次打开零重复解码); 1080p+ 壁纸不再全尺寸解码
-    val slotPx = with(LocalDensity.current) { 48.dp.roundToPx() }.coerceAtLeast(1)
-    // 图片背景缩略图异步加载（仅图片背景；纯色背景 null 不加载）
+    // 槽位实际显示尺寸 (40dp 正圆), 解码按槽位像素采样 + 进程级位图 LRU
+    val slotPx = with(LocalDensity.current) { 40.dp.roundToPx() }.coerceAtLeast(1)
     var bgBitmap by remember(config, bgSource) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(bgSource) {
         if (bgSource == null) {
@@ -389,33 +288,28 @@ private fun ReadStylePreviewSlot(
         }
     }
     val backgroundColor = when {
-        bgBitmap != null -> colors.bottomBackground // 图片铺满槽位，底色仅作加载占位
+        bgBitmap != null -> colors.bottomBackground
         config.curBgType() == 0 -> runCatching {
             Color(ColorUtils.parseColor(config.curBgStr()))
         }.getOrDefault(colors.bottomBackground)
 
-        else -> config.bgMeanColor.takeIf { it != 0 }?.let(::Color)
-            ?: colors.bottomBackground
+        else -> if (config.bgMeanColor != 0) {
+            Color(config.bgMeanColor)
+        } else {
+            colors.bottomBackground
+        }
     }
     val textColor = runCatching { Color(config.curTextColor()) }
         .getOrDefault(colors.primaryText)
     val borderColor = if (selected) colors.accent else textColor
-    // 原版 createStyleItemBinding: 48dp 方块 + 左右 margin 8dp (space.default),
-    // ivStyle 为 ShapeableImageView cornerSize=size/2 (正圆) + strokeWidth 固定 1dp (仅颜色切换),
-    // tvStyle 叠加在图上居中 (FrameLayout 内后添加覆盖在上层, gravity=CENTER)。
-    val shape = CircleShape
 
     Box(
         modifier = Modifier
             .padding(horizontal = DesignTokens.spacingDefault)
-            .size(48.dp)
-            .clip(shape)
+            .size(40.dp)
+            .clip(CircleShape)
             .background(backgroundColor)
-            .border(
-                width = DesignTokens.strokeThin,
-                color = borderColor,
-                shape = shape,
-            )
+            .border(DesignTokens.strokeThin, borderColor, CircleShape)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -429,13 +323,35 @@ private fun ReadStylePreviewSlot(
                 modifier = Modifier.fillMaxSize(),
             )
         }
-        // 样式名叠加居中 (原版 tvStyle 始终覆盖在图上, 选中加粗 + 文字色取当前样式)
         Text(
             text = config.name.ifBlank { "文字" },
             color = textColor,
-            fontSize = 14.sp,
+            fontSize = 12.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
             maxLines = 1,
+        )
+    }
+}
+
+/** 新增样式：加号圆（对照原版 AddStyleItem） */
+@Composable
+private fun AddStyleSwatch(onClick: () -> Unit) {
+    val textColor = AppTheme.colors.primaryText
+    Box(
+        Modifier
+            .padding(horizontal = DesignTokens.spacingDefault)
+            .size(40.dp)
+            .padding(6.dp)
+            .clip(CircleShape)
+            .border(DesignTokens.strokeThin, textColor, CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(Res.drawable.ic_add),
+            contentDescription = null,
+            tint = textColor,
+            modifier = Modifier.size(20.dp),
         )
     }
 }

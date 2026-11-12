@@ -306,7 +306,6 @@ data class BookSourceListCallbacks(
     val onImportLocal: () -> Unit = {},
     val onImportOnline: () -> Unit = {},
     val onGroupManage: () -> Unit = {},
-    val onHelp: () -> Unit = {},
     val onSelectActions: () -> List<SelectAction> = { emptyList() },
     val getSourceHost: (String) -> String = { "#" },
 )
@@ -339,7 +338,6 @@ private fun BookSourceActions(state: BookSourceListState, callbacks: BookSourceL
     val strImportOnline = stringResource(Res.string.import_on_line)
     val strGroupSourcesByDomain = stringResource(Res.string.group_sources_by_domain)
     val strShowSourceIcon = stringResource(Res.string.show_source_icon)
-    val strHelp = stringResource(Res.string.help)
 
     // 排序菜单 (降序开关 + 单选各排序方式 + 按域名分组开关)
     Box {
@@ -398,7 +396,6 @@ private fun BookSourceActions(state: BookSourceListState, callbacks: BookSourceL
             text = strShowSourceIcon,
             checked = state.showSourceIcon,
         ) { dismiss(); callbacks.onToggleShowSourceIcon() }
-        MenuItem(strHelp) { dismiss(); callbacks.onHelp() }
     }
 }
 

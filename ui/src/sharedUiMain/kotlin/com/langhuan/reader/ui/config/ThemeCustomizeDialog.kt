@@ -68,6 +68,7 @@ import kotlinx.coroutines.withContext
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.accent
 import com.langhuan.reader.ui.generated.resources.background_color
+import com.langhuan.reader.ui.generated.resources.secondary_color
 import com.langhuan.reader.ui.generated.resources.background_image
 import com.langhuan.reader.ui.generated.resources.background_image_blurring
 import com.langhuan.reader.ui.generated.resources.bg_image_import_failed
@@ -100,7 +101,7 @@ import org.jetbrains.compose.resources.stringResource
  * 唯一有意偏离 app 端: 选图走平台文件选择器 + [com.langhuan.reader.ui.root.FilePickerService.importBackgroundImage]
  * (复制到本端私有持久目录, 桌面端窗口可调不预裁剪), 不复制源文件到公共图片相册
  * (app 端 setBgFromUri 写 externalFiles 语义等价, 仅路径来源不同);
- * 其余交互 (三色取色盘/背景图/模糊/日夜切换/保存前背景色校验/空名校验) 与 app 端一致。
+ * 其余交互 (四色取色盘/背景图/模糊/日夜切换/保存前背景色校验/空名校验) 与 app 端一致。
  */
 @Composable
 fun ThemeCustomizeDialog(
@@ -119,6 +120,7 @@ fun ThemeCustomizeDialog(
     data class Init(
         val isNight: Boolean,
         val accent: Int,
+        val secondary: Int,
         val bg: Int,
         val bbg: Int,
         val themeName: String,
@@ -127,8 +129,8 @@ fun ThemeCustomizeDialog(
     val initial = remember(mode, configIndex, initIsNight) {
         when (mode) {
             MODE_EDIT_PREFS -> {
-                val (a, b, bb) = readCustomColors(prefs, initIsNight)
-                Init(initIsNight, a, b, bb, "")
+                val c = readCustomColors(prefs, initIsNight)
+                Init(initIsNight, c.accent, c.secondary, c.bg, c.bbg, "")
             }
 
             MODE_EDIT_CONFIG -> {
@@ -138,6 +140,9 @@ fun ThemeCustomizeDialog(
                     Init(
                         isNight = c.isNightTheme,
                         accent = parseColor(c.accentColor),
+                        secondary = parseColor(
+                            if (c.secondaryColor.isNullOrBlank()) c.accentColor else c.secondaryColor
+                        ),
                         bg = parseColor(c.backgroundColor),
                         bbg = parseColor(c.bottomBackground),
                         themeName = c.themeName,
@@ -146,8 +151,8 @@ fun ThemeCustomizeDialog(
             }
 
             else -> {
-                val (a, b, bb) = defaultColors(initIsNight)
-                Init(initIsNight, a, b, bb, "")
+                val c = defaultColors(initIsNight)
+                Init(initIsNight, c.accent, c.secondary, c.bg, c.bbg, "")
             }
         }
     }
@@ -158,6 +163,7 @@ fun ThemeCustomizeDialog(
 
     var isNight by remember { mutableStateOf(initial.isNight) }
     var accent by remember { mutableIntStateOf(initial.accent) }
+    var secondary by remember { mutableIntStateOf(initial.secondary) }
     var bg by remember { mutableIntStateOf(initial.bg) }
     var bbg by remember { mutableIntStateOf(initial.bbg) }
     var themeName by remember { mutableStateOf(initial.themeName) }
@@ -180,7 +186,7 @@ fun ThemeCustomizeDialog(
             }
         )
     }
-    // 取色盘目标: 1=accent 2=bg 3=bbg (对照 app 端 DIALOG_ID_*)
+    // 取色盘目标: 1=accent 2=bg 3=bbg 4=secondary (对照 app 端 DIALOG_ID_*)
     var pickerDialogId by remember { mutableStateOf<Int?>(null) }
 
     // 校验提示文案: 非 Composable 局部函数里不能调 stringResource, 先在此取好
@@ -195,8 +201,8 @@ fun ThemeCustomizeDialog(
     }
 
     fun loadFromPrefs() {
-        val (a, b, bb) = readCustomColors(prefs, isNight)
-        accent = a; bg = b; bbg = bb
+        val c = readCustomColors(prefs, isNight)
+        accent = c.accent; secondary = c.secondary; bg = c.bg; bbg = c.bbg
     }
 
     /** 日/夜切换后重读背景图与模糊值 (对照 app 端 refreshBgImageViews 的 loadFromPrefs 时机)。 */
@@ -208,8 +214,8 @@ fun ThemeCustomizeDialog(
     }
 
     fun loadDefaults() {
-        val (a, b, bb) = defaultColors(isNight)
-        accent = a; bg = b; bbg = bb
+        val c = defaultColors(isNight)
+        accent = c.accent; secondary = c.secondary; bg = c.bg; bbg = c.bbg
     }
 
     fun switchIsNight(newNight: Boolean) {
@@ -241,6 +247,7 @@ fun ThemeCustomizeDialog(
         val opaque = ColorUtils.withAlpha(color, 1f)
         when (dialogId) {
             DIALOG_ID_ACCENT -> accent = opaque
+            DIALOG_ID_SECONDARY -> secondary = opaque
             DIALOG_ID_BG -> {
                 if (checkBgColor(opaque)) bg = opaque
             }
@@ -256,11 +263,13 @@ fun ThemeCustomizeDialog(
         if (isNight) {
             prefs.putInt(PreferKey.cNPrimary, bg)
             prefs.putInt(PreferKey.cNAccent, accent)
+            prefs.putInt(PreferKey.cNSecondary, secondary)
             prefs.putInt(PreferKey.cNBackground, bg)
             prefs.putInt(PreferKey.cNBBackground, bbg)
         } else {
             prefs.putInt(PreferKey.cPrimary, bg)
             prefs.putInt(PreferKey.cAccent, accent)
+            prefs.putInt(PreferKey.cSecondary, secondary)
             prefs.putInt(PreferKey.cBackground, bg)
             prefs.putInt(PreferKey.cBBackground, bbg)
         }
@@ -289,7 +298,7 @@ fun ThemeCustomizeDialog(
             onDismiss()
             return
         }
-        // 对照原版 saveToConfig: 保留 old.isNightTheme, 仅更新名字与三色
+        // 对照原版 saveToConfig: 保留 old.isNightTheme, 仅更新名字与四色
         try {
             ThemeConfigProviders.get().replaceConfig(
                 configIndex,
@@ -298,6 +307,7 @@ fun ThemeCustomizeDialog(
                     isNightTheme = list[configIndex].isNightTheme,
                     primaryColor = "#${bg.hexString}",
                     accentColor = "#${accent.hexString}",
+                    secondaryColor = "#${secondary.hexString}",
                     backgroundColor = "#${bg.hexString}",
                     bottomBackground = "#${bbg.hexString}",
                 ),
@@ -325,6 +335,7 @@ fun ThemeCustomizeDialog(
                     isNightTheme = isNight,
                     primaryColor = "#${bg.hexString}",
                     accentColor = "#${accent.hexString}",
+                    secondaryColor = "#${secondary.hexString}",
                     backgroundColor = "#${bg.hexString}",
                     bottomBackground = "#${bbg.hexString}",
                 ),
@@ -436,6 +447,10 @@ fun ThemeCustomizeDialog(
                 color = accent,
             ) { pickerDialogId = DIALOG_ID_ACCENT }
             ColorRow(
+                label = stringResource(Res.string.secondary_color),
+                color = secondary,
+            ) { pickerDialogId = DIALOG_ID_SECONDARY }
+            ColorRow(
                 label = stringResource(Res.string.background_color),
                 color = bg,
             ) { pickerDialogId = DIALOG_ID_BG }
@@ -508,12 +523,14 @@ fun ThemeCustomizeDialog(
     // 取色盘 (对照 app 端 showColorPicker: 标题按目标取色名称)
     val pickerTitle = when (pickerDialogId) {
         DIALOG_ID_ACCENT -> stringResource(Res.string.accent)
+        DIALOG_ID_SECONDARY -> stringResource(Res.string.secondary_color)
         DIALOG_ID_BG -> stringResource(Res.string.background_color)
         else -> stringResource(Res.string.navbar_color)
     }
     pickerDialogId?.let { dialogId ->
         val seed = when (dialogId) {
             DIALOG_ID_ACCENT -> accent
+            DIALOG_ID_SECONDARY -> secondary
             DIALOG_ID_BG -> bg
             else -> bbg
         }
@@ -534,6 +551,7 @@ const val MODE_NEW_CONFIG = 2
 private const val DIALOG_ID_ACCENT = 1
 private const val DIALOG_ID_BG = 2
 private const val DIALOG_ID_BBG = 3
+private const val DIALOG_ID_SECONDARY = 4
 
 @Composable
 private fun ModeRadio(
@@ -577,34 +595,49 @@ private fun ColorRow(label: String, color: Int, onClick: () -> Unit) {
     }
 }
 
+private data class ThemeColors(
+    val accent: Int,
+    val secondary: Int,
+    val bg: Int,
+    val bbg: Int,
+)
+
 /**
  * 读日/夜自定义色 pref, 未设置 (0) 回落默认色。
  */
-private fun readCustomColors(prefs: com.langhuan.reader.help.config.PreferenceProvider, isNight: Boolean):
-    Triple<Int, Int, Int> {
-    val (defAccent, defBg, defBbg) = defaultColors(isNight)
+private fun readCustomColors(
+    prefs: com.langhuan.reader.help.config.PreferenceProvider,
+    isNight: Boolean,
+): ThemeColors {
+    val defaults = defaultColors(isNight)
     val accent = prefs.getInt(if (isNight) PreferKey.cNAccent else PreferKey.cAccent)
-        .let { if (it == 0) defAccent else it }
+        .let { if (it == 0) defaults.accent else it }
+    val secondary = prefs.getInt(if (isNight) PreferKey.cNSecondary else PreferKey.cSecondary)
+        .let { if (it == 0) accent else it }
     val bg = prefs.getInt(if (isNight) PreferKey.cNBackground else PreferKey.cBackground)
-        .let { if (it == 0) defBg else it }
+        .let { if (it == 0) defaults.bg else it }
     val bbg = prefs.getInt(if (isNight) PreferKey.cNBBackground else PreferKey.cBBackground)
-        .let { if (it == 0) defBbg else it }
-    return Triple(accent, bg, bbg)
+        .let { if (it == 0) defaults.bbg else it }
+    return ThemeColors(accent, secondary, bg, bbg)
 }
 
-/** 默认三色 (对照 app 端 ThemeConfig.readDefaultColors, 取内置配置的日/夜条目色值) */
-private fun defaultColors(isNight: Boolean): Triple<Int, Int, Int> {
+/** 默认色 (对照 app 端 ThemeConfig.readDefaultColors, 取内置配置的日/夜条目色值) */
+private fun defaultColors(isNight: Boolean): ThemeColors {
     val builtin = runCatching { ThemeConfigProviders.get().getBuiltinConfigs() }
         .getOrDefault(emptyList())
     val config = builtin.firstOrNull { it.isNightTheme == isNight }
     return if (config != null) {
-        Triple(
-            parseColor(config.accentColor),
-            parseColor(config.backgroundColor),
-            parseColor(config.bottomBackground),
+        val accent = parseColor(config.accentColor)
+        ThemeColors(
+            accent = accent,
+            secondary = parseColor(
+                if (config.secondaryColor.isNullOrBlank()) config.accentColor else config.secondaryColor
+            ),
+            bg = parseColor(config.backgroundColor),
+            bbg = parseColor(config.bottomBackground),
         )
     } else {
-        Triple(0, 0, 0)
+        ThemeColors(0, 0, 0, 0)
     }
 }
 

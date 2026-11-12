@@ -4,10 +4,9 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -32,6 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -68,8 +69,18 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.exp
 import kotlin.math.floor
+import kotlin.math.ln
 import kotlin.math.roundToInt
+import kotlin.math.sign
+
+// 松手落位：先按摩擦惯性滑行，再用有限三次曲线收到整数格位（无回弹、无过冲）。
+// dragRate 决定甩动距离，omega 决定惯性交接速度；两者与手感参考实现保持一致。
+private const val SHELF_DRAG_RATE = 4.4f
+private const val SHELF_OMEGA = 12f
+private const val SHELF_MIN_FLING = 50f
+private const val SHELF_HANDOFF_SPEED_FACTOR = 4f
 
 /**
  * 书架外部控制入口：顶栏 tab 双击时回到第一本（对照原版 gotoTop）。
@@ -173,14 +184,82 @@ fun LanghuanShelf(
         val pullLimit = with(density) { 96.dp.toPx() }
         var pull by remember { mutableFloatStateOf(0f) }
 
-        fun settleTo(slot: Int) {
+        fun launchSettle(block: suspend () -> Unit) {
             animJob?.cancel()
+            animJob = scope.launch { block() }
+        }
+
+        /** 点按 / 双击滚顶：直接补间到目标格位 */
+        fun settleTo(slot: Int) {
             val target = (slot.coerceIn(0, books.lastIndex) * pitch).coerceIn(0f, maxOffset)
-            animJob = scope.launch {
+            launchSettle {
                 animate(offset, target, animationSpec = tween(320, easing = FastOutSlowInEasing)) { value, _ ->
                     offset = value
                 }
             }
+        }
+
+        /**
+         * 松手落位：[releaseVelocity] 是 offset 方向的速度（px/s）。
+         *
+         * 先按指数摩擦滑行（保留松手瞬间的速度），在速度降到交接阈值后交给有限三次曲线，
+         * 曲线终点速度与加速度都为 0，因此不会在格位上回弹或过冲。
+         * 轻拖（未达到最小甩动速度）直接补间到最近格位。
+         */
+        suspend fun settleWithVelocity(releaseVelocity: Float) {
+            val position = offset
+            if (pitch <= 0f) return
+            val speed = abs(releaseVelocity)
+            val directional = speed >= SHELF_MIN_FLING
+            val release = if (directional) releaseVelocity else 0f
+
+            var target = ((position + release / SHELF_DRAG_RATE) / pitch).roundToInt() * pitch
+            // 真正的甩动要落在前方而不是滑过头再倒回，给惯性留足单调减速的跑道
+            if (directional && (target - position) * release.sign < speed / SHELF_OMEGA) {
+                val runway = position + release / SHELF_OMEGA
+                target = (if (release > 0f) ceil(runway / pitch) else floor(runway / pitch)) * pitch
+            }
+            target = target.coerceIn(0f, maxOffset)
+
+            if (!directional) {
+                animate(position, target, animationSpec = tween(320, easing = FastOutSlowInEasing)) { value, _ ->
+                    offset = value
+                }
+                return
+            }
+
+            val handoffSpeed = pitch * SHELF_HANDOFF_SPEED_FACTOR
+            val coastDuration = if (speed > handoffSpeed) {
+                ln(speed / handoffSpeed) / SHELF_DRAG_RATE
+            } else {
+                0f
+            }
+            val expFactor = exp(-SHELF_DRAG_RATE * coastDuration)
+            val handoffPosition = position + release / SHELF_DRAG_RATE * (1f - expFactor)
+            val handoffVelocity = release * expFactor
+            val landingDuration = if (abs(handoffVelocity) > 1f) {
+                3f * (target - handoffPosition) / handoffVelocity
+            } else {
+                0f
+            }
+            if (landingDuration <= 0f) {
+                offset = target
+                return
+            }
+
+            val startAt = withFrameNanos { it }
+            while (true) {
+                val now = withFrameNanos { it }
+                val t = (now - startAt) / 1_000_000_000f
+                offset = if (t < coastDuration) {
+                    position + release / SHELF_DRAG_RATE * (1f - exp(-SHELF_DRAG_RATE * t))
+                } else {
+                    val remaining = (1f - (t - coastDuration) / landingDuration).coerceIn(0f, 1f)
+                    target - (target - handoffPosition) * remaining * remaining * remaining
+                }
+                if (t >= coastDuration + landingDuration) break
+            }
+            offset = target
         }
 
         // tab 双击滚顶：回到第一本（书架没有列表滚动状态，滚顶只能落到格位 0）
@@ -257,32 +336,79 @@ fun LanghuanShelf(
         // 每本最多 12 次排版（编号/首字/作者/竖排书名逐字），默认缓存 8 条不够，
         // 放大到 128 条让拖动时命中缓存而不是逐帧重排。
         val textMeasurer = rememberTextMeasurer(cacheSize = 128)
-        val dragState = rememberDraggableState { delta ->
-            animJob?.cancel()
-            offset = (offset - delta).coerceIn(0f, maxOffset)
-        }
-        val pullDragState = rememberDraggableState { delta ->
-            pull = if (refreshEnabled && offset <= 1f) {
-                (pull + delta).coerceIn(0f, pullLimit)
-            } else {
-                0f
-            }
-        }
 
+        // 单一手势入口：先判定主轴，再在「横拖书架 / 纵向下拉刷新 / 让给分组页签」之间仲裁。
+        // 处在首尾且继续向外拖时不消费事件，交还给外层 HorizontalPager 切换分组。
         Box(
             Modifier
                 .fillMaxSize()
-                .draggable(
-                    state = pullDragState,
-                    orientation = Orientation.Vertical,
-                    onDragStopped = {
-                        val shouldRefresh = refreshEnabled && !refreshing && pull >= pullTrigger
-                        animate(pull, 0f, animationSpec = tween(220, easing = FastOutSlowInEasing)) { value, _ ->
-                            pull = value
+                .pointerInput(books, pitch, maxOffset, refreshEnabled, refreshing) {
+                    val touchSlop = viewConfiguration.touchSlop
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val tracker = VelocityTracker().apply {
+                            addPosition(down.uptimeMillis, down.position)
                         }
-                        if (shouldRefresh) onRefresh()
-                    },
-                )
+                        var lastPosition = down.position
+                        var totalX = 0f
+                        var totalY = 0f
+                        var mode = 0 // 0 未定 / 1 横拖书架 / 2 下拉刷新
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+                            val dx = change.position.x - lastPosition.x
+                            val dy = change.position.y - lastPosition.y
+                            lastPosition = change.position
+                            tracker.addPosition(change.uptimeMillis, change.position)
+
+                            if (mode == 0) {
+                                totalX += dx
+                                totalY += dy
+                                if (abs(totalX) > touchSlop || abs(totalY) > touchSlop) {
+                                    if (abs(totalX) >= abs(totalY)) {
+                                        val atStart = offset <= 0.5f && totalX > 0f
+                                        val atEnd = offset >= maxOffset - 0.5f && totalX < 0f
+                                        if (atStart || atEnd) return@awaitEachGesture
+                                        mode = 1
+                                    } else {
+                                        if (!refreshEnabled || offset > 1f || totalY < 0f) {
+                                            return@awaitEachGesture
+                                        }
+                                        mode = 2
+                                    }
+                                    animJob?.cancel()
+                                }
+                            }
+                            when (mode) {
+                                1 -> {
+                                    offset = (offset - dx).coerceIn(0f, maxOffset)
+                                    change.consume()
+                                }
+                                2 -> {
+                                    pull = (pull + dy).coerceIn(0f, pullLimit)
+                                    change.consume()
+                                }
+                            }
+                        }
+                        when (mode) {
+                            1 -> launchSettle {
+                                settleWithVelocity(-tracker.calculateVelocity().x)
+                            }
+                            2 -> {
+                                val shouldRefresh =
+                                    refreshEnabled && !refreshing && pull >= pullTrigger
+                                scope.launch {
+                                    animate(
+                                        pull, 0f,
+                                        animationSpec = tween(220, easing = FastOutSlowInEasing),
+                                    ) { value, _ -> pull = value }
+                                }
+                                if (shouldRefresh) onRefresh()
+                            }
+                        }
+                    }
+                }
         ) {
             Column(
                 Modifier
@@ -297,27 +423,13 @@ fun LanghuanShelf(
                         .pointerInput(books, pitch) {
                             detectTapGestures(
                                 onTap = { position ->
-                                    val slot = slotAt(position.x)
-                                    if (abs(offset / pitch - slot) < 0.08f) {
-                                        books.getOrNull(slot)?.let(onOpen)
-                                    } else {
-                                        settleTo(slot)
-                                    }
+                                    books.getOrNull(slotAt(position.x))?.let(onOpen)
                                 },
                                 onLongPress = { position ->
                                     books.getOrNull(slotAt(position.x))?.let(onLongPress)
                                 },
                             )
                         }
-                        .draggable(
-                            state = dragState,
-                            orientation = Orientation.Horizontal,
-                            onDragStopped = { velocity ->
-                                // 惯性先折算成若干格，再吸附到最近的整数格位
-                                val projected = (offset - velocity * 0.12f) / pitch
-                                settleTo(projected.roundToInt())
-                            },
-                        )
                 ) {
                     drawShelfRow(
                         books = books,
@@ -374,10 +486,9 @@ private fun DrawScope.drawShelfRow(
     val last = ceil((offset + size.width + margin) / pitch).toInt()
         .coerceAtMost(books.lastIndex)
 
-    for (slot in first..last) {
-        drawFloorCast(slot, focus, metrics, colors)
-    }
-    for (slot in first..last) {
+    // 抽出量小的先画、大的后画：居中抽出的那本盖住邻书，封面才不会被邻书压掉
+    val order = (first..last).sortedBy { abs(it - focus) }
+    for (slot in order) {
         drawBook(
             book = books[slot],
             slot = slot,
@@ -404,45 +515,7 @@ private fun slotBase(
     return Triple(x + extractionX, restY + extractionY, weight)
 }
 
-/** 书底在地面上的投影：一圈淡墨，让整排书站在同一个平面上。 */
-private fun DrawScope.drawFloorCast(
-    slot: Int,
-    focus: Float,
-    metrics: LanghuanShelfMetrics,
-    colors: AppColors,
-) {
-    val distance = slot - focus
-    val x = metrics.rowStart + slot * metrics.pitch - focus * metrics.pitch
-    val restY = metrics.seatY + metrics.railY(distance)
-    val origin = Offset(x, restY + metrics.topInset + metrics.bodyH)
-    val depth = Offset(
-        metrics.coverW * LanghuanShelfGeometry.depthX,
-        metrics.coverW * LanghuanShelfGeometry.depthY,
-    )
-    val spread = 10f * metrics.density
-    val path = Path().apply {
-        moveTo(origin.x, origin.y)
-        lineTo(origin.x + metrics.spineW, origin.y + 1.4f)
-        lineTo(origin.x + metrics.spineW + depth.x, origin.y + 1.4f + depth.y)
-        lineTo(origin.x + depth.x, origin.y + depth.y)
-        lineTo(origin.x + depth.x - spread, origin.y + depth.y + spread)
-        lineTo(origin.x - spread, origin.y + spread)
-        close()
-    }
-    drawPath(
-        path = path,
-        brush = Brush.linearGradient(
-            colors = listOf(
-                colors.primaryText.copy(alpha = .10f),
-                colors.primaryText.copy(alpha = 0f),
-            ),
-            start = Offset(origin.x + depth.x, origin.y + depth.y),
-            end = Offset(origin.x - spread, origin.y + spread),
-        ),
-    )
-}
-
-/** 一本书：地面投影已画好，这里画顶面、封面、书脊。 */
+/** 一本书：这里画顶面、封面、书脊。 */
 private fun DrawScope.drawBook(
     book: BookItemUi,
     slot: Int,
@@ -492,13 +565,16 @@ private fun DrawScope.drawBook(
     )
 
     // 封面面板：在局部坐标里画，再整体沿深度向量压扁
+    // 注意: Compose Matrix 的 values 是列主序, 平移落在 values[12]/[13],
+    // 即访问器下标为 [3,0]/[3,1]; 写成 [0,3]/[1,3] 会落进透视项,
+    // 整块封面被除到画布原点附近, 表现为「没有封面」+ 一团灰影。
     drawContext.canvas.save()
     drawContext.canvas.concat(
         Matrix().apply {
             this[0, 0] = LanghuanShelfGeometry.depthX
             this[1, 0] = LanghuanShelfGeometry.depthY
-            this[0, 3] = panelA.x
-            this[1, 3] = panelA.y
+            this[3, 0] = panelA.x
+            this[3, 1] = panelA.y
         }
     )
     val panelPath = Path().apply {

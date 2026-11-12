@@ -69,7 +69,6 @@ import org.jetbrains.compose.resources.stringResource
  * @param onTestSpeak 测试菜单 (试听当前表单内容, 不落库)
  * @param onCopySource 拷贝源菜单 (app: context?.sendToClip(GSON.toJson(dataFromView())))
  * @param onPasteSource 粘贴源菜单 (app: viewModel.importFromClip { initView(it) })
- * @param onShowHelp 帮助菜单 (app: showHelp("httpTTSHelp"))
  */
 @Composable
 fun HttpTtsEditDialog(
@@ -81,7 +80,6 @@ fun HttpTtsEditDialog(
     onTestSpeak: () -> Unit,
     onCopySource: () -> Unit,
     onPasteSource: () -> Unit,
-    onShowHelp: () -> Unit,
 ) {
     val colors = AppTheme.colors
     // 预解析菜单 / 按钮文案, 避免 onClick 中误用 @Composable (对齐 TxtTocRuleEditDialog 风格)
@@ -90,7 +88,6 @@ fun HttpTtsEditDialog(
     val testText = stringResource(Res.string.test)
     val copySourceText = stringResource(Res.string.copy_source)
     val pasteSourceText = stringResource(Res.string.paste_source)
-    val helpText = stringResource(Res.string.help)
 
     AppDialogScaffold(
         onDismissRequest = onBack,
@@ -118,7 +115,6 @@ fun HttpTtsEditDialog(
                 item(testText) { onTestSpeak() }
                 item(copySourceText) { onCopySource() }
                 item(pasteSourceText) { onPasteSource() }
-                item(helpText) { onShowHelp() }
             }
         },
         contentPadding = PaddingValues(0.dp),

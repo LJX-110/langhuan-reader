@@ -77,7 +77,7 @@ import kotlin.concurrent.Volatile
  * - getBatteryLevel: Windows 经 kernel32 (JNA) / macOS 经 `pmset -g batt` /
  *   Linux 经 sysfs BAT/capacity 读真实电量, 无电池/失败回落 100 (信息条恒显示电量)
  * - 顶/底栏菜单 UI 由 shared [com.langhuan.reader.ui.book.read.ReadMenuOverlay] 渲染, 此处只持有状态
- * - 导航回调 (clickCatalog/clickSearch/clickFont/clickSetting 等) 经 [AppNavigator] 跳 shared Route
+ * - 导航回调 (clickCatalog/clickSearch/clickSetting 等) 经 [AppNavigator] 跳 shared Route
  * - 章节导航 (clickPre/clickNext/onSeekStop) 委托 [ReaderScreenModel.viewModel]
  * - ReadAloud (朗读): app 端走 ReadAloud + BaseReadAloudService, desktop 无 Service, 改由
  *   [DesktopReadAloudHost] 驱动 ReadAloudControllerShared; 长按弹共享朗读控制面板。

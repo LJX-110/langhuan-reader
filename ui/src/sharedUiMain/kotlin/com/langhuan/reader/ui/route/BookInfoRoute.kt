@@ -434,7 +434,10 @@ fun BookInfoRoute(
             scope.launch(IoDispatcher) {
                 runCatching { BookHelpShared.clearBookCache(listOf(b)) }
                     .onSuccess { Toasters.get().toast(clearCacheSuccessLabel) }
-                    .onFailure { Toasters.get().toast("清理缓存出错\n${it.message}") }
+                    .onFailure {
+                        AppLog.put("清理缓存出错\n${it.message}", it)
+                        Toasters.get().toast("清理缓存失败")
+                    }
             }
         }
 

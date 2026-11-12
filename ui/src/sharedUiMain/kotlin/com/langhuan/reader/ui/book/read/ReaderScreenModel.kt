@@ -904,7 +904,7 @@ class ReaderScreenModel(
                     readBook.upMsg(null)
                 }.catch {
                 AppLog.put("自动换源失败\n${it.message}", it)
-                Toasters.get().toast("自动换源失败\n${it.message}")
+                Toasters.get().toast("自动换源失败，请稍后重试")
                 }.collect()
         }
     }
@@ -1388,14 +1388,8 @@ sealed interface ReaderDialogEvent {
     /** 朗读控制面板 (对照原版 ReadMenu 朗读按钮长按 → showReadAloudDialog) */
     object ReadAloud : ReaderDialogEvent
 
-    /** 首启阅读菜单帮助 (对照原版 ReadMenu.menuInListener.onAnimationEnd → ReadBookActivity.showHelp("readMenuHelp")) */
-    object ReadMenuHelp : ReaderDialogEvent
-
     /** 更多设置 (对照原版 设置按钮 → MoreConfigDialog) */
     object MoreConfig : ReaderDialogEvent
-
-    /** 界面/样式设置 (对照原版 界面按钮 → ReadStyleDialog) */
-    object ReadStyle : ReaderDialogEvent
 
     /** 起效的替换规则 (对照原版 替换按钮 → EffectiveReplacesDialog) */
     object EffectiveReplaces : ReaderDialogEvent

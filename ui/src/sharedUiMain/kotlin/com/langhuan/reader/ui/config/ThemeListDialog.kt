@@ -115,7 +115,7 @@ fun ThemeListDialog(
                             dataVersion++
                         } catch (e: Throwable) {
                             AppLog.put("导入主题失败\n${e.message}", e)
-                            Toasters.get().toast(e.message ?: e.toString())
+                            Toasters.get().toast("导入主题失败")
                         }
                     }
                 }
@@ -166,7 +166,7 @@ fun ThemeListDialog(
                                 dataVersion++
                             } catch (e: Throwable) {
                                 AppLog.put("删除主题失败\n${e.message}", e)
-                                Toasters.get().toast(e.message ?: e.toString())
+                                Toasters.get().toast("删除主题失败")
                             }
                         },
                     )

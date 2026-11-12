@@ -124,16 +124,8 @@ sealed interface AppRoute {
     data class BookSourceEdit(val sourceUrl: String) : AppRoute
 
     @Serializable
-    @SerialName("book_source_debug")
-    data class BookSourceDebug(val sourceUrl: String) : AppRoute
-
-    @Serializable
     @SerialName("replace_rule")
     data object ReplaceRule : AppRoute
-
-    @Serializable
-    @SerialName("dict_rule")
-    data object DictRule : AppRoute
 
     @Serializable
     @SerialName("txt_toc_rule")

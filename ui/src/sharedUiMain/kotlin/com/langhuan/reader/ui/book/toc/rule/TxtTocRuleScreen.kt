@@ -106,8 +106,6 @@ interface TxtTocRuleUiActions {
     fun onImportOnline()
     /** 导入默认规则 (对照 viewModel.importDefault()) */
     fun onImportDefault()
-    /** 帮助 (对照 showHelp("txtTocRuleHelp")) */
-    fun onHelp()
     /** 切换选中 (对照 toggle(item, checked)) */
     fun onToggleSelect(item: TxtTocRule, checked: Boolean)
     /** 全选/全不选 (对照 selected.value = if (all) ... else emptySet()) */
@@ -271,14 +269,6 @@ private fun TxtTocRuleActions(actions: TxtTocRuleUiActions) {
             },
         ) {
             Text(stringResource(Res.string.import_default_rule), color = colors.primaryText)
-        }
-        DropdownMenuItem(
-            onClick = {
-                dismiss()
-                actions.onHelp()
-            },
-        ) {
-            Text(stringResource(Res.string.help), color = colors.primaryText)
         }
     }
 }

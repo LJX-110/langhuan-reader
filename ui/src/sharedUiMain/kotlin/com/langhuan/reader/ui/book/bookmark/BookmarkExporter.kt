@@ -83,7 +83,7 @@ object BookmarkExporter {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            Toasters.get().toast("导出失败\n${e.message}")
+            Toasters.get().toast("导出失败")
             AppLog.put("导出失败\n${e.message}", e)
             false
         }
@@ -99,7 +99,7 @@ object BookmarkExporter {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            Toasters.get().toast("导出失败\n${e.message}")
+            Toasters.get().toast("导出失败")
             AppLog.put("导出失败\n${e.message}", e)
         }
     }

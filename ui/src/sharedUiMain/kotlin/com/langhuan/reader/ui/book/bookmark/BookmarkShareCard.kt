@@ -58,7 +58,7 @@ private const val MaxTextChars = 500
 /** 底部水印透明度 (规格: secondaryText 半透明) */
 private const val WatermarkAlpha = 0.4f
 
-/** 细分隔线透明度 (对照 ReadStyleScreen.Divider 的 secondaryText.copy(alpha) 惯例) */
+/** 细分隔线透明度 (沿用 secondaryText.copy(alpha) 的惯例) */
 private const val DividerAlpha = 0.3f
 
 /**

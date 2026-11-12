@@ -157,7 +157,7 @@ class BookSourceEditViewModelShared(
         }.onError {
             // 替代 context.toastOnUi(msg), Toasters.get() 已下沉 commonMain
             // 原 app 端 save 的 onError 直接 toast localizedMessage; toast 需非空, 空时给空串
-            Toasters.get().toast(it.message ?: "")
+            Toasters.get().toast("保存书源失败")
             it.printStackTraceOnDebug()
         }
     }
@@ -192,7 +192,7 @@ class BookSourceEditViewModelShared(
             }
         }.onError {
             // 替代 context.toastOnUi(msg), Toasters.get() 已下沉 commonMain
-            Toasters.get().toast(it.message ?: "Error")
+            Toasters.get().toast("书源解析失败")
             it.printStackTraceOnDebug()
         }
     }
@@ -219,7 +219,7 @@ class BookSourceEditViewModelShared(
             finally.invoke(it)
         }.onError {
             // 替代 context.toastOnUi(msg), Toasters.get() 已下沉 commonMain
-            Toasters.get().toast(it.message ?: "Error")
+            Toasters.get().toast("书源解析失败")
             it.printStackTraceOnDebug()
         }
     }

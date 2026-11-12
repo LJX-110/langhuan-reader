@@ -136,7 +136,6 @@ interface BookSourceDebugUiActions {
     fun onShowContentSrc()
     fun onShowReviewSrc()
     fun onRefreshExplore()
-    fun onShowHelp()
     fun onSelectOption(name: String, value: String)
     fun onSelectOptions(name: String, values: Set<String>)
     fun onResetOption(name: String)
@@ -283,9 +282,6 @@ private fun DebugActions(actions: BookSourceDebugUiActions) {
         }
         MenuItem(stringResource(Res.string.refresh_explore)) {
             dismiss(); actions.onRefreshExplore()
-        }
-        MenuItem(stringResource(Res.string.help)) {
-            dismiss(); actions.onShowHelp()
         }
     }
 }

@@ -100,7 +100,6 @@ interface RemoteBookUiActions<T : ImportFileItem> {
     fun onUpPath()
     fun onSortCheck(sortKey: RemoteBookSort)
     fun onShowServersDialog()
-    fun onShowWebDavHelp()
     fun onShowLogDialog()
     fun onSelectAll(selectAll: Boolean)
     fun onRevertSelection()
@@ -215,9 +214,6 @@ private fun <T : ImportFileItem> RemoteBookActions(
     OverflowMenu { dismiss ->
         ImportMenuItem(stringResource(Res.string.server_config)) {
             dismiss(); actions.onShowServersDialog()
-        }
-        ImportMenuItem(stringResource(Res.string.help)) {
-            dismiss(); actions.onShowWebDavHelp()
         }
         ImportMenuItem(stringResource(Res.string.log)) {
             dismiss(); actions.onShowLogDialog()

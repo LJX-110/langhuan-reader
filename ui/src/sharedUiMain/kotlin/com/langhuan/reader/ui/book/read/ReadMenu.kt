@@ -28,8 +28,11 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -62,6 +65,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -73,19 +77,16 @@ import com.langhuan.reader.help.book.isEpub
 import com.langhuan.reader.help.book.isLocal
 import com.langhuan.reader.help.book.isLocalTxt
 import com.langhuan.reader.help.book.isNotShelf
-import com.langhuan.reader.help.config.HelpVersion
-import com.langhuan.reader.help.config.LocalConfigKeys
-import com.langhuan.reader.help.config.LocalConfigProviders
-import com.langhuan.reader.help.config.LocalConfigShared
 import com.langhuan.reader.help.config.ReadBookConfigProviders
 import com.langhuan.reader.help.config.ThemeConfigProviders
 import com.langhuan.reader.help.config.currentEInkMode
 import com.langhuan.reader.help.config.currentNightTheme
 import com.langhuan.reader.help.showSourceLogin
 import com.langhuan.reader.help.toast.Toasters
+import com.langhuan.reader.ui.compose.component.AppDetailSeekBar
 import com.langhuan.reader.ui.compose.component.AppDropdownMenu
 import com.langhuan.reader.ui.compose.component.AppMenuCheckbox
-import com.langhuan.reader.ui.compose.component.AppSlider
+import com.langhuan.reader.ui.compose.component.AppSelectorDialog
 import com.langhuan.reader.ui.compose.component.AppSwitch
 import com.langhuan.reader.ui.compose.component.blockInputWhile
 import com.langhuan.reader.ui.compose.component.listItemFocus
@@ -109,17 +110,25 @@ import com.langhuan.reader.ui.root.AppRoute
 import com.langhuan.reader.ui.root.PlatformCapabilityProviders
 import com.langhuan.reader.ui.root.RouteResults
 import com.langhuan.reader.ui.root.toRouteRef
+import com.langhuan.reader.ui.route.BgTextConfigDialogHost
+import com.langhuan.reader.ui.route.ChineseConverterDialogHost
+import com.langhuan.reader.ui.route.FontSelectDialogHost
+import com.langhuan.reader.ui.route.ReadLayoutConfigDialogHost
+import com.langhuan.reader.ui.route.ReadStyleSwatchRow
 import com.langhuan.reader.utils.ColorUtils
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.dark_theme
 import com.langhuan.reader.ui.generated.resources.ic_arrow_back
 import com.langhuan.reader.ui.generated.resources.ic_more_vert
+import com.langhuan.reader.ui.generated.resources.indent
 import com.langhuan.reader.ui.generated.resources.more_menu
 import com.langhuan.reader.ui.generated.resources.next_chapter
 import com.langhuan.reader.ui.generated.resources.previous_chapter
 import com.langhuan.reader.ui.generated.resources.replace_rule_title
 import com.langhuan.reader.ui.generated.resources.search_content
+import com.langhuan.reader.ui.generated.resources.text_font_weight
 import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.stringArrayResource
 import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -139,7 +148,7 @@ enum class ReadMenuAction {
     DOWNLOAD, TOC_REGEX, SET_CHARSET,
     ADD_BOOKMARK, EDIT_CONTENT, SYNC_PROGRESS,
     ENABLE_REPLACE, KEYWORD_HIGHLIGHT, SAME_TITLE_REMOVED, RE_SEGMENT, REVIEW,
-    DEL_RUBY_TAG, DEL_H_TAG, IMAGE_STYLE, UPDATE_TOC, LOG, HELP,
+    DEL_RUBY_TAG, DEL_H_TAG, IMAGE_STYLE, UPDATE_TOC, LOG,
 }
 
 /** 书源操作动作(原 book_read_source PopupMenu) */
@@ -243,8 +252,13 @@ interface ReadMenuState {
     fun clickCatalog()
     fun clickReadAloud()
     fun longClickReadAloud()
-    fun clickFont()
     fun clickSetting()
+
+    /** 底栏「换源」：整书换源 */
+    fun clickChangeSource() = onTopMenuAction(ReadMenuAction.CHANGE_SOURCE)
+
+    /** 长按底栏「换源」：本章换源 */
+    fun longClickChangeSource() = onTopMenuAction(ReadMenuAction.CHAPTER_CHANGE_SOURCE)
 
     // ---- 阅读面板（书签 / 章节定位 / 进度文案）----
 
@@ -441,20 +455,6 @@ open class BaseReadMenuState(
 
     override fun onTransitionIdle(shown: Boolean) {
         if (shown) {
-            // 首启阅读菜单帮助 (对照原版 ReadMenu.menuInListener.onAnimationEnd:
-            // !LocalConfig.readMenuHelpVersionIsLast → callBack.showHelp())。
-            // 原版 E-Ink 无动画分支 (runMenuIn anim=false) 也手动调 onAnimationEnd, 同一时机。
-            // 版本标记由 isLastVersion 在判定时写入, 与原版同一点触发, 关闭后再开菜单不重弹
-            val local = LocalConfigProviders.get()
-            val isLastHelp = LocalConfigShared.isLastVersion(
-                lastVersion = HelpVersion.readMenuHelp,
-                versionKey = LocalConfigKeys.readMenuHelpVersion,
-                firstOpenKey = LocalConfigKeys.firstReadMenu,
-                getInt = local::getInt,
-                getBoolean = local::getBoolean,
-                putInt = local::putInt,
-            )
-            if (!isLastHelp) screenModel.postDialogEvent(ReaderDialogEvent.ReadMenuHelp)
             return
         }
         val onEnd = onMenuOutEnd
@@ -589,11 +589,6 @@ open class BaseReadMenuState(
                 }
             }
 
-            // 帮助 (对照原版 menu_help → showHelp("readMenuHelp"): help Overlay 读 web/help/md 渲染)
-            ReadMenuAction.HELP -> navigator.showOverlay(
-                AppOverlay.Dialog(key = "help", payload = "readMenuHelp")
-            )
-
             ReadMenuAction.DEL_RUBY_TAG -> {
                 screenModel.viewModel.toggleDelTag(Book.rubyTag)
                 upTopMenu()
@@ -666,12 +661,6 @@ open class BaseReadMenuState(
 
     override fun longClickReadAloud() {
         screenModel.postDialogEvent(ReaderDialogEvent.ReadAloud)
-    }
-
-    override fun clickFont() {
-        runMenuOut {
-            screenModel.postDialogEvent(ReaderDialogEvent.ReadStyle)
-        }
     }
 
     override fun clickSetting() {
@@ -992,6 +981,10 @@ private fun TopBarActionIcon(
 
 private const val MIN_READER_FONT_SIZE = 17
 private const val MAX_READER_FONT_SIZE = 40
+// 恢复默认排版时回填的字段默认值（对齐 ReadBookConfig 数据类默认值）
+private const val DEFAULT_TEXT_SIZE = 17
+private const val DEFAULT_LINE_SPACING = 15
+private const val DEFAULT_PARAGRAPH_SPACING = 6
 
 /** 阅读纸色档位：只改当前样式的背景与文字色，并同步日/夜模式。 */
 private data class ReaderPaperTone(
@@ -1026,8 +1019,8 @@ private fun applyReaderPaperTone(tone: ReaderPaperTone) {
     )
 }
 
-/** 阅读底栏面板页：操作坞 / 排版 / 进度 / 书签 */
-private enum class ReaderPanel { DOCK, STYLE, PROGRESS, BOOKMARK }
+/** 阅读底栏面板页：操作坞 / 排版与进度 / 书签 */
+private enum class ReaderPanel { DOCK, STYLE, BOOKMARK }
 
 @Composable
 private fun ReadMenuBottom(
@@ -1045,6 +1038,8 @@ private fun ReadMenuBottom(
     )
     val bg = palette.surface
     val text = palette.onSurface
+    // 章节进度用辅助色；E-Ink 下退回正文色，避免黑白模式出现彩色数字
+    val progressColor = if (eInk) text else AppTheme.colors.companion
 
     // 4dp 阴影向上: 默认 shadow 光源在上方, 先翻转 180° 加阴影再翻回,
     // 阴影即投射到屏幕底部外侧的上方。面板内容随当前页切换，外壳只此一份。
@@ -1073,8 +1068,7 @@ private fun ReadMenuBottom(
         }
         when (panel) {
             ReaderPanel.DOCK -> ReaderDockContent(state, text)
-            ReaderPanel.STYLE -> ReaderStylePanel(state, text, eInk)
-            ReaderPanel.PROGRESS -> ReaderProgressPanel(state, text)
+            ReaderPanel.STYLE -> ReaderStylePanel(state, text, eInk, progressColor)
             ReaderPanel.BOOKMARK -> ReaderBookmarkPanel(state, text)
         }
     }
@@ -1114,15 +1108,6 @@ private fun ReaderPanelTabs(
     ) {
         ReaderPanelTab(rememberString("reader_panel_style"), panel == ReaderPanel.STYLE, text) {
             onPanelChange(if (panel == ReaderPanel.STYLE) ReaderPanel.DOCK else ReaderPanel.STYLE)
-        }
-        ReaderPanelTab(
-            rememberString("reader_panel_progress"),
-            panel == ReaderPanel.PROGRESS,
-            text,
-        ) {
-            onPanelChange(
-                if (panel == ReaderPanel.PROGRESS) ReaderPanel.DOCK else ReaderPanel.PROGRESS
-            )
         }
         ReaderPanelTab(rememberString("bookmark"), panel == ReaderPanel.BOOKMARK, text) {
             onPanelChange(
@@ -1164,31 +1149,9 @@ private fun ReaderPanelTab(
     )
 }
 
-/** 操作坞：全书进度条 + 上一章/目录/下一章 + 查找/专注 */
+/** 操作坞：上一章/目录(含 x/y)/下一章 + 查找/换源(长按本章)/专注 */
 @Composable
 private fun ReaderDockContent(state: ReadMenuState, text: Color) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = DesignTokens.spacingLg),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = state.chapterIndexText,
-            color = text.copy(alpha = .55f),
-            fontSize = 11.sp,
-            maxLines = 1,
-        )
-        AppSlider(
-            value = state.seekValue,
-            max = state.seekMax.coerceAtLeast(1),
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = DesignTokens.spacingMd),
-            color = AppTheme.colors.accent,
-            onValueChangeFinished = { state.onSeekStop(it) },
-        )
-    }
     Row(Modifier.fillMaxWidth()) {
         BottomMenuItem(
             iconKey = "ic_skip_previous",
@@ -1200,6 +1163,7 @@ private fun ReaderDockContent(state: ReadMenuState, text: Color) {
             iconKey = "ic_toc",
             labelKey = "chapter_list",
             tint = text,
+            subLabel = state.chapterIndexText,
             modifier = Modifier.weight(1f),
         ) { state.clickCatalog() }
         BottomMenuItem(
@@ -1212,6 +1176,15 @@ private fun ReaderDockContent(state: ReadMenuState, text: Color) {
     Row(Modifier.fillMaxWidth()) {
         BottomMenuItem("ic_search", "search_content", text, Modifier.weight(1f)) {
             state.clickSearch()
+        }
+        BottomMenuItem(
+            iconKey = "ic_exchange",
+            labelKey = "change_source",
+            tint = text,
+            modifier = Modifier.weight(1f),
+            onLongClick = { state.longClickChangeSource() },
+        ) {
+            state.clickChangeSource()
         }
         BottomMenuItem(
             iconKey = if (readerFocusMode) "ic_fullscreen_exit" else "ic_fullscreen_enter",
@@ -1229,9 +1202,9 @@ private fun ReaderDockContent(state: ReadMenuState, text: Color) {
     }
 }
 
-/** 面板「进度」页：本章百分比 + 目录位置 + 章首/章末跳转 */
+/** 排版页内「本章进度」段：百分比 + 目录位置 + 章首/章末跳转 */
 @Composable
-private fun ReaderProgressPanel(state: ReadMenuState, text: Color) {
+private fun ReaderProgressPanel(state: ReadMenuState, text: Color, progressColor: Color) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -1242,6 +1215,7 @@ private fun ReaderProgressPanel(state: ReadMenuState, text: Color) {
             label = rememberString("chapter_progress_short"),
             value = state.chapterProgressText,
             text = text,
+            valueColor = progressColor,
             modifier = Modifier.weight(1f),
         )
         ReaderMetric(
@@ -1273,15 +1247,22 @@ private fun ReaderMetric(
     value: String,
     text: Color,
     modifier: Modifier = Modifier,
+    valueColor: Color = text,
 ) {
     Column(modifier) {
-        Text(text = value, color = text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        Text(text = value, color = valueColor, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
         Text(text = label, color = text.copy(alpha = .55f), fontSize = 11.sp)
     }
 }
 
 @Composable
-private fun ReaderPanelAction(label: String, text: Color, onClick: () -> Unit) {
+private fun ReaderPanelAction(
+    label: String,
+    text: Color,
+    horizontalPadding: Dp = 16.dp,
+    verticalPadding: Dp = 8.dp,
+    onClick: () -> Unit,
+) {
     Text(
         text = label,
         color = text,
@@ -1290,7 +1271,7 @@ private fun ReaderPanelAction(label: String, text: Color, onClick: () -> Unit) {
             .clip(RoundedCornerShape(14.dp))
             .background(text.copy(alpha = .08f))
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = horizontalPadding, vertical = verticalPadding),
     )
 }
 
@@ -1367,19 +1348,48 @@ private fun ReaderBookmarkPanel(state: ReadMenuState, text: Color) {
     }
 }
 
-/** 面板「排版」页：字号/纸色/行距/翻页 + 更多排版与朗读跟随 */
+/**
+ * 面板「排版与进度」页：一行样式入口（字重/字体/缩进/简繁/版面）+ 四道滑条
+ * （字号/字距/行距/段距）+ 纸色 + 翻页方式 + 配色板 + 本章进度 + 恢复默认。
+ *
+ * 单列布局，滑条右侧直接显示当前值，恢复默认放在面板最底部。
+ * 旧的全屏「界面设置」弹窗（ReadStyleScreen）已删除，能力全部收进本面板。
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ReaderStylePanel(
     state: ReadMenuState,
     text: Color,
     eInk: Boolean,
+    progressColor: Color,
 ) {
     val readConfig = ReadBookConfigProviders.get()
     // 面板内即时状态：点按后先更新本地值让面板立刻响应，再写配置并通知重排/重建翻页委托。
     var fontSize by remember { mutableIntStateOf(readConfig.textSize) }
+    var letterSpacing by remember {
+        mutableIntStateOf((readConfig.letterSpacing * 100).toInt() + 50)
+    }
     var lineSpacing by remember { mutableIntStateOf(readConfig.lineSpacingExtra) }
+    var paragraphSpacing by remember { mutableIntStateOf(readConfig.paragraphSpacing) }
     var pageAnim by remember { mutableIntStateOf(readConfig.pageAnim) }
     var paperBg by remember { mutableStateOf(readConfig.config.curBgStr()) }
+    var shareLayout by remember { mutableStateOf(readConfig.shareLayout) }
+    // 背景文字配置改完返回后自增，让配色板重读被就地修改的样式
+    var swatchTick by remember { mutableIntStateOf(0) }
+
+    var showWeight by remember { mutableStateOf(false) }
+    var showIndent by remember { mutableStateOf(false) }
+    var showFont by remember { mutableStateOf(false) }
+    var showConverter by remember { mutableStateOf(false) }
+    var showLayout by remember { mutableStateOf(false) }
+    var showBgText by remember { mutableStateOf(false) }
+
+    val weightNames = stringArrayResource(Res.array.text_font_weight)
+    val indentNames = stringArrayResource(Res.array.indent)
+
+    fun postConfig(vararg changes: ReadConfigChange) {
+        ReadBookEvents.postConfig(changes.toList())
+    }
 
     fun applyFontSize(value: Int) {
         val next = value.coerceIn(MIN_READER_FONT_SIZE, MAX_READER_FONT_SIZE)
@@ -1387,20 +1397,31 @@ private fun ReaderStylePanel(
         fontSize = next
         readConfig.textSize = next
         readConfig.save()
-        ReadBookEvents.postConfig(
-            listOf(ReadConfigChange.CHAPTER_STYLE, ReadConfigChange.LOAD_CONTENT)
-        )
+        postConfig(ReadConfigChange.CHAPTER_STYLE, ReadConfigChange.LOAD_CONTENT)
+    }
+
+    fun applyLetterSpacing(value: Int) {
+        if (value == letterSpacing) return
+        letterSpacing = value
+        readConfig.letterSpacing = (value - 50) / 100f
+        readConfig.save()
+        postConfig(ReadConfigChange.CHAPTER_STYLE, ReadConfigChange.LOAD_CONTENT)
     }
 
     fun applyLineSpacing(value: Int) {
-        val next = value.coerceIn(8, 24)
-        if (next == lineSpacing) return
-        lineSpacing = next
-        readConfig.lineSpacingExtra = next
+        if (value == lineSpacing) return
+        lineSpacing = value
+        readConfig.lineSpacingExtra = value
         readConfig.save()
-        ReadBookEvents.postConfig(
-            listOf(ReadConfigChange.CHAPTER_STYLE, ReadConfigChange.LOAD_CONTENT)
-        )
+        postConfig(ReadConfigChange.CHAPTER_STYLE, ReadConfigChange.LOAD_CONTENT)
+    }
+
+    fun applyParagraphSpacing(value: Int) {
+        if (value == paragraphSpacing) return
+        paragraphSpacing = value
+        readConfig.paragraphSpacing = value
+        readConfig.save()
+        postConfig(ReadConfigChange.CHAPTER_STYLE, ReadConfigChange.LOAD_CONTENT)
     }
 
     fun applyPageAnim(value: Int) {
@@ -1408,56 +1429,117 @@ private fun ReaderStylePanel(
         pageAnim = value
         readConfig.pageAnim = value
         readConfig.save()
-        ReadBookEvents.postConfig(
-            listOf(ReadConfigChange.PAGE_ANIM, ReadConfigChange.LOAD_CONTENT)
+        postConfig(ReadConfigChange.PAGE_ANIM, ReadConfigChange.LOAD_CONTENT)
+    }
+
+    /** 恢复默认排版：只重置字号与间距类字段，背景、字体文件与翻页方式保持不变 */
+    fun resetStyle() {
+        fontSize = DEFAULT_TEXT_SIZE
+        letterSpacing = 50
+        lineSpacing = DEFAULT_LINE_SPACING
+        paragraphSpacing = DEFAULT_PARAGRAPH_SPACING
+        readConfig.textSize = DEFAULT_TEXT_SIZE
+        readConfig.letterSpacing = 0f
+        readConfig.lineSpacingExtra = DEFAULT_LINE_SPACING
+        readConfig.paragraphSpacing = DEFAULT_PARAGRAPH_SPACING
+        readConfig.textBold = 0
+        readConfig.paragraphIndent = "　　"
+        readConfig.save()
+        postConfig(
+            ReadConfigChange.CHAPTER_STYLE,
+            ReadConfigChange.INVALIDATE_TEXT_PAGE,
+            ReadConfigChange.LOAD_CONTENT,
         )
     }
 
-    Column(Modifier.fillMaxWidth()) {
-        // 字号 + 纸色：一手可调的阅读密度与纸张
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
-            verticalAlignment = Alignment.CenterVertically,
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(max = 340.dp)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        // 一行样式入口：滑条放不下的字重/字体/缩进/简繁/版面
+        FlowRow(
+            Modifier.fillMaxWidth().padding(horizontal = DesignTokens.spacingLg),
+            horizontalArrangement = Arrangement.spacedBy(DesignTokens.spacingDefault),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.spacingXs),
         ) {
-            Text(
-                text = rememberString("text_size"),
-                color = text.copy(alpha = .55f),
-                fontSize = 12.sp,
-            )
-            Spacer(Modifier.width(DesignTokens.spacingMd))
-            Text(
-                text = "A−",
-                color = if (fontSize > MIN_READER_FONT_SIZE) text else text.copy(alpha = .3f),
-                fontSize = 18.sp,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable(enabled = fontSize > MIN_READER_FONT_SIZE) {
-                        applyFontSize(fontSize - 1)
-                    }
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-            )
-            Text(
-                text = "$fontSize",
-                color = text,
-                fontSize = 13.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.width(30.dp),
-            )
-            Text(
-                text = "A+",
-                color = if (fontSize < MAX_READER_FONT_SIZE) text else text.copy(alpha = .3f),
-                fontSize = 18.sp,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable(enabled = fontSize < MAX_READER_FONT_SIZE) {
-                        applyFontSize(fontSize + 1)
-                    }
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-            )
-            Spacer(Modifier.weight(1f))
-            if (!eInk) {
+            ReaderPanelAction(
+                rememberString("font_weight_text"), text,
+                horizontalPadding = 12.dp, verticalPadding = 6.dp,
+            ) { showWeight = true }
+            ReaderPanelAction(
+                rememberString("text_font"), text,
+                horizontalPadding = 12.dp, verticalPadding = 6.dp,
+            ) { showFont = true }
+            ReaderPanelAction(
+                rememberString("text_indent"), text,
+                horizontalPadding = 12.dp, verticalPadding = 6.dp,
+            ) { showIndent = true }
+            ReaderPanelAction(
+                "简/繁", text,
+                horizontalPadding = 12.dp, verticalPadding = 6.dp,
+            ) { showConverter = true }
+            ReaderPanelAction(
+                rememberString("information"), text,
+                horizontalPadding = 12.dp, verticalPadding = 6.dp,
+            ) { showLayout = true }
+        }
+        AppDetailSeekBar(
+            title = rememberString("text_size"),
+            value = fontSize,
+            max = MAX_READER_FONT_SIZE,
+            min = MIN_READER_FONT_SIZE,
+            textColor = text,
+            modifier = Modifier
+                .height(DesignTokens.viewHeightSmall)
+                .padding(horizontal = DesignTokens.spacingLg),
+            onChanged = ::applyFontSize,
+        )
+        AppDetailSeekBar(
+            title = rememberString("text_letter_spacing"),
+            value = letterSpacing,
+            max = 100,
+            min = 30,
+            textColor = text,
+            valueFormat = { ((it - 50) / 100f).toString() },
+            modifier = Modifier
+                .height(DesignTokens.viewHeightSmall)
+                .padding(horizontal = DesignTokens.spacingLg),
+            onChanged = ::applyLetterSpacing,
+        )
+        AppDetailSeekBar(
+            title = rememberString("line_size"),
+            value = lineSpacing,
+            max = 24,
+            min = 8,
+            textColor = text,
+            valueFormat = { "${it / 10f} 倍" },
+            modifier = Modifier
+                .height(DesignTokens.viewHeightSmall)
+                .padding(horizontal = DesignTokens.spacingLg),
+            onChanged = ::applyLineSpacing,
+        )
+        AppDetailSeekBar(
+            title = rememberString("paragraph_size"),
+            value = paragraphSpacing,
+            max = 20,
+            min = 0,
+            textColor = text,
+            valueFormat = { (it / 10f).toString() },
+            modifier = Modifier
+                .height(DesignTokens.viewHeightSmall)
+                .padding(horizontal = DesignTokens.spacingLg),
+            onChanged = ::applyParagraphSpacing,
+        )
+        // 纸色
+        if (!eInk) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
                     text = rememberString("paper_color"),
                     color = text.copy(alpha = .55f),
@@ -1498,32 +1580,7 @@ private fun ReaderStylePanel(
                     }
                 }
             }
-        }
-        // 行距
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = DesignTokens.spacingLg),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = rememberString("line_size"),
-                color = text.copy(alpha = .55f),
-                fontSize = 12.sp,
-            )
-            AppSlider(
-                value = lineSpacing,
-                min = 10,
-                max = 22,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = DesignTokens.spacingMd),
-                color = AppTheme.colors.accent,
-                onValueChangeFinished = { applyLineSpacing(it) },
-            )
-        }
-        // 翻页方式：只暴露滚动/覆盖；滑动、仿真等旧值在 UI 上按覆盖显示
-        if (!eInk) {
+            // 翻页方式：只暴露滚动/覆盖；滑动、仿真等旧值在 UI 上按覆盖显示
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -1549,34 +1606,123 @@ private fun ReaderStylePanel(
                 ) { applyPageAnim(PageAnim.coverPageAnim) }
             }
         }
+        // 配色板（点选切换，长按编辑背景与文字）
+        ReadStyleSwatchRow(refreshKey = swatchTick, onEditStyle = { showBgText = true })
+        // 本章进度：与排版同页，省去一次页签切换
+        ReaderProgressPanel(state, text, progressColor)
+        // 共用布局
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = rememberString("share_layout"),
+                color = text.copy(alpha = .7f),
+                fontSize = 12.sp,
+            )
+            AppSwitch(
+                checked = shareLayout,
+                onCheckedChange = { checked ->
+                    shareLayout = checked
+                    readConfig.shareLayout = checked
+                    readConfig.save()
+                    // 共用布局开关切换 config 来源 (shareConfig ↔ durConfig),
+                    // 生效 pageAnim 可能随之变化, 需重建翻页委托
+                    postConfig(
+                        ReadConfigChange.BG,
+                        ReadConfigChange.STYLE,
+                        ReadConfigChange.PAGE_ANIM,
+                        ReadConfigChange.LOAD_CONTENT,
+                    )
+                },
+            )
+        }
+        // 朗读跟随 + 更多设置
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = rememberString("reader_follow_aloud"),
+                color = text,
+                fontSize = 13.sp,
+                modifier = Modifier.weight(1f),
+            )
+            AppSwitch(
+                checked = readerFollowAloud,
+                onCheckedChange = { readerFollowAloud = it },
+            )
+        }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ReaderPanelAction(rememberString("setting"), text) { state.clickSetting() }
+        }
+        // 恢复默认排版：放在面板最底部
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            ReaderPanelAction(rememberString("reader_reset_style"), text) { resetStyle() }
+        }
     }
-    // 朗读跟随 + 更多排版
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = rememberString("reader_follow_aloud"),
-            color = text,
-            fontSize = 13.sp,
-            modifier = Modifier.weight(1f),
-        )
-        AppSwitch(
-            checked = readerFollowAloud,
-            onCheckedChange = { readerFollowAloud = it },
+
+    if (showWeight) {
+        AppSelectorDialog(
+            onDismissRequest = { showWeight = false },
+            title = rememberString("text_font_weight_converter"),
+            items = weightNames,
+            onItemSelected = { index ->
+                showWeight = false
+                readConfig.textBold = index
+                readConfig.save()
+                postConfig(
+                    ReadConfigChange.CHAPTER_STYLE,
+                    ReadConfigChange.INVALIDATE_TEXT_PAGE,
+                    ReadConfigChange.UP_CONTENT,
+                )
+            },
         )
     }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ReaderPanelAction(rememberString("reader_font_background"), text) { state.clickFont() }
-        Spacer(Modifier.width(DesignTokens.spacingDefault))
-        ReaderPanelAction(rememberString("reader_more_layout"), text) { state.clickSetting() }
+    if (showIndent) {
+        AppSelectorDialog(
+            onDismissRequest = { showIndent = false },
+            title = rememberString("text_indent"),
+            items = indentNames,
+            onItemSelected = { index ->
+                showIndent = false
+                // 对齐 app 端: ReadBookConfig.paragraphIndent = "　".repeat(index)
+                readConfig.paragraphIndent = "　".repeat(index)
+                readConfig.save()
+                postConfig(ReadConfigChange.CHAPTER_STYLE, ReadConfigChange.LOAD_CONTENT)
+            },
+        )
+    }
+    if (showFont) {
+        FontSelectDialogHost(onDismiss = { showFont = false })
+    }
+    if (showConverter) {
+        ChineseConverterDialogHost(onDismiss = { showConverter = false })
+    }
+    if (showLayout) {
+        ReadLayoutConfigDialogHost(onDismiss = { showLayout = false })
+    }
+    if (showBgText) {
+        BgTextConfigDialogHost(
+            onDismiss = {
+                showBgText = false
+                swatchTick++
+            }
+        )
     }
 }
 
@@ -1646,6 +1792,7 @@ fun BottomMenuItem(
     labelKey: String,
     tint: Color,
     modifier: Modifier = Modifier.width(60.dp),
+    subLabel: String? = null,
     onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
@@ -1661,12 +1808,25 @@ fun BottomMenuItem(
             tint = tint,
             modifier = Modifier.size(20.dp),
         )
-        Text(
-            text = rememberString(labelKey),
-            color = tint,
-            fontSize = 12.sp,
-            maxLines = 1,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(top = DesignTokens.spacingXs),
-        )
+        ) {
+            Text(
+                text = rememberString(labelKey),
+                color = tint,
+                fontSize = 12.sp,
+                maxLines = 1,
+            )
+            if (!subLabel.isNullOrBlank()) {
+                Text(
+                    text = subLabel,
+                    color = tint.copy(alpha = .55f),
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    modifier = Modifier.padding(start = DesignTokens.spacingXs),
+                )
+            }
+        }
     }
 }

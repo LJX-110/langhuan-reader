@@ -28,10 +28,6 @@ import com.langhuan.reader.constant.PreferKey
 import com.langhuan.reader.help.AppWebDavShared
 import com.langhuan.reader.help.book.effectiveBookSaveDir
 import com.langhuan.reader.help.config.AppConfigProviders
-import com.langhuan.reader.help.config.HelpVersion
-import com.langhuan.reader.help.config.LocalConfigKeys
-import com.langhuan.reader.help.config.LocalConfigProviders
-import com.langhuan.reader.help.config.LocalConfigShared
 import com.langhuan.reader.help.coroutine.IoDispatcher
 import com.langhuan.reader.help.storage.BackupConfigShared
 import com.langhuan.reader.help.storage.BackupShared
@@ -54,7 +50,6 @@ import com.langhuan.reader.ui.root.PlatformServiceProviders
 import com.langhuan.reader.ui.root.RouteEntry
 import com.langhuan.reader.ui.root.ScreenModelStore
 import com.langhuan.reader.ui.root.reselectBookSaveDir
-import com.langhuan.reader.ui.widget.dialog.HelpDialog
 import com.langhuan.reader.ui.widget.dialog.WaitDialog
 import com.langhuan.reader.utils.format
 import kotlinx.coroutines.CancellationException
@@ -69,8 +64,6 @@ import com.langhuan.reader.ui.generated.resources.backup_no_destination
 import com.langhuan.reader.ui.generated.resources.backup_restore
 import com.langhuan.reader.ui.generated.resources.backup_success
 import com.langhuan.reader.ui.generated.resources.cancel
-import com.langhuan.reader.ui.generated.resources.help
-import com.langhuan.reader.ui.generated.resources.ic_help
 import com.langhuan.reader.ui.generated.resources.loading
 import com.langhuan.reader.ui.generated.resources.ok
 import com.langhuan.reader.ui.generated.resources.restore
@@ -131,8 +124,6 @@ fun BackupConfigRoute(
     // 恢复列表加载等待文案 (对照 app 端 R.string.loading)
     val loadingStr = stringResource(Res.string.loading)
 
-    // 帮助对话框 (对照 app 端 menu_help + 首次进入 showHelp("webDavHelp"))
-    var showHelpDialog by remember { mutableStateOf(false) }
     var showRestoreIgnore by remember { mutableStateOf(false) }
     // WaitDialog 状态 + 后台任务 Job (取消用), 对照 app 端 WaitDialog.from(activity) + onCancelListener
     var waitDialogMessage by remember { mutableStateOf<String?>(null) }
@@ -175,7 +166,8 @@ fun BackupConfigRoute(
             } catch (e: Exception) {
                 // 对照 app 端 onError { AppLog.put("备份出错\n...") + toastOnUi(R.string.backup_fail, ...) }
                 AppLog.put("备份出错\n${e.message}", e)
-                Toasters.get().toast(backupFailStr.format(e.message))
+                // 资源模板首行即结论, 详细异常只进日志
+                Toasters.get().toast(backupFailStr.format("").trim())
             } finally {
                 waitDialogMessage = null
             }
@@ -259,7 +251,7 @@ fun BackupConfigRoute(
                                 throw e
                             } catch (e: Exception) {
                                 AppLog.put("获取WebDav备份列表出错\n${e.message}", e)
-                                errorMsg = "WebDavError\n${e.message}"
+                                errorMsg = "获取备份列表失败，请检查网络或网盘配置"
                             }
                         }
                         waitDialogMessage = null
@@ -288,18 +280,6 @@ fun BackupConfigRoute(
 
     // 对照 app 端 init: 初始化 6 个动态 summary
     LaunchedEffect(Unit) {
-        // 对照原版 onViewCreated: 首次进入弹 webDavHelp (LocalConfig.backupHelpVersionIsLast)
-        // 版本标记存 "local" prefs (LocalConfigStore), 与 app 端 LocalConfig 同存储, 老用户升级不重复弹
-        val local = LocalConfigProviders.get()
-        val isLastHelp = LocalConfigShared.isLastVersion(
-            lastVersion = HelpVersion.backupHelp,
-            versionKey = LocalConfigKeys.backupHelpVersion,
-            firstOpenKey = LocalConfigKeys.firstBackup,
-            getInt = local::getInt,
-            getBoolean = local::getBoolean,
-            putInt = local::putInt,
-        )
-        if (!isLastHelp) showHelpDialog = true
         if (state.webDavUrlSummary.isEmpty()) {
             screenModel.dispatch(
                 BackupConfigUiEvent.UpdateWebDavUrlSummary(
@@ -338,16 +318,6 @@ fun BackupConfigRoute(
         AppTitleBar(
             title = titleStr,
             onBack = { navigator.pop() },
-            actions = {
-                // 对照 app 端 menu_help → showHelp("webDavHelp")
-                IconButton(onClick = { showHelpDialog = true }) {
-                    Icon(
-                        painter = painterResource(Res.drawable.ic_help),
-                        contentDescription = stringResource(Res.string.help),
-                        tint = AppTheme.colors.primaryText,
-                    )
-                }
-            },
         )
         BackupConfigScreen(
             webDavUrlSummary = state.webDavUrlSummary,
@@ -457,7 +427,7 @@ fun BackupConfigRoute(
                         } catch (e: Exception) {
                             // 对照 app 端 onError { AppLog.put("WebDav恢复出错\n...") + toastOnUi("WebDav恢复出错\n...") }
                             AppLog.put("WebDav恢复出错\n${e.message}", e)
-                            Toasters.get().toast("WebDav恢复出错\n${e.message}")
+                            Toasters.get().toast("网盘恢复失败，请稍后重试")
                         } finally {
                             waitDialogMessage = null
                         }
@@ -485,10 +455,5 @@ fun BackupConfigRoute(
                 color = AppTheme.colors.primaryText,
             )
         }
-    }
-
-    // 帮助对话框 (对照 app 端 showHelp("webDavHelp"): menu_help + 首次进入)
-    if (showHelpDialog) {
-        HelpDialog(fileName = "webDavHelp", onDismiss = { showHelpDialog = false })
     }
 }

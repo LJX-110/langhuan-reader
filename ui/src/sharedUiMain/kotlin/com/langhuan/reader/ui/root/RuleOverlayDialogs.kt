@@ -135,8 +135,7 @@ internal fun SourceFilterRuleListDialogContent(
     )
 }
 
-// 帮助文档 (key="help" 时 payload 为 md 文件名; key="dictRuleHelp" 为固定文档;
-// key="updateLog" 为升级更新日志, 标题"更新日志")
+// 帮助文档壳体 (供更新日志复用; 独立帮助弹层已移除, 只在 key="updateLog" 时进入)
 @Composable
 internal fun HelpDialogContent(
     overlay: AppOverlay.Dialog,

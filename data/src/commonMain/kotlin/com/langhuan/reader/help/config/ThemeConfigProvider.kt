@@ -19,8 +19,8 @@ import kotlin.concurrent.Volatile
  * - app 端 `ThemeConfig` 单例依赖大量 Android 专属资源 (Context / ThemeStore /
  *   AppCompatDelegate / AppConfig / SharedPreferences / File / Drawable / NinePatch /
  *   BookCover 等), 无法整体下沉 commonMain;
- * - 但其嵌套 `Config` data class 仅含 6 个简单字段 (themeName/isNightTheme/
- *   primaryColor/accentColor/backgroundColor/bottomBackground) + 1 个运行时标记
+ * - 但其嵌套 `Config` data class 仅含 7 个简单字段 (themeName/isNightTheme/
+ *   primaryColor/accentColor/secondaryColor/backgroundColor/bottomBackground) + 1 个运行时标记
  *   (isBuiltin), 无 Android 依赖, 可以下沉作为 KMP 共享类型。
  *
  * # 字段对照 (与 app 端 `ThemeConfig.Config` 完全一致)
@@ -29,6 +29,7 @@ import kotlin.concurrent.Volatile
  * - isNightTheme: 是否夜间主题
  * - primaryColor: 主色 (十六进制颜色字符串, 如 "#FF5722")
  * - accentColor: 强调色
+ * - secondaryColor: 辅助色 (旧文件缺失时加载期补齐为强调色)
  * - backgroundColor: 背景色
  * - bottomBackground: 底栏背景色
  * - isBuiltin: 是否内置主题 (运行时标记, 不持久化), 对照原 `@Transient var isBuiltin`
@@ -58,7 +59,9 @@ data class ThemeConfigData(
     var primaryColor: String,
     var accentColor: String,
     var backgroundColor: String,
-    var bottomBackground: String
+    var bottomBackground: String,
+    /** 辅助色；旧主题文件没有该字段，加载时补齐为强调色。 */
+    var secondaryColor: String = "",
 ) {
 
     /** 是否内置主题 (运行时标记, 不持久化, 对照 app 端 `@Transient var isBuiltin`)。 */
@@ -75,7 +78,7 @@ data class ThemeConfigData(
         return GSON.toJson(this).hashCode()
     }
 
-    /** 与 app 端原版完全一致: 6 个字段逐一比较。 */
+    /** 与 app 端原版完全一致: 逐字段比较。 */
     override fun equals(other: Any?): Boolean {
         other ?: return false
         if (other is ThemeConfigData) {
@@ -83,6 +86,7 @@ data class ThemeConfigData(
                     && other.isNightTheme == isNightTheme
                     && other.primaryColor == primaryColor
                     && other.accentColor == accentColor
+                    && other.secondaryColor == secondaryColor
                     && other.backgroundColor == backgroundColor
                     && other.bottomBackground == bottomBackground
         }

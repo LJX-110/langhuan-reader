@@ -94,7 +94,6 @@ fun ReplaceRuleListScreen(
     onEditRule: (Long) -> Unit,
     onImportLocal: () -> Unit,
     onImportOnline: () -> Unit,
-    onHelp: () -> Unit,
     onGroupManage: () -> Unit,
     onExport: (List<ReplaceRule>) -> Unit,
 ) {
@@ -138,7 +137,7 @@ fun ReplaceRuleListScreen(
                         hint = stringResource(Res.string.replace_purify_search),
                     )
                 },
-                actions = { ReplaceRuleActions(viewModel, groups, onAddRule, onImportLocal, onImportOnline, onHelp, onGroupManage) },
+                actions = { ReplaceRuleActions(viewModel, groups, onAddRule, onImportLocal, onImportOnline, onGroupManage) },
             )
         },
         listModifier = Modifier.dragSelectable(
@@ -226,7 +225,6 @@ private fun ReplaceRuleActions(
     onAddRule: () -> Unit,
     onImportLocal: () -> Unit,
     onImportOnline: () -> Unit,
-    onHelp: () -> Unit,
     onGroupManage: () -> Unit,
 ) {
     val colors = AppTheme.colors
@@ -289,14 +287,6 @@ private fun ReplaceRuleActions(
             },
         ) {
             Text(stringResource(Res.string.import_on_line), color = colors.primaryText)
-        }
-        DropdownMenuItem(
-            onClick = {
-                dismiss()
-                onHelp()
-            },
-        ) {
-            Text(stringResource(Res.string.help), color = colors.primaryText)
         }
     }
 }

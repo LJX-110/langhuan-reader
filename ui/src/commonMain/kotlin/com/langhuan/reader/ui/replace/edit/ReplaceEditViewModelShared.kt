@@ -143,7 +143,7 @@ class ReplaceEditViewModelShared(
             success.invoke(it)
         }.onError {
             // 替代 context.toastOnUi(msg), Toasters.get() 已下沉 commonMain
-            Toasters.get().toast(it.message ?: "Error")
+            Toasters.get().toast("粘贴替换规则失败")
             it.printStackTraceOnDebug()
         }
     }
@@ -177,7 +177,7 @@ class ReplaceEditViewModelShared(
             success()
         }.onError {
             // 替代 context.toastOnUi(msg), Toasters.get() 已下沉 commonMain
-            Toasters.get().toast("save error, ${it.message}")
+            Toasters.get().toast("保存替换规则失败")
         }
     }
 }

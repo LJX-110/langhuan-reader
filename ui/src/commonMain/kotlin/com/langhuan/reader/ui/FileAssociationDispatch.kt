@@ -78,7 +78,7 @@ object FileAssociationDispatch {
             val extracted = runCatching {
                 ArchiveProviders.get().deCompressIsolated(path, workKey)
             }.getOrElse { e ->
-                Toasters.get().toast(e.message ?: "解压失败")
+                Toasters.get().toast("解压失败")
                 AppLog.put("解压关联文件失败: $path", e)
                 return null
             }
@@ -200,7 +200,7 @@ object FileAssociationDispatch {
         }.getOrElse { e ->
             if (e is CancellationException) throw e
             // 对照原版 FileAssociationViewModel.dispatchIntent 的失败出口文案: 无法打开文件 + 原因
-            Toasters.get().toast("无法打开文件\n${e.message ?: e}")
+            Toasters.get().toast("无法打开该文件")
             AppLog.put("导入关联书籍失败: $path", e)
             return null
         }

@@ -206,10 +206,12 @@ object MonetColorExtract {
         val prefs = PreferenceProviders.get()
         prefs.putInt(PreferKey.cPrimary, day.surface)
         prefs.putInt(PreferKey.cAccent, day.primary)
+        prefs.putInt(PreferKey.cSecondary, day.primary)
         prefs.putInt(PreferKey.cBackground, day.surface)
         prefs.putInt(PreferKey.cBBackground, day.surfaceContainer)
         prefs.putInt(PreferKey.cNPrimary, night.surface)
         prefs.putInt(PreferKey.cNAccent, night.primary)
+        prefs.putInt(PreferKey.cNSecondary, night.primary)
         prefs.putInt(PreferKey.cNBackground, night.surface)
         prefs.putInt(PreferKey.cNBBackground, night.surfaceContainer)
         // 8 键日/夜两套都已写好, 与当前 themeMode 无关, 直接按当前模式重算 ThemeStore

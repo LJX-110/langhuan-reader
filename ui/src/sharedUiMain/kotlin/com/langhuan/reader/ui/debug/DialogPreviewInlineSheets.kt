@@ -3,7 +3,6 @@ package com.langhuan.reader.ui.debug
 import com.langhuan.reader.ui.route.BgTextConfigDialogHost
 import com.langhuan.reader.ui.route.MoreConfigDialogHost
 import com.langhuan.reader.ui.route.ReadAloudConfigDialogHost
-import com.langhuan.reader.ui.route.ReadStyleDialogHost
 import com.langhuan.reader.ui.route.ReviewPostDialogHost
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.aloud_config
@@ -19,9 +18,6 @@ import com.langhuan.reader.ui.generated.resources.aloud_config
 internal fun buildSheetEntries(): List<DialogPreviewEntry.Inline> = listOf(
     DialogPreviewEntry.Inline(DialogPreviewGroup.SHEET, "sheet_more_config", nameText("阅读界面设置"), "MoreConfigDialogHost") { onDismiss ->
         MoreConfigDialogHost(onDismiss = onDismiss)
-    },
-    DialogPreviewEntry.Inline(DialogPreviewGroup.SHEET, "sheet_read_style", nameText("阅读样式设置"), "ReadStyleDialogHost") { onDismiss ->
-        ReadStyleDialogHost(onDismiss = onDismiss)
     },
     DialogPreviewEntry.Inline(
         DialogPreviewGroup.SHEET,

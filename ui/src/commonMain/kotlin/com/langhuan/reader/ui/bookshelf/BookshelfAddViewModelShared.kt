@@ -162,7 +162,7 @@ class BookshelfAddViewModelShared(private val scope: CoroutineScope) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                Toasters.get().toast(e.message ?: "ERROR")
+                Toasters.get().toast("添加书籍失败")
             } finally {
                 _addBookProgress.tryEmit(-1)
             }

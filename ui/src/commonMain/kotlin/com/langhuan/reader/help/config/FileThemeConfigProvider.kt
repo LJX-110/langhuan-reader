@@ -86,11 +86,12 @@ class FileThemeConfigProvider : ThemeConfigProvider {
         }
     }
 
-    /** 对照原版 applyBuiltin: 清 6 个自定义 pref → isNightTheme → applyTheme → RECREATE */
+    /** 对照原版 applyBuiltin: 清自定义 pref → isNightTheme → applyTheme → RECREATE */
     override fun applyBuiltin(isNight: Boolean) {
         val prefs = PreferenceProviders.get()
         if (isNight) {
             prefs.remove(PreferKey.cNAccent)
+            prefs.remove(PreferKey.cNSecondary)
             prefs.remove(PreferKey.cNBackground)
             prefs.remove(PreferKey.cNBBackground)
             prefs.remove(PreferKey.cNPrimary)
@@ -98,6 +99,7 @@ class FileThemeConfigProvider : ThemeConfigProvider {
             prefs.remove(PreferKey.bgImageNBlurring)
         } else {
             prefs.remove(PreferKey.cAccent)
+            prefs.remove(PreferKey.cSecondary)
             prefs.remove(PreferKey.cBackground)
             prefs.remove(PreferKey.cBBackground)
             prefs.remove(PreferKey.cPrimary)
@@ -113,17 +115,24 @@ class FileThemeConfigProvider : ThemeConfigProvider {
     override fun applyConfig(config: ThemeConfigData) {
         runCatching {
             val accent = ColorUtils.parseColor(config.accentColor)
+            val secondary = if (config.secondaryColor.isNullOrBlank()) {
+                accent
+            } else {
+                ColorUtils.parseColor(config.secondaryColor)
+            }
             val bg = ColorUtils.parseColor(config.backgroundColor)
             val bbg = ColorUtils.parseColor(config.bottomBackground)
             val prefs = PreferenceProviders.get()
             if (config.isNightTheme) {
                 prefs.putInt(PreferKey.cNPrimary, bg)
                 prefs.putInt(PreferKey.cNAccent, accent)
+                prefs.putInt(PreferKey.cNSecondary, secondary)
                 prefs.putInt(PreferKey.cNBackground, bg)
                 prefs.putInt(PreferKey.cNBBackground, bbg)
             } else {
                 prefs.putInt(PreferKey.cPrimary, bg)
                 prefs.putInt(PreferKey.cAccent, accent)
+                prefs.putInt(PreferKey.cSecondary, secondary)
                 prefs.putInt(PreferKey.cBackground, bg)
                 prefs.putInt(PreferKey.cBBackground, bbg)
             }
@@ -186,6 +195,7 @@ class FileThemeConfigProvider : ThemeConfigProvider {
             isNightTheme = false,
             primaryColor = DAY_BG_HEX,
             accentColor = DAY_ACCENT_HEX,
+            secondaryColor = DAY_ACCENT_HEX,
             backgroundColor = DAY_BG_HEX,
             bottomBackground = DAY_BBG_HEX,
         ).also { it.isBuiltin = true },
@@ -194,6 +204,7 @@ class FileThemeConfigProvider : ThemeConfigProvider {
             isNightTheme = true,
             primaryColor = NIGHT_BG_HEX,
             accentColor = NIGHT_ACCENT_HEX,
+            secondaryColor = NIGHT_ACCENT_HEX,
             backgroundColor = NIGHT_BG_HEX,
             bottomBackground = NIGHT_BBG_HEX,
         ).also { it.isBuiltin = true },

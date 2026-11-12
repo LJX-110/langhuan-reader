@@ -14,22 +14,15 @@ import com.langhuan.reader.ui.compose.preference.preferenceCategory
 import com.langhuan.reader.ui.compose.preference.switchPreference
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.generated.resources.Res
-import com.langhuan.reader.ui.generated.resources.auto_check_new_backup_s
 import com.langhuan.reader.ui.generated.resources.auto_check_new_backup_t
 import com.langhuan.reader.ui.generated.resources.backup
 import com.langhuan.reader.ui.generated.resources.backup_restore
-import com.langhuan.reader.ui.generated.resources.backup_summary
 import com.langhuan.reader.ui.generated.resources.book_tree_uri_t
-import com.langhuan.reader.ui.generated.resources.only_latest_backup_s
 import com.langhuan.reader.ui.generated.resources.only_latest_backup_t
 import com.langhuan.reader.ui.generated.resources.restore
 import com.langhuan.reader.ui.generated.resources.restore_ignore
-import com.langhuan.reader.ui.generated.resources.restore_ignore_summary
-import com.langhuan.reader.ui.generated.resources.restore_summary
 import com.langhuan.reader.ui.generated.resources.sub_dir
-import com.langhuan.reader.ui.generated.resources.sync_book_progress_plus_s
 import com.langhuan.reader.ui.generated.resources.sync_book_progress_plus_t
-import com.langhuan.reader.ui.generated.resources.sync_book_progress_s
 import com.langhuan.reader.ui.generated.resources.sync_book_progress_t
 import com.langhuan.reader.ui.generated.resources.web_dav_account
 import com.langhuan.reader.ui.generated.resources.web_dav_pw
@@ -77,21 +70,14 @@ fun BackupConfigScreen(
     val titleSubDir = stringResource(Res.string.sub_dir)
     val titleDeviceName = stringResource(Res.string.webdav_device_name)
     val titleSyncProgress = stringResource(Res.string.sync_book_progress_t)
-    val summarySyncProgress = stringResource(Res.string.sync_book_progress_s)
     val titleSyncProgressPlus = stringResource(Res.string.sync_book_progress_plus_t)
-    val summarySyncProgressPlus = stringResource(Res.string.sync_book_progress_plus_s)
     val titleBackupRestore = stringResource(Res.string.backup_restore)
     val titleBackupPath = stringResource(Res.string.book_tree_uri_t)
     val titleBackup = stringResource(Res.string.backup)
-    val summaryBackup = stringResource(Res.string.backup_summary)
     val titleRestore = stringResource(Res.string.restore)
-    val summaryRestore = stringResource(Res.string.restore_summary)
     val titleRestoreIgnore = stringResource(Res.string.restore_ignore)
-    val summaryRestoreIgnore = stringResource(Res.string.restore_ignore_summary)
     val titleOnlyLatest = stringResource(Res.string.only_latest_backup_t)
-    val summaryOnlyLatest = stringResource(Res.string.only_latest_backup_s)
     val titleAutoCheckNewBackup = stringResource(Res.string.auto_check_new_backup_t)
-    val summaryAutoCheckNewBackup = stringResource(Res.string.auto_check_new_backup_s)
 
     AppTheme {
         PreferenceScreen {
@@ -135,14 +121,12 @@ fun BackupConfigScreen(
             switchPreference(
                 prefKey = PreferKey.syncBookProgress,
                 title = titleSyncProgress,
-                summary = summarySyncProgress,
                 defaultValue = true,
                 onCheckedChange = { syncBookProgress = it },
             )
             switchPreference(
                 prefKey = PreferKey.syncBookProgressPlus,
                 title = titleSyncProgressPlus,
-                summary = summarySyncProgressPlus,
                 defaultValue = false,
                 enabled = syncBookProgress,
             )
@@ -157,31 +141,26 @@ fun BackupConfigScreen(
             }
             preference(
                 title = titleBackup,
-                summary = summaryBackup,
                 onClick = onWebDavBackup,
                 onLongClick = onWebDavBackupLong,
             )
             preference(
                 title = titleRestore,
-                summary = summaryRestore,
                 onClick = onWebDavRestore,
                 onLongClick = onWebDavRestoreLong,
             )
             preference(
                 title = titleRestoreIgnore,
-                summary = summaryRestoreIgnore,
                 onClick = onRestoreIgnore,
             )
             switchPreference(
                 prefKey = PreferKey.onlyLatestBackup,
                 title = titleOnlyLatest,
-                summary = summaryOnlyLatest,
                 defaultValue = true,
             )
             switchPreference(
                 prefKey = PreferKey.autoCheckNewBackup,
                 title = titleAutoCheckNewBackup,
-                summary = summaryAutoCheckNewBackup,
                 defaultValue = true,
             )
         }

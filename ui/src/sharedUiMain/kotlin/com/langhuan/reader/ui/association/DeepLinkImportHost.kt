@@ -60,19 +60,22 @@ private suspend fun runSchemeImport(
             runCatching { AddToBookshelfShared.add(req.src, beforeNavigate) }
                 .onFailure {
                     AppLog.put("添加书籍 ${req.src} 出错", it)
-                    Toasters.get().toast(it.message ?: "")
+                    Toasters.get().toast("添加书籍失败")
                 }
 
         DeepLinkImportType.READ_BOOK ->
             runCatching { ReadBookShared.read(req.src, beforeNavigate) }
                 .onFailure {
                     AppLog.put("阅读书籍 ${req.src} 出错", it)
-                    Toasters.get().toast(it.message ?: "")
+                    Toasters.get().toast("打开书籍失败")
                 }
 
         DeepLinkImportType.READ_CONFIG -> runCatching { SchemeImportOps.importReadConfig(req.src) }
             .onSuccess { Toasters.get().toast("导入排版成功: $it") }
-            .onFailure { Toasters.get().toast(it.message ?: "导入排版失败") }
+            .onFailure {
+                AppLog.put("导入排版失败", it)
+                Toasters.get().toast("导入排版失败")
+            }
 
         DeepLinkImportType.UNKNOWN -> {
             // 先零网络按书源认领: 认领到的源直接带到抓书链, 不让下游再算一遍认领;
@@ -84,7 +87,7 @@ private suspend fun runSchemeImport(
                 runCatching { AddToBookshelfShared.add(req.src, beforeNavigate, matchedSource) }
                     .onFailure {
                         AppLog.put("添加书籍 ${req.src} 出错", it)
-                        Toasters.get().toast(it.message ?: "")
+                        Toasters.get().toast("添加书籍失败")
                     }
             } else runCatching { SchemeImportOps.determineType(req.src) }
                 .onSuccess { result ->
@@ -97,7 +100,10 @@ private suspend fun runSchemeImport(
                     }
                 }
                 // 与 ImportTargetDialog 的 Res.string.wrong_format 同一资源, 避免同语义双文案
-                .onFailure { Toasters.get().toast(it.message ?: syncGetString("wrong_format")) }
+                .onFailure {
+                    AppLog.put("识别导入内容失败", it)
+                    Toasters.get().toast(syncGetString("wrong_format"))
+                }
         }
 
         else -> Unit

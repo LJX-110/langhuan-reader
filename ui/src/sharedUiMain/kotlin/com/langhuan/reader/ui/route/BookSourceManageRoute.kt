@@ -11,10 +11,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import com.langhuan.reader.constant.EventBus
 import com.langhuan.reader.data.entities.BookSourcePart
-import com.langhuan.reader.help.config.HelpVersion
-import com.langhuan.reader.help.config.LocalConfigKeys
-import com.langhuan.reader.help.config.LocalConfigProviders
-import com.langhuan.reader.help.config.LocalConfigShared
 import com.langhuan.reader.help.coroutine.IoDispatcher
 import com.langhuan.reader.help.showSourceLogin
 import com.langhuan.reader.help.storage.BackupFileOps
@@ -40,7 +36,6 @@ import com.langhuan.reader.ui.root.PlatformServiceProviders
 import com.langhuan.reader.ui.root.RouteEntry
 import com.langhuan.reader.ui.root.RouteResults
 import com.langhuan.reader.ui.root.ScreenModelStore
-import com.langhuan.reader.ui.widget.dialog.HelpDialog
 import com.langhuan.reader.ui.widget.dialog.OnlineImportUrlDialog
 import com.langhuan.reader.utils.FlowBus
 import kotlinx.coroutines.flow.filter
@@ -139,7 +134,6 @@ fun BookSourceManageRoute(
     }
 
     // 对话框状态 (对照 app 端 Activity 内 showDialogFragment 调用)
-    var showHelp by remember { mutableStateOf(false) }
     var showUrlInput by remember { mutableStateOf(false) }
     var importVm by remember { mutableStateOf<ImportBookSourceViewModelShared?>(null) }
     var showImportDialog by remember { mutableStateOf(false) }
@@ -151,21 +145,6 @@ fun BookSourceManageRoute(
     var showDelSelection by remember { mutableStateOf(false) }
     // 书源分组管理对话框 (对照 app 端 GroupManageDialog; 管理 BookSource.bookSourceGroup, 非书架 BookGroup)
     var showGroupManage by remember { mutableStateOf(false) }
-
-    // 首次打开帮助引导 (对照原版 onActivityCreated: !LocalConfig.bookSourcesHelpVersionIsLast)
-    LaunchedEffect(Unit) {
-        // 版本标记存 "local" prefs (LocalConfigStore), 与原版 LocalConfig 同存储
-        val local = LocalConfigProviders.get()
-        val isLastHelp = LocalConfigShared.isLastVersion(
-            lastVersion = HelpVersion.bookSourcesHelp,
-            versionKey = LocalConfigKeys.bookSourceHelpVersion,
-            firstOpenKey = LocalConfigKeys.firstOpenBookSources,
-            getInt = local::getInt,
-            getBoolean = local::getBoolean,
-            putInt = local::putInt,
-        )
-        if (!isLastHelp) showHelp = true
-    }
 
     // 校验进度文案 (对照 app 端 observeLiveBus: EventBus.CHECK_SOURCE)
     LaunchedEffect(Unit) {
@@ -314,7 +293,6 @@ fun BookSourceManageRoute(
             },
             onImportOnline = { showUrlInput = true },
             onGroupManage = { showGroupManage = true },
-            onHelp = { showHelp = true },
             onSelectActions = {
                 // 对照 app 端 selectActions(): 12 个 SelectAction
                 listOf(
@@ -378,11 +356,6 @@ fun BookSourceManageRoute(
         callbacks = callbacks,
         listState = listState,
     )
-
-    // 帮助对话框 (对照 app 端 help / showHelp("SourceMBookHelp"))
-    if (showHelp) {
-        HelpDialog("SourceMBookHelp") { showHelp = false }
-    }
 
     // 在线导入 URL 输入对话框 (对照 app 端 showImportDialog)
     if (showUrlInput) {

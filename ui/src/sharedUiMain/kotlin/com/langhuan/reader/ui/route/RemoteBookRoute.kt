@@ -14,10 +14,6 @@ import com.langhuan.reader.data.AppDbProviders
 import com.langhuan.reader.data.entities.Book
 import com.langhuan.reader.data.entities.Server
 import com.langhuan.reader.help.config.AppConfigProviders
-import com.langhuan.reader.help.config.HelpVersion
-import com.langhuan.reader.help.config.LocalConfigKeys
-import com.langhuan.reader.help.config.LocalConfigProviders
-import com.langhuan.reader.help.config.LocalConfigShared
 import com.langhuan.reader.help.config.PreferenceProviders
 import com.langhuan.reader.model.remote.RemoteBook
 import com.langhuan.reader.ui.about.AppLogDialog
@@ -41,7 +37,6 @@ import com.langhuan.reader.ui.root.rememberRouteVisibleState
 import com.langhuan.reader.ui.root.RouteEntry
 import com.langhuan.reader.ui.root.ScreenModelStore
 import com.langhuan.reader.ui.root.toRouteRef
-import com.langhuan.reader.ui.widget.dialog.HelpDialog
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.no
 import com.langhuan.reader.ui.generated.resources.ok
@@ -92,9 +87,8 @@ fun RemoteBookRoute(
     var searchKey by remember { mutableStateOf("") }
     var sortKeyState by remember { mutableStateOf(RemoteBookSort.Default) }
 
-    // 弹窗显示状态 (服务器配置 / WebDav 帮助 / 日志 / 重新加入书架确认 / 服务器编辑)
+    // 弹窗显示状态 (服务器配置 / 日志 / 重新加入书架确认 / 服务器编辑)
     var showServersDialog by remember { mutableStateOf(false) }
-    var showWebDavHelp by remember { mutableStateOf(false) }
     var showLogDialog by remember { mutableStateOf(false) }
     var reAddTarget by remember { mutableStateOf<RemoteBook?>(null) }
     var showServerConfigDialog by remember { mutableStateOf(false) }
@@ -105,19 +99,8 @@ fun RemoteBookRoute(
     val serversVm = remember(scope) { ServersViewModelShared(scope) }
     val serverConfigVm = remember(scope) { ServerConfigViewModelShared(scope) }
 
-    // 对照 RemoteBookActivity.onActivityCreated: 首次帮助 + initData + upPath
+    // 对照 RemoteBookActivity.onActivityCreated: initData + upPath
     LaunchedEffect(Unit) {
-        // 版本标记存 "local" prefs (LocalConfigStore), 与原版 LocalConfig 同存储
-        val local = LocalConfigProviders.get()
-        val isLastHelp = LocalConfigShared.isLastVersion(
-            lastVersion = HelpVersion.webDavBookHelp,
-            versionKey = LocalConfigKeys.webDavBookHelpVersion,
-            firstOpenKey = LocalConfigKeys.firstOpenWebDavBook,
-            getInt = local::getInt,
-            getBoolean = local::getBoolean,
-            putInt = local::putInt,
-        )
-        if (!isLastHelp) showWebDavHelp = true
         shared.initData { shared.upPath() }
     }
 
@@ -157,10 +140,6 @@ fun RemoteBookRoute(
 
         override fun onShowServersDialog() {
             showServersDialog = true
-        }
-
-        override fun onShowWebDavHelp() {
-            showWebDavHelp = true
         }
 
         override fun onShowLogDialog() {
@@ -304,11 +283,6 @@ fun RemoteBookRoute(
                 shared.initData { shared.upPath() }
             },
         )
-    }
-
-    // WebDav 帮助对话框 (对照 app showHelp("webDavBookHelp"))
-    if (showWebDavHelp) {
-        HelpDialog(fileName = "webDavBookHelp", onDismiss = { showWebDavHelp = false })
     }
 
     // 应用日志对话框 (对照 app showDialogFragment<AppLogDialog>)

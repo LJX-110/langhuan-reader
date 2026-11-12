@@ -117,7 +117,8 @@ private fun DockItem(
     onClick: () -> Unit,
 ) {
     val colors = AppTheme.colors
-    val tint = if (selected) colors.accent else colors.summaryText
+    // 选中态用辅助色，与强调色的按钮/标题形成层次
+    val tint = if (selected) colors.companion else colors.summaryText
     val interaction = remember { MutableInteractionSource() }
     Column(
         modifier = modifier.clickable(

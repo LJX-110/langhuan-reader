@@ -1,5 +1,6 @@
 package com.langhuan.reader.ui.book.source.manage
 
+import com.langhuan.reader.constant.AppLog
 import com.langhuan.reader.data.AppDbProviders
 import com.langhuan.reader.data.entities.BookSource
 import com.langhuan.reader.data.entities.BookSourcePart
@@ -86,7 +87,8 @@ suspend fun selectedSourcesJson(
     val sources = runCatching {
         getExportBookSources(selection, allCount, sortAscending, sort)
     }.getOrElse {
-        Toasters.get().toast("导出书源失败\n${it.message}")
+        AppLog.put("导出书源失败\n${it.message}", it)
+        Toasters.get().toast("导出书源失败")
         return null
     }
     return sources.toExportJsonText()

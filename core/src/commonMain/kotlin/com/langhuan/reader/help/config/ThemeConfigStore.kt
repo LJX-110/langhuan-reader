@@ -33,13 +33,33 @@ object ThemeConfigStore {
     /** 对照 app 端 getConfigsFromDisk: 文件不存在/解析失败返回空列表 (自带库锁) */
     fun load(): List<ThemeConfigData> = withLock { loadUnlocked() }
 
-    /** 调用方已持有 [withLock] 时使用; 读取失败保持原版空列表合同。 */
+    /**
+     * 调用方已持有 [withLock] 时使用; 读取失败保持原版空列表合同。
+     *
+     * 旧版主题文件没有 secondaryColor 字段，读入后一次性以强调色补齐并写回，
+     * 之后各处按非空值使用，不再做运行期兜底。
+     */
     fun loadUnlocked(): List<ThemeConfigData> = runCatching {
-        if (BackupFileOps.exists(configFilePath)) {
+        val loaded = if (BackupFileOps.exists(configFilePath)) {
             GSON.fromJsonArray<ThemeConfigData>(BackupFileOps.readText(configFilePath)).getOrThrow()
         } else {
             emptyList()
         }
+        var migrated = false
+        val configs = loaded.map { config ->
+            // Gson 对缺失字段给 null（不是默认值），这里一并按空处理
+            if (config.secondaryColor.isNullOrBlank()) {
+                migrated = true
+                config.copy(secondaryColor = config.accentColor)
+            } else {
+                config
+            }
+        }
+        if (migrated) {
+            runCatching { saveOrThrowUnlocked(configs) }
+                .onFailure { AppLog.putDebug("补齐主题辅助色失败\n${it.message}", it) }
+        }
+        configs
     }.getOrElse { e ->
         AppLog.putDebug("读取 themeConfig.json 出错\n${e.message}", e)
         emptyList()
@@ -64,10 +84,13 @@ object ThemeConfigStore {
         saveOrThrowUnlocked(configs)
     }
 
-    /** 对照 app 端 validateConfig: 4 个色值按主题域合同可解析才有效 */
+    /** 对照 app 端 validateConfig: 各色值按主题域合同可解析才有效 */
     fun validate(config: ThemeConfigData): Boolean = runCatching {
         ColorUtils.parseThemeColor(config.primaryColor)
         ColorUtils.parseThemeColor(config.accentColor)
+        if (!config.secondaryColor.isNullOrBlank()) {
+            ColorUtils.parseThemeColor(config.secondaryColor)
+        }
         ColorUtils.parseThemeColor(config.backgroundColor)
         ColorUtils.parseThemeColor(config.bottomBackground)
     }.isSuccess

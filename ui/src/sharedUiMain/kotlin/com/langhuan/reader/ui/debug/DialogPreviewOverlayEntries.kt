@@ -82,8 +82,6 @@ internal suspend fun buildOverlayEntries(): List<DialogPreviewEntry.Overlay> {
     }
 
     // ===== 无需数据: 打开即见真实内容 =====
-    // 帮助与更新日志: 同一个弹窗 (帮助壳 + 文本查看), 只留一条
-    dialog("help_app", titleOf(Res.string.help), "help") { AppOverlay.Dialog(it, payload = "appHelp") }
     dialog("crash_logs", titleOf(Res.string.crash_log), "crash_logs") { AppOverlay.Dialog(it) }
     dialog("crash_notice", nameText("崩溃后提示"), CRASH_NOTICE_OVERLAY_KEY) { AppOverlay.Dialog(it) }
     dialog("app_log", titleOf(Res.string.log), "app_log") { AppOverlay.Dialog(it) }

@@ -309,7 +309,7 @@ fun SourceLoginDialog(
                 // 取消 (如对话框已关闭) 不是登录错误, 按协程约定继续抛出
                 if (e is CancellationException) throw e
                 AppLog.put("登录出错\n${e.message}", e)
-                Toasters.get().toast("登录出错\n${e.message}")
+                Toasters.get().toast("登录失败，请检查账号或网络")
                 e.printStackTraceOnDebug()
             }
         }

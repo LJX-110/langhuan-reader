@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.langhuan.reader.constant.AppLog
 import com.langhuan.reader.help.config.ReadBookConfigProviders
 import com.langhuan.reader.help.config.ReadConfigDefaults
 import com.langhuan.reader.help.coroutine.IoDispatcher
@@ -198,7 +199,8 @@ fun BgTextConfigContent(
                 }.onFailure {
                     // 取消不当作失败上报 (对照原版 execute{}.onError{} 的 isActive 守卫)
                     if (it is CancellationException) throw it
-                    Toasters.get().toast("导入失败:${it.message}")
+                    Toasters.get().toast("导入失败，请检查配置文件")
+                    AppLog.put("导入配置失败\n${it.message}", it)
                 }
             }
         }
@@ -224,7 +226,8 @@ fun BgTextConfigContent(
                 }.onFailure {
                     // 取消不当作失败上报 (对照原版 execute{}.onError{} 的 isActive 守卫)
                     if (it is CancellationException) throw it
-                    Toasters.get().toast("导出失败:${it.message}")
+                    Toasters.get().toast("导出失败")
+                    AppLog.put("导出配置失败\n${it.message}", it)
                 }
             }
         }
@@ -264,7 +267,8 @@ fun BgTextConfigContent(
                 }.onFailure {
                     // 取消不当作失败上报 (对照原版 execute{}.onError{} 的 isActive 守卫)
                     if (it is CancellationException) throw it
-                    Toasters.get().toast(it.message ?: "设置背景图失败")
+                    Toasters.get().toast("设置背景图失败")
+                    AppLog.put("设置背景图失败\n${it.message}", it)
                 }
             }
         }

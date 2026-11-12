@@ -149,9 +149,7 @@ import com.langhuan.reader.ui.generated.resources.copy_url
 import com.langhuan.reader.ui.generated.resources.draw
 import com.langhuan.reader.ui.generated.resources.empty
 import com.langhuan.reader.ui.generated.resources.error
-import com.langhuan.reader.ui.generated.resources.help
 import com.langhuan.reader.ui.generated.resources.explore_option_invalidated
-import com.langhuan.reader.ui.generated.resources.ic_help
 import com.langhuan.reader.ui.generated.resources.import_bookshelf
 import com.langhuan.reader.ui.generated.resources.my
 import com.langhuan.reader.ui.generated.resources.ok

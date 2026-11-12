@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.unit.dp
+import com.langhuan.reader.constant.AppLog
 import com.langhuan.reader.constant.EventBus
 import com.langhuan.reader.constant.PreferKey
 import com.langhuan.reader.help.FileUtilsCommon
@@ -287,7 +288,8 @@ private suspend fun addDefaultCoverFromPicker(prefKey: String) {
             }
         }
     }.onFailure {
-        Toasters.get().toast("添加封面失败\n${it.message}")
+        AppLog.put("添加封面失败\n${it.message}", it)
+        Toasters.get().toast("添加封面失败")
         return
     }
     BookCoverShared.addDefaultCoverEntry(prefs, prefKey, entry)

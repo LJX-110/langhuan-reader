@@ -52,7 +52,7 @@ class BookmarkEditScreenModel : ScreenModel {
                 }.onSuccess {
                     event.onSuccess()
                 }.onError {
-                    Toasters.get().toast("save error, ${it.message}")
+                    Toasters.get().toast("保存书签失败")
                     it.printStackTraceOnDebug()
                 }
             }
@@ -64,7 +64,7 @@ class BookmarkEditScreenModel : ScreenModel {
                 }.onSuccess {
                     event.onSuccess()
                 }.onError {
-                    Toasters.get().toast("delete error, ${it.message}")
+                    Toasters.get().toast("删除书签失败")
                     it.printStackTraceOnDebug()
                 }
             }

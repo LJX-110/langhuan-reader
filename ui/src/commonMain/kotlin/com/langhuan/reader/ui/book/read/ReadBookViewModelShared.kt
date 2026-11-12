@@ -984,7 +984,7 @@ class ReadBookViewModelShared(
                 }
                 // 失败归属校验: 检查是整书级 IO, 期间切书/关书后旧书的失败不得污染当前阅读状态
                 if (readBook.book.value?.bookUrl == book.bookUrl) {
-                    readBook.upMsg("打开本地书籍出错: ${e.message}")
+                    readBook.upMsg("打开本地书籍出错")
                     if (e.isSecurityException() || e is FileNotFoundException) {
                         postPermissionDenial(0, book)
                     }
@@ -1079,7 +1079,7 @@ class ReadBookViewModelShared(
         throw e
     } catch (e: Exception) {
         AppLog.put("加载目录失败\n${e.message}", e)
-        showMessageChapter("加载目录失败\n${e.message}", readBook.durChapterIndex.value, readBook.chapterSize)
+        showMessageChapter("加载目录失败，请稍后重试", readBook.durChapterIndex.value, readBook.chapterSize)
         null
     }
 
@@ -1261,7 +1261,7 @@ class ReadBookViewModelShared(
             // 永久卡住, 等本章排版的调用方 (skipToSearch) 也永远等不到本章。
             // 只作用于当前章: showMessageChapter 写的是滑窗 0 位, 前后章预载失败不许顶掉在看的章
             if (index == readBook.durChapterIndex.value) {
-                showMessageChapter("加载正文失败\n${e.message}", index, readBook.chapterSize)
+                showMessageChapter("加载正文失败，请稍后重试", index, readBook.chapterSize)
             }
         } finally {
             loadGuard.release(index)

@@ -102,7 +102,7 @@ android {
         compose = true
     }
     androidResources {
-        localeFilters += listOf("en", "zh", "zh-rHK", "zh-rTW")
+        localeFilters += listOf("en", "zh")
     }
     buildTypes {
         release {
@@ -207,41 +207,6 @@ android {
             // 传递依赖进入 classpath, 源码无任何 material3 使用, 属误报
             "UsingMaterialAndMaterial3Libraries",
         )
-    }
-}
-
-// APK 语言目录过滤: APK 只打包 values/ (英文默认) + values-zh/ (简中) +
-// values-zh-rHK/values-zh-rTW (繁体), 排除 4 个小语种目录 (values-es-rES/values-ja-rJP/
-// values-pt-rBR/values-vi)。用户决策小语种暂缓打包; 资源文件本体保留在 :ui 全量
-// (desktop/iOS 资源生成不受影响)。androidResources.localeFilters 只作用于 AAPT 合并的
-// res/ 资源, 管不到 composeResources (它作为 assets 走 merge{Variant}Assets)。
-// 机制: :ui 的 copy*ComposeResourcesToAndroidAssets 只把 composeResources 复制进
-// :ui AAR, 全量合并发生在本模块的 merge{Variant}Assets (把 AAR 资产复制进合并输出)。
-// :ui 侧删除会被 merge 覆盖, 故挂在此处 doLast: merge 完成后删除合并输出下的 4 个
-// 小语种子目录, 删除先于 package{Variant} 打包 (package 任务消费 merge 输出)。
-// 输出目录用 outputs.files 取, 不硬编码路径。
-// 配置缓存约束: doLast 内不得引用脚本级对象或 Task.project —— 待删列表就地声明,
-// 删除用 File.deleteRecursively 而非 project.delete。
-tasks.matching {
-    it.name == "mergeAppDebugAssets" || it.name == "mergeAppReleaseAssets"
-}.configureEach {
-    doLast {
-        val excludedLocales = listOf(
-            "values-es-rES",
-            "values-ja-rJP",
-            "values-pt-rBR",
-            "values-vi",
-        )
-        outputs.files.forEach { output ->
-            // 目录名由 compose 资源插件按模块名生成, 不硬编码; 扫描 composeResources 下所有
-            // 插件产物目录逐个清理, 模块切分/改名后无需同步本处
-            val composeResourcesRoot = output.resolve("composeResources")
-            composeResourcesRoot.listFiles().orEmpty().forEach { resourcesRoot ->
-                excludedLocales.forEach { locale ->
-                    resourcesRoot.resolve(locale).deleteRecursively()
-                }
-            }
-        }
     }
 }
 
