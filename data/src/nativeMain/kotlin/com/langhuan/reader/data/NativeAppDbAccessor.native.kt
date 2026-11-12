@@ -16,14 +16,13 @@ import com.langhuan.reader.data.dao.RuleSubDao
 import com.langhuan.reader.data.dao.SearchKeywordDao
 import com.langhuan.reader.data.dao.KeywordHighlightDao
 import com.langhuan.reader.data.dao.ServerDao
-import com.langhuan.reader.data.dao.SourceFilterRuleDao
 import com.langhuan.reader.data.dao.TxtTocRuleDao
 
 /**
  * iOS/鸿蒙 (Native target) 共用 [AppDbAccessor] 实现:
  * 委托 [AppDatabaseProviders.get].appDb 的全部 17 个 DAO,
  * 供 shared commonMain 中下沉的 webBook 编排层 (WebBook/BookContent/
- * SourceHelp/SearchBookFilter/ReadBookViewModelShared 等) 通过 [AppDbProviders]
+ * SourceHelp/ReadBookViewModelShared 等) 通过 [AppDbProviders]
  * 间接访问 appDb。
  *
  * # 共用原因
@@ -67,8 +66,7 @@ class NativeAppDbAccessor : AppDbAccessor {
     override val dictRuleDao: DictRuleDao get() = appDb.dictRuleDao
     override val readRecordDao: ReadRecordDao get() = appDb.readRecordDao
     override val serverDao: ServerDao get() = appDb.serverDao
-    // SearchBookFilter/SourceHelp 下沉新增的 3 个 DAO 暴露点
-    override val sourceFilterRuleDao: SourceFilterRuleDao get() = appDb.sourceFilterRuleDao
+    // SourceHelp 下沉新增的 2 个 DAO 暴露点
     override val httpTTSDao: HttpTTSDao get() = appDb.httpTTSDao
     override val cacheDao: CacheDao get() = appDb.cacheDao
     override val cookieDao: CookieDao get() = appDb.cookieDao

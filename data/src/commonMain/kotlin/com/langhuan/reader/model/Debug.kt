@@ -44,8 +44,8 @@ import kotlinx.coroutines.flow.asStateFlow
  *   (commonMain 无 java.text, 用纯 Kotlin 拼接, 行为与原 mm:ss.SSS 格式一致)
  * - `CheckSource.timeout` → [CheckSourceShared.timeout] (同已下沉 commonMain, 用户配置生效)
  *
- * 嵌套 [Callback] 接口与 `var callback: Callback?` 字段保留, app 端 DebugWsHandler /
- * BookSourceDebugModel 实现该接口并 `Debug.callback = this` 的代码零改动。
+ * 嵌套 [Callback] 接口与 `var callback: Callback?` 字段保留, 平台调试通道实现该接口并
+ * `Debug.callback = this` 的代码零改动。
  *
  * [Coroutine.async] / [HtmlFormatter] / [isWebFile] / [WebBook.*Await] / [AnalyzeRuleCore]
  * 等依赖均已下沉 commonMain, 直接复用。

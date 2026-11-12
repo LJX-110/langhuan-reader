@@ -17,7 +17,6 @@ import com.langhuan.reader.ui.root.encodeSourceVariableOverlayPayload
 import com.langhuan.reader.ui.route.encodeReviewListDialogPayload
 import com.langhuan.reader.utils.encodeStringMap
 import com.langhuan.reader.ui.generated.resources.Res
-import com.langhuan.reader.ui.generated.resources.add
 import com.langhuan.reader.ui.generated.resources.assists_key_config
 import com.langhuan.reader.ui.generated.resources.bookshelf_layout
 import com.langhuan.reader.ui.generated.resources.bottom_nav_config
@@ -27,7 +26,6 @@ import com.langhuan.reader.ui.generated.resources.copy_to_clipboard
 import com.langhuan.reader.ui.generated.resources.crash_log
 import com.langhuan.reader.ui.generated.resources.customize_day_theme
 import com.langhuan.reader.ui.generated.resources.default_cover
-import com.langhuan.reader.ui.generated.resources.dict_rule
 import com.langhuan.reader.ui.generated.resources.export
 import com.langhuan.reader.ui.generated.resources.export_config
 import com.langhuan.reader.ui.generated.resources.export_success
@@ -40,7 +38,6 @@ import com.langhuan.reader.ui.generated.resources.login_source
 import com.langhuan.reader.ui.generated.resources.search_book_key
 import com.langhuan.reader.ui.generated.resources.set_book_variable
 import com.langhuan.reader.ui.generated.resources.set_source_variable
-import com.langhuan.reader.ui.generated.resources.source_filter_rule
 import com.langhuan.reader.ui.generated.resources.theme_list
 import com.langhuan.reader.ui.generated.resources.txt_toc_rule
 
@@ -132,19 +129,12 @@ internal suspend fun buildOverlayEntries(): List<DialogPreviewEntry.Overlay> {
 
     // 导入类只留网络导入这一条: 它先弹取地址、再弹勾选导入, 一条对照两层形制;
     // 本地导入 (平台文件选择器) 与深链导入最终落到的都是同一个勾选导入弹窗, 不再重复列。
-    dialog("dict_rule_import_online", titleOf(Res.string.import_on_line), "dictRuleImportOnline") {
+    dialog("txt_toc_rule_import_online", titleOf(Res.string.import_on_line), "txtTocRuleImportOnline") {
         AppOverlay.Dialog(it)
     }
 
-    // 规则类: 编辑 / 列表 (数据由覆盖物内自取, 取不到即空表)
-    dialog("dict_rule_edit", titleOf(Res.string.dict_rule), "dictRuleEdit") { AppOverlay.Dialog(it) }
+    // 规则类: 编辑 (数据由覆盖物内自取, 取不到即空表)
     dialog("txt_toc_rule_edit", titleOf(Res.string.txt_toc_rule), "txtTocRuleEdit") { AppOverlay.Dialog(it) }
-    dialog("source_filter_edit", titleConcat(Res.string.add, Res.string.source_filter_rule), "sourceFilterRuleEdit") {
-        AppOverlay.Dialog(it)
-    }
-    dialog("source_filter_list", titleOf(Res.string.source_filter_rule), "sourceFilterRuleList") {
-        AppOverlay.Dialog(it)
-    }
 
     // 更新弹窗 (payload 走 IntentData 侧信道, 样本版本号不代表任何真实发布)
     dialog("update_dialog", nameText("更新弹窗"), "updateDialog") {

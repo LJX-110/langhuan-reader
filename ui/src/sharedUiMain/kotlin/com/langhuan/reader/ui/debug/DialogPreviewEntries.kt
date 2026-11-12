@@ -37,10 +37,6 @@ sealed interface DialogPreviewName {
 internal fun titleOf(resource: StringResource, vararg args: Any): DialogPreviewName =
     DialogPreviewName.Res(listOf(DialogPreviewName.Res.Part(resource, args.toList())))
 
-/** 引用弹窗标题: 弹窗把多段资源拼成一个标题时, 按拼接顺序给出。 */
-internal fun titleConcat(vararg resources: StringResource): DialogPreviewName =
-    DialogPreviewName.Res(resources.map { DialogPreviewName.Res.Part(it) })
-
 /** 弹窗标题引用不到时写死的文字。 */
 internal fun nameText(text: String): DialogPreviewName = DialogPreviewName.Text(text)
 

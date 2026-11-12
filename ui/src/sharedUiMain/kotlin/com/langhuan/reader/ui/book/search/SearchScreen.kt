@@ -125,7 +125,6 @@ import com.langhuan.reader.ui.generated.resources.search_result_empty
 import com.langhuan.reader.ui.generated.resources.search_result_empty_close_precision
 import com.langhuan.reader.ui.generated.resources.search_result_empty_switch_all
 import com.langhuan.reader.ui.generated.resources.search_scope
-import com.langhuan.reader.ui.generated.resources.source_filter_rule
 import com.langhuan.reader.ui.generated.resources.stop
 import org.jetbrains.compose.resources.stringResource
 
@@ -152,9 +151,6 @@ interface SearchNavCallbacks {
     /** 弹出搜索范围对话框 (分组/书源选择)。 */
     fun onAlertSearchScope()
 
-    /** 弹出书源过滤规则列表对话框。 */
-    fun onShowSourceFilterRule()
-
     /** 弹出应用日志对话框。 */
     fun onShowAppLog()
 
@@ -178,7 +174,6 @@ object NoOpSearchNavCallbacks : SearchNavCallbacks {
     override fun onSourceSectionClick(source: BookSource, keyword: String) {}
     override fun onManageBookSources() {}
     override fun onAlertSearchScope() {}
-    override fun onShowSourceFilterRule() {}
     override fun onShowAppLog() {}
     // 桌面端验证场景: 清空历史 no-op (原 shared InputHelp 直接 viewModel.clearHistory()
     // 的行为改由宿主决定, app 端 override 弹确认框保留原交互)
@@ -511,7 +506,7 @@ private fun SearchActions(
         } else {
             scope.displayNames
         }
-        // 顺序: 书源管理置顶, 其后精准搜索, 搜索范围入口, 当前范围项与全部书源, 筛选规则, 日志收尾
+        // 顺序: 书源管理置顶, 其后精准搜索, 搜索范围入口, 当前范围项与全部书源, 日志收尾
         TextMenuItem(stringResource(Res.string.book_source_manage)) {
             dismiss(); navCallbacks.onManageBookSources()
         }

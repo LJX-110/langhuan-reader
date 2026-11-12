@@ -17,7 +17,6 @@ import com.langhuan.reader.data.entities.ReplaceRule
 import com.langhuan.reader.data.entities.RuleSub
 import com.langhuan.reader.data.entities.SearchKeyword
 import com.langhuan.reader.data.entities.Server
-import com.langhuan.reader.data.entities.SourceFilterRule
 import com.langhuan.reader.data.entities.TxtTocRule
 import com.langhuan.reader.data.entities.toBookSource
 import com.langhuan.reader.help.DirectLinkUploadStoreProviders
@@ -186,9 +185,6 @@ object RestoreShared {
             }
             fileToListT<DictRule>(path, "dictRule.json")?.let {
                 appDb.dictRuleDao.insert(*it.toTypedArray())
-            }
-            fileToListT<SourceFilterRule>(path, "sourceFilterRule.json")?.let {
-                appDb.sourceFilterRuleDao.insert(*it.toTypedArray())
             }
             fileToListT<KeyboardAssist>(path, "keyboardAssists.json")?.let {
                 appDb.keyboardAssistsDao.insert(*it.toTypedArray())

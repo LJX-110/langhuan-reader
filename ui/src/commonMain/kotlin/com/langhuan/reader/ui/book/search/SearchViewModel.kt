@@ -12,7 +12,6 @@ import com.langhuan.reader.help.book.incrementalFilter
 import com.langhuan.reader.help.config.AppConfigProviders
 import com.langhuan.reader.help.coroutine.IoDispatcher
 import com.langhuan.reader.help.toast.Toasters
-import com.langhuan.reader.ui.compose.platform.syncGetString
 import com.langhuan.reader.model.webBook.ExploreOption
 import com.langhuan.reader.model.webBook.ExploreOptionSelection
 import com.langhuan.reader.model.webBook.ExploreOptionUiState
@@ -269,7 +268,6 @@ class SearchViewModel {
 
     private var searchID = 0L
     private var searchCommandJob: Job? = null
-    private var filteredCount = 0
     private var booksFlowJob: Job? = null
     private var searchBooksThrottleJob: Job? = null
     private val bookshelfSearchKeyFlow = MutableStateFlow("")
@@ -288,7 +286,6 @@ class SearchViewModel {
         override fun getSearchScope(): SearchScope = searchScope
 
         override fun onSearchStart() {
-            filteredCount = 0
             _isSearching.value = true
         }
 
@@ -304,17 +301,6 @@ class SearchViewModel {
             _hasMore.value = hasMore
             _isSearching.value = false
             _searchFinishEmpty.tryEmit(isEmpty)
-            if (filteredCount > 0) {
-                runCatching {
-                    Toasters.get().toast(
-                        syncGetString("source_filter_rule_filtered_count", filteredCount)
-                    )
-                }
-            }
-        }
-
-        override fun onFiltered(count: Int) {
-            filteredCount += count
         }
 
         override fun onSearchCancel(exception: Throwable?) {

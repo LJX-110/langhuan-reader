@@ -47,7 +47,7 @@ import org.jetbrains.compose.resources.stringResource
  *   含 Android 专属 API (Fragment / Bundle / Context)。
  * - 桌面/iOS 端无 Fragment 体系, 改为纯 @Composable + [Dialog], 由调用方注入数据与回调。
  *
- * # API 设计 (与 [DictRuleEditDialog] 同模式)
+ * # API 设计 (与书源编辑对话框同模式)
  *
  * 数据与持久化全部由调用方注入, 本组件仅负责 UI 与交互:
  * - [server]: 待编辑的服务器 (null=新增), 调用方按 id 异步加载后传入
@@ -78,7 +78,7 @@ fun ServerConfigDialog(
     onDismiss: () -> Unit,
 ) {
     val colors = AppTheme.colors
-    // 表单字段 (keyed by server, 切换编辑目标时重置, 与 DictRuleEditDialog 同模式)
+    // 表单字段 (keyed by server, 切换编辑目标时重置)
     var name by remember(server) { mutableStateOf(server?.name.orEmpty()) }
     val initConfig = remember(server) { server?.getWebDavConfig() }
     var url by remember(server) { mutableStateOf(initConfig?.url.orEmpty()) }

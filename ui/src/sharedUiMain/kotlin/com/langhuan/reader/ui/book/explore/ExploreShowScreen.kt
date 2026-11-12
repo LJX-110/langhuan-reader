@@ -78,7 +78,6 @@ import com.langhuan.reader.ui.generated.resources.intro_show_null
 import com.langhuan.reader.ui.generated.resources.login
 import com.langhuan.reader.ui.generated.resources.out_favorites
 import com.langhuan.reader.ui.generated.resources.refresh
-import com.langhuan.reader.ui.generated.resources.source_filter_rule
 import com.langhuan.reader.ui.generated.resources.switchLayout
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
@@ -100,7 +99,6 @@ import org.jetbrains.compose.resources.stringResource
  *   - switchLayout       布局切换 contentDescription
  *   - refresh            刷新按钮 (标题栏常显, contentDescription)
  *   - login              书源登录菜单项 (书源带登录入口时显示)
- *   - source_filter_rule 源过滤规则菜单
  *   - bottom_line        到底文案
  *   - empty              空文案
  *   - error_load_msg     错误加载文案 (带 %s 格式参数, "点击查看详情")
@@ -211,9 +209,6 @@ interface ExploreShowUiActions {
 
     /** 长按布局图标弹列数选择 */
     fun onShowColumnPicker()
-
-    /** 溢出菜单 - 显示源过滤规则 */
-    fun onShowSourceFilterRule()
 
     /** footer 点击 (错误时弹详情与复制, 否则触发加载下一页) */
     fun onFooterClick()

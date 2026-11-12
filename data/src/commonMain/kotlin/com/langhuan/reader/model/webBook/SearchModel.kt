@@ -10,7 +10,6 @@ import com.langhuan.reader.exception.NoStackTraceException
 import com.langhuan.reader.help.book.releaseHtmlData
 import com.langhuan.reader.help.config.AppConfigProviders
 import com.langhuan.reader.help.coroutine.IoDispatcher
-import com.langhuan.reader.help.source.SearchBookFilter
 import com.langhuan.reader.model.analyzeRule.AnalyzeUrlCore
 import com.langhuan.reader.ui.book.search.SearchScope
 import com.langhuan.reader.utils.concurrent.newConcurrentMap
@@ -464,8 +463,8 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
     private fun generationOf(sourceUrl: String): Int = resultGenerations[sourceUrl] ?: 0
 
     /**
-     * 单页结果统一处理 (主链与单源重搜共用): 丢弃过期世代 → 过滤/release/exhausted/hasMore/
-     * 入组/重建聚合/回调。过滤在锁外, 提交在锁内且重新核身份。
+     * 单页结果统一处理 (主链与单源重搜共用): 丢弃过期世代 → release/exhausted/hasMore/
+     * 入组/重建聚合/回调。提交在锁内且重新核身份。
      */
     private suspend fun handlePageResult(result: SourcePageResult) {
         val source = result.source
@@ -473,11 +472,7 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
         if (!synchronized(stateLock) { isCurrentSourceLocked(sourceUrl, result.searchId, result.generation) }) {
             return
         }
-        val (items, filteredCount) = SearchBookFilter.apply(result.page.books)
-        if (filteredCount > 0) {
-            callBack.onFiltered(filteredCount)
-        }
-        for (book in items) {
+        for (book in result.page.books) {
             book.releaseHtmlData()
         }
         synchronized(stateLock) {
@@ -497,7 +492,7 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                 } else {
                     nextPageUrls[sourceUrl] = nextPageUrl
                 }
-                mergeGroup(source, items)
+                mergeGroup(source, result.page.books)
                 rebuildAggregate(precision)
                 recomputeHasMoreLocked()
                 currentCoroutineContext().ensureActive()
@@ -851,7 +846,5 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
 
         /** 本轮搜索源列表就绪 (在 [search] 里与 [bookSources] 同时赋值)。 */
         fun onSearchSourcesResolved(sources: List<BookSource>) {}
-
-        fun onFiltered(count: Int) {}
     }
 }

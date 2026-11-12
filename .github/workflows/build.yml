@@ -39,6 +39,14 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
 
+      # tag 推送时把 vX.Y.Z 注入 -PappVersion, 包内版本号与 tag 一致;
+      # 普通分支构建留空, 走 app/build.gradle.kts 的默认基线版本
+      - name: Resolve app version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "APP_VERSION_ARG=-PappVersion=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          fi
+
       # 复用仓库已有的签名 Secrets, 仓库里不落任何密钥文件
       - name: Restore release keystore
         env:
@@ -49,6 +57,13 @@ jobs:
             exit 1
           fi
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      # 调试包做编译校验, 不进 Release (签名用默认 debug key)
+      - name: Build debug APK
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug --parallel --build-cache --warning-mode all \
+            $APP_VERSION_ARG
 
       # 只出 arm64-v8a 单包: 已开 R8 + 资源裁剪
       - name: Build release APK
@@ -62,7 +77,8 @@ jobs:
             -PRELEASE_STORE_FILE="$RUNNER_TEMP/release.jks" \
             -PRELEASE_STORE_PASSWORD="$STORE_PASSWORD" \
             -PRELEASE_KEY_ALIAS="$KEY_ALIAS" \
-            -PRELEASE_KEY_PASSWORD="$KEY_PASSWORD"
+            -PRELEASE_KEY_PASSWORD="$KEY_PASSWORD" \
+            $APP_VERSION_ARG
 
       # 推 v* 标签才发版, 平时 build 只做校验
       - name: Publish release

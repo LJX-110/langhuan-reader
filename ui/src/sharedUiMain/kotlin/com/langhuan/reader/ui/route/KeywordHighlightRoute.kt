@@ -81,7 +81,7 @@ fun KeywordHighlightRoute(
         )
     }
 
-    // 系统返回/ESC 走与标题栏返回同一条路径 (对照 SourceFilterRuleRoute)
+    // 系统返回/ESC 走与标题栏返回同一条路径
     val backStack by navigator.backStack.collectAsState()
     val isTopEntry = backStack.lastOrNull()?.id == entry.id
     AppBackHandler(enabled = isTopEntry, onBack = { actions.onBack() })

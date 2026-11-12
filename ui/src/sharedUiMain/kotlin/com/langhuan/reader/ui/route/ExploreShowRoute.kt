@@ -20,7 +20,6 @@ import com.langhuan.reader.ui.book.explore.ExploreShowScreen
 import com.langhuan.reader.ui.book.explore.ExploreShowScreenModel
 import com.langhuan.reader.ui.book.explore.ExploreShowUiActions
 import com.langhuan.reader.ui.book.explore.ExploreShowUiEvent
-import com.langhuan.reader.ui.book.search.SearchScope
 import com.langhuan.reader.ui.bookshelf.LocalBookCoverSlot
 import com.langhuan.reader.ui.bookshelf.LocalCoverRatioLayout
 import com.langhuan.reader.ui.bookshelf.ShelfVideoItem
@@ -30,7 +29,6 @@ import com.langhuan.reader.ui.compose.component.ExploreOptionsRow
 import com.langhuan.reader.ui.dialog.NumberPickerDialog
 import com.langhuan.reader.ui.explore.ExploreShowViewModelShared
 import com.langhuan.reader.ui.root.AppNavigator
-import com.langhuan.reader.ui.root.AppOverlay
 import com.langhuan.reader.ui.root.AppRoute
 import com.langhuan.reader.ui.root.RouteEntry
 import com.langhuan.reader.ui.root.OnRouteLifecycle
@@ -221,17 +219,6 @@ fun ExploreShowRoute(
             // 对照 Activity.showColumnPicker: showNumberPicker + setColumnCount
             override fun onShowColumnPicker() {
                 showColumnPicker = true
-            }
-
-            // 对照 Activity.showSourceFilterRule: 弹 scoped 列表对话框 (非跳转管理页)
-            override fun onShowSourceFilterRule() {
-                val scope = vm.bookSource?.let { SearchScope(it).toString() }
-                navigator.showOverlay(
-                    AppOverlay.Dialog(
-                        key = "sourceFilterRuleList",
-                        payload = scope
-                    )
-                )
             }
 
             // 对照 Activity.onFooterClickImpl: errorMsg 非空弹详情与复制, 否则触发加载

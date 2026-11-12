@@ -119,7 +119,6 @@
     <string name="add">添加</string>
     <string name="close">关闭</string>
     <string name="source_filter_rule_manage">管理全部</string>
-    <string name="source_filter_rule_no_match">当前范围没有命中的筛选规则</string>
     <string name="select_font">选择字体</string>
     <string name="default_font">默认字体</string>
     <string name="other_folder">其它目录</string>
@@ -152,7 +151,6 @@
     <string name="draw">提醒</string>
     <string name="timeout_millisecond">超时毫秒数</string>
     <string name="respondTime">响应时间：%1$d ms</string>
-    <string name="dict_rule">字典规则</string>
     <string name="enable_selection">启用所选</string>
     <string name="disable_selection">禁用所选</string>
     <string name="selection_to_top">置顶所选</string>
@@ -203,7 +201,6 @@
     <string name="search_content">全文搜索</string>
     <string name="search_content_size">搜索结果</string>
     <string name="searchHistory">搜索历史</string>
-    <string name="source_filter_rule">筛选规则</string>
     <string name="start">开始</string>
     <string name="stop">停止</string>
     <string name="refresh">刷新</string>
@@ -436,22 +433,6 @@
     <string name="txt_toc_rule_edit_name_required">名称不能为空</string>
     <string name="txt_toc_rule_edit_regex_error">正则语法错误或不支持(txt)</string>
     <string name="txt_toc_rule_edit_copy_success">已复制</string>
-    <string name="dict_rule_edit_name">名称</string>
-    <string name="dict_rule_edit_url_rule">URL 规则</string>
-    <string name="dict_rule_edit_show_rule">显示规则</string>
-    <string name="dict_rule_edit_copy_success">已复制</string>
-    <string name="source_filter_rule_name">名称</string>
-    <string name="source_filter_rule_pattern">正则表达式</string>
-    <string name="source_filter_rule_fields">作用字段（任一命中则丢弃）</string>
-    <string name="source_filter_rule_scope_label">作用范围</string>
-    <string name="source_filter_rule_scope_summary_all">全部书源</string>
-    <string name="source_filter_rule_invalid_pattern">正则表达式无效</string>
-    <string name="source_filter_rule_no_field">请至少选一个作用字段</string>
-    <string name="source_filter_field_name">书名</string>
-    <string name="source_filter_field_author">作者</string>
-    <string name="source_filter_field_intro">简介</string>
-    <string name="source_filter_field_kind">分类</string>
-    <string name="source_filter_field_word_count">字数</string>
     <string name="content_edit_reset">重置</string>
     <string name="content_edit_copy_all">复制全部</string>
     <string name="content_edit_copy_success">已复制</string>
@@ -516,9 +497,7 @@
     <string name="import_state_existing">已有</string>
     <string name="import_book_source">导入书源</string>
     <string name="import_replace_rule">导入替换规则</string>
-    <string name="import_dict_rule">导入字典规则</string>
     <string name="import_txt_toc_rule">导入 TXT 目录规则</string>
-    <string name="import_source_filter_rule">导入筛选规则</string>
     <string name="select_new_source">选中新增源</string>
     <string name="select_update_source">选中更新源</string>
     <string name="diy_source_group">自定义源分组</string>
@@ -589,8 +568,6 @@
     <string name="setting">设置</string>
     <string name="share_layout">共用布局</string>
     <string name="share_selected_source">分享选中源</string>
-    <string name="source_filter_rule_delete_all_confirm">删除全部筛选规则？</string>
-    <string name="source_filter_rule_empty">还没有筛选规则，点右上角 + 添加</string>
     <string name="style_name">样式名称：</string>
     <string name="sure_clear_search_history">是否确认清除所有搜索历史记录</string>
     <string name="system_tts">系统 TTS</string>
@@ -927,7 +904,6 @@
     <string name="select_book_folder">选择书籍目录</string>
     <string name="service_starting">服务启动中</string>
     <string name="set_local_password">设置本地密码</string>
-    <string name="source_filter_rule_filtered_count">已过滤书源</string>
     <string name="source_http_header">HTTP头</string>
     <string name="start_read">开始阅读</string>
     <string name="sure_upload">确认上传</string>

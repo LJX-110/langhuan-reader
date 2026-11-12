@@ -267,7 +267,7 @@ class ImportReplaceRuleViewModelShared(
      * - 下载的文本递归调 [importAwait] (与 app 端 `importAwait(it)` 一致)。
      *
      * 注: app 端原版用 `text("utf-8")` 显式指定编码, 本类保留 (与
-     * [ImportSourceFilterRuleViewModelShared] 的 `text("utf-8")` 一致)。
+     * 其它导入 VM 的 `text("utf-8")` 一致)。
      */
     private suspend fun importUrl(url: String) {
         OkHttpClientProviders.get().okHttpClient.newCallResponseBody {

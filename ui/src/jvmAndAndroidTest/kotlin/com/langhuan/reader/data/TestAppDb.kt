@@ -44,7 +44,6 @@ class TestDbAccessor(private val db: AppDatabase) : AppDbAccessor {
     override val serverDao get() = db.serverDao
     override val txtTocRuleDao get() = db.txtTocRuleDao
     override val dictRuleDao get() = db.dictRuleDao
-    override val sourceFilterRuleDao get() = db.sourceFilterRuleDao
     override val httpTTSDao get() = db.httpTTSDao
     override val cacheDao get() = db.cacheDao
     override val cookieDao get() = db.cookieDao

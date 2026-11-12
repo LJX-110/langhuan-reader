@@ -15,7 +15,7 @@ import org.jetbrains.compose.resources.stringResource
  * 供各端 deep link 宿主与规则订阅 (RuleSubRoute) 用同一段代码分发。
  *
  * 抹平三处差异:
- * - 入口方法名: 书源/目录规则/字典/语音/主题是 `importSource(text)`, 替换规则是 `import(text)`;
+ * - 入口方法名: 书源/目录规则/语音/主题是 `importSource(text)`, 替换规则是 `import(text)`;
  * - 列表适配器: 各自的 Import*ItemsVm (字段名 allSources/allRules 不同);
  * - 对话框标题 key。
  *
@@ -72,14 +72,6 @@ class DeepLinkImportTarget private constructor(
                 )
             }
 
-            DeepLinkImportType.SOURCE_FILTER_RULE ->
-                ImportSourceFilterRuleViewModelShared(scope).let { vm ->
-                    DeepLinkImportTarget(
-                        ImportSourceFilterRuleItemsVm(vm), "source_filter_rule",
-                        vm.errorState, vm.successState, vm::import,
-                    )
-                }
-
             DeepLinkImportType.TXT_TOC_RULE -> ImportTxtTocRuleViewModelShared(scope).let { vm ->
                 DeepLinkImportTarget(
                     ImportTxtTocRuleItemsVm(vm), "import_txt_toc_rule",
@@ -90,13 +82,6 @@ class DeepLinkImportTarget private constructor(
             DeepLinkImportType.HTTP_TTS -> ImportHttpTtsViewModelShared(scope).let { vm ->
                 DeepLinkImportTarget(
                     ImportHttpTtsItemsVm(vm), "import_tts",
-                    vm.errorState, vm.successState, vm::importSource,
-                )
-            }
-
-            DeepLinkImportType.DICT_RULE -> ImportDictRuleViewModelShared(scope).let { vm ->
-                DeepLinkImportTarget(
-                    ImportDictRuleItemsVm(vm), "import_dict_rule",
                     vm.errorState, vm.successState, vm::importSource,
                 )
             }

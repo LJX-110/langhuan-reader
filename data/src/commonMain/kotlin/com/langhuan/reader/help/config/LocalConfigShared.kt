@@ -49,19 +49,6 @@ object LocalConfigKeys {
      */
     const val lastCacheCleanup = "lastCacheCleanup"
 
-    // help 引导版本 key
-    const val readHelpVersion = "readHelpVersion"
-    const val firstRead = "firstRead"
-    const val backupHelpVersion = "backupHelpVersion"
-    const val firstBackup = "firstBackup"
-    const val readMenuHelpVersion = "readMenuHelpVersion"
-    const val firstReadMenu = "firstReadMenu"
-    const val bookSourceHelpVersion = "bookSourceHelpVersion"
-    const val firstOpenBookSources = "firstOpenBookSources"
-    const val webDavBookHelpVersion = "webDavBookHelpVersion"
-    const val firstOpenWebDavBook = "firstOpenWebDavBook"
-    const val ruleHelpVersion = "ruleHelpVersion"
-
     // 资源升级版本 key
     const val httpTtsVersion = "httpTtsVersion"
     const val txtTocRuleVersion = "txtTocRuleVersion"
@@ -74,31 +61,12 @@ object LocalConfigKeys {
 }
 
 /**
- * 各 help 引导 / 资源升级的最新版本号常量。
+ * 资源升级的最新版本号常量。
  *
- * 与原版 `LocalConfig` 各 `isLastVersion` / `needUpXxx` 调用时传入的 `lastVersion`
- * 参数值一致。
+ * 与原版 `LocalConfig` 各 `needUpXxx` 调用时传入的 `lastVersion` 参数值一致。
  */
 @Suppress("ConstPropertyName")
 object HelpVersion {
-    /** 阅读引导最新版本 (对应 `isLastVersion(1, "readHelpVersion", "firstRead")`)。 */
-    const val readHelp = 1
-
-    /** 备份引导最新版本 (对应 `isLastVersion(1, "backupHelpVersion", "firstBackup")`)。 */
-    const val backupHelp = 1
-
-    /** 阅读菜单引导最新版本 (对应 `isLastVersion(1, "readMenuHelpVersion", "firstReadMenu")`)。 */
-    const val readMenuHelp = 1
-
-    /** 书源引导最新版本 (对应 `isLastVersion(1, "bookSourceHelpVersion", "firstOpenBookSources")`)。 */
-    const val bookSourcesHelp = 1
-
-    /** WebDav 书籍引导最新版本 (对应 `isLastVersion(1, "webDavBookHelpVersion", "firstOpenWebDavBook")`)。 */
-    const val webDavBookHelp = 1
-
-    /** 规则引导最新版本 (对应 `isLastVersion(1, "ruleHelpVersion")`)。 */
-    const val ruleHelp = 1
-
     /** HttpTTS 资源最新版本 (对应 `!isLastVersion(6, "httpTtsVersion")`)。 */
     const val httpTts = 6
 

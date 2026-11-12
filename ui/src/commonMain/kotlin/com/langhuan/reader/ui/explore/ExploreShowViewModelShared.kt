@@ -13,9 +13,6 @@ import com.langhuan.reader.help.book.isNotShelf
 import com.langhuan.reader.help.coroutine.IoDispatcher
 import com.langhuan.reader.help.coroutine.SingleJobSlot
 import com.langhuan.reader.help.coroutine.printStackTraceOnDebug
-import com.langhuan.reader.help.source.SearchBookFilter
-import com.langhuan.reader.help.toast.Toasters
-import com.langhuan.reader.ui.compose.platform.syncGetString
 import com.langhuan.reader.model.analyzeRule.AnalyzeUrlCore
 import com.langhuan.reader.model.webBook.BookListPager
 import com.langhuan.reader.model.webBook.ExploreOptionSelection
@@ -63,11 +60,10 @@ data class ExplorePageState(
  *
  * 对照 app 端 `ExploreShowViewModel(app) : BaseViewModel(app)`: 核心业务编排
  * (initData/收藏/分页加载/书架 key 维护/列数与样式切换) 不依赖 Android 专属 API,
- * 仅依赖 [AppDbProviders]/[IntentData]/[PinnedExploreHelp]/[WebBook]/[SearchBookFilter],
+ * 仅依赖 [AppDbProviders]/[IntentData]/[PinnedExploreHelp]/[WebBook],
  * 可下沉多端复用。
  *
- * Android 专属依赖替换: toast 文案 (R.string.source_filter_rule_filtered_count) →
- * `Toasters.get().toast("已过滤 $n 本")`; BuildConfig.DEBUG → false 兜底 (桌面无 BuildConfig);
+ * Android 专属依赖替换: BuildConfig.DEBUG → false 兜底 (桌面无 BuildConfig);
  * ConcurrentHashMap.newKeySet() → [newConcurrentSet] expect/actual (iOS: mutableSetOf());
  * LiveData → 信号类 [MutableSharedFlow] (replay=1, 保留 postValue 每次都投递语义——
  * StateFlow 会吞掉相等值, 重试后错误串相同就收不到事件, 加载态永远悬空), 纯状态用 StateFlow。
@@ -577,7 +573,7 @@ class ExploreShowViewModelShared(
                     optionSelections = request.selections,
                 )
             }
-            val (items, filteredCount) = SearchBookFilter.apply(pageResult.books)
+            val items = pageResult.books
             synchronized(stateLock) {
                 if (requestId != request.id) return
                 val prevSize = books.size
@@ -595,13 +591,6 @@ class ExploreShowViewModelShared(
                         null
                     },
                 )
-            }
-            if (filteredCount > 0) {
-                runCatching {
-                    Toasters.get().toast(
-                        syncGetString("source_filter_rule_filtered_count", filteredCount)
-                    )
-                }
             }
         } catch (e: ExploreOptionSelectionInvalidatedException) {
             currentCoroutineContext().ensureActive()

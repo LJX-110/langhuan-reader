@@ -868,8 +868,8 @@ compose.desktop {
                 "jdk.zipfs",
                 "jdk.management",
             )
-            // CI 传 -PappVersion 注入实际版本 (与 Android 同源); 本地构建回落 2.0.0
-            packageVersion = providers.gradleProperty("appVersion").orNull ?: "2.0.0"
+            // CI 传 -PappVersion 注入实际版本 (与 Android 同源); 本地构建回落 2.1.0
+            packageVersion = providers.gradleProperty("appVersion").orNull ?: "2.1.0"
             // 应用元数据 (从 shared 模块继承项目名, 这里给桌面端独立 packageName)
             packageName = "langhuan"
             description = "Langhuan desktop reader (Compose Multiplatform)"

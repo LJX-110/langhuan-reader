@@ -17,14 +17,10 @@ enum class DeepLinkImportType {
     BOOK_SOURCE,
     /** /replaceRule */
     REPLACE_RULE,
-    /** 筛选规则 (无专属 path, 由自动识别进入) */
-    SOURCE_FILTER_RULE,
     /** /textTocRule */
     TXT_TOC_RULE,
     /** /httpTTS */
     HTTP_TTS,
-    /** /dictRule */
-    DICT_RULE,
     /** /theme */
     THEME,
     /** /addToBookshelf (app 端 AddToBookshelfHelper.add) */
@@ -126,7 +122,6 @@ object LanghuanDeepLink {
             "/replaceRule" -> DeepLinkImportType.REPLACE_RULE
             "/textTocRule" -> DeepLinkImportType.TXT_TOC_RULE
             "/httpTTS" -> DeepLinkImportType.HTTP_TTS
-            "/dictRule" -> DeepLinkImportType.DICT_RULE
             "/theme" -> DeepLinkImportType.THEME
             "/addToBookshelf" -> DeepLinkImportType.ADD_TO_BOOKSHELF
             "/readConfig" -> DeepLinkImportType.READ_CONFIG

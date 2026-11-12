@@ -18,14 +18,13 @@ import com.langhuan.reader.data.dao.ReplaceRuleDao
 import com.langhuan.reader.data.dao.RuleSubDao
 import com.langhuan.reader.data.dao.SearchKeywordDao
 import com.langhuan.reader.data.dao.ServerDao
-import com.langhuan.reader.data.dao.SourceFilterRuleDao
 import com.langhuan.reader.data.dao.TxtTocRuleDao
 import kotlin.concurrent.Volatile
 
 /**
  * appDb 跨模块只读访问接口。
  *
- * 17 个 DAO 接口已下沉 shared (commonMain), 但 appDb 单例 (AppDatabase)
+ * 16 个 DAO 接口已下沉 shared (commonMain), 但 appDb 单例 (AppDatabase)
  * 仍依赖 Room + appCtx, 留 app 端。本接口仅暴露 webBook 编排层
  * (WebBook/BookChapterList/BookContent) 及下沉的 Book 扩展
  * (getDisplayTitle 等) 及 ReadTimeRecorder 用到的 5 个 DAO
@@ -36,12 +35,12 @@ import kotlin.concurrent.Volatile
  *
  * 模式参考 BookInfoRefreshers / SourceDebugLoggers。
  *
- * 下沉 SearchModel/SearchScope/SearchBookFilter/SourceHelp 时新增
- * sourceFilterRuleDao/httpTTSDao/cacheDao 3 个 DAO 暴露点。
+ * 下沉 SearchModel/SearchScope/SourceHelp 时新增
+ * httpTTSDao/cacheDao 2 个 DAO 暴露点。
  *
  * 详情页读分组名时新增 bookGroupDao 暴露点。
  *
- * 全部 17 个 DAO 均已暴露: shared 业务代码统一走本接口 (AppDbProviders.get()),
+ * 全部 16 个 DAO 均已暴露: shared 业务代码统一走本接口 (AppDbProviders.get()),
  * AppDatabaseProviders 仅保留给 AppDbAccessor 实现与需要完整 Room API
  * (useWriterConnection / VACUUM) 的场景。
  */
@@ -63,9 +62,6 @@ interface AppDbAccessor {
 
     /** 字典规则 DAO。 */
     val dictRuleDao: DictRuleDao
-
-    /** 搜索/发现结果过滤规则 DAO (SearchBookFilter 用)。 */
-    val sourceFilterRuleDao: SourceFilterRuleDao
 
     /** HttpTTS DAO (SourceHelp.getSource/deleteSource 走 SourceType.tts 分支用)。 */
     val httpTTSDao: HttpTTSDao

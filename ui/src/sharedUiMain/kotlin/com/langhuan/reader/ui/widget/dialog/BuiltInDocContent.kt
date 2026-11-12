@@ -20,7 +20,7 @@ import com.langhuan.reader.ui.generated.resources.Res
  * 读取失败不降级成假正文: 这些文档随包分发, 读不到只可能是打包/改名错 (构建期事实),
  * 如实抛出比给用户看一段"读取失败"更有用。
  *
- * @param path composeResources `files/` 下的相对路径 (如 `web/help/md/dictRuleHelp.md`、
+ * @param path composeResources `files/` 下的相对路径 (如 `web/help/md/updateLog.md`、
  *   `md/privacyPolicy.md`)
  */
 @Composable

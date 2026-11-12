@@ -131,10 +131,6 @@ sealed interface AppRoute {
     @SerialName("txt_toc_rule")
     data object TxtTocRule : AppRoute
 
-    @Serializable
-    @SerialName("source_filter_rule")
-    data object SourceFilterRule : AppRoute
-
     // 关键词高亮管理 (规则默认作用范围 = 本书, 故带上阅读页当前书)
     @Serializable
     @SerialName("keyword_highlight")

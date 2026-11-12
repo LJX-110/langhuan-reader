@@ -119,7 +119,6 @@
     <string name="add">Add</string>
     <string name="close">Close</string>
     <string name="source_filter_rule_manage">Manage all</string>
-    <string name="source_filter_rule_no_match">No filter rules apply to this scope.</string>
     <string name="select_font">Select fonts</string>
     <string name="default_font">Default font</string>
     <string name="other_folder">Other folder</string>
@@ -152,7 +151,6 @@
     <string name="draw">Warning</string>
     <string name="timeout_millisecond">Timed out milliseconds</string>
     <string name="respondTime">respondTime: %1$d ms</string>
-    <string name="dict_rule">Dict rule</string>
     <string name="enable_selection">Enable selected</string>
     <string name="disable_selection">Disable selected</string>
     <string name="selection_to_top">Selection To Top</string>
@@ -203,7 +201,6 @@
     <string name="search_content">Search content</string>
     <string name="search_content_size">search result</string>
     <string name="searchHistory">Search history</string>
-    <string name="source_filter_rule">Filter rules</string>
     <string name="start">Start</string>
     <string name="stop">Stop</string>
     <string name="refresh">Refresh</string>
@@ -436,22 +433,6 @@
     <string name="txt_toc_rule_edit_name_required">Name cannot be empty</string>
     <string name="txt_toc_rule_edit_regex_error">Regex syntax error or unsupported (txt)</string>
     <string name="txt_toc_rule_edit_copy_success">Copied</string>
-    <string name="dict_rule_edit_name">Name</string>
-    <string name="dict_rule_edit_url_rule">URL rule</string>
-    <string name="dict_rule_edit_show_rule">Show rule</string>
-    <string name="dict_rule_edit_copy_success">Copied</string>
-    <string name="source_filter_rule_name">Name</string>
-    <string name="source_filter_rule_pattern">Regex pattern</string>
-    <string name="source_filter_rule_fields">Apply to fields (any matches → drop)</string>
-    <string name="source_filter_rule_scope_label">Apply to</string>
-    <string name="source_filter_rule_scope_summary_all">All sources</string>
-    <string name="source_filter_rule_invalid_pattern">Invalid regex</string>
-    <string name="source_filter_rule_no_field">Pick at least one field</string>
-    <string name="source_filter_field_name">Title</string>
-    <string name="source_filter_field_author">Author</string>
-    <string name="source_filter_field_intro">Intro</string>
-    <string name="source_filter_field_kind">Category</string>
-    <string name="source_filter_field_word_count">Word count</string>
     <string name="content_edit_reset">Reset</string>
     <string name="content_edit_copy_all">Copy all</string>
     <string name="content_edit_copy_success">Copied</string>
@@ -514,9 +495,7 @@
     <string name="import_state_existing">Existing</string>
     <string name="import_book_source">Import book sources</string>
     <string name="import_replace_rule">Import replace rules</string>
-    <string name="import_dict_rule">Import dict rule</string>
     <string name="import_txt_toc_rule">Import txt directory rules</string>
-    <string name="import_source_filter_rule">Import filter rules</string>
     <string name="select_new_source">Select new source</string>
     <string name="select_update_source">Select update source</string>
     <string name="diy_source_group">Custom source grouping</string>
@@ -587,8 +566,6 @@
     <string name="setting">Settings</string>
     <string name="share_layout">Shared layout</string>
     <string name="share_selected_source">Share selected sources</string>
-    <string name="source_filter_rule_delete_all_confirm">Delete all filter rules?</string>
-    <string name="source_filter_rule_empty">No rules. Tap + to add.</string>
     <string name="style_name">Style name:</string>
     <string name="sure_clear_search_history">Are you sure to clear all search history</string>
     <string name="system_tts">System tts</string>
@@ -925,7 +902,6 @@
     <string name="select_book_folder">Select book folder</string>
     <string name="service_starting">Service starting</string>
     <string name="set_local_password">Set local password</string>
-    <string name="source_filter_rule_filtered_count">Filtered sources</string>
     <string name="source_http_header">HTTP header</string>
     <string name="start_read">Start reading</string>
     <string name="sure_upload">Confirm upload</string>

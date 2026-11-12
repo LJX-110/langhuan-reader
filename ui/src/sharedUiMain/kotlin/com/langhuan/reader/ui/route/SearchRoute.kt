@@ -32,7 +32,6 @@ import com.langhuan.reader.ui.compose.component.AppAlertDialog
 import com.langhuan.reader.ui.compose.platform.AppBackHandler
 import com.langhuan.reader.ui.compose.platform.AppShortcutHandler
 import com.langhuan.reader.ui.root.AppNavigator
-import com.langhuan.reader.ui.root.AppOverlay
 import com.langhuan.reader.ui.root.AppRoute
 import androidx.compose.ui.input.key.Key
 import com.langhuan.reader.ui.compose.platform.AppShortcut
@@ -175,16 +174,6 @@ fun SearchRoute(
 
             override fun onAlertSearchScope() {
                 showSearchScope = true
-            }
-
-            // 对照 Activity: 弹 scoped 列表对话框 (非跳转管理页)
-            override fun onShowSourceFilterRule() {
-                navigator.showOverlay(
-                    AppOverlay.Dialog(
-                        key = "sourceFilterRuleList",
-                        payload = viewModel.searchScope.toString()
-                    )
-                )
             }
 
             override fun onShowAppLog() {

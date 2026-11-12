@@ -919,30 +919,10 @@ private fun DialogOverlayContent(overlay: AppOverlay.Dialog, navigator: AppNavig
         "import_file_name" -> ImportFileNameOverlayDialogContent(overlay, navigator)
         "book_export_format" -> BookExportFormatDialogContent(overlay, navigator)
 
-        // 字典规则
-        "dictRuleEdit" -> DictRuleEditDialogContent(overlay, navigator)
-        "dictRuleImportLocal" ->
-            RuleImportLocalDialogContent(overlay, navigator, RuleImportKind.DICT)
-
-        "dictRuleImportOnline" ->
-            RuleImportOnlineDialogContent(overlay, navigator, RuleImportKind.DICT)
-
         // TXT 目录规则
         "txtTocRuleEdit" -> TxtTocRuleEditDialogContent(overlay, navigator)
-        "txtTocRuleImportLocal" ->
-            RuleImportLocalDialogContent(overlay, navigator, RuleImportKind.TXT_TOC)
-
-        "txtTocRuleImportOnline" ->
-            RuleImportOnlineDialogContent(overlay, navigator, RuleImportKind.TXT_TOC)
-
-        // 筛选规则
-        "sourceFilterRuleEdit" -> SourceFilterEditDialogContent(overlay, navigator)
-        "sourceFilterRuleList" -> SourceFilterRuleListDialogContent(overlay, navigator)
-        "sourceFilterRuleImportLocal" ->
-            RuleImportLocalDialogContent(overlay, navigator, RuleImportKind.SOURCE_FILTER)
-
-        "sourceFilterRuleImportOnline" ->
-            RuleImportOnlineDialogContent(overlay, navigator, RuleImportKind.SOURCE_FILTER)
+        "txtTocRuleImportLocal" -> TxtTocRuleImportLocalDialogContent(overlay, navigator)
+        "txtTocRuleImportOnline" -> TxtTocRuleImportOnlineDialogContent(overlay, navigator)
 
         // 导出分发 (上传 URL / 保存到文件) + 导出成功
         "exportDispatch" -> ExportDispatchDialogContent(overlay, navigator)

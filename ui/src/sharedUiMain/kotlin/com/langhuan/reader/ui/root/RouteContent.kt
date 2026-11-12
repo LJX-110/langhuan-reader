@@ -26,7 +26,6 @@ import com.langhuan.reader.ui.route.KeywordHighlightRoute
 import com.langhuan.reader.ui.route.SearchContentRoute
 import com.langhuan.reader.ui.route.SearchRoute
 import com.langhuan.reader.ui.debug.DialogPreviewScreen
-import com.langhuan.reader.ui.route.SourceFilterRuleRoute
 import com.langhuan.reader.ui.route.TocRoute
 import com.langhuan.reader.ui.route.TxtTocRuleRoute
 import com.langhuan.reader.ui.route.WebViewRoute
@@ -150,11 +149,6 @@ fun RouteContent(
 
         is AppRoute.SearchContent -> {
             SearchContentRoute(entry, navigator, screenModelStore)
-            true
-        }
-
-        is AppRoute.SourceFilterRule -> {
-            SourceFilterRuleRoute(entry, navigator, screenModelStore)
             true
         }
 

@@ -29,7 +29,7 @@ val AppRoute.launchMode: RouteLaunchMode
 
         // 原版 singleTop
         is AppRoute.BookInfo, is AppRoute.BookSourceManage, is AppRoute.TxtTocRule,
-        is AppRoute.ReplaceRule, is AppRoute.SourceFilterRule,
+        is AppRoute.ReplaceRule,
         is AppRoute.BookshelfManage, is AppRoute.Toc,
         is AppRoute.SearchContent, is AppRoute.ImportBook,
         is AppRoute.RemoteBook, is AppRoute.Bookmark -> RouteLaunchMode.SingleTop

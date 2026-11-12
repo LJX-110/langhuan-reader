@@ -104,7 +104,7 @@ object BackupShared {
             return base + BackupFileOps.separator + ZIP_FILE_NAME
         }
 
-    /** 备份时需要导出的所有文件名 (与原版 backupFileNames 逐项一致 + KMP 期新增的 keywordHighlight.json, 共 20 个)。 */
+    /** 备份时需要导出的所有文件名 (与原版 backupFileNames 逐项一致 + KMP 期新增的 keywordHighlight.json, 共 19 个)。 */
     private val backupFileNames: Array<String> = arrayOf(
         "bookshelf.json",
         "bookmark.json",
@@ -119,7 +119,6 @@ object BackupShared {
         "httpTTS.json",
         "keyboardAssists.json",
         "dictRule.json",
-        "sourceFilterRule.json",
         "servers.json",
         ruleFileName,
         ReadBookConfigShared.configFileName,
@@ -299,7 +298,6 @@ object BackupShared {
             writeListToJson(appDb.httpTTSDao.all(), "httpTTS.json")
             writeListToJson(appDb.keyboardAssistsDao.all(), "keyboardAssists.json")
             writeListToJson(appDb.dictRuleDao.all(), "dictRule.json")
-            writeListToJson(appDb.sourceFilterRuleDao.all(), "sourceFilterRule.json")
 
             // 2. servers.json 加密 (与原版一致)
             GSON.toJson(appDb.serverDao.all()).let { json ->

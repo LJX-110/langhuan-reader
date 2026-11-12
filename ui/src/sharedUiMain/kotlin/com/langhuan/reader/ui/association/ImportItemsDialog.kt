@@ -24,10 +24,8 @@ import androidx.compose.ui.Modifier
 import com.langhuan.reader.constant.AppLog
 import com.langhuan.reader.data.AppDbProviders
 import com.langhuan.reader.data.entities.BookSource
-import com.langhuan.reader.data.entities.DictRule
 import com.langhuan.reader.data.entities.HttpTTS
 import com.langhuan.reader.data.entities.ReplaceRule
-import com.langhuan.reader.data.entities.SourceFilterRule
 import com.langhuan.reader.help.config.AppConfigProviders
 import com.langhuan.reader.help.toast.Toasters
 import com.langhuan.reader.ui.compose.component.AlertButton
@@ -708,50 +706,6 @@ class ImportTxtTocRuleItemsVm(
     override fun itemJson(index: Int): String = GSON.toJson(vm.allSources[index])
 }
 
-/** 字典规则适配器 (对照 app 端 ImportDictRuleDialog; 按 name 查本地, 内容变了算更新)。 */
-class ImportDictRuleItemsVm(
-    private val vm: ImportDictRuleViewModelShared,
-) : ImportItemsVm {
-    override val defaultChecked: List<Boolean> get() = vm.defaultChecked
-
-    override fun itemLabel(index: Int): String = vm.allSources[index].name
-
-    override fun itemState(index: Int): ImportItemState {
-        val local = vm.checkSources[index]
-        val item = vm.allSources[index]
-        return when {
-            local == null -> ImportItemState.NEW
-            dictRuleChanged(item, local) -> ImportItemState.UPDATE
-
-            else -> ImportItemState.EXISTING
-        }
-    }
-
-    override val scope get() = vm.scope
-
-    override val submitState get() = vm.submitState
-
-    override suspend fun repairCaches(): String? = null
-
-    override fun recordSubmitResult(result: ImportSubmitResult) = vm.recordSubmitResult(result)
-
-    override fun beginSubmit(checked: List<Boolean>): Boolean = vm.beginSubmit(checked)
-
-    override fun endSubmit() = vm.endSubmit()
-
-    override suspend fun importSelectAwait(checked: List<Boolean>) {
-        vm.importSelectAwait(checked)
-    }
-
-    override fun itemJson(index: Int): String = GSON.toJson(vm.allSources[index])
-
-    override fun updateItemFromJson(index: Int, json: String): Boolean =
-        GSON.fromJsonObject<DictRule>(json).getOrNull()?.let {
-            vm.allSources[index] = it
-            true
-        } ?: false
-}
-
 /** 语音源适配器 (对照 app 端 ImportHttpTtsDialog: lastUpdateTime 比对, CodeDialog 可编辑回写)。 */
 class ImportHttpTtsItemsVm(
     private val vm: ImportHttpTtsViewModelShared,
@@ -831,49 +785,4 @@ class ImportThemeItemsVm(
     override fun itemJson(index: Int): String = GSON.toJson(vm.allSources[index])
 }
 
-/** 筛选规则适配器 (对照 app 端 ImportSourceFilterRuleDialog; 按 id 查本地, 内容变了算更新)。 */
-class ImportSourceFilterRuleItemsVm(
-    private val vm: ImportSourceFilterRuleViewModelShared,
-) : ImportItemsVm {
-    override val defaultChecked: List<Boolean> get() = vm.defaultChecked
 
-    override fun itemLabel(index: Int): String {
-        val item = vm.allRules[index]
-        return item.name.ifEmpty { item.pattern }
-    }
-
-    override fun itemState(index: Int): ImportItemState {
-        val local = vm.checkRules[index]
-        val item = vm.allRules[index]
-        return when {
-            local == null -> ImportItemState.NEW
-            sourceFilterRuleChanged(item, local) -> ImportItemState.UPDATE
-
-            else -> ImportItemState.EXISTING
-        }
-    }
-
-    override val scope get() = vm.scope
-
-    override val submitState get() = vm.submitState
-
-    override suspend fun repairCaches(): String? = null
-
-    override fun recordSubmitResult(result: ImportSubmitResult) = vm.recordSubmitResult(result)
-
-    override fun beginSubmit(checked: List<Boolean>): Boolean = vm.beginSubmit(checked)
-
-    override fun endSubmit() = vm.endSubmit()
-
-    override suspend fun importSelectAwait(checked: List<Boolean>) {
-        vm.importSelectAwait(checked)
-    }
-
-    override fun itemJson(index: Int): String = GSON.toJson(vm.allRules[index])
-
-    override fun updateItemFromJson(index: Int, json: String): Boolean =
-        GSON.fromJsonObject<SourceFilterRule>(json).getOrNull()?.let {
-            vm.allRules[index] = it
-            true
-        } ?: false
-}

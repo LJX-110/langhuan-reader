@@ -8,6 +8,7 @@
 - 包名：`com.langhuan.reader`
 - 技术栈：Kotlin Multiplatform + Compose Multiplatform（M2），AGP 9.4.1 / Kotlin 2.3.20 / Gradle 9.6.0，compileSdk 37 / targetSdk 36 / minSdk 24
 - 模块：`app`（Android 外壳 + 业务入口）、`ui`（共享 Compose 界面）、`data`、`core`、`foundation`、`modules/*`
+- 平台：Android 是唯一维护与发布平台；桌面 / iOS / 鸿蒙已明确放弃，代码保留但不适配、不验收、不发布
 - 品牌与文案：统一称「琅嬛阁」，不引用上游项目名，也不使用其它同类产品的名称、栏目名与字样
 
 ## 改动边界
@@ -45,6 +46,7 @@
 ```
 
 - 主构建用 JDK 21；`build-logic` 与 `modules/quickjs-processor` 的 toolchain 固定 17，所以必须用上面的 `-D` 同时登记两个 JDK。写进 `gradle.properties` 的 `org.gradle.java.installations.paths` 在 Gradle 9 下不生效，别再往里加。
+- 正式包只由 CI 在推 `v*` tag 时构建并发布；本地不出发行包，调试包与编译校验可本地跑。
 - 工程路径必须是纯 ASCII；`versionCode` 由 `git rev-list HEAD --count` 推导，仓库至少要有一个提交。
 - 验收标准：编译通过即可，不做真机验收、不做视觉验收；没跑过的检查要在汇报里写明「未验证」。
 - Kotlin daemon 在部分机器上会因临时目录权限回退到进程内编译，日志里出现 `AccessDeniedException` 不是失败。

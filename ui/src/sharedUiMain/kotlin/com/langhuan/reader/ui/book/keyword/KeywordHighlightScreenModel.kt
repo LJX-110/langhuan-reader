@@ -21,7 +21,6 @@ data class KeywordHighlightUiState(
 /**
  * 关键词高亮列表页 (shared)。
  *
- * 对齐 [com.langhuan.reader.ui.book.filter.SourceFilterRuleScreenModel] 的结构:
  * 数据流直订 DAO flow, 变更后列表与阅读层 (ChapterHighlightState 订阅同一 flow) 自动回推,
  * 无需经路由回传结果。
  */

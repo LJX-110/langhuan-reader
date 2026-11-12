@@ -102,8 +102,7 @@ object WebBookProvidersImpl :
     // TxtTocRuleViewModelShared / DictRuleViewModelShared 下沉新增的 2 个 DAO 暴露点
     override val txtTocRuleDao get() = appDb.txtTocRuleDao
     override val dictRuleDao get() = appDb.dictRuleDao
-    // SearchBookFilter/SourceHelp 下沉新增的 3 个 DAO 暴露点
-    override val sourceFilterRuleDao get() = appDb.sourceFilterRuleDao
+    // SourceHelp 下沉新增的 2 个 DAO 暴露点
     override val httpTTSDao get() = appDb.httpTTSDao
     override val cacheDao get() = appDb.cacheDao
     override val cookieDao get() = appDb.cookieDao

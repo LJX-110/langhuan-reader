@@ -169,9 +169,7 @@ object SchemeImportOps {
 fun JsonType.toDeepLinkImportType(): DeepLinkImportType = when (this) {
     JsonType.BOOK_SOURCE, JsonType.RSS_SOURCE -> DeepLinkImportType.BOOK_SOURCE
     JsonType.REPLACE_RULE -> DeepLinkImportType.REPLACE_RULE
-    JsonType.SOURCE_FILTER_RULE -> DeepLinkImportType.SOURCE_FILTER_RULE
     JsonType.THEME -> DeepLinkImportType.THEME
-    JsonType.DICT_RULE -> DeepLinkImportType.DICT_RULE
     JsonType.TXT_RULE -> DeepLinkImportType.TXT_TOC_RULE
     JsonType.HTTP_TTS -> DeepLinkImportType.HTTP_TTS
 }

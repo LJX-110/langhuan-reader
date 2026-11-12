@@ -8,7 +8,7 @@ import com.langhuan.reader.data.runInImmediateTransaction
 /**
  * 桌面端 [AppDbAccessor] 实现: 委托 [AppDatabaseProviders.get].appDb 的全部 17 个 DAO
  * + `runInTransaction`, 供 shared commonMain 中下沉的 webBook 编排层 / SourceHelp /
- * SearchBookFilter / ReadBookViewModelShared 等通过 [com.langhuan.reader.data.AppDbProviders]
+ * ReadBookViewModelShared 等通过 [com.langhuan.reader.data.AppDbProviders]
  * 间接访问 appDb。
  *
  * # 注册时机
@@ -24,7 +24,7 @@ import com.langhuan.reader.data.runInImmediateTransaction
  *
  * # DAO 成员清单 (与 AppDbAccessor 接口一致)
  * bookDao / bookSourceDao / bookChapterDao / replaceRuleDao / readRecordDao /
- * serverDao / sourceFilterRuleDao / httpTTSDao / cacheDao
+ * serverDao / httpTTSDao / cacheDao
  *
  * 模式参考 app 端 WebBookProvidersImpl 的 AppDbAccessor 实现段。
  */
@@ -52,8 +52,7 @@ class DesktopAppDbAccessor : AppDbAccessor {
     override val dictRuleDao get() = appDb.dictRuleDao
     override val readRecordDao get() = appDb.readRecordDao
     override val serverDao get() = appDb.serverDao
-    // SearchBookFilter/SourceHelp 下沉新增的 3 个 DAO 暴露点
-    override val sourceFilterRuleDao get() = appDb.sourceFilterRuleDao
+    // SourceHelp 下沉新增的 2 个 DAO 暴露点
     override val httpTTSDao get() = appDb.httpTTSDao
     override val cacheDao get() = appDb.cacheDao
     override val cookieDao get() = appDb.cookieDao

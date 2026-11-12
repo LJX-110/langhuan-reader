@@ -23,7 +23,6 @@ import com.langhuan.reader.data.dao.ReplaceRuleDao
 import com.langhuan.reader.data.dao.RuleSubDao
 import com.langhuan.reader.data.dao.SearchKeywordDao
 import com.langhuan.reader.data.dao.ServerDao
-import com.langhuan.reader.data.dao.SourceFilterRuleDao
 import com.langhuan.reader.data.dao.TxtTocRuleDao
 import com.langhuan.reader.data.entities.Book
 import com.langhuan.reader.data.entities.BookChapter
@@ -42,7 +41,6 @@ import com.langhuan.reader.data.entities.ReplaceRule
 import com.langhuan.reader.data.entities.RuleSub
 import com.langhuan.reader.data.entities.SearchKeyword
 import com.langhuan.reader.data.entities.Server
-import com.langhuan.reader.data.entities.SourceFilterRule
 import com.langhuan.reader.data.entities.TxtTocRule
 
 /**
@@ -54,14 +52,14 @@ import com.langhuan.reader.data.entities.TxtTocRule
  *   (官方 room3 的 migrate 是 suspend, 鸿蒙 CPF fork 不是)
  */
 @Database(
-    version = 89,
+    version = 90,
     exportSchema = true,
     entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchKeyword::class, Cookie::class,
         Bookmark::class, TxtTocRule::class, ReadRecord::class,
         HttpTTS::class, Cache::class,
         RuleSub::class, DictRule::class, KeyboardAssist::class, Server::class,
-        SourceFilterRule::class, KeywordHighlight::class],
+        KeywordHighlight::class],
     views = [BookSourcePart::class],
     autoMigrations = [
         AutoMigration(from = 83, to = 84),
@@ -70,6 +68,7 @@ import com.langhuan.reader.data.entities.TxtTocRule
         AutoMigration(from = 86, to = 87),
         AutoMigration(from = 87, to = 88),
         AutoMigration(from = 88, to = 89),
+        AutoMigration(from = 89, to = 90, spec = Migration89To90::class),
     ]
 )
 // DATABASE 作用域注册 Book.Converters: iOS/ohos KSP 处理 BookChapter.ForeignKey 跨实体解析时,
@@ -101,7 +100,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract val keyboardAssistsDao: KeyboardAssistsDao
     abstract val keywordHighlightDao: KeywordHighlightDao
     abstract val serverDao: ServerDao
-    abstract val sourceFilterRuleDao: SourceFilterRuleDao
 
     companion object {
 
