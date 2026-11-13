@@ -1,7 +1,7 @@
 package com.langhuan.reader.ui.book.read
 
 /*
- * 阅读菜单：顶栏 + 底栏（操作坞 / 排版 / 书签三态）。
+ * 阅读菜单：顶栏 + 底栏（操作坞 / 排版 / 更多）。
  *
  * 四端共用本文件的 Composable 与 [ReadMenuState]；平台端只实现状态与平台动作
  * （Activity 生命周期、TTS、对话框路由），界面一律在这里。
@@ -20,7 +20,6 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -42,8 +41,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
@@ -63,8 +62,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -86,8 +84,8 @@ import com.langhuan.reader.help.showSourceLogin
 import com.langhuan.reader.help.toast.Toasters
 import com.langhuan.reader.ui.compose.component.AppDetailSeekBar
 import com.langhuan.reader.ui.compose.component.AppDropdownMenu
-import com.langhuan.reader.ui.compose.component.AppMenuCheckbox
 import com.langhuan.reader.ui.compose.component.AppSelectorDialog
+import com.langhuan.reader.ui.compose.component.AppSlider
 import com.langhuan.reader.ui.compose.component.AppSwitch
 import com.langhuan.reader.ui.compose.component.blockInputWhile
 import com.langhuan.reader.ui.compose.component.listItemFocus
@@ -98,19 +96,12 @@ import com.langhuan.reader.ui.compose.platform.rememberColor
 import com.langhuan.reader.ui.compose.platform.rememberPainter
 import com.langhuan.reader.ui.compose.platform.rememberString
 import com.langhuan.reader.ui.compose.platform.syncGetString
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
-import com.langhuan.reader.ui.compose.theme.LANGHUAN_THEME_ACCENT_CHANGED
-import com.langhuan.reader.ui.compose.theme.LanghuanThemeSwatch
-import com.langhuan.reader.ui.compose.theme.LanghuanThemes
 import com.langhuan.reader.ui.compose.theme.LanghuanType
 import com.langhuan.reader.ui.compose.theme.LocalEInk
 import com.langhuan.reader.ui.compose.theme.langhuanReadable
 import com.langhuan.reader.ui.root.AppNavigator
-import com.langhuan.reader.ui.root.AppOverlay
 import com.langhuan.reader.ui.root.AppRoute
 import com.langhuan.reader.ui.root.PlatformCapabilityProviders
 import com.langhuan.reader.ui.root.RouteResults
@@ -120,26 +111,23 @@ import com.langhuan.reader.ui.route.ChineseConverterDialogHost
 import com.langhuan.reader.ui.route.FontSelectDialogHost
 import com.langhuan.reader.ui.route.ReadLayoutConfigDialogHost
 import com.langhuan.reader.utils.ColorUtils
-import com.langhuan.reader.utils.FlowBus
 import com.langhuan.reader.ui.generated.resources.Res
-import com.langhuan.reader.ui.generated.resources.dark_theme
 import com.langhuan.reader.ui.generated.resources.ic_arrow_back
-import com.langhuan.reader.ui.generated.resources.ic_more_vert
 import com.langhuan.reader.ui.generated.resources.indent
-import com.langhuan.reader.ui.generated.resources.more_menu
 import com.langhuan.reader.ui.generated.resources.next_chapter
 import com.langhuan.reader.ui.generated.resources.previous_chapter
-import com.langhuan.reader.ui.generated.resources.replace_rule_title
 import com.langhuan.reader.ui.generated.resources.search_content
 import com.langhuan.reader.ui.generated.resources.text_font_weight
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringArrayResource
-import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
+
+/** 全书进度条刻度数（0.1% 精度足够，避免拖动抖动） */
+private const val PROGRESS_STEPS = 1000
 
 /** 复刻 View 动画默认 AccelerateDecelerateInterpolator */
 val AccelerateDecelerateEasing = Easing { x ->
@@ -228,6 +216,12 @@ interface ReadMenuState {
     val prevEnabled: Boolean
     val nextEnabled: Boolean
     val isNightTheme: Boolean
+
+    /** 全书进度（0f..1f），底栏进度条显示用 */
+    val bookProgress: Float
+
+    /** 拖动全书进度条落位：按比例跳到对应章节 */
+    fun seekBookProgress(fraction: Float) = Unit
 
     // ---- 动画生命周期回调 ----
     fun onTransitionIdle(shown: Boolean)
@@ -419,6 +413,8 @@ open class BaseReadMenuState(
     override var nextEnabled: Boolean by mutableStateOf(false)
         protected set
     override var isNightTheme: Boolean by mutableStateOf(currentNightTheme())
+        protected set
+    override var bookProgress: Float by mutableStateOf(0f)
         protected set
 
     override var chapterProgressText: String by mutableStateOf("—")
@@ -734,6 +730,22 @@ open class BaseReadMenuState(
         } else {
             "—"
         }
+        bookProgress = if (page != null && page.chapterSize > 0) {
+            val within = if (page.pageSize > 0) (page.index + 1f) / page.pageSize else 0f
+            ((page.chapterIndex + within) / page.chapterSize).coerceIn(0f, 1f)
+        } else {
+            0f
+        }
+    }
+
+    /** 全书进度条落位：按章节比例折算目标章，落到章首 */
+    override fun seekBookProgress(fraction: Float) {
+        val page = screenModel.viewModel.curTextPage.value ?: return
+        val total = page.chapterSize
+        if (total <= 0) return
+        val target = (fraction.coerceIn(0f, 1f) * total).toInt().coerceIn(0, total - 1)
+        if (target == page.chapterIndex) return
+        screenModel.openChapter(target, 0)
     }
 
     override fun bookmarkFlow(): Flow<List<Bookmark>>? = screenModel.bookmarkFlow()
@@ -889,10 +901,11 @@ private fun ReadMenuTopBar(
                 }
             }
             TopBarActionIcon(
-                iconKey = "ic_bookmark",
-                descKey = "bookmark_add",
+                iconKey = "ic_exchange",
+                descKey = "change_source",
                 tint = topText,
-                onClick = { state.addBookmarkHere() },
+                onClick = { state.clickChangeSource() },
+                onLongClick = { state.longClickChangeSource() },
             )
             TopBarActionIcon(
                 iconKey = "ic_read_aloud",
@@ -909,7 +922,7 @@ private fun ReadMenuTopBar(
                     onClick = { state.onTopMenuAction(ReadMenuAction.SET_CHARSET) },
                 )
             }
-            // Aa：展开底栏的排版/进度/书签面板
+            // Aa：展开底栏的排版/更多面板
             Box(
                 Modifier
                     .size(48.dp)
@@ -1024,8 +1037,8 @@ private fun applyReaderPaperTone(tone: ReaderPaperTone) {
     )
 }
 
-/** 阅读底栏面板页：操作坞 / 排版与进度 / 书签 */
-private enum class ReaderPanel { DOCK, STYLE, BOOKMARK }
+/** 阅读底栏面板页：操作坞 / 排版 / 更多 */
+private enum class ReaderPanel { DOCK, STYLE, MORE }
 
 @Composable
 private fun ReadMenuBottom(
@@ -1080,7 +1093,7 @@ private fun ReadMenuBottom(
         when (panel) {
             ReaderPanel.DOCK -> ReaderDockContent(state, text)
             ReaderPanel.STYLE -> ReaderStylePanel(state, text, eInk, progressColor, panelAccent)
-            ReaderPanel.BOOKMARK -> ReaderBookmarkPanel(state, text, panelAccent)
+            ReaderPanel.MORE -> ReaderMorePanel(state, text, panelAccent)
         }
     }
 }
@@ -1104,7 +1117,7 @@ private fun ReaderPanelHandle(text: Color) {
     }
 }
 
-/** 面板页签：排版 / 进度 / 书签；再点当前页签或「收起」回操作坞 */
+/** 面板页签：排版 / 更多；再点当前页签或「收起」回操作坞 */
 @Composable
 private fun ReaderPanelTabs(
     panel: ReaderPanel,
@@ -1121,10 +1134,8 @@ private fun ReaderPanelTabs(
         ReaderPanelTab(rememberString("reader_panel_style"), panel == ReaderPanel.STYLE, text, accent) {
             onPanelChange(if (panel == ReaderPanel.STYLE) ReaderPanel.DOCK else ReaderPanel.STYLE)
         }
-        ReaderPanelTab(rememberString("bookmark"), panel == ReaderPanel.BOOKMARK, text, accent) {
-            onPanelChange(
-                if (panel == ReaderPanel.BOOKMARK) ReaderPanel.DOCK else ReaderPanel.BOOKMARK
-            )
+        ReaderPanelTab(rememberString("reader_panel_more"), panel == ReaderPanel.MORE, text, accent) {
+            onPanelChange(if (panel == ReaderPanel.MORE) ReaderPanel.DOCK else ReaderPanel.MORE)
         }
         Spacer(Modifier.weight(1f))
         Text(
@@ -1163,43 +1174,36 @@ private fun ReaderPanelTab(
 }
 
 /**
- * 操作坞：低频动作（查找/换源/专注）压成上方一条紧凑带，高频的
- * 上一章 / 目录 / 下一章 放在贴近拇指的底行。
+ * 操作坞：上方一行全书进度，下方一行三格（上一章 / 目录 x/y / 下一章）。
  *
- * 之前两行等高等重，搜索和换源反而离拇指更近；现在只在底行保留大按钮。
+ * 搜索、换源、专注都收进顶栏或「更多」，贴近拇指的位置只留翻页与目录。
  */
 @Composable
 private fun ReaderDockContent(state: ReadMenuState, text: Color) {
-    Row(Modifier.fillMaxWidth()) {
-        BottomMenuItem(
-            iconKey = "ic_search",
-            labelKey = "search_content",
-            tint = text.copy(alpha = .65f),
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(
+                start = DesignTokens.spacingLg,
+                end = DesignTokens.spacingLg,
+                top = DesignTokens.spacingXs,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AppSlider(
+            value = (state.bookProgress * PROGRESS_STEPS).roundToInt(),
+            max = PROGRESS_STEPS,
+            color = text.copy(alpha = .72f),
+            trackColor = text.copy(alpha = .16f),
             modifier = Modifier.weight(1f),
-            compact = true,
-        ) { state.clickSearch() }
-        BottomMenuItem(
-            iconKey = "ic_exchange",
-            labelKey = "change_source",
-            tint = text.copy(alpha = .65f),
-            modifier = Modifier.weight(1f),
-            compact = true,
-            onLongClick = { state.longClickChangeSource() },
-        ) { state.clickChangeSource() }
-        BottomMenuItem(
-            iconKey = if (readerFocusMode) "ic_fullscreen_exit" else "ic_fullscreen_enter",
-            labelKey = if (readerFocusMode) "reader_focus_exit" else "reader_focus",
-            tint = text.copy(alpha = .65f),
-            modifier = Modifier.weight(1f),
-            compact = true,
-        ) {
-            if (readerFocusMode) {
-                readerFocusMode = false
-            } else {
-                readerFocusMode = true
-                state.runMenuOut()
-            }
-        }
+            onValueChangeFinished = { state.seekBookProgress(it.toFloat() / PROGRESS_STEPS) },
+        )
+        Spacer(Modifier.width(DesignTokens.spacingDefault))
+        Text(
+            text = "${(state.bookProgress * 100).roundToInt()}%",
+            color = text.copy(alpha = .6f),
+            fontSize = 11.sp,
+        )
     }
     Row(Modifier.fillMaxWidth()) {
         BottomMenuItem(
@@ -1244,89 +1248,162 @@ private fun ReaderPanelAction(
     )
 }
 
-/** 面板「书签」页：当前位置加书签 + 本书书签列表（点跳转，右端删除） */
+/**
+ * 面板「更多」页：低频动作 + 整本书相关的开关。
+ *
+ * 第一行是查找正文 / 专注模式 / 添加书签；其下是本书书签列表（点跳转，右端删除）；
+ * 再往下是共用布局、朗读跟随两个开关，最后一行是设置入口。
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ReaderBookmarkPanel(state: ReadMenuState, text: Color, accent: Color) {
+private fun ReaderMorePanel(state: ReadMenuState, text: Color, accent: Color) {
+    val readConfig = ReadBookConfigProviders.get()
+    var shareLayout by remember { mutableStateOf(readConfig.shareLayout) }
     val bookmarks by remember(state) {
         state.bookmarkFlow() ?: flowOf(emptyList())
     }.collectAsState(emptyList())
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ReaderPanelAction(rememberString("bookmark_add"), text) { state.addBookmarkHere() }
-    }
-    if (bookmarks.isEmpty()) {
-        Text(
-            text = rememberString("reader_bookmark_empty"),
-            color = text.copy(alpha = .55f),
-            fontSize = 12.sp,
-            modifier = Modifier.padding(
-                horizontal = DesignTokens.spacingLg,
-                vertical = DesignTokens.spacingDefault,
-            ),
-        )
-        return
-    }
+
     Column(
         Modifier
             .fillMaxWidth()
-            .heightIn(max = 220.dp)
+            .heightIn(max = 420.dp)
             .verticalScroll(rememberScrollState()),
     ) {
-        bookmarks.forEach { bookmark ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable { state.jumpToBookmark(bookmark) }
-                    .padding(horizontal = DesignTokens.spacingLg, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+        FlowRow(
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = DesignTokens.spacingLg,
+                    vertical = DesignTokens.spacingDefault,
+                ),
+            horizontalArrangement = Arrangement.spacedBy(DesignTokens.spacingDefault),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.spacingXs),
+        ) {
+            ReaderPanelAction(rememberString("search_content"), text, horizontalPadding = 12.dp) {
+                state.clickSearch()
+            }
+            ReaderPanelAction(
+                label = rememberString(if (readerFocusMode) "reader_focus_exit" else "reader_focus"),
+                text = text,
+                horizontalPadding = 12.dp,
             ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = bookmark.chapterName.ifBlank { "第 ${bookmark.chapterIndex + 1} 章" },
-                        color = text,
-                        fontSize = 14.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    val preview = bookmark.bookText.trim().take(40)
-                    if (preview.isNotEmpty()) {
+                if (readerFocusMode) {
+                    readerFocusMode = false
+                } else {
+                    readerFocusMode = true
+                    state.runMenuOut()
+                }
+            }
+            ReaderPanelAction(rememberString("bookmark_add"), text, horizontalPadding = 12.dp) {
+                state.addBookmarkHere()
+            }
+        }
+
+        if (bookmarks.isEmpty()) {
+            Text(
+                text = rememberString("reader_bookmark_empty"),
+                color = text.copy(alpha = .55f),
+                fontSize = 12.sp,
+                modifier = Modifier.padding(
+                    horizontal = DesignTokens.spacingLg,
+                    vertical = DesignTokens.spacingDefault,
+                ),
+            )
+        } else {
+            bookmarks.forEach { bookmark ->
+                val fallbackChapter = rememberString(
+                    "reader_chapter_fallback",
+                    bookmark.chapterIndex + 1,
+                )
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { state.jumpToBookmark(bookmark) }
+                        .padding(horizontal = DesignTokens.spacingLg, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
                         Text(
-                            text = preview,
-                            color = text.copy(alpha = .55f),
-                            fontSize = 11.sp,
+                            text = bookmark.chapterName.ifBlank { fallbackChapter },
+                            color = text,
+                            fontSize = 14.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        val preview = bookmark.bookText.trim().take(40)
+                        if (preview.isNotEmpty()) {
+                            Text(
+                                text = preview,
+                                color = text.copy(alpha = .55f),
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
+                    Text(
+                        text = rememberString("delete"),
+                        color = accent,
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { state.deleteBookmark(bookmark) }
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
                 }
-                Text(
-                    text = rememberString("delete"),
-                    color = accent,
-                    fontSize = 12.sp,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable { state.deleteBookmark(bookmark) }
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                )
             }
+        }
+
+        ReaderSwitchRow(
+            label = rememberString("share_layout"),
+            checked = shareLayout,
+            text = text,
+        ) { checked ->
+            shareLayout = checked
+            readConfig.shareLayout = checked
+            readConfig.save()
+            // 共用布局开关切换 config 来源 (shareConfig ↔ durConfig),
+            // 生效 pageAnim 可能随之变化, 需重建翻页委托
+            ReadBookEvents.postConfig(
+                listOf(
+                    ReadConfigChange.BG,
+                    ReadConfigChange.STYLE,
+                    ReadConfigChange.PAGE_ANIM,
+                    ReadConfigChange.LOAD_CONTENT,
+                )
+            )
+        }
+        ReaderSwitchRow(
+            label = rememberString("reader_follow_aloud"),
+            checked = readerFollowAloud,
+            text = text,
+        ) { readerFollowAloud = it }
+
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = DesignTokens.spacingLg,
+                    vertical = DesignTokens.spacingDefault,
+                ),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ReaderPanelAction(rememberString("setting"), text) { state.clickSetting() }
         }
     }
 }
 
 /**
- * 面板「排版」页，参考轻小说文库的阅读设置分层：
+ * 面板「排版」页：
  *
  * 1. 上半：四道带数值的滑条（字号 / 字距 / 行距 / 段距），单次调节即生效；
  * 2. 其下一排二级胶囊（字重 / 字体 / 缩进 / 简繁 / 版面），放不下的项收进各自子弹窗；
- * 3. 背景与主题：宣纸/青笺/墨夜三张拟物纸样 + 自定义，12 套主辅双色主题格；
+ * 3. 背景：宣纸/青笺/墨夜三张拟物纸样 + 自定义；
  * 4. 翻页方式独立成三态（滚动 / 覆盖 / 无动画）；
- * 5. 本章进度压成一行，底部是设置与恢复默认。
+ * 5. 本章进度压成一行，底部是恢复默认排版。
  *
- * 单列布局，整页可滚动。旧的全屏「界面设置」弹窗与预设色块行均已删除。
+ * 单列布局，整页可滚动。主题色、书签、共用布局与朗读跟随都收进「更多」。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1347,9 +1424,6 @@ private fun ReaderStylePanel(
     var paragraphSpacing by remember { mutableIntStateOf(readConfig.paragraphSpacing) }
     var pageAnim by remember { mutableIntStateOf(readConfig.pageAnim) }
     var paperBg by remember { mutableStateOf(readConfig.config.curBgStr()) }
-    var shareLayout by remember { mutableStateOf(readConfig.shareLayout) }
-    // 12 套主题：只改强调色，不重建 Activity（见 LANGHUAN_THEME_ACCENT_CHANGED）
-    var themeIndex by remember { mutableIntStateOf(LanghuanThemes.currentIndex()) }
 
     var showWeight by remember { mutableStateOf(false) }
     var showIndent by remember { mutableStateOf(false) }
@@ -1404,17 +1478,6 @@ private fun ReaderStylePanel(
         readConfig.pageAnim = value
         readConfig.save()
         postConfig(ReadConfigChange.PAGE_ANIM, ReadConfigChange.LOAD_CONTENT)
-    }
-
-    /**
-     * 换 12 套主题之一：只写皮肤下标并发轻量事件，让 [AppTheme] 重算强调色。
-     * 不走 `applyDayNight()` —— 那会 `Activity.recreate()`，正在读的这一页会被重建。
-     */
-    fun applyTheme(index: Int) {
-        if (index == themeIndex) return
-        themeIndex = index
-        LanghuanThemes.select(index)
-        FlowBus.with(LANGHUAN_THEME_ACCENT_CHANGED).tryEmit("")
     }
 
     /** 恢复默认排版：只重置字号与间距类字段，背景、字体文件与翻页方式保持不变 */
@@ -1526,7 +1589,7 @@ private fun ReaderStylePanel(
             ) { showLayout = true }
         }
         if (!eInk) {
-            // 背景与主题：拟物纸样 + 12 套双色主题
+            // 背景：宣纸 / 青笺 / 墨夜三张拟物纸样 + 自定义
             ReaderStyleSectionLabel(
                 text = rememberString("reader_section_paper"),
                 color = text,
@@ -1596,12 +1659,6 @@ private fun ReaderStylePanel(
                     accent = accent,
                 ) { applyPageAnim(PageAnim.noAnim) }
             }
-            ReaderThemeSwatches(
-                selectedIndex = themeIndex,
-                text = text,
-                accent = accent,
-                onSelect = ::applyTheme,
-            )
         }
         // 本章进度压成一行：百分比、目录位置、章首/章末跳转都在同一行里
         Row(
@@ -1635,40 +1692,14 @@ private fun ReaderStylePanel(
                 horizontalPadding = 10.dp, verticalPadding = 4.dp,
             ) { state.clickChapterEnd() }
         }
-        ReaderSwitchRow(
-            label = rememberString("share_layout"),
-            checked = shareLayout,
-            text = text,
-        ) { checked ->
-            shareLayout = checked
-            readConfig.shareLayout = checked
-            readConfig.save()
-            // 共用布局开关切换 config 来源 (shareConfig ↔ durConfig),
-            // 生效 pageAnim 可能随之变化, 需重建翻页委托
-            postConfig(
-                ReadConfigChange.BG,
-                ReadConfigChange.STYLE,
-                ReadConfigChange.PAGE_ANIM,
-                ReadConfigChange.LOAD_CONTENT,
-            )
-        }
-        ReaderSwitchRow(
-            label = rememberString("reader_follow_aloud"),
-            checked = readerFollowAloud,
-            text = text,
-        ) { readerFollowAloud = it }
-        // 底部两个低频动作并排：设置 / 恢复默认排版
+        // 底部只留一个低频动作：恢复默认排版
         Row(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
-            horizontalArrangement = Arrangement.spacedBy(
-                DesignTokens.spacingDefault,
-                Alignment.CenterHorizontally,
-            ),
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ReaderPanelAction(rememberString("setting"), text) { state.clickSetting() }
             ReaderPanelAction(rememberString("reader_reset_style"), text) { resetStyle() }
         }
     }
@@ -1792,63 +1823,6 @@ private fun ReaderPaperCard(
     }
 }
 
-/**
- * 12 套主题的双色色块。每格左半主色、右半辅助色，两色始终同显；
- * 选中项的名字显示在标题行右侧，色块本身只加一圈描边，避免整行跳动。
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ReaderThemeSwatches(
-    selectedIndex: Int,
-    text: Color,
-    accent: Color,
-    onSelect: (Int) -> Unit,
-) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = rememberString("langhuan_theme"),
-                color = text.copy(alpha = .5f),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-            )
-            Spacer(Modifier.weight(1f))
-            Text(
-                text = LanghuanThemes.all[selectedIndex.coerceIn(0, LanghuanThemes.all.lastIndex)].name,
-                color = text.copy(alpha = .7f),
-                fontSize = 11.sp,
-                maxLines = 1,
-            )
-        }
-        Spacer(Modifier.height(DesignTokens.spacingXs))
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            maxItemsInEachRow = 6,
-        ) {
-            LanghuanThemes.all.forEachIndexed { index, preset ->
-                Box(
-                    Modifier
-                        .clip(CircleShape)
-                        .clickable { onSelect(index) }
-                        .padding(3.dp),
-                ) {
-                    LanghuanThemeSwatch(
-                        preset = preset,
-                        selected = index == selectedIndex,
-                        selectionColor = accent,
-                        size = 28.dp,
-                    )
-                }
-            }
-        }
-    }
-}
-
 @Composable
 private fun ReaderSwitchRow(
     label: String,
@@ -1940,17 +1914,14 @@ fun BottomMenuItem(
     tint: Color,
     modifier: Modifier = Modifier.width(60.dp),
     subLabel: String? = null,
-    /** 低频动作的紧凑形态：图标与文字更小、上下留白更少 */
-    compact: Boolean = false,
-    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     Column(
         modifier
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .clickable(onClick = onClick)
             .padding(
-                top = if (compact) 2.dp else DesignTokens.spacingXs,
-                bottom = if (compact) 4.dp else DesignTokens.spacingDefault,
+                top = DesignTokens.spacingXs,
+                bottom = DesignTokens.spacingDefault,
             ),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -1958,16 +1929,16 @@ fun BottomMenuItem(
             painter = rememberPainter(iconKey),
             contentDescription = rememberString(labelKey),
             tint = tint,
-            modifier = Modifier.size(if (compact) 17.dp else 20.dp),
+            modifier = Modifier.size(20.dp),
         )
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(top = if (compact) 1.dp else DesignTokens.spacingXs),
+            modifier = Modifier.padding(top = DesignTokens.spacingXs),
         ) {
             Text(
                 text = rememberString(labelKey),
                 color = tint,
-                fontSize = if (compact) 11.sp else 12.sp,
+                fontSize = 12.sp,
                 maxLines = 1,
             )
             if (!subLabel.isNullOrBlank()) {

@@ -15,14 +15,11 @@ import com.langhuan.reader.ui.association.ImportItemsDialog
 import com.langhuan.reader.ui.association.ImportTxtTocRuleItemsVm
 import com.langhuan.reader.ui.association.ImportTxtTocRuleViewModelShared
 import com.langhuan.reader.ui.book.toc.rule.TxtTocRuleEditDialog
-import com.langhuan.reader.ui.widget.dialog.HelpDialog
 import com.langhuan.reader.ui.widget.dialog.OnlineImportUrlDialog
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.langhuan.reader.ui.generated.resources.Res
-import com.langhuan.reader.ui.generated.resources.help
 import com.langhuan.reader.ui.generated.resources.import_txt_toc_rule
-import com.langhuan.reader.ui.generated.resources.update_log
 import com.langhuan.reader.ui.generated.resources.wrong_format
 import org.jetbrains.compose.resources.stringResource
 
@@ -55,35 +52,6 @@ internal fun TxtTocRuleEditDialogContent(overlay: AppOverlay.Dialog, navigator: 
         onDismiss = { navigator.dismissOverlay(overlay.key) },
         clipTextProvider = { PlatformCapabilityProviders.get().getClipboardText() },
         clipTextSink = { PlatformCapabilityProviders.get().copyToClipboard(it) },
-    )
-}
-
-// 帮助文档壳体 (供更新日志复用; 独立帮助弹层已移除, 只在 key="updateLog" 时进入)
-@Composable
-internal fun HelpDialogContent(
-    overlay: AppOverlay.Dialog,
-    navigator: AppNavigator,
-    fileName: String,
-    title: String = stringResource(Res.string.help),
-) {
-    if (fileName.isEmpty()) {
-        LaunchedEffect(overlay.key) { navigator.dismissOverlay(overlay.key) }
-        return
-    }
-    HelpDialog(fileName, title = title) { navigator.dismissOverlay(overlay.key) }
-}
-
-/** 升级更新日志 (key="updateLog", 对照原版 upVersion updateLog 分支)。 */
-@Composable
-internal fun UpdateLogOverlayDialogContent(
-    overlay: AppOverlay.Dialog,
-    navigator: AppNavigator,
-) {
-    HelpDialogContent(
-        overlay = overlay,
-        navigator = navigator,
-        fileName = "updateLog",
-        title = stringResource(Res.string.update_log),
     )
 }
 

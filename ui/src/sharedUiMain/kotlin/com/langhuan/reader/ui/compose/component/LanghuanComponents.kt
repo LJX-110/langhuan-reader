@@ -37,7 +37,7 @@ import com.langhuan.reader.ui.generated.resources.ic_search
 import org.jetbrains.compose.resources.painterResource
 
 /**
- * 琅嬛阁页面标题：左侧一道主题色细竖线 + 22sp 衬线标题，右侧留给操作。
+ * 琅嬛阁页面标题：22sp 衬线标题，右侧留给操作。
  *
  * 每页只保留这一行标题——不再叠加品牌顶栏、英文副题或档案编号。
  */
@@ -54,14 +54,6 @@ fun LanghuanPageHeader(
             .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            Modifier
-                .width(3.dp)
-                .height(18.dp)
-                .clip(RoundedCornerShape(1.5.dp))
-                .background(colors.accentFill)
-        )
-        Spacer(Modifier.width(8.dp))
         Text(
             text = title,
             style = LanghuanType.pageTitle,
@@ -143,7 +135,7 @@ fun LanghuanDivider(
 /**
  * 设置分组面板：衬线分组标题 + 行，行之间由调用方插入 [LanghuanSettingsDivider]。
  *
- * 不画卡片、不叠描边，靠留白与字重分组；左右 20dp 与页面标题同一条竖线。
+ * 不画卡片、不叠描边，靠留白与字重分组；左右 20dp 与页面标题对齐。
  */
 @Composable
 fun LanghuanSettingsGroup(
@@ -160,14 +152,6 @@ fun LanghuanSettingsGroup(
             Modifier.padding(bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                Modifier
-                    .width(3.dp)
-                    .height(14.dp)
-                    .clip(RoundedCornerShape(1.5.dp))
-                    .background(AppTheme.colors.accentFill)
-            )
-            Spacer(Modifier.width(8.dp))
             Text(
                 text = title,
                 style = LanghuanType.sectionTitle,

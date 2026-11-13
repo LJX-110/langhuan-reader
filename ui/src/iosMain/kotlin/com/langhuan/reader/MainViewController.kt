@@ -36,8 +36,8 @@ import com.langhuan.reader.ui.book.read.ReaderPlatformProviders
 import com.langhuan.reader.ui.book.source.SourceUiEventBridgeHost
 import com.langhuan.reader.ui.association.DeepLinkImportHost
 import com.langhuan.reader.ui.about.notifyAppCrash
-import com.langhuan.reader.ui.about.preferenceUpVersionStore
-import com.langhuan.reader.ui.about.upVersion
+import com.langhuan.reader.ui.about.preferenceAppVersionStore
+import com.langhuan.reader.ui.about.recordAppVersion
 import com.langhuan.reader.ui.compose.platform.LocalAppConfigProvider
 import com.langhuan.reader.ui.compose.platform.LocalEventBusProvider
 import com.langhuan.reader.ui.compose.platform.LocalThemeStoreProvider
@@ -140,20 +140,14 @@ fun MainViewController(): UIViewController {
                             screenModelStore = screenModelStore,
                         )
                         // 启动期维护 (下沉件 StartupMaintenanceShared, 与 Android/桌面同一份):
-                        // 默认数据补齐 + 缓存清理 + WebDav 进度同步。必须排在下方"升级更新日志"之前
-                        // —— 维护的"这一版要不要补默认数据"与弹窗"这一版要不要展示"读的是**同一份
-                        // 存储的同一个 key** (`appVersionCode`), 而写回它的只有弹窗: 弹窗先跑就会把
-                        // 维护的门关死, 那一版要补的预置分组/默认资源就再也补不上了 (与 app 端
-                        // App.onCreate 的 DefaultData.upVersion() 先于 MainActivity 同一时序)。
+                        // 默认数据补齐 + 缓存清理 + WebDav 进度同步。必须排在下方"记录版本号"之前
+                        // —— 维护的"这一版要不要补默认数据"与记录读的是**同一份存储的同一个 key**
+                        // (`appVersionCode`), 而写回它的是记录: 记录先跑就会把维护的门关死, 那一版
+                        // 要补的预置分组/默认资源就再也补不上了 (与 app 端 App.onCreate 的
+                        // DefaultData.upVersion() 先于 MainActivity 同一时序)。
                         // 异步、不阻塞首帧 (LaunchedEffect 自身就是后台协程)。
-                        // 升级更新日志 (对照原版 MainActivity.upVersion): 首启弹帮助, 升级弹更新日志;
-                        // iOS 无构建类型感知, isDebug 恒 false (对齐 release 行为);
-                        // 版本名取不到时不推进版本号, 下次启动再判。
                         //
-                        // 启动期维护必须在同一协程内排在弹窗之前: 弹窗会写回 appVersionCode,
-                        // 而维护也拿这个键当门 (两个 LaunchedEffect 并发时谁先写谁关门, 结果是预置项
-                        // 可能被永久跳过)。Android (onCreate → onPostCreate) 与桌面
-                        // (注册内含 initDesktopDefaultData → 再 upVersion) 本来就是这个串行序。
+                        // 版本名取不到时不推进版本号, 下次启动再判。
                         LaunchedEffect(Unit) {
                             StartupMaintenanceShared.initDefaultData()
                             // cacheExtraMayHaveWork=false: iOS 的 clearCacheExtra 是空实现
@@ -181,13 +175,12 @@ fun MainViewController(): UIViewController {
                                 IosPlatformCapabilities.presentWebDavNewBackupConfirm(newBackup.name)
                             }
                             IosPlatformCapabilities.getAppVersionName()?.let { versionName ->
-                                upVersion(
+                                recordAppVersion(
                                     versionNameToVersionCode(versionName),
-                                    isDebug = false,
-                                    preferenceUpVersionStore(),
+                                    preferenceAppVersionStore(),
                                 )
                             }
-                            // 崩溃后重启提示 (对照原版 MainActivity.notifyAppCrash): 排在版本更新
+                            // 崩溃后重启提示 (对照原版 MainActivity.notifyAppCrash): 排在版本记录
                             // 之后, 与 app 端同一位置; 标记由 IosCrashHandler 落盘时置位。
                             // iOS 无构建类型感知, isDebug 恒 false (对齐 release 行为)
                             notifyAppCrash(isDebug = false)

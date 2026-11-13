@@ -29,10 +29,10 @@
 - 字体：页眉、分组标题、书名使用 `LanghuanType` 的衬线样式，正文保持系统字体。正文与标题若需分字体，必须同时改度量与绘制两侧，否则会错行。
 - 组件：页眉 `LanghuanPageHeader`、搜索入口 `LanghuanSearchEntry`、分组标题 `LanghuanSectionTitle`、3D 书架 `LanghuanShelf`、皮肤弹窗 `LanghuanSkinDialog`、阅读排版面板 `ReaderStylePanel`。新增外观组件统一用 `Langhuan*` 前缀，放在与业务就近的 `component/` 目录。
 - 阅读设置只有一处：阅读菜单的「排版」面板（`ReadMenu.kt` 的 `ReaderStylePanel`）。不要再新增全屏「界面设置」弹窗；放不下的项做成子弹窗（`ReadStyleDialog.kt` 的字体/简繁/配色板、`ReadLayoutConfigDialog.kt`、`BgTextConfigDialog.kt`）。
-- 不提供帮助、教程类弹层；说明文字就近放在对应设置项旁。`files/web/help` 只服务更新日志（`updateLog.md`），不再新增帮助文档。
+- 不提供帮助、教程、更新日志类弹层；说明文字就近放在对应设置项旁。`files/web/help` 只保留 Markdown 渲染资源（鸿蒙 WebView 复用）。
 - 图标：只保留一套「阁顶为书」图标（黛蓝 `#22344A` / 米白 `#F3EBDD`，两色，不用黄铜），启动页与图标同源；不提供换图标入口，也不保留旧图标资源。
 - 3D 书架几何常量集中在 `LanghuanShelfGeometry`，不要在绘制代码里另写一套数字。
-- 避免卡片投影、重描边、装饰性渐变这类堆料；层级靠留白、字重与那条主题色细线区分。
+- 避免卡片投影、重描边、装饰性渐变这类堆料；层级靠留白与字重区分。
 
 ## 构建与验证
 

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,7 +24,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Icon
 import androidx.compose.material.RadioButton
 import androidx.compose.material.RadioButtonDefaults
@@ -143,7 +141,7 @@ fun PreferenceScreen(
     }
 }
 
-/** 分组标题：主题色细竖线 + 衬线标题，白/黑底上直接落字，不做卡片。 */
+/** 分组标题：衬线标题，白/黑底上直接落字，不做卡片。 */
 fun PreferenceScope.preferenceCategory(title: String) = preferenceItem(fullLine = true) {
     Row(
         modifier = Modifier
@@ -151,14 +149,6 @@ fun PreferenceScope.preferenceCategory(title: String) = preferenceItem(fullLine 
             .padding(start = DesignTokens.spacingLg, end = DesignTokens.spacingLg, top = DesignTokens.spacingLg, bottom = DesignTokens.spacingDefault),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            Modifier
-                .width(3.dp)
-                .height(14.dp)
-                .clip(RoundedCornerShape(1.5.dp))
-                .background(AppTheme.colors.accentFill)
-        )
-        Spacer(Modifier.width(8.dp))
         Text(
             text = title,
             style = LanghuanType.sectionTitle,

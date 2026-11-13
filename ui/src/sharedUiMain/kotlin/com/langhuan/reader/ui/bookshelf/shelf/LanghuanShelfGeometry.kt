@@ -40,21 +40,16 @@ object LanghuanShelfGeometry {
 
     fun spineWidth(width: Float): Float = (width * .043f).coerceIn(14f, 18f)
 
-    fun pitch(width: Float): Float = spineWidth(width) + slotGap
-
     fun coverWidth(width: Float): Float = (width * .32f).coerceIn(100f, 128f)
 
     /** 书身高度：封面图（118:166）加上下两道档案栏位。 */
     fun bodyHeight(cover: Float): Float = (cover - 20f) * 166f / 118f + 54f
 
     /** 一本静止的书从书脊左边到封面右边、在屏幕上的横向宽度。 */
-    fun footprint(spine: Float, cover: Float): Float = spine + cover * depthX
+    fun footprint(spine: Float, cover: Float): Float = spine + cover
 
-    /** 顶面在书脊顶边之上撑起的高度。 */
-    fun topInset(cover: Float): Float = -cover * depthY
-
-    /** 静止时书顶在行框内的纵向位置：书坐在行框下半部，抽出时才上浮。 */
-    fun seatY(height: Float): Float = height * seatRatio + 12f
+    /** 顶面窄带在封面顶边之上撑起的高度（纸厚，单位 dp）。 */
+    fun topInset(): Float = 6f
 
     /** 抽出波权重：中心为 1，[waveRadius] 处为 0，中间按 cos² 收口。 */
     fun wave(distance: Float): Float {
@@ -102,12 +97,12 @@ class LanghuanShelfMetrics(val viewport: Float, val density: Float = 1f) {
     val bodyH: Float = LanghuanShelfGeometry.bodyHeight(coverDp) * density
     val pitch: Float = (spineDp + LanghuanShelfGeometry.slotGap) * density
     val footprint: Float = LanghuanShelfGeometry.footprint(spineW, coverW)
-    val topInset: Float = LanghuanShelfGeometry.topInset(coverW)
+    val topInset: Float = LanghuanShelfGeometry.topInset() * density
 
     /** 书身高度（封面本身；顶面画在它上方）。 */
     val volumeH: Float = topInset + bodyH + LanghuanShelfGeometry.spineShear * spineW
 
-    /** 静止书顶在行框内的纵向位置。 */
+    /** 静止书顶在行框内的纵向位置：书坐在行框下半部，抽出时才上浮。 */
     val seatY: Float = bodyH * LanghuanShelfGeometry.seatRatio + 12f * density
 
     /** 行框总高度：静止站位 + 抽出上浮的余量 + 底部留白。 */

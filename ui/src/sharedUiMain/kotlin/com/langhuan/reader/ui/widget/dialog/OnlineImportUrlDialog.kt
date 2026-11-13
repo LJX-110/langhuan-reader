@@ -65,7 +65,7 @@ fun OnlineImportUrlDialog(
     var url by remember { mutableStateOf("") }
     // 历史列表 (对照 app 端 cacheUrls: 读缓存逗号拆分, defaultUrl 不在列表时插首位)
     // 初值为空, 读到后回填 —— getAsString(persistent = true) 是磁盘 IO (桌面端直读文件),
-    // 放 remember 里会在组合期卡主线程, 故照 HelpDialog 的 LaunchedEffect + IoDispatcher 范式
+    // 放 remember 里会在组合期卡主线程, 故用 LaunchedEffect + IoDispatcher 在后台读
     val cacheUrls = remember(recordKey) { mutableStateListOf<String>() }
     LaunchedEffect(recordKey) {
         val urls = withContext(IoDispatcher) {

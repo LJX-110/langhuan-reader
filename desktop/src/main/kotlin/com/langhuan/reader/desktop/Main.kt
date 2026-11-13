@@ -37,7 +37,6 @@ import com.langhuan.reader.help.config.PreferenceProviders
 import com.langhuan.reader.help.config.ReadConfigProviders
 import com.langhuan.reader.help.coroutine.Coroutine
 import com.langhuan.reader.help.coroutine.registerJvmDebugState
-import com.langhuan.reader.help.file.desktopResolveStoredRef
 import com.langhuan.reader.help.file.desktopAppRootDir
 import com.langhuan.reader.help.file.desktopResolveStoredRef
 import com.langhuan.reader.help.image.decodeBytesSampled
@@ -82,9 +81,9 @@ import com.langhuan.reader.ui.compose.platform.rememberString
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.reader.ReaderDictWord
 import com.langhuan.reader.ui.reader.ReaderImageActionMenu
-import com.langhuan.reader.ui.about.preferenceUpVersionStore
+import com.langhuan.reader.ui.about.preferenceAppVersionStore
 import com.langhuan.reader.ui.about.notifyAppCrash
-import com.langhuan.reader.ui.about.upVersion
+import com.langhuan.reader.ui.about.recordAppVersion
 import com.langhuan.reader.ui.root.AppFontScaleScope
 import com.langhuan.reader.ui.root.ImportStageDialog
 import com.langhuan.reader.ui.root.ImportStageOwner
@@ -799,13 +798,11 @@ private fun runDesktopApp() = application {
             // 故必须排在上面 (启动器在本函数内注册)
             DesktopTrayTaskNotifications.install()
         }
-        // 升级更新日志 (对照原版 MainActivity.upVersion): 首启弹帮助, 升级弹更新日志;
-        // debug 判定与 registerJvmDebugState 同源 (run 任务注入 -Dlanghuan.debug=true)
+        // 记录版本号 (appVersionCode 是默认数据补种的版本门)
         LaunchedEffect(Unit) {
-            upVersion(
+            recordAppVersion(
                 DesktopAppInfo.versionCode,
-                System.getProperty("langhuan.debug")?.toBoolean() == true,
-                preferenceUpVersionStore(),
+                preferenceAppVersionStore(),
             )
             // JVM 致命错误现场 (进程直接终止, 各异常处理器都跑不到): 认领属于本应用的
             // hs_err 文件搬进崩溃目录, 收到即说明上次是崩着退出的, 据此置"异常退出"标记

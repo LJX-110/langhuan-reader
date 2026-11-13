@@ -6,26 +6,26 @@
     android:viewportHeight="108">
     <!-- 阁顶：摊开的书页 -->
     <path
-        android:fillColor="#F3EBDD"
+        android:fillColor="#C8A96A"
         android:pathData="M22,51 L54,37 L86,51 L79,55 L54,44 L29,55 Z" />
     <!-- 三根书脊 -->
     <path
-        android:strokeColor="#F3EBDD"
+        android:strokeColor="#C8A96A"
         android:strokeWidth="8"
         android:strokeLineCap="round"
         android:pathData="M39,62 L39,78" />
     <path
-        android:strokeColor="#F3EBDD"
+        android:strokeColor="#C8A96A"
         android:strokeWidth="8"
         android:strokeLineCap="round"
         android:pathData="M54,62 L54,78" />
     <path
-        android:strokeColor="#F3EBDD"
+        android:strokeColor="#C8A96A"
         android:strokeWidth="8"
         android:strokeLineCap="round"
         android:pathData="M69,62 L69,78" />
     <!-- 檐顶点 -->
     <path
-        android:fillColor="#F3EBDD"
+        android:fillColor="#C8A96A"
         android:pathData="M50.5,33 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0 Z" />
 </vector>

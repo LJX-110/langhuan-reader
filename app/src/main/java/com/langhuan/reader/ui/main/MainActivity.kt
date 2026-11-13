@@ -1,6 +1,5 @@
 package com.langhuan.reader.ui.main
 
-import android.content.Context
 import android.content.Intent
 import android.graphics.Typeface
 import android.net.Uri
@@ -58,12 +57,11 @@ import com.langhuan.reader.model.ActiveReadBookRegistry
 import com.langhuan.reader.model.fileBook.FileBook
 import com.langhuan.reader.help.file.AndroidDirAuthorizations
 import com.langhuan.reader.receiver.MediaButtonReceiver
-import com.langhuan.reader.service.BaseReadAloudService
 import com.langhuan.reader.service.ExportBookService
-import com.langhuan.reader.ui.about.UpVersionStore
+import com.langhuan.reader.ui.about.AppVersionStore
 import com.langhuan.reader.ui.about.checkUpdateAndPrompt
 import com.langhuan.reader.ui.about.notifyAppCrash
-import com.langhuan.reader.ui.about.upVersion
+import com.langhuan.reader.ui.about.recordAppVersion
 import com.langhuan.reader.ui.association.DeepLinkImportHost
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.association.LanghuanDeepLink
@@ -716,12 +714,10 @@ class MainActivity : BaseComposeActivity(imageBg = false) {
         lifecycleScope.launch {
             //隐私协议
             if (!privacyPolicy()) return@launch
-            //版本更新 (首启弹帮助, 升级弹更新日志; versionCode 写回 LocalConfig
-            //供 DefaultData.upVersion 做默认数据版本推进判断)
-            upVersion(
+            //记录版本号 (appVersionCode 供 DefaultData.upVersion 做默认数据版本推进判断)
+            recordAppVersion(
                 AppConst.appInfo.versionCode,
-                BuildConfig.DEBUG,
-                object : UpVersionStore {
+                object : AppVersionStore {
                     override fun getSavedVersionCode(): Long = LocalConfig.versionCode
 
                     override fun saveVersionCode(versionCode: Long) {

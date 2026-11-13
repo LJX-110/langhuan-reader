@@ -36,7 +36,6 @@
     <string name="import_on_line">网络导入</string>
     <string name="group_sources_by_domain">按域名分组显示</string>
     <string name="show_source_icon">显示书源图标</string>
-    <string name="update_log">更新日志</string>
     <string name="help">帮助</string>
     <string name="edit">编辑</string>
     <string name="to_top">置顶</string>
@@ -67,18 +66,13 @@
     <string name="show_read_title_addition">展示顶部工具栏附加区域</string>
     <string name="aloud_config">朗读设置</string>
     <string name="pause_read_aloud_while_phone_calls_title">来电期间暂停朗读</string>
-    <string name="pause_read_aloud_while_phone_calls_summary">在通话期间暂停朗读，需要读取手机状态权限</string>
     <string name="read_aloud_wake_lock">朗读服务唤醒锁</string>
-    <string name="read_aloud_wake_lock_summary">开启朗读的时候启用唤醒锁,有些手机开启唤醒锁会被杀后台</string>
     <string name="pref_media_button_per_next">媒体按钮•上一首|下一首</string>
     <string name="pref_media_button_per_next_summary">上一段|下一段/上一章|下一章</string>
     <string name="read_aloud_by_page">按页朗读</string>
-    <string name="read_aloud_by_page_summary">及时翻页，翻页时会停顿一下</string>
     <string name="stream_read_aloud_audio">流式播放音频</string>
-    <string name="stream_read_aloud_audio_summary">即边下边播，网络不好时播放会断断续续，仅TTS源有效</string>
     <string name="speak_engine">朗读引擎</string>
     <string name="sys_tts_config">系统 TTS 设置</string>
-    <string name="sys_tts_config_summary">打开系统 TTS 设置界面</string>
     <string name="chapter_list">目录</string>
     <string name="bookmark">书签</string>
     <string name="export">导出</string>
@@ -125,6 +119,10 @@
     <string name="system_typeface">系统内置字体样式</string>
     <string name="bookshelf">书架</string>
     <string name="bookshelf_empty">书架还空着，先去搜索书籍或从发现里添加吧！</string>
+    <string name="shelf_pull_refresh">下拉刷新目录</string>
+    <string name="shelf_release_refresh">松手刷新目录</string>
+    <string name="shelf_refreshing">正在更新目录…</string>
+    <string name="unknown_author">未知作者</string>
     <string name="add_book_url">添加书籍网址</string>
     <string name="select_file">选择文件</string>
     <string name="replace_rule_edit">替换规则编辑</string>
@@ -271,15 +269,12 @@
     <string name="auto_backup_no_book_save_dir">未设置书籍保存位置：备份只上传 WebDav，本地不保留副本</string>
     <string name="backup_no_destination">没有可用于保存备份的位置：请设置书籍保存位置，或检查 WebDav 网盘配置</string>
     <string name="backup_dir_unwritable">书籍保存位置不可写：本次备份只上传 WebDav，本地不保留副本</string>
-    <string name="backup_summary">本地和 WebDav 一起备份</string>
     <string name="auto_check_new_backup_s">打开软件时检查是否有新备份，有新备份时提示是否更新</string>
     <string name="auto_check_new_backup_t">自动检查新备份</string>
     <string name="only_latest_backup_s">本地备份仅保留最新备份文件</string>
     <string name="only_latest_backup_t">仅保留最新备份</string>
     <string name="restore">恢复</string>
     <string name="restore_ignore">恢复忽略列表</string>
-    <string name="restore_ignore_summary">恢复时忽略一些内容不恢复，方便不同手机配置不同</string>
-    <string name="restore_summary">优先从 WebDav 恢复，长按从本地恢复</string>
     <string name="select_restore_file">选择恢复文件</string>
     <string name="set_local_password_summary">本地密码用来对备份的敏感信息加密和解密,如需在不同设备之间同步,本地密码需一致.</string>
     <string name="web_dav_account">WebDav 账号</string>
@@ -375,7 +370,6 @@
     <string name="change_cover_source">封面换源</string>
     <string name="btn_default_s">默认</string>
     <string name="page_touch_slop_dialog_title">滑动翻页阈值（0 = 系统默认值）</string>
-    <string name="page_touch_slop_summary">滑动多长距离才会触发滑动翻页（系统默认值 %1$s px）</string>
     <string name="search_src">搜索源码</string>
     <string name="book_src">书籍源码</string>
     <string name="toc_src">目录源码</string>
@@ -821,12 +815,14 @@
     <string name="reader_focus">专注</string>
     <string name="reader_focus_exit">退出专注</string>
     <!-- 阅读底栏面板 -->
-    <string name="reader_panel_style">排版与进度</string>
+    <string name="reader_panel_style">排版</string>
+    <string name="reader_panel_more">更多</string>
     <string name="reader_reset_style">恢复默认排版</string>
     <string name="reader_panel_collapse">收起</string>
     <string name="reader_chapter_start">回章首</string>
     <string name="reader_chapter_end">章末</string>
     <string name="reader_bookmark_empty">暂无书签</string>
+    <string name="reader_chapter_fallback">第 %1$d 章</string>
     <string name="reader_follow_aloud">朗读跟随</string>
     <string name="paper_color">纸色</string>
     <string name="paper_xuan">宣纸</string>

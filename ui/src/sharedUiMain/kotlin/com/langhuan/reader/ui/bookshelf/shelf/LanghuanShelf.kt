@@ -39,7 +39,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -60,6 +59,7 @@ import androidx.compose.ui.unit.sp
 import com.langhuan.reader.data.AppDbProviders
 import com.langhuan.reader.data.entities.Book
 import com.langhuan.reader.help.image.ImageBitmapLoader
+import com.langhuan.reader.ui.compose.platform.rememberString
 import com.langhuan.reader.ui.compose.theme.AppColors
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.LanghuanType
@@ -133,13 +133,14 @@ fun LanghuanShelf(
     emptyContent: (@Composable () -> Unit)? = null,
 ) {
     val colors = AppTheme.colors
+    val unknownAuthor = rememberString("unknown_author")
     if (books.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             if (emptyContent != null) {
                 emptyContent()
             } else {
                 Text(
-                    text = "书架还是空的",
+                    text = rememberString("bookshelf_empty"),
                     color = colors.summaryText,
                     fontSize = 14.sp,
                 )
@@ -442,12 +443,14 @@ fun LanghuanShelf(
                         colors = colors,
                         covers = covers,
                         textMeasurer = textMeasurer,
+                        unknownAuthor = unknownAuthor,
                     )
                 }
                 ShelfMeta(
                     book = books[centerIndex],
                     index = centerIndex,
                     total = books.size,
+                    unknownAuthor = unknownAuthor,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(with(density) { metaHeightPx.toDp() })
@@ -455,12 +458,13 @@ fun LanghuanShelf(
                 )
             }
             if (pull > 0f || refreshing) {
+                val pullHint = when {
+                    refreshEnabled && (pull >= pullTrigger) -> rememberString("shelf_release_refresh")
+                    refreshing -> rememberString("shelf_refreshing")
+                    else -> rememberString("shelf_pull_refresh")
+                }
                 Text(
-                    text = when {
-                        refreshEnabled && (pull >= pullTrigger) -> "松手刷新目录"
-                        refreshing -> "正在更新目录…"
-                        else -> "下拉刷新目录"
-                    },
+                    text = pullHint,
                     color = colors.summaryText,
                     fontSize = 11.sp,
                     modifier = Modifier
@@ -481,6 +485,7 @@ private fun DrawScope.drawShelfRow(
     colors: AppColors,
     covers: Map<String, ImageBitmap?>,
     textMeasurer: TextMeasurer,
+    unknownAuthor: String,
 ) {
     val pitch = metrics.pitch
     if (pitch <= 0f) return
@@ -505,6 +510,7 @@ private fun DrawScope.drawShelfRow(
             colors = colors,
             cover = covers[books[slot].bookUrl],
             textMeasurer = textMeasurer,
+            unknownAuthor = unknownAuthor,
         )
     }
 }
@@ -524,27 +530,23 @@ private fun DrawScope.drawFloorShadow(
     val (baseX, baseY, _) = slotBase(slot, focus, metrics)
     val d = metrics.density
     val origin = Offset(baseX, baseY + metrics.topInset + metrics.bodyH)
-    val depth = Offset(
-        metrics.coverW * LanghuanShelfGeometry.depthX,
-        metrics.coverW * LanghuanShelfGeometry.depthY,
-    )
+    val width = metrics.spineW + metrics.coverW
+    // 直立书的落地投影：书底沿台面横向铺开，向下渐隐，两侧各探出一点软边
     val path = Path().apply {
         moveTo(origin.x, origin.y)
-        lineTo(origin.x + metrics.spineW, origin.y + 1.4f * d)
-        lineTo(origin.x + metrics.spineW + depth.x, origin.y + 1.4f * d + depth.y)
-        lineTo(origin.x + depth.x, origin.y + depth.y)
-        lineTo(origin.x + depth.x - 10f * d, origin.y + depth.y + 10f * d)
-        lineTo(origin.x - 10f * d, origin.y + 10f * d)
+        lineTo(origin.x + width, origin.y)
+        lineTo(origin.x + width + 8f * d, origin.y + 9f * d)
+        lineTo(origin.x - 8f * d, origin.y + 9f * d)
         close()
     }
     val bounds = path.getBounds()
     val ink = colors.primaryText
     drawPath(
         path = path,
-        brush = Brush.linearGradient(
-            colors = listOf(ink.copy(alpha = .10f), ink.copy(alpha = 0f)),
-            start = Offset(bounds.right, bounds.top),
-            end = Offset(bounds.left, bounds.bottom),
+        brush = Brush.verticalGradient(
+            colors = listOf(ink.copy(alpha = .09f), ink.copy(alpha = 0f)),
+            startY = bounds.top,
+            endY = bounds.bottom,
         ),
     )
 }
@@ -572,6 +574,7 @@ private fun DrawScope.drawBook(
     colors: AppColors,
     cover: ImageBitmap?,
     textMeasurer: TextMeasurer,
+    unknownAuthor: String,
 ) {
     val (baseX, baseY, _) = slotBase(slot, focus, metrics)
     val d = metrics.density
@@ -581,57 +584,41 @@ private fun DrawScope.drawBook(
         baseX + metrics.spineW,
         baseY + metrics.topInset + metrics.spineW * shear,
     )
-    val depth = Offset(
-        metrics.coverW * LanghuanShelfGeometry.depthX,
-        metrics.coverW * LanghuanShelfGeometry.depthY,
-    )
     val panelA = spineTopRight
 
-    // 顶面：书脊顶边沿深度向量推出去的一条窄带，不是整张封面。
-    // 上一版把顶面画到了封面全宽，看起来像摊开的一张纸，这是「生硬感」的主要来源。
+    // 顶面：封面顶边上的一道纸厚窄带。旧版沿斜投影把整张封面压成平行四边形，
+    // 封面看上去是斜的；现在封面直立，顶面只留纸厚这一道。
+    val bandH = 4f * d
     val topPath = Path().apply {
-        moveTo(spineTop.x, spineTop.y)
+        moveTo(panelA.x, panelA.y - bandH)
+        lineTo(panelA.x + metrics.coverW, panelA.y - bandH)
+        lineTo(panelA.x + metrics.coverW, panelA.y)
         lineTo(panelA.x, panelA.y)
-        lineTo(panelA.x + depth.x, panelA.y + depth.y)
-        lineTo(spineTop.x + depth.x, spineTop.y + depth.y)
         close()
     }
-    val topBounds = topPath.getBounds()
     drawPath(
         path = topPath,
         brush = Brush.verticalGradient(
             colors = listOf(
-                blend(colors.paper, Color.Black, .10f),
-                blend(colors.paper, Color.White, .05f),
+                blend(colors.paper, Color.White, .16f),
+                blend(colors.paper, Color.Black, .05f),
             ),
-            startY = topBounds.bottom,
-            endY = topBounds.top,
+            startY = panelA.y - bandH,
+            endY = panelA.y,
         ),
     )
     drawPath(
         path = topPath,
-        color = colors.primaryText.copy(alpha = .22f),
+        color = colors.primaryText.copy(alpha = .18f),
         style = Stroke(width = .6f * d),
     )
 
-    // 封面面板：在局部坐标里画，再整体沿深度向量压扁
-    // 注意: Compose Matrix 的 values 是列主序, 平移落在 values[12]/[13],
-    // 即访问器下标为 [3,0]/[3,1]; 写成 [0,3]/[1,3] 会落进透视项,
-    // 整块封面被除到画布原点附近, 表现为「没有封面」+ 一团灰影。
-    drawContext.canvas.save()
-    drawContext.canvas.concat(
-        Matrix().apply {
-            this[0, 0] = LanghuanShelfGeometry.depthX
-            this[1, 0] = LanghuanShelfGeometry.depthY
-            this[3, 0] = panelA.x
-            this[3, 1] = panelA.y
-        }
-    )
+    // 封面：直立矩形，与书脊同高。不再做斜投影压缩，封面与书脊一样正。
     val panelPath = Path().apply {
-        moveTo(0f, 0f)
-        lineTo(metrics.coverW, 0f)
-        lineTo(metrics.coverW, metrics.bodyH)
-        lineTo(0f, metrics.bodyH)
+        moveTo(panelA.x, panelA.y)
+        lineTo(panelA.x + metrics.coverW, panelA.y)
+        lineTo(panelA.x + metrics.coverW, panelA.y + metrics.bodyH)
+        lineTo(panelA.x, panelA.y + metrics.bodyH)
         close()
     }
     drawPath(panelPath, colors.paper)
@@ -639,12 +626,22 @@ private fun DrawScope.drawBook(
 
     val coverCode = "NO.${(slot + 1).toString().padStart(3, '0')}"
     val codeStyle = TextStyle(fontSize = 9.sp, fontWeight = FontWeight.Medium, color = colors.summaryText)
-    drawText(textMeasurer, coverCode, topLeft = Offset(10f * d, 9f * d), style = codeStyle)
+    drawText(
+        textMeasurer,
+        coverCode,
+        topLeft = Offset(panelA.x + 10f * d, panelA.y + 9f * d),
+        style = codeStyle,
+    )
 
-    val imageLeft = 10f * d
-    val imageTop = 9f * d + textMeasurer.measure(coverCode, codeStyle).size.height + 7f * d
+    val imageLeft = panelA.x + 10f * d
+    val imageTop = panelA.y + 9f * d + textMeasurer.measure(coverCode, codeStyle).size.height + 7f * d
     if (cover != null) {
-        clipRect(imageLeft, imageTop, metrics.coverW - 10f * d, imageTop + metrics.coverImageH) {
+        clipRect(
+            imageLeft,
+            imageTop,
+            panelA.x + metrics.coverW - 10f * d,
+            imageTop + metrics.coverImageH,
+        ) {
             drawImage(
                 image = cover,
                 srcOffset = IntOffset.Zero,
@@ -680,18 +677,17 @@ private fun DrawScope.drawBook(
         )
     }
 
-    val author = book.author.ifBlank { "未知作者" }
+    val author = book.author.ifBlank { unknownAuthor }
     val authorStyle = TextStyle(fontSize = 9.sp, color = colors.summaryText)
     drawText(
         textMeasurer,
         author,
-        topLeft = Offset(imageLeft, metrics.bodyH - 18f * d),
+        topLeft = Offset(imageLeft, panelA.y + metrics.bodyH - 18f * d),
         style = authorStyle,
         overflow = TextOverflow.Ellipsis,
         maxLines = 1,
         size = Size(metrics.coverImageW, 18f * d),
     )
-    drawContext.canvas.restore()
 
     // 书脊：整排书统一用纸色，不再用主题色铺满。
     // 参考实现里书脊是米白纸面 + 深色竖排书名，主题色只留在书名区等小面积位置；
@@ -787,6 +783,7 @@ private fun ShelfMeta(
     book: BookItemUi,
     index: Int,
     total: Int,
+    unknownAuthor: String,
     modifier: Modifier = Modifier,
 ) {
     val colors = AppTheme.colors
@@ -802,9 +799,9 @@ private fun ShelfMeta(
             Spacer(Modifier.height(2.dp))
             val chapter = book.durChapterTitle
             val meta = if (chapter.isNullOrBlank()) {
-                book.author.ifBlank { "未知作者" }
+                book.author.ifBlank { unknownAuthor }
             } else {
-                "${book.author.ifBlank { "未知作者" }} · $chapter"
+                "${book.author.ifBlank { unknownAuthor }} · $chapter"
             }
             Text(
                 text = meta,

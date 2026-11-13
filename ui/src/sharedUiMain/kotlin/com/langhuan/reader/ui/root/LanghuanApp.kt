@@ -39,7 +39,6 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.unit.dp
 import com.langhuan.reader.constant.AppLog
 import com.langhuan.reader.data.AppDbProviders
 import com.langhuan.reader.data.entities.BookGroup
@@ -874,9 +873,6 @@ private fun DialogOverlayContent(overlay: AppOverlay.Dialog, navigator: AppNavig
 
         // 默认封面图集管理 (对照 app 端 DefaultCoverGalleryDialog; payload "1"=夜间, 其余=日间)
         "default_cover_gallery" -> DefaultCoverGalleryOverlayDialogContent(overlay, navigator)
-
-        // 升级更新日志 (对照原版 upVersion updateLog 分支)
-        "updateLog" -> UpdateLogOverlayDialogContent(overlay, navigator)
 
         // 崩溃日志 (对照 app 端 CrashLogsDialog Fragment)
         "crash_logs" -> CrashLogsOverlayDialogContent(overlay, navigator)

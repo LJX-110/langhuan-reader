@@ -7,7 +7,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.langhuan.reader.constant.PreferKey
 import com.langhuan.reader.help.config.PreferenceProviders
 import com.langhuan.reader.help.config.ReadBookConfigProviders
@@ -20,10 +19,8 @@ import com.langhuan.reader.ui.compose.component.AppBottomSheetDialog
 import com.langhuan.reader.ui.compose.component.AppSheetSurface
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.dialog.NumberPickerDialog
-import com.langhuan.reader.ui.root.PlatformCapabilityProviders
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.page_touch_slop_dialog_title
-import com.langhuan.reader.ui.generated.resources.page_touch_slop_summary
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -61,15 +58,10 @@ private fun MoreConfigBody(
     readBookConfig: ReadBookConfigShared,
 ) {
     val pref = PreferenceProviders.get()
-    // 触摸灵敏度摘要: 系统scaledTouchSlop格式化 (对照 app 端 page_touch_slop_summary)
-    val slopSquare = PlatformCapabilityProviders.get().getScaledTouchSlop()
-    val pageTouchSlopSummary =
-        stringResource(Res.string.page_touch_slop_summary, slopSquare.toString())
     var showPageTouchSlop by remember { mutableStateOf(false) }
     var showClickRegional by remember { mutableStateOf(false) }
 
     MoreConfigScreen(
-        pageTouchSlopSummary = pageTouchSlopSummary,
         onPageTouchSlop = { showPageTouchSlop = true },
         onClickRegionalConfig = { showClickRegional = true },
         onPrefChange = { key ->

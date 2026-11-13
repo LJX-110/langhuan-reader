@@ -48,7 +48,6 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 fun MoreConfigScreen(
-    pageTouchSlopSummary: String,
     onPageTouchSlop: () -> Unit,
     onClickRegionalConfig: () -> Unit,
     onPrefChange: (String) -> Unit = {},
@@ -163,7 +162,6 @@ fun MoreConfigScreen(
             // 音量键翻页恒生效 (2026-08 用户拍板), 无开关条目; 滚轮翻页已彻底禁用 (2026-08 用户拍板), 无开关条目
             preference(
                 title = titlePageTouchSlop,
-                summary = pageTouchSlopSummary,
                 isBottomBackground = true,
                 onClick = onPageTouchSlop,
             )
