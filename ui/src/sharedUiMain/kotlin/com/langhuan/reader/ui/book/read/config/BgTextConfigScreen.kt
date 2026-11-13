@@ -3,7 +3,6 @@ package com.langhuan.reader.ui.book.read.config
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -32,7 +31,6 @@ import com.langhuan.reader.ui.book.read.ReadConfigChange
 import com.langhuan.reader.ui.compose.component.AlertButton
 import com.langhuan.reader.ui.compose.component.AppAlertDialog
 import com.langhuan.reader.ui.compose.component.AppDetailSeekBar
-import com.langhuan.reader.ui.compose.component.AppSelectorDialog
 import com.langhuan.reader.ui.compose.component.AppSwitchRow
 import com.langhuan.reader.ui.compose.component.AppUnderlineTextField
 import com.langhuan.reader.ui.compose.component.StrokeTextChip
@@ -54,7 +52,6 @@ import com.langhuan.reader.ui.generated.resources.ic_edit
 import com.langhuan.reader.ui.generated.resources.ic_baseline_close
 import com.langhuan.reader.ui.generated.resources.import_str
 import com.langhuan.reader.ui.generated.resources.ok
-import com.langhuan.reader.ui.generated.resources.restore
 import com.langhuan.reader.ui.generated.resources.select_image
 import com.langhuan.reader.ui.generated.resources.style_name
 import com.langhuan.reader.ui.generated.resources.text_color
@@ -117,18 +114,6 @@ interface BgTextConfigController {
 
     /** 持久化配置（对应 `ReadBookConfig.save()`） */
     fun save()
-
-    /**
-     * 恢复预设布局名称列表（对应 app 端 `DefaultData.readConfigs.map { it.name }`）。
-     * shared/commonMain 无 DefaultData，由各平台 wrapper 提供预设名列表。
-     */
-    fun restorePresetNames(): List<String>
-
-    /**
-     * 恢复预设布局（对应 app 端 `ReadBookConfig.durConfig = defaultConfigs[i].copy()`）。
-     * @param index 预设索引
-     */
-    fun restorePreset(index: Int)
 }
 
 /**
@@ -209,26 +194,21 @@ fun BgTextConfigScreen(
     val bgAlphaStr = stringResource(Res.string.bg_alpha)
     val bgImageStr = stringResource(Res.string.bg_image)
     val selectImageStr = stringResource(Res.string.select_image)
-    val restoreStr = stringResource(Res.string.restore)
     val editStr = stringResource(Res.string.edit)
     val okStr = stringResource(Res.string.ok)
     val cancelStr = stringResource(Res.string.cancel)
 
-    // 恢复预设布局后整体重读配置（对齐原 initData）
-    var refresh by remember { mutableIntStateOf(0) }
-    var name by remember(refresh, styleNameStr) {
+    var name by remember(styleNameStr) {
         mutableStateOf(controller.name.ifBlank { styleNameStr })
     }
-    var darkStatusIcon by remember(refresh) { mutableStateOf(controller.darkStatusIcon()) }
-    var underline by remember(refresh) { mutableStateOf(controller.underline()) }
-    var bgAlpha by remember(refresh) { mutableIntStateOf(controller.bgAlpha()) }
+    var darkStatusIcon by remember { mutableStateOf(controller.darkStatusIcon()) }
+    var underline by remember { mutableStateOf(controller.underline()) }
+    var bgAlpha by remember { mutableIntStateOf(controller.bgAlpha()) }
     var showTextColorPicker by remember { mutableStateOf(false) }
     var showBgColorPicker by remember { mutableStateOf(false) }
     var showNameEditDialog by remember { mutableStateOf(false) }
-    var showRestorePresetDialog by remember { mutableStateOf(false) }
-    // 背景图片行状态: 变更只发生在本对话框三处 (选色确认/清除/选图回调), 各自就地
-    // 刷新, 不订阅 ReadBookEvents (恢复预设走 refresh 重读)
-    var bgState by remember(refresh) {
+    // 背景图片行状态: 变更只发生在本对话框三处 (选色确认/清除/选图回调), 各自就地刷新
+    var bgState by remember {
         mutableStateOf(controller.curBgType() to controller.curBgStr())
     }
     fun refreshBgState() {
@@ -258,11 +238,6 @@ fun BgTextConfigScreen(
                 modifier = Modifier
                     .size(20.dp)
                     .clickable { showNameEditDialog = true },
-            )
-            Spacer(Modifier.weight(1f))
-            Text(
-                restoreStr, color = colors.primaryText,
-                modifier = Modifier.clickable { showRestorePresetDialog = true },
             )
         }
         // 暗色状态栏图标开关（对照原版 setCurStatusIconDark + upSystemUiVisibility）
@@ -436,27 +411,6 @@ fun BgTextConfigScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-    }
-
-    // 恢复预设布局选择对话框 (对齐 app 端 context.selector)
-    if (showRestorePresetDialog) {
-        val presetNames = controller.restorePresetNames()
-        AppSelectorDialog(
-            onDismissRequest = { showRestorePresetDialog = false },
-            title = restoreStr,
-            items = presetNames,
-            onItemSelected = { index ->
-                controller.restorePreset(index)
-                refresh++
-                actions.onPostConfig(
-                    listOf(
-                        ReadConfigChange.BG,
-                        ReadConfigChange.STYLE,
-                        ReadConfigChange.LOAD_CONTENT,
-                    )
-                )
-            },
-        )
     }
 }
 

@@ -22,6 +22,15 @@ data class LanghuanThemePreset(
 )
 
 /**
+ * 只换 12 套主题强调色时的轻量刷新事件。
+ *
+ * 与 `EventBus.RECREATE` 分开：后者会让 Android 宿主 `Activity.recreate()`，
+ * 在阅读页换主题会把正在读的一页连同翻页委托一起重建；这里只让 [AppTheme]
+ * 重读皮肤下标并重组颜色，正文与阅读位置都不动。
+ */
+const val LANGHUAN_THEME_ACCENT_CHANGED = "langhuanThemeAccentChanged"
+
+/**
  * 12 套可切换皮肤。与 Flutter 版 `theme_presets.dart` 一一对应，
  * 默认第 1 套（鸢尾蓝 · 流光白）。
  */

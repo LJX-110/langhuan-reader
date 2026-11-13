@@ -207,8 +207,8 @@ fun AppTextButton(
 }
 
 /** 开关：自绘复刻 SwitchCompat/MD2 形态（细 track + 圆 thumb 带阴影），
- *  着色对齐 TintHelper.setTint(SwitchCompat)：勾选 track=accent α0.5 / thumb=accent，
- *  未选/禁用取 ate_switch_* 值。滑动动画走 animateDpAsState，E-Ink 禁动画。 */
+ *  勾选态用辅助色 (track=companion α0.5 / thumb=companion)，未选/禁用取 ate_switch_* 值。
+ *  滑动动画走 animateDpAsState，E-Ink 禁动画。 */
 @Composable
 fun AppSwitch(
     checked: Boolean,

@@ -811,6 +811,11 @@
     <string name="dialog_preview_group_sheet">底部弹层</string>
     <string name="dialog_preview_group_base">基础形制</string>
     <string name="langhuan_skin">皮肤</string>
+    <string name="langhuan_theme">主题</string>
+    <string name="reader_section_typography">排版</string>
+    <string name="reader_section_paper">背景与主题</string>
+    <string name="reader_layout">版面</string>
+    <string name="reader_custom_bg">自定义</string>
 
     <!-- 阅读页专注模式与纸色 -->
     <string name="reader_focus">专注</string>

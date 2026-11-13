@@ -31,6 +31,8 @@ import com.langhuan.reader.ui.compose.platform.ProvidePlatformImeEditCommands
 import com.langhuan.reader.ui.compose.platform.LocalThemeStoreProvider
 import com.langhuan.reader.ui.compose.platform.ThemeStoreProvider
 import com.langhuan.reader.ui.compose.platform.platformTextStyleNoFontPadding
+import com.langhuan.reader.utils.FlowBus
+import kotlinx.coroutines.launch
 
 /**
  * E-Ink 模式标记，供组件去动画/黑白化。
@@ -265,6 +267,12 @@ fun AppTheme(
     var recreateTick by remember(themeStore, eventBus) { mutableIntStateOf(0) }
     // Native providers 从持久层读取普通值，事件到达时触发重组；Desktop 的 State getter 可直接触发。
     LaunchedEffect(themeStore, eventBus) {
+        // 阅读面板只换强调色：走轻量事件，不触发 Android 的 Activity 重建
+        launch {
+            FlowBus.with(LANGHUAN_THEME_ACCENT_CHANGED).collect {
+                recreateTick++
+            }
+        }
         eventBus.recreateEvent.collect {
             recreateTick++
         }

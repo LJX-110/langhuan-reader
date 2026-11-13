@@ -1,7 +1,7 @@
 package com.langhuan.reader.ui.book.read
 
 /*
- * 阅读菜单：顶栏 + 底栏（操作坞 / 排版 / 进度 / 书签四态）。
+ * 阅读菜单：顶栏 + 底栏（操作坞 / 排版 / 书签三态）。
  *
  * 四端共用本文件的 Composable 与 [ReadMenuState]；平台端只实现状态与平台动作
  * （Activity 生命周期、TTS、对话框路由），界面一律在这里。
@@ -62,6 +62,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -102,8 +103,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
+import com.langhuan.reader.ui.compose.theme.LANGHUAN_THEME_ACCENT_CHANGED
+import com.langhuan.reader.ui.compose.theme.LanghuanThemeSwatch
+import com.langhuan.reader.ui.compose.theme.LanghuanThemes
 import com.langhuan.reader.ui.compose.theme.LanghuanType
 import com.langhuan.reader.ui.compose.theme.LocalEInk
+import com.langhuan.reader.ui.compose.theme.langhuanReadable
 import com.langhuan.reader.ui.root.AppNavigator
 import com.langhuan.reader.ui.root.AppOverlay
 import com.langhuan.reader.ui.root.AppRoute
@@ -114,8 +119,8 @@ import com.langhuan.reader.ui.route.BgTextConfigDialogHost
 import com.langhuan.reader.ui.route.ChineseConverterDialogHost
 import com.langhuan.reader.ui.route.FontSelectDialogHost
 import com.langhuan.reader.ui.route.ReadLayoutConfigDialogHost
-import com.langhuan.reader.ui.route.ReadStyleSwatchRow
 import com.langhuan.reader.utils.ColorUtils
+import com.langhuan.reader.utils.FlowBus
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.dark_theme
 import com.langhuan.reader.ui.generated.resources.ic_arrow_back
@@ -1038,8 +1043,14 @@ private fun ReadMenuBottom(
     )
     val bg = palette.surface
     val text = palette.onSurface
+    // 底栏可能落在深色纸/图片上，而 AppTheme 的强调色是按页面白/近黑校正的。
+    // 这里再按底栏自身明暗校正一次，保证页签、胶囊、进度数字在墨夜纸上也读得清。
+    val panelDark = bg.luminance() < .5f
+    val panelAccent =
+        if (eInk) text else langhuanReadable(AppTheme.colors.accentFill, panelDark)
     // 章节进度用辅助色；E-Ink 下退回正文色，避免黑白模式出现彩色数字
-    val progressColor = if (eInk) text else AppTheme.colors.companion
+    val progressColor =
+        if (eInk) text else langhuanReadable(AppTheme.colors.companion, panelDark)
 
     // 4dp 阴影向上: 默认 shadow 光源在上方, 先翻转 180° 加阴影再翻回,
     // 阴影即投射到屏幕底部外侧的上方。面板内容随当前页切换，外壳只此一份。
@@ -1064,12 +1075,12 @@ private fun ReadMenuBottom(
             )
         }
         if (panel != ReaderPanel.DOCK) {
-            ReaderPanelTabs(panel, text, onPanelChange)
+            ReaderPanelTabs(panel, text, panelAccent, onPanelChange)
         }
         when (panel) {
             ReaderPanel.DOCK -> ReaderDockContent(state, text)
-            ReaderPanel.STYLE -> ReaderStylePanel(state, text, eInk, progressColor)
-            ReaderPanel.BOOKMARK -> ReaderBookmarkPanel(state, text)
+            ReaderPanel.STYLE -> ReaderStylePanel(state, text, eInk, progressColor, panelAccent)
+            ReaderPanel.BOOKMARK -> ReaderBookmarkPanel(state, text, panelAccent)
         }
     }
 }
@@ -1098,6 +1109,7 @@ private fun ReaderPanelHandle(text: Color) {
 private fun ReaderPanelTabs(
     panel: ReaderPanel,
     text: Color,
+    accent: Color,
     onPanelChange: (ReaderPanel) -> Unit,
 ) {
     Row(
@@ -1106,10 +1118,10 @@ private fun ReaderPanelTabs(
             .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ReaderPanelTab(rememberString("reader_panel_style"), panel == ReaderPanel.STYLE, text) {
+        ReaderPanelTab(rememberString("reader_panel_style"), panel == ReaderPanel.STYLE, text, accent) {
             onPanelChange(if (panel == ReaderPanel.STYLE) ReaderPanel.DOCK else ReaderPanel.STYLE)
         }
-        ReaderPanelTab(rememberString("bookmark"), panel == ReaderPanel.BOOKMARK, text) {
+        ReaderPanelTab(rememberString("bookmark"), panel == ReaderPanel.BOOKMARK, text, accent) {
             onPanelChange(
                 if (panel == ReaderPanel.BOOKMARK) ReaderPanel.DOCK else ReaderPanel.BOOKMARK
             )
@@ -1132,26 +1144,63 @@ private fun ReaderPanelTab(
     label: String,
     selected: Boolean,
     tint: Color,
+    accent: Color,
     onClick: () -> Unit,
 ) {
     Text(
         text = label,
-        color = if (selected) AppTheme.colors.accent else tint.copy(alpha = .6f),
+        color = if (selected) accent else tint.copy(alpha = .6f),
         fontSize = 13.sp,
         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
         modifier = Modifier
             .clip(RoundedCornerShape(14.dp))
             .background(
-                if (selected) AppTheme.colors.accent.copy(alpha = .12f) else Color.Transparent
+                if (selected) accent.copy(alpha = .12f) else Color.Transparent
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 6.dp),
     )
 }
 
-/** 操作坞：上一章/目录(含 x/y)/下一章 + 查找/换源(长按本章)/专注 */
+/**
+ * 操作坞：低频动作（查找/换源/专注）压成上方一条紧凑带，高频的
+ * 上一章 / 目录 / 下一章 放在贴近拇指的底行。
+ *
+ * 之前两行等高等重，搜索和换源反而离拇指更近；现在只在底行保留大按钮。
+ */
 @Composable
 private fun ReaderDockContent(state: ReadMenuState, text: Color) {
+    Row(Modifier.fillMaxWidth()) {
+        BottomMenuItem(
+            iconKey = "ic_search",
+            labelKey = "search_content",
+            tint = text.copy(alpha = .65f),
+            modifier = Modifier.weight(1f),
+            compact = true,
+        ) { state.clickSearch() }
+        BottomMenuItem(
+            iconKey = "ic_exchange",
+            labelKey = "change_source",
+            tint = text.copy(alpha = .65f),
+            modifier = Modifier.weight(1f),
+            compact = true,
+            onLongClick = { state.longClickChangeSource() },
+        ) { state.clickChangeSource() }
+        BottomMenuItem(
+            iconKey = if (readerFocusMode) "ic_fullscreen_exit" else "ic_fullscreen_enter",
+            labelKey = if (readerFocusMode) "reader_focus_exit" else "reader_focus",
+            tint = text.copy(alpha = .65f),
+            modifier = Modifier.weight(1f),
+            compact = true,
+        ) {
+            if (readerFocusMode) {
+                readerFocusMode = false
+            } else {
+                readerFocusMode = true
+                state.runMenuOut()
+            }
+        }
+    }
     Row(Modifier.fillMaxWidth()) {
         BottomMenuItem(
             iconKey = "ic_skip_previous",
@@ -1172,86 +1221,6 @@ private fun ReaderDockContent(state: ReadMenuState, text: Color) {
             tint = if (state.nextEnabled) text else text.copy(alpha = .3f),
             modifier = Modifier.weight(1f),
         ) { if (state.nextEnabled) state.clickNext() }
-    }
-    Row(Modifier.fillMaxWidth()) {
-        BottomMenuItem("ic_search", "search_content", text, Modifier.weight(1f)) {
-            state.clickSearch()
-        }
-        BottomMenuItem(
-            iconKey = "ic_exchange",
-            labelKey = "change_source",
-            tint = text,
-            modifier = Modifier.weight(1f),
-            onLongClick = { state.longClickChangeSource() },
-        ) {
-            state.clickChangeSource()
-        }
-        BottomMenuItem(
-            iconKey = if (readerFocusMode) "ic_fullscreen_exit" else "ic_fullscreen_enter",
-            labelKey = if (readerFocusMode) "reader_focus_exit" else "reader_focus",
-            tint = text,
-            modifier = Modifier.weight(1f),
-        ) {
-            if (readerFocusMode) {
-                readerFocusMode = false
-            } else {
-                readerFocusMode = true
-                state.runMenuOut()
-            }
-        }
-    }
-}
-
-/** 排版页内「本章进度」段：百分比 + 目录位置 + 章首/章末跳转 */
-@Composable
-private fun ReaderProgressPanel(state: ReadMenuState, text: Color, progressColor: Color) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ReaderMetric(
-            label = rememberString("chapter_progress_short"),
-            value = state.chapterProgressText,
-            text = text,
-            valueColor = progressColor,
-            modifier = Modifier.weight(1f),
-        )
-        ReaderMetric(
-            label = rememberString("chapter_list"),
-            value = state.chapterIndexText,
-            text = text,
-            modifier = Modifier.weight(1f),
-        )
-    }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ReaderPanelAction(rememberString("reader_chapter_start"), text) {
-            state.clickChapterStart()
-        }
-        Spacer(Modifier.width(DesignTokens.spacingDefault))
-        ReaderPanelAction(rememberString("reader_chapter_end"), text) {
-            state.clickChapterEnd()
-        }
-    }
-}
-
-@Composable
-private fun ReaderMetric(
-    label: String,
-    value: String,
-    text: Color,
-    modifier: Modifier = Modifier,
-    valueColor: Color = text,
-) {
-    Column(modifier) {
-        Text(text = value, color = valueColor, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-        Text(text = label, color = text.copy(alpha = .55f), fontSize = 11.sp)
     }
 }
 
@@ -1277,7 +1246,7 @@ private fun ReaderPanelAction(
 
 /** 面板「书签」页：当前位置加书签 + 本书书签列表（点跳转，右端删除） */
 @Composable
-private fun ReaderBookmarkPanel(state: ReadMenuState, text: Color) {
+private fun ReaderBookmarkPanel(state: ReadMenuState, text: Color, accent: Color) {
     val bookmarks by remember(state) {
         state.bookmarkFlow() ?: flowOf(emptyList())
     }.collectAsState(emptyList())
@@ -1336,7 +1305,7 @@ private fun ReaderBookmarkPanel(state: ReadMenuState, text: Color) {
                 }
                 Text(
                     text = rememberString("delete"),
-                    color = AppTheme.colors.accent,
+                    color = accent,
                     fontSize = 12.sp,
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
@@ -1349,11 +1318,15 @@ private fun ReaderBookmarkPanel(state: ReadMenuState, text: Color) {
 }
 
 /**
- * 面板「排版与进度」页：一行样式入口（字重/字体/缩进/简繁/版面）+ 四道滑条
- * （字号/字距/行距/段距）+ 纸色 + 翻页方式 + 配色板 + 本章进度 + 恢复默认。
+ * 面板「排版」页，参考轻小说文库的阅读设置分层：
  *
- * 单列布局，滑条右侧直接显示当前值，恢复默认放在面板最底部。
- * 旧的全屏「界面设置」弹窗（ReadStyleScreen）已删除，能力全部收进本面板。
+ * 1. 上半：四道带数值的滑条（字号 / 字距 / 行距 / 段距），单次调节即生效；
+ * 2. 其下一排二级胶囊（字重 / 字体 / 缩进 / 简繁 / 版面），放不下的项收进各自子弹窗；
+ * 3. 背景与主题：宣纸/青笺/墨夜三张拟物纸样 + 自定义，12 套主辅双色主题格；
+ * 4. 翻页方式独立成三态（滚动 / 覆盖 / 无动画）；
+ * 5. 本章进度压成一行，底部是设置与恢复默认。
+ *
+ * 单列布局，整页可滚动。旧的全屏「界面设置」弹窗与预设色块行均已删除。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1362,6 +1335,7 @@ private fun ReaderStylePanel(
     text: Color,
     eInk: Boolean,
     progressColor: Color,
+    accent: Color,
 ) {
     val readConfig = ReadBookConfigProviders.get()
     // 面板内即时状态：点按后先更新本地值让面板立刻响应，再写配置并通知重排/重建翻页委托。
@@ -1374,8 +1348,8 @@ private fun ReaderStylePanel(
     var pageAnim by remember { mutableIntStateOf(readConfig.pageAnim) }
     var paperBg by remember { mutableStateOf(readConfig.config.curBgStr()) }
     var shareLayout by remember { mutableStateOf(readConfig.shareLayout) }
-    // 背景文字配置改完返回后自增，让配色板重读被就地修改的样式
-    var swatchTick by remember { mutableIntStateOf(0) }
+    // 12 套主题：只改强调色，不重建 Activity（见 LANGHUAN_THEME_ACCENT_CHANGED）
+    var themeIndex by remember { mutableIntStateOf(LanghuanThemes.currentIndex()) }
 
     var showWeight by remember { mutableStateOf(false) }
     var showIndent by remember { mutableStateOf(false) }
@@ -1432,6 +1406,17 @@ private fun ReaderStylePanel(
         postConfig(ReadConfigChange.PAGE_ANIM, ReadConfigChange.LOAD_CONTENT)
     }
 
+    /**
+     * 换 12 套主题之一：只写皮肤下标并发轻量事件，让 [AppTheme] 重算强调色。
+     * 不走 `applyDayNight()` —— 那会 `Activity.recreate()`，正在读的这一页会被重建。
+     */
+    fun applyTheme(index: Int) {
+        if (index == themeIndex) return
+        themeIndex = index
+        LanghuanThemes.select(index)
+        FlowBus.with(LANGHUAN_THEME_ACCENT_CHANGED).tryEmit("")
+    }
+
     /** 恢复默认排版：只重置字号与间距类字段，背景、字体文件与翻页方式保持不变 */
     fun resetStyle() {
         fontSize = DEFAULT_TEXT_SIZE
@@ -1455,36 +1440,14 @@ private fun ReaderStylePanel(
     Column(
         Modifier
             .fillMaxWidth()
-            .heightIn(max = 340.dp)
+            .heightIn(max = 420.dp)
             .verticalScroll(rememberScrollState()),
     ) {
-        // 一行样式入口：滑条放不下的字重/字体/缩进/简繁/版面
-        FlowRow(
-            Modifier.fillMaxWidth().padding(horizontal = DesignTokens.spacingLg),
-            horizontalArrangement = Arrangement.spacedBy(DesignTokens.spacingDefault),
-            verticalArrangement = Arrangement.spacedBy(DesignTokens.spacingXs),
-        ) {
-            ReaderPanelAction(
-                rememberString("font_weight_text"), text,
-                horizontalPadding = 12.dp, verticalPadding = 6.dp,
-            ) { showWeight = true }
-            ReaderPanelAction(
-                rememberString("text_font"), text,
-                horizontalPadding = 12.dp, verticalPadding = 6.dp,
-            ) { showFont = true }
-            ReaderPanelAction(
-                rememberString("text_indent"), text,
-                horizontalPadding = 12.dp, verticalPadding = 6.dp,
-            ) { showIndent = true }
-            ReaderPanelAction(
-                "简/繁", text,
-                horizontalPadding = 12.dp, verticalPadding = 6.dp,
-            ) { showConverter = true }
-            ReaderPanelAction(
-                rememberString("information"), text,
-                horizontalPadding = 12.dp, verticalPadding = 6.dp,
-            ) { showLayout = true }
-        }
+        ReaderStyleSectionLabel(
+            text = rememberString("reader_section_typography"),
+            color = text,
+            modifier = Modifier.padding(top = DesignTokens.spacingDefault),
+        )
         AppDetailSeekBar(
             title = rememberString("text_size"),
             value = fontSize,
@@ -1532,146 +1495,180 @@ private fun ReaderStylePanel(
                 .padding(horizontal = DesignTokens.spacingLg),
             onChanged = ::applyParagraphSpacing,
         )
-        // 纸色
+        // 二级入口：字重 / 字体 / 缩进 / 简繁 / 版面。
+        // 高频的四道滑块留在面板上，低频项收进这排胶囊，点开各自的子弹窗。
+        FlowRow(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
+            horizontalArrangement = Arrangement.spacedBy(DesignTokens.spacingDefault),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.spacingXs),
+        ) {
+            ReaderPanelAction(
+                rememberString("font_weight_text"), text,
+                horizontalPadding = 12.dp, verticalPadding = 6.dp,
+            ) { showWeight = true }
+            ReaderPanelAction(
+                rememberString("text_font"), text,
+                horizontalPadding = 12.dp, verticalPadding = 6.dp,
+            ) { showFont = true }
+            ReaderPanelAction(
+                rememberString("text_indent"), text,
+                horizontalPadding = 12.dp, verticalPadding = 6.dp,
+            ) { showIndent = true }
+            ReaderPanelAction(
+                rememberString("chinese_converter"), text,
+                horizontalPadding = 12.dp, verticalPadding = 6.dp,
+            ) { showConverter = true }
+            ReaderPanelAction(
+                rememberString("reader_layout"), text,
+                horizontalPadding = 12.dp, verticalPadding = 6.dp,
+            ) { showLayout = true }
+        }
         if (!eInk) {
+            // 背景与主题：拟物纸样 + 12 套双色主题
+            ReaderStyleSectionLabel(
+                text = rememberString("reader_section_paper"),
+                color = text,
+                modifier = Modifier.padding(top = DesignTokens.spacingDefault),
+            )
             Row(
                 Modifier
                     .fillMaxWidth()
                     .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
+                horizontalArrangement = Arrangement.spacedBy(DesignTokens.spacingDefault),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = rememberString("paper_color"),
-                    color = text.copy(alpha = .55f),
-                    fontSize = 12.sp,
-                )
-                Spacer(Modifier.width(DesignTokens.spacingDefault))
                 readerPaperTones.forEach { tone ->
                     val selected = paperBg.equals(tone.bg, ignoreCase = true)
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable {
-                                applyReaderPaperTone(tone)
-                                paperBg = tone.bg
-                            }
-                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                    ReaderPaperCard(
+                        label = rememberString(tone.labelKey),
+                        background = Color(ColorUtils.parseColor(tone.bg)),
+                        ink = Color(ColorUtils.parseColor(tone.text)),
+                        selected = selected,
+                        panelText = text,
+                        accent = accent,
                     ) {
-                        Box(
-                            Modifier
-                                .size(20.dp)
-                                .clip(CircleShape)
-                                .then(
-                                    if (selected) {
-                                        Modifier.border(2.dp, AppTheme.colors.accent, CircleShape)
-                                    } else {
-                                        Modifier
-                                    }
-                                )
-                                .background(Color(ColorUtils.parseColor(tone.bg)))
-                        )
-                        Text(
-                            text = rememberString(tone.labelKey),
-                            color = text.copy(alpha = .6f),
-                            fontSize = 9.sp,
-                            maxLines = 1,
-                        )
+                        applyReaderPaperTone(tone)
+                        paperBg = tone.bg
                     }
                 }
+                ReaderPaperCard(
+                    label = rememberString("reader_custom_bg"),
+                    background = text.copy(alpha = .06f),
+                    ink = text,
+                    selected = false,
+                    panelText = text,
+                    accent = accent,
+                ) { showBgText = true }
             }
-            // 翻页方式：只暴露滚动/覆盖；滑动、仿真等旧值在 UI 上按覆盖显示
+            // 翻页方式：滚动 / 覆盖 / 无动画。滑动、仿真等旧值在 UI 上按覆盖显示。
+            ReaderStyleSectionLabel(
+                text = rememberString("page_anim"),
+                color = text,
+                modifier = Modifier.padding(top = DesignTokens.spacingDefault),
+            )
             Row(
                 Modifier
                     .fillMaxWidth()
                     .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
+                horizontalArrangement = Arrangement.spacedBy(DesignTokens.spacingDefault),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = rememberString("page_anim"),
-                    color = text.copy(alpha = .55f),
-                    fontSize = 12.sp,
-                )
-                Spacer(Modifier.weight(1f))
                 ReaderPageModeChip(
                     label = rememberString("page_anim_scroll"),
                     selected = pageAnim == PageAnim.scrollPageAnim,
                     tint = text,
+                    accent = accent,
                 ) { applyPageAnim(PageAnim.scrollPageAnim) }
-                Spacer(Modifier.width(DesignTokens.spacingDefault))
                 ReaderPageModeChip(
                     label = rememberString("page_anim_cover"),
-                    selected = pageAnim != PageAnim.scrollPageAnim,
+                    selected = pageAnim == PageAnim.coverPageAnim ||
+                        pageAnim == PageAnim.slidePageAnim ||
+                        pageAnim == PageAnim.simulationPageAnim,
                     tint = text,
+                    accent = accent,
                 ) { applyPageAnim(PageAnim.coverPageAnim) }
+                ReaderPageModeChip(
+                    label = rememberString("page_anim_none"),
+                    selected = pageAnim == PageAnim.noAnim,
+                    tint = text,
+                    accent = accent,
+                ) { applyPageAnim(PageAnim.noAnim) }
             }
-        }
-        // 配色板（点选切换，长按编辑背景与文字）
-        ReadStyleSwatchRow(refreshKey = swatchTick, onEditStyle = { showBgText = true })
-        // 本章进度：与排版同页，省去一次页签切换
-        ReaderProgressPanel(state, text, progressColor)
-        // 共用布局
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = rememberString("share_layout"),
-                color = text.copy(alpha = .7f),
-                fontSize = 12.sp,
-            )
-            AppSwitch(
-                checked = shareLayout,
-                onCheckedChange = { checked ->
-                    shareLayout = checked
-                    readConfig.shareLayout = checked
-                    readConfig.save()
-                    // 共用布局开关切换 config 来源 (shareConfig ↔ durConfig),
-                    // 生效 pageAnim 可能随之变化, 需重建翻页委托
-                    postConfig(
-                        ReadConfigChange.BG,
-                        ReadConfigChange.STYLE,
-                        ReadConfigChange.PAGE_ANIM,
-                        ReadConfigChange.LOAD_CONTENT,
-                    )
-                },
+            ReaderThemeSwatches(
+                selectedIndex = themeIndex,
+                text = text,
+                accent = accent,
+                onSelect = ::applyTheme,
             )
         }
-        // 朗读跟随 + 更多设置
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = rememberString("reader_follow_aloud"),
-                color = text,
-                fontSize = 13.sp,
-                modifier = Modifier.weight(1f),
-            )
-            AppSwitch(
-                checked = readerFollowAloud,
-                onCheckedChange = { readerFollowAloud = it },
-            )
-        }
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ReaderPanelAction(rememberString("setting"), text) { state.clickSetting() }
-        }
-        // 恢复默认排版：放在面板最底部
+        // 本章进度压成一行：百分比、目录位置、章首/章末跳转都在同一行里
         Row(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
-            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
+            Text(
+                text = state.chapterProgressText,
+                color = progressColor,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = state.chapterIndexText,
+                color = text.copy(alpha = .55f),
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            ReaderPanelAction(
+                rememberString("reader_chapter_start"), text,
+                horizontalPadding = 10.dp, verticalPadding = 4.dp,
+            ) { state.clickChapterStart() }
+            Spacer(Modifier.width(6.dp))
+            ReaderPanelAction(
+                rememberString("reader_chapter_end"), text,
+                horizontalPadding = 10.dp, verticalPadding = 4.dp,
+            ) { state.clickChapterEnd() }
+        }
+        ReaderSwitchRow(
+            label = rememberString("share_layout"),
+            checked = shareLayout,
+            text = text,
+        ) { checked ->
+            shareLayout = checked
+            readConfig.shareLayout = checked
+            readConfig.save()
+            // 共用布局开关切换 config 来源 (shareConfig ↔ durConfig),
+            // 生效 pageAnim 可能随之变化, 需重建翻页委托
+            postConfig(
+                ReadConfigChange.BG,
+                ReadConfigChange.STYLE,
+                ReadConfigChange.PAGE_ANIM,
+                ReadConfigChange.LOAD_CONTENT,
+            )
+        }
+        ReaderSwitchRow(
+            label = rememberString("reader_follow_aloud"),
+            checked = readerFollowAloud,
+            text = text,
+        ) { readerFollowAloud = it }
+        // 底部两个低频动作并排：设置 / 恢复默认排版
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
+            horizontalArrangement = Arrangement.spacedBy(
+                DesignTokens.spacingDefault,
+                Alignment.CenterHorizontally,
+            ),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ReaderPanelAction(rememberString("setting"), text) { state.clickSetting() }
             ReaderPanelAction(rememberString("reader_reset_style"), text) { resetStyle() }
         }
     }
@@ -1720,9 +1717,158 @@ private fun ReaderStylePanel(
         BgTextConfigDialogHost(
             onDismiss = {
                 showBgText = false
-                swatchTick++
+                // 自定义背景改完后就地重读纸色，纸样预览立即跟上
+                paperBg = readConfig.config.curBgStr()
             }
         )
+    }
+}
+
+@Composable
+private fun ReaderStyleSectionLabel(
+    text: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = text,
+        color = color.copy(alpha = .5f),
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Medium,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(
+                start = DesignTokens.spacingLg,
+                end = DesignTokens.spacingLg,
+                bottom = DesignTokens.spacingXs,
+            ),
+    )
+}
+
+/**
+ * 拟物纸样：一块带纸色的圆角纸片 + 纸上的示例字，下面标纸名。
+ *
+ * 比原来 20dp 的小圆点更接近参考里"能看出纸感"的预览：宣纸的米、青笺的淡青、
+ * 墨夜的近黑都能直接看到，选中时只加一圈主题色描边，不叠阴影。
+ */
+@Composable
+private fun ReaderPaperCard(
+    label: String,
+    background: Color,
+    ink: Color,
+    selected: Boolean,
+    panelText: Color,
+    accent: Color,
+    onClick: () -> Unit,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(2.dp),
+    ) {
+        Box(
+            Modifier
+                .size(width = 54.dp, height = 42.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .background(background)
+                .border(
+                    width = if (selected) 1.5.dp else 0.5.dp,
+                    color = if (selected) accent else panelText.copy(alpha = .18f),
+                    shape = RoundedCornerShape(7.dp),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = "文", color = ink, fontSize = 15.sp)
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = label,
+            color = panelText.copy(alpha = if (selected) .9f else .55f),
+            fontSize = 10.sp,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * 12 套主题的双色色块。每格左半主色、右半辅助色，两色始终同显；
+ * 选中项的名字显示在标题行右侧，色块本身只加一圈描边，避免整行跳动。
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ReaderThemeSwatches(
+    selectedIndex: Int,
+    text: Color,
+    accent: Color,
+    onSelect: (Int) -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = rememberString("langhuan_theme"),
+                color = text.copy(alpha = .5f),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = LanghuanThemes.all[selectedIndex.coerceIn(0, LanghuanThemes.all.lastIndex)].name,
+                color = text.copy(alpha = .7f),
+                fontSize = 11.sp,
+                maxLines = 1,
+            )
+        }
+        Spacer(Modifier.height(DesignTokens.spacingXs))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            maxItemsInEachRow = 6,
+        ) {
+            LanghuanThemes.all.forEachIndexed { index, preset ->
+                Box(
+                    Modifier
+                        .clip(CircleShape)
+                        .clickable { onSelect(index) }
+                        .padding(3.dp),
+                ) {
+                    LanghuanThemeSwatch(
+                        preset = preset,
+                        selected = index == selectedIndex,
+                        selectionColor = accent,
+                        size = 28.dp,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReaderSwitchRow(
+    label: String,
+    checked: Boolean,
+    text: Color,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = DesignTokens.spacingLg, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            color = text.copy(alpha = .8f),
+            fontSize = 12.5.sp,
+            modifier = Modifier.weight(1f),
+        )
+        AppSwitch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
@@ -1731,16 +1877,17 @@ private fun ReaderPageModeChip(
     label: String,
     selected: Boolean,
     tint: Color,
+    accent: Color,
     onClick: () -> Unit,
 ) {
     Text(
         text = label,
-        color = if (selected) AppTheme.colors.accent else tint.copy(alpha = .6f),
+        color = if (selected) accent else tint.copy(alpha = .6f),
         fontSize = 13.sp,
         modifier = Modifier
             .clip(RoundedCornerShape(14.dp))
             .background(
-                if (selected) AppTheme.colors.accent.copy(alpha = .12f) else Color.Transparent
+                if (selected) accent.copy(alpha = .12f) else Color.Transparent
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 6.dp),
@@ -1793,29 +1940,34 @@ fun BottomMenuItem(
     tint: Color,
     modifier: Modifier = Modifier.width(60.dp),
     subLabel: String? = null,
+    /** 低频动作的紧凑形态：图标与文字更小、上下留白更少 */
+    compact: Boolean = false,
     onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     Column(
         modifier
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(top = DesignTokens.spacingXs, bottom = DesignTokens.spacingDefault),
+            .padding(
+                top = if (compact) 2.dp else DesignTokens.spacingXs,
+                bottom = if (compact) 4.dp else DesignTokens.spacingDefault,
+            ),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(
             painter = rememberPainter(iconKey),
             contentDescription = rememberString(labelKey),
             tint = tint,
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(if (compact) 17.dp else 20.dp),
         )
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(top = DesignTokens.spacingXs),
+            modifier = Modifier.padding(top = if (compact) 1.dp else DesignTokens.spacingXs),
         ) {
             Text(
                 text = rememberString(labelKey),
                 color = tint,
-                fontSize = 12.sp,
+                fontSize = if (compact) 11.sp else 12.sp,
                 maxLines = 1,
             )
             if (!subLabel.isNullOrBlank()) {

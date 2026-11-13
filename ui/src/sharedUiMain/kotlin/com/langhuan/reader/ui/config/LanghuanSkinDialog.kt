@@ -1,7 +1,6 @@
 package com.langhuan.reader.ui.config
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +36,7 @@ import com.langhuan.reader.ui.compose.component.LanghuanSegmentedControl
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
 import com.langhuan.reader.ui.compose.theme.LanghuanThemePreset
+import com.langhuan.reader.ui.compose.theme.LanghuanThemeSwatch
 import com.langhuan.reader.ui.compose.theme.LanghuanThemes
 import com.langhuan.reader.ui.root.PlatformCapabilityProviders
 import com.langhuan.reader.ui.generated.resources.Res
@@ -128,20 +128,8 @@ private fun SkinRow(
             .padding(horizontal = 4.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 主色实心圆 + 辅助色实心圆：一眼看出这套皮肤的两色关系
-        Box(
-            Modifier
-                .size(26.dp)
-                .background(preset.accent, CircleShape)
-                .border(0.5.dp, colors.line, CircleShape)
-        )
-        Spacer(Modifier.width(6.dp))
-        Box(
-            Modifier
-                .size(26.dp)
-                .background(preset.secondary, CircleShape)
-                .border(0.5.dp, colors.line, CircleShape)
-        )
+        // 双色同显：左半主色、右半辅助色。浅色辅助色落在白底上也不会“消失”。
+        LanghuanThemeSwatch(preset = preset, selected = selected, size = 34.dp)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(

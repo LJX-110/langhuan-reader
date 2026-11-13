@@ -809,6 +809,11 @@
     <string name="dialog_preview_group_sheet">Bottom sheets</string>
     <string name="dialog_preview_group_base">Base shells</string>
     <string name="langhuan_skin">Skin</string>
+    <string name="langhuan_theme">Theme</string>
+    <string name="reader_section_typography">Typography</string>
+    <string name="reader_section_paper">Paper &amp; theme</string>
+    <string name="reader_layout">Layout</string>
+    <string name="reader_custom_bg">Custom</string>
 
     <!-- 阅读页专注模式与纸色 -->
     <string name="reader_focus">Focus</string>

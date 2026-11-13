@@ -11,7 +11,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.langhuan.reader.constant.AppLog
 import com.langhuan.reader.help.config.ReadBookConfigProviders
-import com.langhuan.reader.help.config.ReadConfigDefaults
 import com.langhuan.reader.help.coroutine.IoDispatcher
 import com.langhuan.reader.help.http.OkHttpClientProviders
 import com.langhuan.reader.help.http.newCallResponseBody
@@ -163,16 +162,6 @@ fun BgTextConfigContent(
 
             // 持久化配置 (对照 app 端 ReadBookConfig.save)
             override fun save() = readBookConfig.save()
-
-            // 预设布局名列表 (对照 app 端 DefaultData.readConfigs.map { it.name })
-            override fun restorePresetNames(): List<String> =
-                ReadConfigDefaults.readConfigs.map { it.name }
-
-            // 恢复预设布局 (对照 app 端 ReadBookConfig.durConfig = defaultConfigs[i].copy())
-            override fun restorePreset(index: Int) {
-                readBookConfig.durConfig = ReadConfigDefaults.readConfigs[index].copy()
-                readBookConfig.save()
-            }
         }
     }
 

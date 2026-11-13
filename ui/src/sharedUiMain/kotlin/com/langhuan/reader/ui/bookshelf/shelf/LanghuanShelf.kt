@@ -63,7 +63,6 @@ import com.langhuan.reader.help.image.ImageBitmapLoader
 import com.langhuan.reader.ui.compose.theme.AppColors
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.LanghuanType
-import com.langhuan.reader.ui.compose.theme.langhuanOnColor
 import com.langhuan.reader.uimodel.BookItemUi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -131,15 +130,20 @@ fun LanghuanShelf(
     onRefresh: () -> Unit = {},
     onOpen: (BookItemUi) -> Unit,
     onLongPress: (BookItemUi) -> Unit,
+    emptyContent: (@Composable () -> Unit)? = null,
 ) {
     val colors = AppTheme.colors
     if (books.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(
-                text = "书架还是空的",
-                color = colors.summaryText,
-                fontSize = 14.sp,
-            )
+            if (emptyContent != null) {
+                emptyContent()
+            } else {
+                Text(
+                    text = "书架还是空的",
+                    color = colors.summaryText,
+                    fontSize = 14.sp,
+                )
+            }
         }
         return
     }
@@ -469,7 +473,7 @@ fun LanghuanShelf(
     }
 }
 
-/** 整排书：先铺地面投影，再按格位顺序画书。 */
+/** 整排书：先铺地面投影，再按格位顺序（左 → 右）画书。 */
 private fun DrawScope.drawShelfRow(
     books: List<BookItemUi>,
     offset: Float,
@@ -486,9 +490,13 @@ private fun DrawScope.drawShelfRow(
     val last = ceil((offset + size.width + margin) / pitch).toInt()
         .coerceAtMost(books.lastIndex)
 
-    // 抽出量小的先画、大的后画：居中抽出的那本盖住邻书，封面才不会被邻书压掉
-    val order = (first..last).sortedBy { abs(it - focus) }
-    for (slot in order) {
+    // 投影先铺满一层：任何一本书的阴影都落在所有书下面
+    for (slot in first..last) {
+        drawFloorShadow(slot, focus, metrics, colors)
+    }
+    // 平行排布的书按格位顺序绘制：右邻书的封面压住左邻书的纵深，与真实遮挡一致。
+    // 不再按「离中心远近」排序，拖动时不会出现层序跳变。
+    for (slot in first..last) {
         drawBook(
             book = books[slot],
             slot = slot,
@@ -499,6 +507,46 @@ private fun DrawScope.drawShelfRow(
             textMeasurer = textMeasurer,
         )
     }
+}
+
+/**
+ * 地面投影：书脊底边沿深度向量铺开的一块梯形，右下角再拖出两道小斜边。
+ *
+ * 用从右上到左下的渐隐填充，书才像站在台面上而不是浮在纸面上。
+ * 与书体共用 [slotBase] 的顶点，拖动/抽出时阴影跟着走。
+ */
+private fun DrawScope.drawFloorShadow(
+    slot: Int,
+    focus: Float,
+    metrics: LanghuanShelfMetrics,
+    colors: AppColors,
+) {
+    val (baseX, baseY, _) = slotBase(slot, focus, metrics)
+    val d = metrics.density
+    val origin = Offset(baseX, baseY + metrics.topInset + metrics.bodyH)
+    val depth = Offset(
+        metrics.coverW * LanghuanShelfGeometry.depthX,
+        metrics.coverW * LanghuanShelfGeometry.depthY,
+    )
+    val path = Path().apply {
+        moveTo(origin.x, origin.y)
+        lineTo(origin.x + metrics.spineW, origin.y + 1.4f * d)
+        lineTo(origin.x + metrics.spineW + depth.x, origin.y + 1.4f * d + depth.y)
+        lineTo(origin.x + depth.x, origin.y + depth.y)
+        lineTo(origin.x + depth.x - 10f * d, origin.y + depth.y + 10f * d)
+        lineTo(origin.x - 10f * d, origin.y + 10f * d)
+        close()
+    }
+    val bounds = path.getBounds()
+    val ink = colors.primaryText
+    drawPath(
+        path = path,
+        brush = Brush.linearGradient(
+            colors = listOf(ink.copy(alpha = .10f), ink.copy(alpha = 0f)),
+            start = Offset(bounds.right, bounds.top),
+            end = Offset(bounds.left, bounds.bottom),
+        ),
+    )
 }
 
 private fun slotBase(
@@ -525,7 +573,7 @@ private fun DrawScope.drawBook(
     cover: ImageBitmap?,
     textMeasurer: TextMeasurer,
 ) {
-    val (baseX, baseY, weight) = slotBase(slot, focus, metrics)
+    val (baseX, baseY, _) = slotBase(slot, focus, metrics)
     val d = metrics.density
     val shear = LanghuanShelfGeometry.spineShear
     val spineTop = Offset(baseX, baseY + metrics.topInset)
@@ -538,30 +586,32 @@ private fun DrawScope.drawBook(
         metrics.coverW * LanghuanShelfGeometry.depthY,
     )
     val panelA = spineTopRight
-    val panelB = panelA + depth
-    val panelC = panelB + Offset(0f, metrics.bodyH)
-    val panelD = panelA + Offset(0f, metrics.bodyH)
 
-    // 顶面：纸的暗面到亮面
+    // 顶面：书脊顶边沿深度向量推出去的一条窄带，不是整张封面。
+    // 上一版把顶面画到了封面全宽，看起来像摊开的一张纸，这是「生硬感」的主要来源。
     val topPath = Path().apply {
         moveTo(spineTop.x, spineTop.y)
         lineTo(panelA.x, panelA.y)
-        lineTo(panelB.x, panelB.y)
+        lineTo(panelA.x + depth.x, panelA.y + depth.y)
         lineTo(spineTop.x + depth.x, spineTop.y + depth.y)
         close()
     }
+    val topBounds = topPath.getBounds()
     drawPath(
         path = topPath,
         brush = Brush.verticalGradient(
-            colors = listOf(colors.paperDeep, colors.paper),
-            startY = topPath.getBounds().bottom,
-            endY = topPath.getBounds().top,
+            colors = listOf(
+                blend(colors.paper, Color.Black, .10f),
+                blend(colors.paper, Color.White, .05f),
+            ),
+            startY = topBounds.bottom,
+            endY = topBounds.top,
         ),
     )
     drawPath(
         path = topPath,
-        color = colors.primaryText.copy(alpha = .26f),
-        style = Stroke(width = .6f),
+        color = colors.primaryText.copy(alpha = .22f),
+        style = Stroke(width = .6f * d),
     )
 
     // 封面面板：在局部坐标里画，再整体沿深度向量压扁
@@ -587,12 +637,12 @@ private fun DrawScope.drawBook(
     drawPath(panelPath, colors.paper)
     drawPath(panelPath, colors.line, style = Stroke(width = 1f))
 
-    val code = (slot + 1).toString().padStart(2, '0')
+    val coverCode = "NO.${(slot + 1).toString().padStart(3, '0')}"
     val codeStyle = TextStyle(fontSize = 9.sp, fontWeight = FontWeight.Medium, color = colors.summaryText)
-    drawText(textMeasurer, code, topLeft = Offset(10f * d, 9f * d), style = codeStyle)
+    drawText(textMeasurer, coverCode, topLeft = Offset(10f * d, 9f * d), style = codeStyle)
 
     val imageLeft = 10f * d
-    val imageTop = 9f * d + textMeasurer.measure(code, codeStyle).size.height + 7f * d
+    val imageTop = 9f * d + textMeasurer.measure(coverCode, codeStyle).size.height + 7f * d
     if (cover != null) {
         clipRect(imageLeft, imageTop, metrics.coverW - 10f * d, imageTop + metrics.coverImageH) {
             drawImage(
@@ -643,7 +693,9 @@ private fun DrawScope.drawBook(
     )
     drawContext.canvas.restore()
 
-    // 书脊：切变过的竖条，主题色渐变 + 竖排书名
+    // 书脊：整排书统一用纸色，不再用主题色铺满。
+    // 参考实现里书脊是米白纸面 + 深色竖排书名，主题色只留在书名区等小面积位置；
+    // 上一版每本书脊都是一条高饱和色带，远看像一排色卡，这是「生硬」的第二个来源。
     val spinePath = Path().apply {
         moveTo(spineTop.x, spineTop.y)
         lineTo(spineTopRight.x, spineTopRight.y)
@@ -651,34 +703,39 @@ private fun DrawScope.drawBook(
         lineTo(spineTop.x, spineTop.y + metrics.bodyH)
         close()
     }
-    val accent = colors.accentFill
+    val spinePaper = colors.paperDeep
     drawPath(
         path = spinePath,
         brush = Brush.horizontalGradient(
             colors = listOf(
-                blend(accent, Color.Black, .24f),
-                accent,
-                blend(accent, Color.White, .14f),
+                blend(spinePaper, Color.Black, .06f),
+                spinePaper,
+                blend(spinePaper, Color.White, .05f),
             ),
             startX = spineTop.x,
             endX = spineTopRight.x,
         ),
     )
+    drawPath(
+        path = spinePath,
+        color = colors.line.copy(alpha = .55f),
+        style = Stroke(width = .6f * d),
+    )
 
-    val onAccent = langhuanOnColor(accent)
+    val spineInk = colors.primaryText
+    val spineCode = (slot + 1).toString().padStart(2, '0')
     val spineCodeStyle = TextStyle(
         fontSize = 8.5.sp,
-        fontWeight = FontWeight.SemiBold,
-        color = onAccent.copy(alpha = .78f),
+        fontWeight = FontWeight.Medium,
+        color = spineInk.copy(alpha = .62f),
     )
+    val spineCodeLayout = textMeasurer.measure(spineCode, spineCodeStyle)
     drawText(
-        textMeasurer,
-        code,
-        topLeft = Offset(spineTop.x + 1f, spineTop.y + metrics.spineW * shear + 6f * d),
-        style = spineCodeStyle,
-        maxLines = 1,
-        softWrap = false,
-        size = Size(metrics.spineW - 2f * d, 16f * d),
+        textLayoutResult = spineCodeLayout,
+        topLeft = Offset(
+            spineTop.x + (metrics.spineW - spineCodeLayout.size.width) / 2f,
+            spineTop.y + metrics.spineW * shear + 8f * d,
+        ),
     )
 
     // 竖排书名：一行一个字，最多七行
@@ -687,8 +744,8 @@ private fun DrawScope.drawBook(
     }
     val titleStyle = TextStyle(
         fontSize = 9.sp,
-        fontWeight = FontWeight.SemiBold,
-        color = onAccent,
+        fontWeight = FontWeight.Medium,
+        color = spineInk,
     )
     val charHeight = textMeasurer.measure("书", titleStyle).size.height.toFloat()
     val totalHeight = charHeight * chars.size
@@ -701,18 +758,20 @@ private fun DrawScope.drawBook(
                 spineTop.x + (metrics.spineW - layout.size.width) / 2f,
                 y,
             ),
-            color = onAccent,
         )
         y += charHeight
     }
 
-    // 抽出量接近 1 时给一点投影，书像被拿起来
-    if (weight > .2f) {
-        drawPath(
-            path = spinePath,
-            color = colors.primaryText.copy(alpha = .08f * weight),
-        )
-    }
+    // 书脊底部的小圆点：参考实现用一枚 6dp 圆点收尾，比整块投影安静。
+    // 用辅助色而不是灰：这是每本书脊上唯一的主题色触点，面积小，不喧宾夺主
+    drawCircle(
+        color = colors.companion.copy(alpha = .8f),
+        radius = 3f * d,
+        center = Offset(
+            spineTop.x + metrics.spineW / 2f,
+            spineTop.y + metrics.bodyH - 10f * d,
+        ),
+    )
 }
 
 private fun blend(base: Color, overlay: Color, fraction: Float): Color = Color(

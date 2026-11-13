@@ -318,6 +318,9 @@ fun MainRoute(
         }
     }
 
+    // 「本地」页的导入书单入口（书架溢出菜单已移除该项）
+    var showImportShelf by remember { mutableStateOf(false) }
+
     MainScreen(
         visibleTags = visibleTags,
         initialPage = initialPage,
@@ -358,7 +361,14 @@ fun MainRoute(
                 }
             }
         },
-        homeTab = { LocalBooksTab(navigator, homeActive) },
+        homeTab = {
+            LocalBooksTab(
+                navigator = navigator,
+                active = homeActive,
+                onImportLocalBook = { navigator.push(AppRoute.ImportBook) },
+                onImportBookshelf = { showImportShelf = true },
+            )
+        },
         bookshelfTab = {
             // 封面比例布局状态: 只在书架内容处下发, 其余 tab 封面保持无持有者的原路径
             CompositionLocalProvider(
@@ -371,6 +381,8 @@ fun MainRoute(
                     bookshelfGotoTopTick,
                     bookshelfTabSelected,
                     isRootTop = isMainTop,
+                    showImportShelf = showImportShelf,
+                    onDismissImportShelf = { showImportShelf = false },
                 )
             }
         },
@@ -439,6 +451,9 @@ private fun BookshelfTabContent(
     tabSelected: Boolean,
     // 主界面是栈顶时分组返回拦截才生效 (否则压栈页面的返回键会被不可见书架页吞掉)
     isRootTop: Boolean,
+    // 「本地」页触发的导入书单对话框（状态放在 MainRoute，与本地页共享）
+    showImportShelf: Boolean,
+    onDismissImportShelf: () -> Unit,
 ) {
     var showAppLog by remember { mutableStateOf(false) }
     // 分组长按或管理列表编辑 → GroupEditDialog。
@@ -459,24 +474,21 @@ private fun BookshelfTabContent(
     }
     // 对照 BookshelfManageRoute: GroupViewModelShared 持久化分组增删改
     val groupVm = remember(scope) { GroupViewModelShared(scope) }
-    // 溢出菜单 "add_url" / "import_bookshelf" → 输入框对话框 (对照 BaseBookshelfFragment
-    // showAddBookByUrlAlert / importBookshelfAlert)
+    // 溢出菜单 "add_url" → 输入框对话框 (对照 BaseBookshelfFragment showAddBookByUrlAlert);
+    // "导入书单"入口已移到「本地」页，这里仍复用同一对话框与 addVm
     var showAddByUrl by remember { mutableStateOf(false) }
-    var showImportShelf by remember { mutableStateOf(false) }
     val addVm = remember(scope) { BookshelfAddViewModelShared(scope) }
     val currentGroupId by viewModel.currentGroupId.collectAsState()
 
     val callbacks = remember(navigator, currentGroupId) {
         BookshelfActionsCallbacks(
             onRefresh = { viewModel.upToc() },
-            onAddLocalBook = { navigator.push(AppRoute.ImportBook) },
             onAddRemoteBook = { navigator.push(AppRoute.RemoteBook) },
             onShowAddBookByUrlAlert = { showAddByUrl = true },
             // 对照原版 BaseBookshelfFragment: startActivity<BookshelfManageActivity> {
             //   putExtra("groupId", groupId) } — 管理页只显示书架当前选中分组的书
             onOpenBookshelfManage = { navigator.push(AppRoute.BookshelfManage(currentGroupId)) },
             onShowGroupManage = { showGroupManage = true },
-            onImportBookshelf = { showImportShelf = true },
             onShowAppLog = { showAppLog = true },
             onRefreshShelf = { viewModel.refresh() },
         )
@@ -546,17 +558,17 @@ private fun BookshelfTabContent(
                         }
                         if (path != null) {
                             val text = withContext(IoDispatcher) { BackupFileOps.readText(path) }
-                            showImportShelf = false
+                            onDismissImportShelf()
                             addVm.importBookshelf(text, currentGroupId)
                         }
                     }
                 },
             ),
             onConfirm = {
-                showImportShelf = false
+                onDismissImportShelf()
                 if (it.isNotBlank()) addVm.importBookshelf(it, currentGroupId)
             },
-            onDismiss = { showImportShelf = false },
+            onDismiss = onDismissImportShelf,
         )
     }
     // 分组管理对话框与原版一致，编辑和新增使用完整 GroupEditDialog。

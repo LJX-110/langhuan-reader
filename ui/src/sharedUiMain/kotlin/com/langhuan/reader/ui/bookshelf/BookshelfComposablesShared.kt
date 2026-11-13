@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.CircularProgressIndicator
+import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
@@ -584,12 +585,16 @@ fun BookshelfActions(callbacks: BookshelfActionsCallbacks) {
         // 刷新: 等价下拉刷新 (onRefresh), 无下拉手势的端 (如桌面) 走此入口
         ShelfMenuItem("refresh") { dismiss(); callbacks.onRefresh() }
         ShelfMenuItem("force_refresh_book") { dismiss(); callbacks.onRefreshShelf() }
-        ShelfMenuItem("book_local") { dismiss(); callbacks.onAddLocalBook() }
         ShelfMenuItem("add_remote_book") { dismiss(); callbacks.onAddRemoteBook() }
         ShelfMenuItem("add_url") { dismiss(); callbacks.onShowAddBookByUrlAlert() }
+        // 导入书 / 导入书单在「本地」页，不再占书架菜单
+        Divider(
+            color = AppTheme.colors.line,
+            thickness = 0.5.dp,
+            modifier = Modifier.padding(vertical = 4.dp),
+        )
         ShelfMenuItem("bookshelf_management") { dismiss(); callbacks.onOpenBookshelfManage() }
         ShelfMenuItem("group_manage") { dismiss(); callbacks.onShowGroupManage() }
-        ShelfMenuItem("import_bookshelf") { dismiss(); callbacks.onImportBookshelf() }
         ShelfMenuItem("log") { dismiss(); callbacks.onShowAppLog() }
     }
 }
@@ -600,12 +605,10 @@ data class BookshelfActionsCallbacks(
     /** 刷新 (等价下拉刷新 onRefresh, 无下拉手势的端走菜单入口) */
     val onRefresh: () -> Unit = {},
     val onRefreshShelf: () -> Unit = {},
-    val onAddLocalBook: () -> Unit = {},
     val onAddRemoteBook: () -> Unit = {},
     val onShowAddBookByUrlAlert: () -> Unit = {},
     val onOpenBookshelfManage: () -> Unit = {},
     val onShowGroupManage: () -> Unit = {},
-    val onImportBookshelf: () -> Unit = {},
     val onShowAppLog: () -> Unit = {},
 )
 
