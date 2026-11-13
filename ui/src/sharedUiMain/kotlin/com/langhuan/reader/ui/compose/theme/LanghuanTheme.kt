@@ -147,7 +147,7 @@ fun langhuanReadable(color: Color, dark: Boolean, minRatio: Float = 4.5f): Color
  * 两者都贴近页面时才做可读性校正，避免主题色「消失」。
  *
  * 只比对比度、不加亮度差条件：纯黄在白底上亮度差很大但对比度只有 1.07，
- * 若放过它，分组竖线、书脊这类小块标记会看不见。
+ * 若放过它，书脊、选中态这类小块标记会看不见。
  */
 fun langhuanThemeAccent(primary: Color, secondary: Color, dark: Boolean): Color {
     val page = if (dark) DarkPage else LightPage

@@ -757,7 +757,7 @@ private fun ExploreTitleBar(
     val eInk = LocalEInk.current
     Box(Modifier.fillMaxWidth().then(if (eInk) Modifier else Modifier.platformStatusBarPadding())) {
         Column {
-            // 页眉：与书架 / 本地页同一套「主题色细竖线 + 衬线标题」
+            // 页眉：与书架 / 本地页同一套衬线标题
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 if (onBack != null) {
                     IconButton(onClick = onBack) {

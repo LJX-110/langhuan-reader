@@ -527,9 +527,9 @@ private fun DrawScope.drawFloorShadow(
     metrics: LanghuanShelfMetrics,
     colors: AppColors,
 ) {
-    val (baseX, baseY, _) = slotBase(slot, focus, metrics)
+    val base = slotBase(slot, focus, metrics)
     val d = metrics.density
-    val origin = Offset(baseX, baseY + metrics.topInset + metrics.bodyH)
+    val origin = Offset(base.x, base.y + metrics.topInset + metrics.bodyH)
     val width = metrics.spineW + metrics.coverW
     // 直立书的落地投影：书底沿台面横向铺开，向下渐隐，两侧各探出一点软边
     val path = Path().apply {
@@ -551,18 +551,20 @@ private fun DrawScope.drawFloorShadow(
     )
 }
 
+/** 书在行内的落点：格位基准再加上抽出偏移 */
 private fun slotBase(
     slot: Int,
     focus: Float,
     metrics: LanghuanShelfMetrics,
-): Triple<Float, Float, Float> {
+): Offset {
     val distance = slot - focus
     val weight = LanghuanShelfGeometry.wave(distance)
     val x = metrics.rowStart + slot * metrics.pitch - focus * metrics.pitch
     val restY = metrics.seatY + metrics.railY(distance)
-    val extractionY = LanghuanShelfGeometry.extractionY(metrics.coverW, metrics.bodyH, weight)
-    val extractionX = LanghuanShelfGeometry.extractionX(metrics.coverW, weight)
-    return Triple(x + extractionX, restY + extractionY, weight)
+    return Offset(
+        x + LanghuanShelfGeometry.extractionX(metrics.coverW, weight),
+        restY + LanghuanShelfGeometry.extractionY(metrics.coverW, metrics.bodyH, weight),
+    )
 }
 
 /** 一本书：这里画顶面、封面、书脊。 */
@@ -576,13 +578,13 @@ private fun DrawScope.drawBook(
     textMeasurer: TextMeasurer,
     unknownAuthor: String,
 ) {
-    val (baseX, baseY, _) = slotBase(slot, focus, metrics)
+    val base = slotBase(slot, focus, metrics)
     val d = metrics.density
     val shear = LanghuanShelfGeometry.spineShear
-    val spineTop = Offset(baseX, baseY + metrics.topInset)
+    val spineTop = Offset(base.x, base.y + metrics.topInset)
     val spineTopRight = Offset(
-        baseX + metrics.spineW,
-        baseY + metrics.topInset + metrics.spineW * shear,
+        base.x + metrics.spineW,
+        base.y + metrics.topInset + metrics.spineW * shear,
     )
     val panelA = spineTopRight
 

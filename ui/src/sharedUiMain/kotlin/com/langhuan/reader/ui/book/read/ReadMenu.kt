@@ -43,7 +43,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.Text
@@ -83,7 +82,6 @@ import com.langhuan.reader.help.config.currentNightTheme
 import com.langhuan.reader.help.showSourceLogin
 import com.langhuan.reader.help.toast.Toasters
 import com.langhuan.reader.ui.compose.component.AppDetailSeekBar
-import com.langhuan.reader.ui.compose.component.AppDropdownMenu
 import com.langhuan.reader.ui.compose.component.AppSelectorDialog
 import com.langhuan.reader.ui.compose.component.AppSlider
 import com.langhuan.reader.ui.compose.component.AppSwitch
@@ -870,7 +868,7 @@ private fun ReadMenuTopBar(
             IconButton(onClick = { state.supportFinishAfterTransition() }) {
                 Icon(
                     painter = painterResource(Res.drawable.ic_arrow_back),
-                    contentDescription = null,
+                    contentDescription = rememberString("back"),
                     tint = topText,
                 )
             }
@@ -949,51 +947,28 @@ private fun ReadMenuTopBar(
     }
 }
 
-/** 顶栏图标动作，长按弹出子菜单(原 iconItemOnLongClick + PopupMenu) */
+/** 顶栏图标动作，可选长按回调 */
 @Composable
 private fun TopBarActionIcon(
     iconKey: String,
     descKey: String,
     tint: Color,
     onClick: () -> Unit,
-    longPressMenu: List<Pair<String, ReadMenuAction>>? = null,
     onLongClick: (() -> Unit)? = null,
-    onAction: ((ReadMenuAction) -> Unit)? = null,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        Box(
-            Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .combinedClickable(
-                    onClick = onClick,
-                    onLongClick = onLongClick
-                        ?: longPressMenu?.let { { expanded = true } },
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = rememberPainter(iconKey),
-                contentDescription = rememberString(descKey),
-                tint = tint,
-                modifier = Modifier.size(24.dp),
-            )
-        }
-        if (longPressMenu != null && onAction != null) {
-            AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                longPressMenu.forEach { (textKey, action) ->
-                    DropdownMenuItem(
-                        onClick = {
-                            expanded = false
-                            onAction(action)
-                        },
-                    ) {
-                        Text(rememberString(textKey), color = AppTheme.colors.primaryText)
-                    }
-                }
-            }
-        }
+    Box(
+        Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = rememberPainter(iconKey),
+            contentDescription = rememberString(descKey),
+            tint = tint,
+            modifier = Modifier.size(24.dp),
+        )
     }
 }
 
@@ -1540,7 +1515,7 @@ private fun ReaderStylePanel(
             max = 24,
             min = 8,
             textColor = text,
-            valueFormat = { "${it / 10f} 倍" },
+            valueFormat = { "${it / 10f}×" },
             modifier = Modifier
                 .height(DesignTokens.viewHeightSmall)
                 .padding(horizontal = DesignTokens.spacingLg),
