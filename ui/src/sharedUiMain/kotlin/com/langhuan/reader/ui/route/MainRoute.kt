@@ -64,10 +64,12 @@ import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.add_book_url
 import com.langhuan.reader.ui.generated.resources.cancel
 import com.langhuan.reader.ui.generated.resources.draw
+import com.langhuan.reader.ui.generated.resources.error
 import com.langhuan.reader.ui.generated.resources.import_bookshelf
 import com.langhuan.reader.ui.generated.resources.my
 import com.langhuan.reader.ui.generated.resources.ok
 import com.langhuan.reader.ui.generated.resources.select_file
+import com.langhuan.reader.ui.generated.resources.source_not_found
 import com.langhuan.reader.ui.generated.resources.sure_del
 import com.langhuan.reader.ui.main.MainScreen
 import com.langhuan.reader.ui.main.explore.ExploreScreen
@@ -567,6 +569,7 @@ private fun ExploreTabContent(
 ) {
     val screenState by screenModel.state.collectAsState()
     val scope = rememberCoroutineScope()
+    val sourceNotFoundText = stringResource(Res.string.source_not_found)
 
     val uiState = remember(screenState, listState) {
         ExploreUiState(
@@ -622,7 +625,7 @@ private fun ExploreTabContent(
                             )
                         }
                     } else {
-                        Toasters.get().toast("Source not found")
+                        Toasters.get().toast(sourceNotFoundText)
                     }
                 }
             }
@@ -716,7 +719,7 @@ private fun ExploreTabContent(
     // 分类错误详情 (对照 ExploreTabState.showKindError 的 TextDialog)
     kindError?.let { kind ->
         TextDialog(
-            title = "ERROR",
+            title = stringResource(Res.string.error),
             content = kind.url.orEmpty(),
             onDismiss = { kindError = null },
         )

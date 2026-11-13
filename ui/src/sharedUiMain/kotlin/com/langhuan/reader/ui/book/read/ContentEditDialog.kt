@@ -38,6 +38,7 @@ import com.langhuan.reader.ui.compose.component.AppTextField
 import com.langhuan.reader.ui.compose.component.OverflowMenu
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
+import com.langhuan.reader.utils.toUserFacingReason
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -169,8 +170,8 @@ fun ContentEditDialog(
             } catch (e: Throwable) {
                 // 原版失败只收转圈不提示 (静默空白), 这里补提示;
                 // AppLog 自带的 toast 开关在桌面端只打印日志, 走 Toasters 两端才可见
-                val reason = e.message ?: e.toString()
-                AppLog.put("编辑正文加载失败\n$reason", e)
+                val reason = e.toUserFacingReason()
+                AppLog.put("编辑正文加载失败\n${e.message}", e)
                 Toasters.get().toast("$loadErrorText\n$reason")
             } finally {
                 loading = false

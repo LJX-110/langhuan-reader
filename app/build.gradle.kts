@@ -51,8 +51,8 @@ abstract class CopyRenamedApks : DefaultTask() {
 
 val name = "langhuan"
 
-// CI 传 -PappVersion 注入统一版本号 (tag 去掉 v 前缀); 本地构建默认 2.3.0
-val version = providers.gradleProperty("appVersion").orNull ?: "2.3.0"
+// CI 传 -PappVersion 注入统一版本号 (tag 去掉 v 前缀); 本地构建默认 2.4.0
+val version = providers.gradleProperty("appVersion").orNull ?: "2.4.0"
 
 // 共存构建 (CI 传 -PcoexistBuild=true): 包名后缀与 APK 文件名后缀同源,
 // 与原包名版本可同时安装, 且 releaseA 字样是应用内更新识别渠道变体的依据 (AppReleaseInfo)

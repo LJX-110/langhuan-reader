@@ -63,6 +63,7 @@ import com.langhuan.reader.ui.root.PlatformServiceProviders
 import com.langhuan.reader.utils.ColorUtils
 import com.langhuan.reader.utils.FlowBus
 import com.langhuan.reader.utils.hexString
+import com.langhuan.reader.utils.toUserFacingReason
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.langhuan.reader.ui.generated.resources.Res
@@ -315,7 +316,7 @@ fun ThemeCustomizeDialog(
         } catch (e: Throwable) {
             // 真实盘满/不可写: 留在编辑框并提示原因, 不刷新成功态
             AppLog.put("保存主题失败\n${e.message}", e)
-            onToast(e.message ?: e.toString())
+            onToast(e.toUserFacingReason())
             return
         }
         notifyConfigChanged()
@@ -342,7 +343,7 @@ fun ThemeCustomizeDialog(
             )
         } catch (e: Throwable) {
             AppLog.put("保存主题失败\n${e.message}", e)
-            onToast(e.message ?: e.toString())
+            onToast(e.toUserFacingReason())
             return
         }
         notifyConfigChanged()

@@ -55,7 +55,7 @@ Windows 下把 `./gradlew` 换成 `.\gradlew.bat`。工程路径必须是纯 ASC
 
 ## 版本
 
-`versionCode = 10000 + git 提交数`（浅克隆会直接报错，需要完整历史）；`versionName` 默认取 `app/build.gradle.kts` 中的基线版本（当前 `2.3.0`），打 tag 时 CI 用 `-PappVersion` 注入去掉 `v` 前缀的 tag 版本，保证包内版本与 tag 一致。
+`versionCode = 10000 + git 提交数`（浅克隆会直接报错，需要完整历史）；`versionName` 默认取 `app/build.gradle.kts` 中的基线版本（当前 `2.4.0`），打 tag 时 CI 用 `-PappVersion` 注入去掉 `v` 前缀的 tag 版本，保证包内版本与 tag 一致。
 
 ## 许可
 

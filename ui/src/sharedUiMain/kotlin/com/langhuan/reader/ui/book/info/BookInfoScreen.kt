@@ -56,6 +56,7 @@ import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -110,6 +111,7 @@ import com.langhuan.reader.ui.generated.resources.more_menu
 import com.langhuan.reader.ui.generated.resources.other
 import com.langhuan.reader.ui.generated.resources.read_dur_progress
 import com.langhuan.reader.ui.generated.resources.reading
+import com.langhuan.reader.ui.generated.resources.refresh
 import com.langhuan.reader.ui.generated.resources.review
 import com.langhuan.reader.ui.generated.resources.set_book_variable
 import com.langhuan.reader.ui.generated.resources.set_source_variable
@@ -391,8 +393,20 @@ private fun PortraitLayout(
                         Spacer(Modifier.height(56.dp)) // actionBarSize
                         if (state.useDevFeat) TopSectionHorizontal(state, coverSlot)
                         else TopSectionVertical(state, coverSlot, land = false)
+                        // 头部与索引区之间一道细分隔线，让书名/元信息与操作区分层
+                        HairlineDivider(
+                            Modifier.padding(
+                                start = DesignTokens.spacingLg,
+                                end = DesignTokens.spacingLg,
+                                top = DesignTokens.spacingDefault,
+                            )
+                        )
                         ActionsRow(state, actions, Modifier.padding(horizontal = DesignTokens.spacingDefault))
                         KindsSection(state, actions, Modifier.padding(horizontal = DesignTokens.spacingDefault))
+                        SectionHeader(
+                            stringResource(Res.string.book_intro),
+                            Modifier.padding(horizontal = DesignTokens.spacingLg),
+                        )
                         IntroSection(
                             state, actions, introImageSlot,
                             Modifier.padding(start = DesignTokens.spacingLg, end = DesignTokens.spacingDefault, bottom = DesignTokens.spacingDefault),
@@ -471,6 +485,7 @@ private fun LandscapeLayout(
                     Spacer(Modifier.height(platformStatusBarHeight()))
                     ActionsRow(state, actions, Modifier)
                     KindsSection(state, actions, Modifier)
+                    SectionHeader(stringResource(Res.string.book_intro), Modifier)
                     IntroSection(state, actions, introImageSlot, Modifier.padding(start = DesignTokens.spacingDefault, bottom = DesignTokens.spacingDefault))
                     Spacer(Modifier.height(64.dp))
                     Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
@@ -484,6 +499,43 @@ private fun LandscapeLayout(
             }
             BottomButtons(state, actions, Modifier.align(Alignment.BottomCenter))
         }
+    }
+}
+
+/** 细分隔线：编辑式排版的分层线，颜色走主题描边色。 */
+@Composable
+private fun HairlineDivider(modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(DesignTokens.strokeHairline)
+            .background(AppTheme.colors.line)
+    )
+}
+
+/** 区块标题：短标签 + 一条延伸到右侧的细线，替代整块留白来做分段。 */
+@Composable
+private fun SectionHeader(label: String, modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .padding(top = DesignTokens.spacingLg, bottom = DesignTokens.spacingDefault),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            color = AppTheme.colors.primaryText,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.4.sp,
+        )
+        Spacer(Modifier.width(DesignTokens.spacingMd))
+        Box(
+            Modifier
+                .weight(1f)
+                .height(DesignTokens.strokeHairline)
+                .background(AppTheme.colors.line)
+        )
     }
 }
 
@@ -554,7 +606,7 @@ private fun InfoOverflowMenu(
             val menu = state.menuState
             val dismiss = { expanded = false }
             // 刷新: 等价下拉刷新 (onRefresh), 无下拉手势的端 (如桌面) 走此入口
-            MenuItem(rememberString("refresh")) { dismiss(); actions.onRefresh() }
+            MenuItem(stringResource(Res.string.refresh)) { dismiss(); actions.onRefresh() }
             if (menu.isLocal) {
                 MenuItem(stringResource(Res.string.upload_to_remote)) {
                     dismiss(); actions.onUploadBook()
@@ -689,7 +741,10 @@ private fun NameText(state: BookInfoUiState, align: TextAlign, maxLines: Int) {
         text = state.book?.name ?: stringResource(Res.string.book_name),
         // 封面取色生效时按共享亮暗判定映射 primaryText 昼夜对, 否则随主题
         color = LocalBookCoverPalette.current?.nameFg ?: AppTheme.colors.primaryText,
-        fontSize = 20.sp,
+        fontSize = 23.sp,
+        lineHeight = 28.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = (-0.7).sp,
         textAlign = align,
         maxLines = maxLines,
         modifier = Modifier
@@ -704,7 +759,8 @@ private fun WordCountText(state: BookInfoUiState, align: TextAlign) {
     Text(
         text = text,
         color = LocalBookCoverPalette.current?.wordCountFg ?: AppTheme.colors.secondaryText,
-        fontSize = 14.sp,
+        fontSize = 12.sp,
+        letterSpacing = 0.3.sp,
         textAlign = align,
         modifier = Modifier.fillMaxWidth(),
     )
@@ -728,7 +784,7 @@ private fun LastedRow(state: BookInfoUiState, modifier: Modifier) {
         Text(
             text = state.lastedTitle,
             color = summaryColor,
-            fontSize = 14.sp,
+            fontSize = 12.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )

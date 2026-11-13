@@ -780,7 +780,7 @@ fun ReadMenuOverlay(state: ReadMenuState) {
     LaunchedEffect(vs.isIdle, vs.currentState) {
         if (vs.isIdle) state.onTransitionIdle(vs.currentState)
     }
-    // 底栏当前面板：0 操作坞 / 1 排版 / 2 进度 / 3 书签；菜单收起后复位到操作坞
+    // 底栏当前面板：操作坞 / 排版 / 更多；菜单收起后复位到操作坞
     var panel by remember { mutableStateOf(ReaderPanel.DOCK) }
     LaunchedEffect(vs.currentState) {
         if (!vs.currentState) panel = ReaderPanel.DOCK
@@ -1378,7 +1378,7 @@ private fun ReaderMorePanel(state: ReadMenuState, text: Color, accent: Color) {
  * 4. 翻页方式独立成三态（滚动 / 覆盖 / 无动画）；
  * 5. 本章进度压成一行，底部是恢复默认排版。
  *
- * 单列布局，整页可滚动。主题色、书签、共用布局与朗读跟随都收进「更多」。
+ * 单列布局，整页可滚动。书签、共用布局、朗读跟随与设置入口都收进「更多」。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1455,7 +1455,7 @@ private fun ReaderStylePanel(
         postConfig(ReadConfigChange.PAGE_ANIM, ReadConfigChange.LOAD_CONTENT)
     }
 
-    /** 恢复默认排版：只重置字号与间距类字段，背景、字体文件与翻页方式保持不变 */
+    /** 恢复默认排版：重置字号、字距、行距、段距、字重与缩进；背景、字体文件与翻页方式保持不变 */
     fun resetStyle() {
         fontSize = DEFAULT_TEXT_SIZE
         letterSpacing = 50

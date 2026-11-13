@@ -4,6 +4,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -17,7 +18,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,6 +37,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -451,6 +456,8 @@ fun LanghuanShelf(
                     index = centerIndex,
                     total = books.size,
                     unknownAuthor = unknownAuthor,
+                    onPrev = { if (centerIndex > 0) settleTo(centerIndex - 1) },
+                    onNext = { if (centerIndex < books.lastIndex) settleTo(centerIndex + 1) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(with(density) { metaHeightPx.toDp() })
@@ -786,19 +793,29 @@ private fun ShelfMeta(
     index: Int,
     total: Int,
     unknownAuthor: String,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = AppTheme.colors
-    Row(modifier) {
+    // 与参考页一致：书名 17sp 加粗、副标题 12sp、页码等宽小字
+    val titleStyle = TextStyle(
+        fontFamily = LanghuanType.serif,
+        fontSize = 17.sp,
+        lineHeight = 22.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = (-0.2).sp,
+    )
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
                 text = book.name,
-                style = LanghuanType.bookTitle,
+                style = titleStyle,
                 color = colors.accent,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(3.dp))
             val chapter = book.durChapterTitle
             val meta = if (chapter.isNullOrBlank()) {
                 book.author.ifBlank { unknownAuthor }
@@ -808,18 +825,64 @@ private fun ShelfMeta(
             Text(
                 text = meta,
                 color = colors.summaryText,
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
         Spacer(Modifier.width(10.dp))
+        ShelfPageStepper(
+            index = index,
+            total = total,
+            onPrev = onPrev,
+            onNext = onNext,
+        )
+    }
+}
+
+/** 翻页指示：`< 03 / 08 >`，两侧箭头可点，落位到相邻书。 */
+@Composable
+private fun ShelfPageStepper(
+    index: Int,
+    total: Int,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+) {
+    val colors = AppTheme.colors
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        ShelfStepperArrow("<", enabled = index > 0, onClick = onPrev, color = colors.summaryText)
         Text(
             text = "${(index + 1).toString().padStart(2, '0')} / " +
                 total.toString().padStart(2, '0'),
             color = colors.summaryText,
             fontSize = 10.sp,
             letterSpacing = 1.sp,
+            modifier = Modifier.padding(horizontal = 2.dp),
+        )
+        ShelfStepperArrow("<", rotation = 180f, enabled = index < total - 1, onClick = onNext, color = colors.summaryText)
+    }
+}
+
+@Composable
+private fun ShelfStepperArrow(
+    glyph: String,
+    enabled: Boolean,
+    color: Color,
+    onClick: () -> Unit,
+    rotation: Float = 0f,
+) {
+    Box(
+        Modifier
+            .size(28.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = glyph,
+            color = color.copy(alpha = if (enabled) 1f else .35f),
+            fontSize = 14.sp,
+            modifier = Modifier.rotate(rotation),
         )
     }
 }

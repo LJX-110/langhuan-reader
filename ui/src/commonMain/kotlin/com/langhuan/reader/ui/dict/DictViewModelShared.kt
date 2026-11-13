@@ -4,6 +4,7 @@ import com.langhuan.reader.data.AppDbProviders
 import com.langhuan.reader.data.entities.DictRule
 import com.langhuan.reader.data.entities.search
 import com.langhuan.reader.help.coroutine.Coroutine
+import com.langhuan.reader.utils.toUserFacingReason
 import kotlinx.coroutines.CoroutineScope
 
 /**
@@ -105,7 +106,7 @@ class DictViewModelShared(
         }.onSuccess {
             onFinally.invoke(it)
         }.onError {
-            onFinally.invoke(it.message ?: "ERROR")
+            onFinally.invoke(it.toUserFacingReason())
         }
     }
 }

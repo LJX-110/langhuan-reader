@@ -42,10 +42,13 @@ import com.langhuan.reader.utils.verificationField
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.cancel
 import com.langhuan.reader.ui.generated.resources.custom_export
+import com.langhuan.reader.ui.generated.resources.error
 import com.langhuan.reader.ui.generated.resources.error_scope_input
+import com.langhuan.reader.ui.generated.resources.execute_script
 import com.langhuan.reader.ui.generated.resources.export_all
 import com.langhuan.reader.ui.generated.resources.export_chapter_index
 import com.langhuan.reader.ui.generated.resources.export_file_name
+import com.langhuan.reader.ui.generated.resources.export_filename_variable_hint
 import com.langhuan.reader.ui.generated.resources.file_contains_number
 import com.langhuan.reader.ui.generated.resources.ok
 import com.langhuan.reader.ui.generated.resources.result_analyzed
@@ -222,6 +225,7 @@ fun ExportSectionConfigDialog(books: List<Book>, onDismiss: () -> Unit) {
                         },
                     trailingIcon = {
                         // 解析示例 (对照原版 lyEtEpubFilename 的 endIcon 点击)
+                        val errorText = stringResource(Res.string.error)
                         IconButton(onClick = {
                             fileNameHelper = if (verifyFileName(fileName)) {
                                 books.firstOrNull()?.let { book ->
@@ -229,19 +233,19 @@ fun ExportSectionConfigDialog(books: List<Book>, onDismiss: () -> Unit) {
                                         book.getExportFileName("epub", 1, fileName)
                                 } ?: resultAnalyzedText
                             } else {
-                                "Error"
+                                errorText
                             }
                         }) {
                             Icon(
                                 painter = rememberPainter("ic_play_24dp"),
-                                contentDescription = "Execute script",
+                                contentDescription = stringResource(Res.string.execute_script),
                                 tint = AppTheme.colors.primaryText,
                             )
                         }
                     },
                 )
                 Text(
-                    "Variable: name, author, epubIndex",
+                    stringResource(Res.string.export_filename_variable_hint),
                     color = AppTheme.colors.secondaryText,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(top = DesignTokens.spacingXs),

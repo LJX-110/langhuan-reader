@@ -7,6 +7,7 @@ import com.langhuan.reader.help.coroutine.Coroutine
 import com.langhuan.reader.ui.root.screenModelScope
 import com.langhuan.reader.utils.GSON
 import com.langhuan.reader.utils.fromJsonObject
+import com.langhuan.reader.utils.toUserFacingReason
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -85,7 +86,7 @@ class ReplaceEditViewModel {
         }.onSuccess {
             success(it)
         }.onError {
-            error(it.message ?: "Error")
+            error(it.toUserFacingReason())
         }
     }
 

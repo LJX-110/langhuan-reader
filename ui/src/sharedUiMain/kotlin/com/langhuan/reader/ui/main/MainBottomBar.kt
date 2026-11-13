@@ -1,10 +1,15 @@
 package com.langhuan.reader.ui.main
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,7 +25,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,6 +42,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,6 +76,17 @@ fun MainBottomBar(
     val iconDp = (if (iconSize > 0) iconSize.dp else 20.dp)
     val slotWidth = 64.dp
     val shape = RoundedCornerShape(dockHeight / 2)
+    // 按下时整条胶囊轻微上浮并纵向拉伸（对齐参考实现的接触反馈）：
+    // 只改绘制变换，不改布局，不会把相邻页签挤走。
+    var pressed by remember { mutableStateOf(false) }
+    val press by animateFloatAsState(
+        targetValue = if (pressed && !eInk) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "dockPress",
+    )
 
     Box(
         modifier = Modifier
@@ -79,6 +100,11 @@ fun MainBottomBar(
             modifier = Modifier
                 .width(slotWidth * tags.size)
                 .height(dockHeight)
+                .graphicsLayer {
+                    scaleX = 1f + press * .018f
+                    scaleY = 1f + press * .055f
+                    translationY = -press * 3.dp.toPx()
+                }
                 .shadow(if (eInk) 0.dp else 6.dp, shape, clip = false)
                 .clip(shape)
                 .background(colors.fillet)
@@ -98,6 +124,7 @@ fun MainBottomBar(
                     iconDp = iconDp,
                     showLabel = showLabel,
                     modifier = Modifier.weight(1f).fillMaxHeight(),
+                    onPressChange = { down -> pressed = down },
                     onClick = {
                         if (selected) onReselect(tag) else onSelect(index)
                     },
@@ -114,12 +141,25 @@ private fun DockItem(
     iconDp: androidx.compose.ui.unit.Dp,
     showLabel: Boolean,
     modifier: Modifier,
+    onPressChange: (Boolean) -> Unit,
     onClick: () -> Unit,
 ) {
     val colors = AppTheme.colors
     // 选中态用辅助色，与强调色的按钮/标题形成层次
     val tint = if (selected) colors.companion else colors.summaryText
     val interaction = remember { MutableInteractionSource() }
+    // clickable 在按下/抬起/移出时都会给出正确的按压态，据此驱动整条胶囊的接触反馈
+    val isPressed by interaction.collectIsPressedAsState()
+    LaunchedEffect(isPressed) { onPressChange(isPressed) }
+    // 下划线随选中态展开，而不是瞬切
+    val indicatorWidth by animateDpAsState(
+        targetValue = if (selected) 12.dp else 0.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "dockIndicator",
+    )
     Column(
         modifier = modifier.clickable(
             interactionSource = interaction,
@@ -143,7 +183,7 @@ private fun DockItem(
         Spacer(Modifier.height(3.dp))
         Box(
             Modifier
-                .width(if (selected) 12.dp else 0.dp)
+                .width(indicatorWidth)
                 .height(1.5.dp)
                 .background(colors.companion)
         )
