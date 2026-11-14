@@ -230,6 +230,12 @@ object MonetColorExtract {
     }
 }
 
-/** android.graphics.Color 实例 → ARGB Int (core-ktx 无该扩展)。 */
+/**
+ * android.graphics.Color 实例 → ARGB Int (core-ktx 无该扩展)。
+ *
+ * alpha()/red() 等实例方法是 API 26+ (minSdk 24 够不着), 故显式标注要求;
+ * 实际调用方 (壁纸回调 / readWallpaperSeed) 都在 @RequiresApi(S) 内, 运行面不受影响。
+ */
+@RequiresApi(Build.VERSION_CODES.O)
 private fun android.graphics.Color.toArgbInt(): Int =
     android.graphics.Color.argb(alpha(), red(), green(), blue())

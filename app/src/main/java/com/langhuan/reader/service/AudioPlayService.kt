@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import com.langhuan.reader.R
 import com.langhuan.reader.base.BaseService
@@ -575,6 +576,7 @@ class AudioPlayService : BaseService(), AudioPlaySessionHost {
  * 另外还要求设备支持“变速场景下的 offload”(速度切换是常规操作), 不支持时该请求被
  * 采媒库静默忽略 —— 即“不需要 PCM 才省电”只在这种设备上真实生效。
  */
+@androidx.annotation.OptIn(UnstableApi::class)
 private fun ExoPlayer.applyOffloadPolicy() {
     val needsPcm = AudioPlayShared.isAudioPageResumed() && AudioPlayShared.needsAudioPcm()
     val mode = if (needsPcm) {

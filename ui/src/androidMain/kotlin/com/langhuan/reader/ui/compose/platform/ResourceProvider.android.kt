@@ -1,15 +1,9 @@
 package com.langhuan.reader.ui.compose.platform
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.painter.BitmapPainter
-import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
-import androidx.core.content.ContextCompat
-import androidx.core.graphics.drawable.toBitmap
 import com.langhuan.reader.ui.compose.theme.LocalAppColors
 import java.util.concurrent.ConcurrentHashMap
 
@@ -25,32 +19,6 @@ private fun resolveResourceId(context: android.content.Context, name: String, ty
     val cacheKey = "$type:$name"
     return resourceIdCache.getOrPut(cacheKey) {
         context.resources.getIdentifier(name, type, context.packageName)
-    }
-}
-
-/**
- * Android actual: 按 mipmap 资源名查 id, AdaptiveIconDrawable 转 Bitmap 后包 BitmapPainter。
- *
- * 复刻 app 端 ThemeConfigScreen 原图标加载逻辑:
- * - `Resources.getIdentifier(name, "mipmap", packageName)` 查 mipmap 资源 id
- *   (mipmap 不在 drawable 类型下, 需单独查)
- * - `ContextCompat.getDrawable` 取 Drawable (替代 app 模块 Context.getCompatDrawable 扩展)
- * - `Drawable.toBitmap()` + `asImageBitmap()` + `BitmapPainter` 转 Painter
- *   (AdaptiveIconDrawable 不支持 painterResource, 必须先转 Bitmap)
- * - runCatching 兜底, 资源缺失返回 null
- */
-@Composable
-actual fun rememberLauncherIconPainters(iconValues: List<String>): List<Painter?> {
-    val context = LocalContext.current
-    return remember(iconValues) {
-        iconValues.map { name ->
-            @Suppress("DiscouragedApi")
-            val resId = context.resources.getIdentifier(name, "mipmap", context.packageName)
-            if (resId == 0) return@map null
-            runCatching {
-                BitmapPainter(ContextCompat.getDrawable(context, resId)!!.toBitmap().asImageBitmap())
-            }.getOrNull()
-        }
     }
 }
 

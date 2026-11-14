@@ -12,8 +12,7 @@ import org.jetbrains.compose.resources.stringResource
 /**
  * 跨平台资源访问器: 字符串/字符串数组/Painter 四端统一走 Compose Resources 按 key 索引的
  * 映射表 (见 ComposeResourceLookup 的 [findStringResource]/[findDrawableResource]);
- * 仅 [rememberColor] 与 [rememberLauncherIconPainters] 是 expect/actual —— 前者无
- * Compose Resources 对应 API, 后者 Android 需处理 AdaptiveIconDrawable。
+ * 仅 [rememberColor] 是 expect/actual —— 无 Compose Resources 对应 API。
  * 调用方用 [rememberPainter]/[rememberString]/[rememberColor] 替代
  * painterResource/stringResource/colorResource, 由 B 类 Composable 下沉时统一调用。
  *
@@ -67,20 +66,6 @@ fun rememberStringArray(key: String): List<String> {
     val resource = findStringArrayResource(key) ?: return emptyList()
     return stringArrayResource(resource)
 }
-
-/**
- * 加载 Launcher 图标预览 Painter 列表 (ThemeConfigScreen 换图标用)。
- *
- * 替代 app 端 `LocalContext.current + getIdentifier("mipmap") + getCompatDrawable + toBitmap + BitmapPainter` 链。
- * 各平台 actual 行为:
- * - Android: 按 mipmap 资源名查 id, AdaptiveIconDrawable 转 Bitmap 后包 BitmapPainter
- *   (painterResource 不支持 AdaptiveIconDrawable); 找不到返回 null
- * - 桌面 JVM / iOS: 无 launcher 图标概念, 返回空 List (调用方按需处理空态)
- *
- * @param iconValues mipmap 资源名列表 (如 ["ic_launcher", "ic_launcher_book", ...])
- */
-@Composable
-expect fun rememberLauncherIconPainters(iconValues: List<String>): List<Painter?>
 
 @Composable
 expect fun rememberColor(key: String): Color

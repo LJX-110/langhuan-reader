@@ -1,5 +1,6 @@
 package com.langhuan.reader.help.media
 
+import android.annotation.SuppressLint
 import android.app.Service
 import android.content.Context
 import androidx.core.app.NotificationManagerCompat
@@ -32,7 +33,13 @@ class MediaNotificationHost(
     private var lastKey: List<Any?>? = null
     private var job: Coroutine<*>? = null
 
-    /** 内容或封面变了才重建通知; 重建按"后一次取代前一次"串行, 不并发下发。 */
+    /**
+     * 内容或封面变了才重建通知; 重建按"后一次取代前一次"串行, 不并发下发。
+     *
+     * POST_NOTIFICATIONS 由权限流程统一请求 (BaseService.addPermissions), 未授权时系统静默
+     * 丢弃通知; notify 已包 try/catch, lint 看不到跨类请求点, 定点压制 MissingPermission。
+     */
+    @SuppressLint("MissingPermission")
     fun refresh() {
         val key = dedupKey()
         if (key == lastKey) return

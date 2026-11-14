@@ -199,13 +199,11 @@ android {
             "MissingTranslation", "NewerVersionAvailable", "GradleDependency",
             // targetSdk 36 是产品决策 (升 37 引入 Android 16 行为变更, 需单独回归验证)
             "OldTargetApi",
-            // AGP 8.13.2 是刻意保持 (AGP 9 破坏性变更, 见 build-logic 注释), 暂不升级
+            // 构建工具链版本统一钉在 gradle/libs.versions.toml (当前 AGP 9.4.1), 升级节奏
+            // 由构建线控制, lint 的"有新版本可用"提示与它冲突
             "AndroidGradlePluginVersion",
             // media3/appcompat 私有资源: 依赖版本固定, 资源稳定存在, 保留引用
             "PrivateResource",
-            // 代码库只用 md2 (androidx.compose.material) 组件; material3 仅经 ui-tooling
-            // 传递依赖进入 classpath, 源码无任何 material3 使用, 属误报
-            "UsingMaterialAndMaterial3Libraries",
         )
     }
 }

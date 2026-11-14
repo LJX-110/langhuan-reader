@@ -252,8 +252,8 @@ private fun DrawScope.drawDockIcon(tag: String, color: Color) {
             drawCircle(color, radius = w * .105f, center = Offset(w * .5f, h * .34f), style = stroke)
             val shoulders = Path().apply {
                 moveTo(w * .25f, h * .79f)
-                quadraticBezierTo(w * .29f, h * .54f, w * .5f, h * .54f)
-                quadraticBezierTo(w * .71f, h * .54f, w * .75f, h * .79f)
+                quadraticTo(w * .29f, h * .54f, w * .5f, h * .54f)
+                quadraticTo(w * .71f, h * .54f, w * .75f, h * .79f)
             }
             drawPath(shoulders, color, style = stroke)
             drawLine(color, Offset(w * .38f, h * .79f), Offset(w * .62f, h * .79f), stroke.width, StrokeCap.Round)

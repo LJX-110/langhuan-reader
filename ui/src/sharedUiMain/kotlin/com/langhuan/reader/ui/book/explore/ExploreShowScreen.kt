@@ -86,8 +86,6 @@ import org.jetbrains.compose.resources.stringResource
  * 下沉所需资源 key 清单 (供 ResourceProvider 各平台 actual 补全)
  *
  * Painter key (drawable):
- *   - ic_layout_list     列表布局图标
- *   - ic_layout_video    视频布局图标
  *   - ic_author          作者图标 (已存在, 复用 BookshelfComposablesShared)
  *   - ic_book_last       最新章节图标 (已存在, 复用 BookshelfComposablesShared)
  *   - ic_bookmark        网格 tier 书架徽标
