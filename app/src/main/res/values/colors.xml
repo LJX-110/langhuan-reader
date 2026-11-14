@@ -11,8 +11,8 @@
 
     <color name="transparent">#00000000</color>
 
-    <!-- 琅嬛阁启动图标底色（藏青） -->
-    <color name="brand_icon_background">#1F2E3D</color>
+    <!-- 琅嬛阁启动图标底色（鸢尾蓝） -->
+    <color name="brand_icon_background">#4F5BD5</color>
 
     <color name="menu_color_default">#383838</color>
 

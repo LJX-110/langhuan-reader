@@ -37,4 +37,14 @@ data class AppColors(
     val paperDeep: Color = background,
     /** 细边线（分隔线、卡片描边） */
     val line: Color = primaryText,
+    /** 3D 书架封面平面的实色（替代半透明，后排文字不会透出来） */
+    val shelfCover: Color = paperDeep,
+    /** 3D 书架书脊平面的实色 */
+    val shelfSpine: Color = paperDeep,
+    /** 3D 书架顶面渐变的起始色（收口色用 [shelfCover]） */
+    val shelfTop: Color = paperDeep,
+    /** 3D 书架落地投影的墨色 */
+    val shelfFloor: Color = summaryText,
+    /** 3D 书架顶面描边色 */
+    val shelfEdge: Color = line,
 )

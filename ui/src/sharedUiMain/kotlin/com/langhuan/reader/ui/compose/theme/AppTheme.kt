@@ -221,6 +221,12 @@ private fun readAppColors(themeStore: ThemeStoreProvider, isEInk: Boolean): AppC
         paper = palette.paper,
         paperDeep = palette.paperDeep,
         line = palette.line,
+        // 3D 书架：三块平面都是实色，靠顶面与地面投影区分层次
+        shelfCover = if (isDark) Color(0xFF292F29) else Color(0xFFF2F0E9),
+        shelfSpine = if (isDark) Color(0xFF2D332D) else Color(0xFFF2F0E9),
+        shelfTop = if (isDark) Color(0xFF41473D) else Color(0xFFE3DFD3),
+        shelfFloor = if (isDark) Color(0xFFF2F0E9) else Color(0xFF8A806B),
+        shelfEdge = if (isDark) Color(0xFFF2F0E9) else Color(0xFF9A927F),
     )
 }
 

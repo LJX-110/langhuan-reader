@@ -1,6 +1,8 @@
 package com.langhuan.reader.ui.bookshelf.shelf
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -43,17 +45,21 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
@@ -64,10 +70,12 @@ import androidx.compose.ui.unit.sp
 import com.langhuan.reader.data.AppDbProviders
 import com.langhuan.reader.data.entities.Book
 import com.langhuan.reader.help.image.ImageBitmapLoader
+import com.langhuan.reader.ui.compose.platform.platformTextStyleNoFontPadding
 import com.langhuan.reader.ui.compose.platform.rememberString
 import com.langhuan.reader.ui.compose.theme.AppColors
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.LanghuanType
+import com.langhuan.reader.ui.compose.theme.LocalEInk
 import com.langhuan.reader.uimodel.BookItemUi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -85,6 +93,9 @@ private const val SHELF_DRAG_RATE = 4.4f
 private const val SHELF_OMEGA = 12f
 private const val SHELF_MIN_FLING = 50f
 private const val SHELF_HANDOFF_SPEED_FACTOR = 4f
+
+/** 点按居中：参考实现的 620ms 轻微过冲曲线，落在格位上有「吸附」的手感。 */
+private const val SHELF_CENTRE_MS = 620
 
 /**
  * 书架外部控制入口：顶栏 tab 双击时回到第一本（对照原版 gotoTop）。
@@ -104,13 +115,13 @@ class LanghuanShelfState {
 }
 
 /**
- * 琅嬛阁 3D 书架：一排书脊 + 景深，滚动位置是唯一时钟。
+ * 琅嬛阁 3D 书架：一排实体书 + 景深，滚动位置是唯一时钟。
  *
  * 中心那本从行里「抽」出来（cos² 抽出波，左右各到 ±1.48 格），邻书退回书脊，
- * 整排沿行内弧线轻微下沉；松手后落回整数格位。首尾不循环。
+ * 整排沿行内弧线轻微起伏；松手后落回整数格位。首尾不循环。
  *
- * 绘制全部在一个 Canvas 里完成：整排书的书脊 / 封面 / 顶面共享同一批顶点，
- * 拖动与惯性只改一个偏移量，不触发子组件重组。
+ * 绘制全部在一个 Canvas 里完成：书脊 / 封面 / 顶面三块平面共用同一组物理顶点，
+ * 封面是沿深度向量 (0.66, -0.30) 斜投影的平行四边形，不是直立矩形。
  *
  * @param books 书架书目（按传入顺序排列）
  * @param coverBook 封面对实体回查: 封面解密 / cbz 取图要完整 [Book], 由页面边界按
@@ -188,6 +199,13 @@ fun LanghuanShelf(
         var animJob by remember { mutableStateOf<Job?>(null) }
         val scope = rememberCoroutineScope()
 
+        // 入场：整排书沿深度轴滑入（720ms，逐本错开），E-Ink 下直接落位。
+        val eInk = LocalEInk.current
+        val entrance = remember { Animatable(if (eInk) 1f else 0f) }
+        LaunchedEffect(Unit) {
+            if (!eInk) entrance.animateTo(1f, tween(720, easing = LinearEasing))
+        }
+
         // 下拉刷新：3D 书架没有纵向滚动容器，pullRefresh 收不到嵌套滚动事件，
         // 这里直接吃纵向拖动，位移量兼作指示器进度。
         val pullTrigger = with(density) { 56.dp.toPx() }
@@ -199,13 +217,18 @@ fun LanghuanShelf(
             animJob = scope.launch { block() }
         }
 
-        /** 点按 / 双击滚顶：直接补间到目标格位 */
+        /** 点按 / 双击滚顶：按参考曲线补间到目标格位 */
         fun settleTo(slot: Int) {
             val target = (slot.coerceIn(0, books.lastIndex) * pitch).coerceIn(0f, maxOffset)
             launchSettle {
-                animate(offset, target, animationSpec = tween(320, easing = FastOutSlowInEasing)) { value, _ ->
-                    offset = value
-                }
+                animate(
+                    offset,
+                    target,
+                    animationSpec = tween(
+                        SHELF_CENTRE_MS,
+                        easing = androidx.compose.animation.core.CubicBezierEasing(.2f, 1.06f, .35f, 1f),
+                    ),
+                ) { value, _ -> offset = value }
             }
         }
 
@@ -277,25 +300,6 @@ fun LanghuanShelf(
             if (state.goToTopTick > 0) settleTo(0)
         }
 
-        /**
-         * 命中哪一格：先看被抽出的那本（它画在中心左边），否则按格位步长就近换算。
-         *
-         * 书脊间距是 [LanghuanShelfMetrics.pitch]，而一本书的可见宽度（书脊 + 封面投影）
-         * 远大于间距，直接按「区间包含」判定会让相邻书的命中区大量重叠，故用格位中心就近判定。
-         */
-        fun slotAt(x: Float): Int {
-            val focus = (offset / pitch).coerceIn(0f, books.lastIndex.toFloat())
-            val center = focus.roundToInt().coerceIn(0, books.lastIndex)
-            val extraction = LanghuanShelfGeometry.extractionX(
-                metrics.coverW,
-                LanghuanShelfGeometry.wave(center - focus),
-            )
-            val centerLeft = metrics.rowStart + center * pitch - offset + extraction
-            if (x >= centerLeft && x <= centerLeft + metrics.footprint) return center
-            return ((offset + x - metrics.rowStart - metrics.spineW / 2f) / pitch).roundToInt()
-                .coerceIn(0, books.lastIndex)
-        }
-
         val centerIndex by remember(pitch, books) {
             derivedStateOf {
                 (offset / pitch).roundToInt().coerceIn(0, books.lastIndex)
@@ -343,7 +347,7 @@ fun LanghuanShelf(
             }
         }
 
-        // 每本最多 12 次排版（编号/首字/作者/竖排书名逐字），默认缓存 8 条不够，
+        // 每本最多十余次排版（编号 / 首字 / 竖排书名逐字），默认缓存 8 条不够，
         // 放大到 128 条让拖动时命中缓存而不是逐帧重排。
         val textMeasurer = rememberTextMeasurer(cacheSize = 128)
 
@@ -430,13 +434,28 @@ fun LanghuanShelf(
                     Modifier
                         .fillMaxWidth()
                         .height(rowHeightDp)
-                        .pointerInput(books, pitch) {
+                        .pointerInput(books, pitch, metrics) {
                             detectTapGestures(
                                 onTap = { position ->
-                                    books.getOrNull(slotAt(position.x))?.let(onOpen)
+                                    val index = shelfIndexAt(
+                                        position = position,
+                                        count = books.size,
+                                        focus = offset / pitch,
+                                        metrics = metrics,
+                                    ) ?: return@detectTapGestures
+                                    // 点已居中的那本才打开，点别的先把它转到中心（同参考行为）
+                                    val settled = abs(offset / pitch - index) < .03f &&
+                                        animJob?.isActive != true
+                                    if (settled) onOpen(books[index]) else settleTo(index)
                                 },
                                 onLongPress = { position ->
-                                    books.getOrNull(slotAt(position.x))?.let(onLongPress)
+                                    val index = shelfIndexAt(
+                                        position = position,
+                                        count = books.size,
+                                        focus = offset / pitch,
+                                        metrics = metrics,
+                                    ) ?: return@detectTapGestures
+                                    onLongPress(books[index])
                                 },
                             )
                         }
@@ -448,7 +467,7 @@ fun LanghuanShelf(
                         colors = colors,
                         covers = covers,
                         textMeasurer = textMeasurer,
-                        unknownAuthor = unknownAuthor,
+                        entrance = entrance.value,
                     )
                 }
                 ShelfMeta(
@@ -484,6 +503,155 @@ fun LanghuanShelf(
     }
 }
 
+/**
+ * 一本书在场景里的落点与三块平面。
+ *
+ * 三块平面共用 [ox]/[oy] 这一组物理顶点：
+ * - 书脊：x 轴轻微切变（[LanghuanShelfGeometry.spineShear]）后直立在行上
+ * - 封面：从书脊顶边沿深度向量斜投影展开的平行四边形
+ * - 顶面：连接书脊顶边与封面顶边的四边形（纸厚）
+ */
+private class ShelfSlot(
+    val index: Int,
+    val volumeX: Float,
+    val volumeY: Float,
+    val ox: Float,
+    val oy: Float,
+    val spineW: Float,
+    val bodyH: Float,
+    val coverW: Float,
+    val spinePath: Path,
+    val coverPath: Path,
+    val topPath: Path,
+) {
+    /** 命中测试：书脊与封面都是仿射平行四边形，反解 (u, v) 判断是否落在面上。 */
+    fun hitTest(point: Offset): Boolean {
+        // 书脊：p = o + u*(1, shear) + v*(0, 1)
+        val spineU = point.x - ox
+        if (spineU in 0f..spineW) {
+            val v = point.y - oy - spineU * LanghuanShelfGeometry.spineShear
+            if (v in 0f..bodyH) return true
+        }
+        // 封面：p = o + spine*(1, shear) + u*(depthX, depthY) + v*(0, 1)
+        val coverU = (point.x - ox - spineW) / LanghuanShelfGeometry.depthX
+        if (coverU in 0f..coverW) {
+            val v = point.y - oy - spineW * LanghuanShelfGeometry.spineShear -
+                coverU * LanghuanShelfGeometry.depthY
+            if (v in 0f..bodyH) return true
+        }
+        return false
+    }
+}
+
+private fun shelfSlot(
+    index: Int,
+    focus: Float,
+    metrics: LanghuanShelfMetrics,
+    viewport: Float,
+    entrance: Float,
+): ShelfSlot {
+    val distance = index - focus
+    val weight = LanghuanShelfGeometry.wave(distance) * entranceCrest(entrance)
+    val assembly = assemblyOffset(distance, viewport, metrics.pitch, metrics.density, entrance)
+    val volumeX = metrics.rowStart + distance * metrics.pitch + assembly.x
+    val volumeY = metrics.railY(distance) + assembly.y
+    val ox = volumeX + metrics.extractionX(weight)
+    val oy = volumeY + metrics.extractionY(weight)
+
+    val spine = metrics.spineW
+    val body = metrics.bodyH
+    val shear = LanghuanShelfGeometry.spineShear
+    val rightX = ox + spine
+    val rightY = oy + spine * shear
+    val depthX = metrics.coverW * LanghuanShelfGeometry.depthX
+    val depthY = metrics.coverW * LanghuanShelfGeometry.depthY
+
+    val spinePath = Path().apply {
+        moveTo(ox, oy)
+        lineTo(rightX, rightY)
+        lineTo(rightX, rightY + body)
+        lineTo(ox, oy + body)
+        close()
+    }
+    val coverPath = Path().apply {
+        moveTo(rightX, rightY)
+        lineTo(rightX + depthX, rightY + depthY)
+        lineTo(rightX + depthX, rightY + depthY + body)
+        lineTo(rightX, rightY + body)
+        close()
+    }
+    val topPath = Path().apply {
+        moveTo(ox, oy)
+        lineTo(rightX, rightY)
+        lineTo(rightX + depthX, rightY + depthY)
+        lineTo(ox + depthX, oy + depthY)
+        close()
+    }
+    return ShelfSlot(
+        index = index,
+        volumeX = volumeX,
+        volumeY = volumeY,
+        ox = ox,
+        oy = oy,
+        spineW = spine,
+        bodyH = body,
+        coverW = metrics.coverW,
+        spinePath = spinePath,
+        coverPath = coverPath,
+        topPath = topPath,
+    )
+}
+
+/** 入场权重：0.38 之前不动，之后按 easeOutCubic 升到 1。 */
+private fun entranceCrest(entrance: Float): Float {
+    if (entrance >= 1f) return 1f
+    return easeOutCubic(((entrance - .38f) / .62f).coerceIn(0f, 1f))
+}
+
+/** 入场位移：逐本错开，沿深度轴从 56dp 外滑到原位。 */
+private fun assemblyOffset(
+    distance: Float,
+    viewport: Float,
+    pitch: Float,
+    density: Float,
+    entrance: Float,
+): Offset {
+    if (entrance >= 1f) return Offset.Zero
+    val order = (distance + viewport / pitch / 2f + 2f).coerceIn(0f, 16f)
+    val start = order * .018f
+    val progress = easeOutCubic(((entrance - start) / .52f).coerceIn(0f, 1f))
+    val travel = 56f * density * (1f - progress)
+    return Offset(LanghuanShelfGeometry.depthX * travel, LanghuanShelfGeometry.depthY * travel)
+}
+
+private fun easeOutCubic(t: Float): Float {
+    val inv = 1f - t
+    return 1f - inv * inv * inv
+}
+
+/** 命中测试：按实际三块平面判断，未命中再按格位步长就近换算。 */
+private fun shelfIndexAt(
+    position: Offset,
+    count: Int,
+    focus: Float,
+    metrics: LanghuanShelfMetrics,
+): Int? {
+    val reach = visibleReach(metrics) + 1f
+    val first = floor(focus - reach).toInt().coerceIn(0, count - 1)
+    val last = ceil(focus + reach).toInt().coerceIn(first, count - 1)
+    // 右邻画在左邻之上，命中也要从右往左找
+    for (index in last downTo first) {
+        val slot = shelfSlot(index, focus, metrics, metrics.viewport, 1f)
+        if (slot.hitTest(position)) return index
+    }
+    val guess = focus + (position.x - metrics.rowStart) / metrics.pitch
+    return guess.roundToInt().coerceIn(0, count - 1)
+}
+
+private fun visibleReach(metrics: LanghuanShelfMetrics): Float =
+    metrics.viewport / 2f / metrics.pitch +
+        (metrics.footprint + metrics.pullDistance) / metrics.pitch
+
 /** 整排书：先铺地面投影，再按格位顺序（左 → 右）画书。 */
 private fun DrawScope.drawShelfRow(
     books: List<BookItemUi>,
@@ -492,299 +660,299 @@ private fun DrawScope.drawShelfRow(
     colors: AppColors,
     covers: Map<String, ImageBitmap?>,
     textMeasurer: TextMeasurer,
-    unknownAuthor: String,
+    entrance: Float,
 ) {
     val pitch = metrics.pitch
     if (pitch <= 0f) return
     val focus = offset / pitch
-    val margin = metrics.footprint + metrics.coverW
-    val first = floor((offset - margin) / pitch).toInt().coerceAtLeast(0)
-    val last = ceil((offset + size.width + margin) / pitch).toInt()
-        .coerceAtMost(books.lastIndex)
+    val reach = visibleReach(metrics)
+    val first = floor(focus - reach).toInt().coerceIn(0, books.lastIndex)
+    val last = ceil(focus + reach).toInt().coerceIn(first, books.lastIndex)
+    if (last < first) return
 
-    // 投影先铺满一层：任何一本书的阴影都落在所有书下面
-    for (slot in first..last) {
-        drawFloorShadow(slot, focus, metrics, colors)
-    }
-    // 平行排布的书按格位顺序绘制：右邻书的封面压住左邻书的纵深，与真实遮挡一致。
-    // 不再按「离中心远近」排序，拖动时不会出现层序跳变。
-    for (slot in first..last) {
-        drawBook(
-            book = books[slot],
-            slot = slot,
-            focus = focus,
-            metrics = metrics,
-            colors = colors,
-            cover = covers[books[slot].bookUrl],
-            textMeasurer = textMeasurer,
-            unknownAuthor = unknownAuthor,
-        )
+    val slots = (first..last).map { shelfSlot(it, focus, metrics, size.width, entrance) }
+    val styles = shelfTextStyles(colors)
+
+    clipRect(0f, 0f, size.width, size.height) {
+        for (slot in slots) drawFloorShadow(slot, metrics, colors)
+        // 平行排布的书按格位顺序绘制：右邻书的封面压住左邻的纵深，与真实遮挡一致。
+        // 不按「离中心远近」排序，拖动时不会出现层序跳变。
+        for (slot in slots) {
+            drawVolume(
+                book = books[slot.index],
+                slot = slot,
+                metrics = metrics,
+                colors = colors,
+                styles = styles,
+                cover = covers[books[slot.index].bookUrl],
+                textMeasurer = textMeasurer,
+            )
+        }
     }
 }
 
-/**
- * 地面投影：书脊底边沿深度向量铺开的一块梯形，右下角再拖出两道小斜边。
- *
- * 用从右上到左下的渐隐填充，书才像站在台面上而不是浮在纸面上。
- * 与书体共用 [slotBase] 的顶点，拖动/抽出时阴影跟着走。
- */
+/** 地面投影：书脊底边沿深度向量铺开的一条窄带，从右上到左下渐隐。 */
 private fun DrawScope.drawFloorShadow(
-    slot: Int,
-    focus: Float,
+    slot: ShelfSlot,
     metrics: LanghuanShelfMetrics,
     colors: AppColors,
 ) {
-    val base = slotBase(slot, focus, metrics)
     val d = metrics.density
-    val origin = Offset(base.x, base.y + metrics.topInset + metrics.bodyH)
-    val width = metrics.spineW + metrics.coverW
-    // 直立书的落地投影：书底沿台面横向铺开，向下渐隐，两侧各探出一点软边
+    val origin = Offset(slot.volumeX, slot.volumeY + metrics.baseY + metrics.bodyH)
+    val depth = Offset(
+        metrics.coverW * LanghuanShelfGeometry.depthX,
+        metrics.coverW * LanghuanShelfGeometry.depthY,
+    )
     val path = Path().apply {
         moveTo(origin.x, origin.y)
-        lineTo(origin.x + width, origin.y)
-        lineTo(origin.x + width + 8f * d, origin.y + 9f * d)
-        lineTo(origin.x - 8f * d, origin.y + 9f * d)
+        lineTo(origin.x + metrics.spineW, origin.y + 1.4f * d)
+        lineTo(origin.x + metrics.spineW + depth.x, origin.y + 1.4f * d + depth.y)
+        lineTo(origin.x + depth.x, origin.y + depth.y)
+        lineTo(origin.x + depth.x - 10f * d, origin.y + depth.y + 10f * d)
+        lineTo(origin.x - 10f * d, origin.y + 10f * d)
         close()
     }
     val bounds = path.getBounds()
-    val ink = colors.primaryText
     drawPath(
         path = path,
-        brush = Brush.verticalGradient(
-            colors = listOf(ink.copy(alpha = .09f), ink.copy(alpha = 0f)),
-            startY = bounds.top,
-            endY = bounds.bottom,
+        brush = Brush.linearGradient(
+            colors = listOf(
+                colors.shelfFloor.copy(alpha = .10f),
+                colors.shelfFloor.copy(alpha = 0f),
+            ),
+            start = Offset(bounds.right, bounds.top),
+            end = Offset(bounds.left, bounds.bottom),
         ),
     )
 }
 
-/** 书在行内的落点：格位基准再加上抽出偏移 */
-private fun slotBase(
-    slot: Int,
-    focus: Float,
-    metrics: LanghuanShelfMetrics,
-): Offset {
-    val distance = slot - focus
-    val weight = LanghuanShelfGeometry.wave(distance)
-    val x = metrics.rowStart + slot * metrics.pitch - focus * metrics.pitch
-    val restY = metrics.seatY + metrics.railY(distance)
-    return Offset(
-        x + LanghuanShelfGeometry.extractionX(metrics.coverW, weight),
-        restY + LanghuanShelfGeometry.extractionY(metrics.coverW, metrics.bodyH, weight),
-    )
-}
-
-/** 一本书：这里画顶面、封面、书脊。 */
-private fun DrawScope.drawBook(
+/** 一本书：封面 → 顶面 → 书脊（书脊压在封面接缝上，遮住分缝）。 */
+private fun DrawScope.drawVolume(
     book: BookItemUi,
-    slot: Int,
-    focus: Float,
+    slot: ShelfSlot,
     metrics: LanghuanShelfMetrics,
     colors: AppColors,
+    styles: ShelfTextStyles,
     cover: ImageBitmap?,
     textMeasurer: TextMeasurer,
-    unknownAuthor: String,
 ) {
-    val base = slotBase(slot, focus, metrics)
     val d = metrics.density
+    val spine = metrics.spineW
+    val body = metrics.bodyH
     val shear = LanghuanShelfGeometry.spineShear
-    val spineTop = Offset(base.x, base.y + metrics.topInset)
-    val spineTopRight = Offset(
-        base.x + metrics.spineW,
-        base.y + metrics.topInset + metrics.spineW * shear,
-    )
-    val panelA = spineTopRight
+    val number = slot.index + 1
 
-    // 顶面：封面顶边上的一道纸厚窄带。旧版沿斜投影把整张封面压成平行四边形，
-    // 封面看上去是斜的；现在封面直立，顶面只留纸厚这一道。
-    val bandH = 4f * d
-    val topPath = Path().apply {
-        moveTo(panelA.x, panelA.y - bandH)
-        lineTo(panelA.x + metrics.coverW, panelA.y - bandH)
-        lineTo(panelA.x + metrics.coverW, panelA.y)
-        lineTo(panelA.x, panelA.y)
-        close()
+    // 封面：x 轴沿深度向量斜投影，y 轴保持竖直 —— 与参考的 coverTransform 一致
+    val coverMatrix = Matrix().apply {
+        this[0, 0] = LanghuanShelfGeometry.depthX
+        this[1, 0] = LanghuanShelfGeometry.depthY
+        this[0, 3] = slot.ox + spine
+        this[1, 3] = slot.oy + spine * shear
     }
-    drawPath(
-        path = topPath,
-        brush = Brush.verticalGradient(
-            colors = listOf(
-                blend(colors.paper, Color.White, .16f),
-                blend(colors.paper, Color.Black, .05f),
-            ),
-            startY = panelA.y - bandH,
-            endY = panelA.y,
-        ),
-    )
-    drawPath(
-        path = topPath,
-        color = colors.primaryText.copy(alpha = .18f),
-        style = Stroke(width = .6f * d),
-    )
-
-    // 封面：直立矩形，与书脊同高。不再做斜投影压缩，封面与书脊一样正。
-    val panelPath = Path().apply {
-        moveTo(panelA.x, panelA.y)
-        lineTo(panelA.x + metrics.coverW, panelA.y)
-        lineTo(panelA.x + metrics.coverW, panelA.y + metrics.bodyH)
-        lineTo(panelA.x, panelA.y + metrics.bodyH)
-        close()
-    }
-    drawPath(panelPath, colors.paper)
-    drawPath(panelPath, colors.line, style = Stroke(width = 1f))
-
-    val coverCode = "NO.${(slot + 1).toString().padStart(3, '0')}"
-    val codeStyle = TextStyle(fontSize = 9.sp, fontWeight = FontWeight.Medium, color = colors.summaryText)
-    drawText(
-        textMeasurer,
-        coverCode,
-        topLeft = Offset(panelA.x + 10f * d, panelA.y + 9f * d),
-        style = codeStyle,
-    )
-
-    val imageLeft = panelA.x + 10f * d
-    val imageTop = panelA.y + 9f * d + textMeasurer.measure(coverCode, codeStyle).size.height + 7f * d
-    if (cover != null) {
-        clipRect(
-            imageLeft,
-            imageTop,
-            panelA.x + metrics.coverW - 10f * d,
-            imageTop + metrics.coverImageH,
-        ) {
-            drawImage(
-                image = cover,
-                srcOffset = IntOffset.Zero,
-                srcSize = IntSize(cover.width, cover.height),
-                dstOffset = IntOffset(imageLeft.roundToInt(), imageTop.roundToInt()),
-                dstSize = IntSize(
-                    metrics.coverImageW.roundToInt(),
-                    metrics.coverImageH.roundToInt(),
-                ),
+    withTransform({ transform(coverMatrix) }) {
+        clipRect(0f, 0f, metrics.coverW, body) {
+            drawRect(colors.shelfCover, Offset.Zero, Size(metrics.coverW, body))
+            drawCoverContent(book, number, metrics, colors, styles, cover, textMeasurer)
+            drawRect(
+                color = colors.line,
+                topLeft = Offset.Zero,
+                size = Size(metrics.coverW, body),
+                style = Stroke(.7f * d),
             )
         }
+    }
+
+    // 顶面：书脊顶边与封面顶边之间的纸厚
+    val topBounds = slot.topPath.getBounds()
+    val topMidY = (topBounds.top + topBounds.bottom) / 2f
+    drawPath(
+        path = slot.topPath,
+        brush = Brush.linearGradient(
+            colors = listOf(colors.shelfTop, colors.shelfSpine),
+            start = Offset(topBounds.left, topMidY),
+            end = Offset(topBounds.right, topMidY),
+        ),
+    )
+    drawPath(
+        path = slot.topPath,
+        color = colors.shelfEdge.copy(alpha = .24f),
+        style = Stroke(.4f * d),
+    )
+
+    // 书脊：x 轴轻微切变，直立在标题行上
+    val spineMatrix = Matrix().apply {
+        this[1, 0] = shear
+        this[0, 3] = slot.ox
+        this[1, 3] = slot.oy
+    }
+    withTransform({ transform(spineMatrix) }) {
+        clipRect(0f, 0f, spine, body) {
+            drawRect(colors.shelfSpine, Offset.Zero, Size(spine, body))
+            drawSpineContent(book, number, metrics, colors, styles, textMeasurer)
+            drawRect(
+                color = colors.line,
+                topLeft = Offset.Zero,
+                size = Size(spine, body),
+                style = Stroke(.7f * d),
+            )
+        }
+    }
+}
+
+/** 封面内容：NO.xxx → 封面图 → 文件代号（左对齐，上下各留一行档案位）。 */
+private fun DrawScope.drawCoverContent(
+    book: BookItemUi,
+    number: Int,
+    metrics: LanghuanShelfMetrics,
+    colors: AppColors,
+    styles: ShelfTextStyles,
+    cover: ImageBitmap?,
+    textMeasurer: TextMeasurer,
+) {
+    val d = metrics.density
+    val left = 10f * d
+    val codeLayout = textMeasurer.measure(
+        "NO.${number.toString().padStart(3, '0')}",
+        styles.code,
+    )
+    drawText(codeLayout, topLeft = Offset(left, 9f * d))
+
+    val imageTop = 9f * d + codeLayout.size.height + 7f * d
+    val imageW = metrics.coverImageW
+    val imageH = metrics.coverImageH
+    if (cover != null) {
+        // 等比裁切填满封面格（BoxFit.cover），不拉伸变形
+        val scale = maxOf(imageW / cover.width, imageH / cover.height)
+        val srcW = (imageW / scale).roundToInt().coerceIn(1, cover.width)
+        val srcH = (imageH / scale).roundToInt().coerceIn(1, cover.height)
+        drawImage(
+            image = cover,
+            srcOffset = IntOffset((cover.width - srcW) / 2, (cover.height - srcH) / 2),
+            srcSize = IntSize(srcW, srcH),
+            dstOffset = IntOffset(left.roundToInt(), imageTop.roundToInt()),
+            dstSize = IntSize(imageW.roundToInt(), imageH.roundToInt()),
+            filterQuality = FilterQuality.Medium,
+        )
     } else {
-        drawRect(
-            color = colors.paperDeep,
-            topLeft = Offset(imageLeft, imageTop),
-            size = Size(metrics.coverImageW, metrics.coverImageH),
-        )
-        // 无封面：书名首字落在封面上，避免整格空白
+        drawRect(colors.paperDeep, Offset(left, imageTop), Size(imageW, imageH))
         val initial = book.name.take(1)
-        val initialStyle = TextStyle(
-            fontSize = 34.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = colors.summaryText.copy(alpha = .55f),
-        )
-        val layout = textMeasurer.measure(initial, initialStyle)
+        val layout = textMeasurer.measure(initial, styles.initial)
         drawText(
-            textLayoutResult = layout,
+            layout,
             topLeft = Offset(
-                imageLeft + (metrics.coverImageW - layout.size.width) / 2f,
-                imageTop + (metrics.coverImageH - layout.size.height) / 2f,
+                left + (imageW - layout.size.width) / 2f,
+                imageTop + (imageH - layout.size.height) / 2f,
             ),
-            color = colors.summaryText.copy(alpha = .55f),
         )
     }
 
-    val author = book.author.ifBlank { unknownAuthor }
-    val authorStyle = TextStyle(fontSize = 9.sp, color = colors.summaryText)
+    val fileLayout = textMeasurer.measure(fileCode(book), styles.code)
     drawText(
-        textMeasurer,
-        author,
-        topLeft = Offset(imageLeft, panelA.y + metrics.bodyH - 18f * d),
-        style = authorStyle,
-        overflow = TextOverflow.Ellipsis,
-        maxLines = 1,
-        size = Size(metrics.coverImageW, 18f * d),
-    )
-
-    // 书脊：整排书统一用纸色，不再用主题色铺满。
-    // 参考实现里书脊是米白纸面 + 深色竖排书名，主题色只留在书名区等小面积位置；
-    // 上一版每本书脊都是一条高饱和色带，远看像一排色卡，这是「生硬」的第二个来源。
-    val spinePath = Path().apply {
-        moveTo(spineTop.x, spineTop.y)
-        lineTo(spineTopRight.x, spineTopRight.y)
-        lineTo(spineTopRight.x, spineTopRight.y + metrics.bodyH)
-        lineTo(spineTop.x, spineTop.y + metrics.bodyH)
-        close()
-    }
-    val spinePaper = colors.paperDeep
-    drawPath(
-        path = spinePath,
-        brush = Brush.horizontalGradient(
-            colors = listOf(
-                blend(spinePaper, Color.Black, .06f),
-                spinePaper,
-                blend(spinePaper, Color.White, .05f),
-            ),
-            startX = spineTop.x,
-            endX = spineTopRight.x,
-        ),
-    )
-    drawPath(
-        path = spinePath,
-        color = colors.line.copy(alpha = .55f),
-        style = Stroke(width = .6f * d),
-    )
-
-    val spineInk = colors.primaryText
-    val spineCode = (slot + 1).toString().padStart(2, '0')
-    val spineCodeStyle = TextStyle(
-        fontSize = 8.5.sp,
-        fontWeight = FontWeight.Medium,
-        color = spineInk.copy(alpha = .62f),
-    )
-    val spineCodeLayout = textMeasurer.measure(spineCode, spineCodeStyle)
-    drawText(
-        textLayoutResult = spineCodeLayout,
-        topLeft = Offset(
-            spineTop.x + (metrics.spineW - spineCodeLayout.size.width) / 2f,
-            spineTop.y + metrics.spineW * shear + 8f * d,
-        ),
-    )
-
-    // 竖排书名：一行一个字，最多七行
-    val chars = book.name.take(7).toList().let {
-        if (book.name.length > 7) it + '…' else it
-    }
-    val titleStyle = TextStyle(
-        fontSize = 9.sp,
-        fontWeight = FontWeight.Medium,
-        color = spineInk,
-    )
-    val charHeight = textMeasurer.measure("书", titleStyle).size.height.toFloat()
-    val totalHeight = charHeight * chars.size
-    var y = spineTop.y + metrics.bodyH / 2f - totalHeight / 2f
-    for (ch in chars) {
-        val layout = textMeasurer.measure(ch.toString(), titleStyle)
-        drawText(
-            textLayoutResult = layout,
-            topLeft = Offset(
-                spineTop.x + (metrics.spineW - layout.size.width) / 2f,
-                y,
-            ),
-        )
-        y += charHeight
-    }
-
-    // 书脊底部的小圆点：参考实现用一枚 6dp 圆点收尾，比整块投影安静。
-    // 用辅助色而不是灰：这是每本书脊上唯一的主题色触点，面积小，不喧宾夺主
-    drawCircle(
-        color = colors.companion.copy(alpha = .8f),
-        radius = 3f * d,
-        center = Offset(
-            spineTop.x + metrics.spineW / 2f,
-            spineTop.y + metrics.bodyH - 10f * d,
-        ),
+        fileLayout,
+        topLeft = Offset(left, metrics.bodyH - 8f * d - fileLayout.size.height),
     )
 }
 
-private fun blend(base: Color, overlay: Color, fraction: Float): Color = Color(
-    red = base.red + (overlay.red - base.red) * fraction,
-    green = base.green + (overlay.green - base.green) * fraction,
-    blue = base.blue + (overlay.blue - base.blue) * fraction,
-    alpha = base.alpha,
+/** 书脊内容：顶部编号 → 竖排书名（每行一字）→ 底部圆点。 */
+private fun DrawScope.drawSpineContent(
+    book: BookItemUi,
+    number: Int,
+    metrics: LanghuanShelfMetrics,
+    colors: AppColors,
+    styles: ShelfTextStyles,
+    textMeasurer: TextMeasurer,
+) {
+    val d = metrics.density
+    val spine = metrics.spineW
+    val body = metrics.bodyH
+
+    val codeLayout = textMeasurer.measure(
+        number.toString().padStart(2, '0'),
+        styles.code,
+    )
+    val maxW = (spine - 2f * d).coerceAtLeast(1f)
+    val fit = if (codeLayout.size.width > maxW) maxW / codeLayout.size.width else 1f
+    val codeH = codeLayout.size.height * fit
+    if (fit < 1f) {
+        withTransform({
+            translate((spine - codeLayout.size.width * fit) / 2f, 9f * d)
+            scale(fit, fit, pivot = Offset.Zero)
+        }) {
+            drawText(codeLayout, topLeft = Offset.Zero)
+        }
+    } else {
+        drawText(
+            codeLayout,
+            topLeft = Offset((spine - codeLayout.size.width) / 2f, 9f * d),
+        )
+    }
+
+    val glyphs = book.name.take(7).toList().let {
+        if (book.name.length > 7) it + '…' else it
+    }
+    if (glyphs.isNotEmpty()) {
+        val layouts = glyphs.map { textMeasurer.measure(it.toString(), styles.title) }
+        val lineHeight = layouts.maxOf { it.size.height }.toFloat()
+        val top = 9f * d + codeH + 10f * d
+        val bottom = body - 21f * d
+        val total = lineHeight * layouts.size
+        var y = top + ((bottom - top - total) / 2f).coerceAtLeast(0f)
+        for (layout in layouts) {
+            drawText(
+                layout,
+                topLeft = Offset(
+                    (spine - layout.size.width) / 2f,
+                    y + (lineHeight - layout.size.height) / 2f,
+                ),
+            )
+            y += lineHeight
+        }
+    }
+
+    // 书脊底部的小圆点：整面书脊唯一的辅助色触点
+    drawCircle(
+        color = colors.companion.copy(alpha = .85f),
+        radius = 3f * d,
+        center = Offset(spine / 2f, body - 12f * d),
+    )
+}
+
+private class ShelfTextStyles(
+    val code: TextStyle,
+    val title: TextStyle,
+    val initial: TextStyle,
 )
+
+private fun shelfTextStyles(colors: AppColors): ShelfTextStyles = ShelfTextStyles(
+    code = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontSize = 9.sp,
+        lineHeight = 12.sp,
+        letterSpacing = 1.05.sp,
+        fontWeight = FontWeight.Medium,
+        color = colors.summaryText,
+        platformStyle = platformTextStyleNoFontPadding(),
+    ),
+    title = TextStyle(
+        fontSize = 9.sp,
+        lineHeight = (9f * 1.08f).sp,
+        fontWeight = FontWeight.SemiBold,
+        color = colors.primaryText,
+        platformStyle = platformTextStyleNoFontPadding(),
+    ),
+    initial = TextStyle(
+        fontSize = 34.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = colors.summaryText.copy(alpha = .55f),
+        platformStyle = platformTextStyleNoFontPadding(),
+    ),
+)
+
+/** 文件代号：书没有数字主键，用书址哈希取五位，保证同一本书每次一致。 */
+private fun fileCode(book: BookItemUi): String {
+    val code = (book.bookUrl.hashCode().toLong() and 0xFFFF_FFFFL) % 100_000L
+    return "WK-" + code.toString().padStart(5, '0')
+}
 
 /** 书名区：当前居中那本的名字、作者与格位计数。 */
 @Composable
@@ -831,12 +999,14 @@ private fun ShelfMeta(
             )
         }
         Spacer(Modifier.width(10.dp))
-        ShelfPageStepper(
-            index = index,
-            total = total,
-            onPrev = onPrev,
-            onNext = onNext,
-        )
+        if (total > 1) {
+            ShelfPageStepper(
+                index = index,
+                total = total,
+                onPrev = onPrev,
+                onNext = onNext,
+            )
+        }
     }
 }
 

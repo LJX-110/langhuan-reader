@@ -5,7 +5,7 @@
 // 本文件只管 iOS 的画布尺寸、坐标换算、图层组合与输出路径。
 //
 // 合成规则 (先画 background 再画 foreground, 同为 108x108 viewport):
-//   AppIcon = #1F2A24 (墨绿底) + ic_launcher_foreground (阁顶为书)
+//   AppIcon = #4F5BD5 (鸢尾蓝底) + ic_launcher_foreground (阁顶为书)
 //
 // 可见窗口: 层图按 108 viewport 全幅绘制后整体放大 1.5 倍, 可见窗口 = 层坐标的中央
 // 72/108。AOSP AdaptiveIconDrawable 的三条依据 —— EXTRA_INSET_PERCENTAGE = 1/4f,
@@ -59,7 +59,7 @@ private data class Combo(
 fun main() {
     val res = Paths.get("app", "src", "main", "res")
     val combos = listOf(
-        Combo("AppIcon", null, "#1F2A24", "drawable/ic_launcher_foreground.xml"),
+        Combo("AppIcon", null, "#4F5BD5", "drawable/ic_launcher_foreground.xml"),
     )
     for (combo in combos) {
         val img = BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_ARGB)
