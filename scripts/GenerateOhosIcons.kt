@@ -16,7 +16,7 @@
 //   - iOS 脚本: 缩放 SIZE/VISIBLE_VIEW 再平移, 直接输出可见窗口 1024x1024
 //
 // 输出 (AppScope/resources/base/media/):
-//   app_icon_background.png = #4F5BD5 纯色底
+//   app_icon_background.png = #0F64B5 纯色底
 //   app_icon_foreground.png = ic_launcher_foreground (阁顶为书) 叠加在透明底上
 // 两层分别独立输出: 前景层必须透明底 (系统要与背景层合成), 故不做压平。
 //
@@ -51,7 +51,7 @@ fun main() {
     val outDir = Paths.get("ohosApp", "AppScope", "resources", "base", "media")
     Files.createDirectories(outDir)
     // 两层分开输出: 背景层不透明 (鸢尾蓝底), 前景层透明底 (阁顶为书)
-    render(res, outDir, "app_icon_background.png", "#4F5BD5", null, null)
+    render(res, outDir, "app_icon_background.png", "#0F64B5", null, null)
     render(res, outDir, "app_icon_foreground.png", null, null, "drawable/ic_launcher_foreground.xml")
 }
 

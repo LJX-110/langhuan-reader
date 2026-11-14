@@ -556,7 +556,8 @@ private fun shelfSlot(
     val volumeX = metrics.rowStart + distance * metrics.pitch + assembly.x
     val volumeY = metrics.railY(distance) + assembly.y
     val ox = volumeX + metrics.extractionX(weight)
-    val oy = volumeY + metrics.extractionY(weight)
+    // 行内纵坐标只含弧线与入场位移；静止书顶还要落在 baseY 上（对照参考 origin）
+    val oy = volumeY + metrics.baseY + metrics.extractionY(weight)
 
     val spine = metrics.spineW
     val body = metrics.bodyH
@@ -742,12 +743,14 @@ private fun DrawScope.drawVolume(
     val shear = LanghuanShelfGeometry.spineShear
     val number = slot.index + 1
 
-    // 封面：x 轴沿深度向量斜投影，y 轴保持竖直 —— 与参考的 coverTransform 一致
+    // 封面：x 轴沿深度向量斜投影，y 轴保持竖直 —— 与参考的 coverTransform 一致。
+    // Compose Matrix 是「行向量」布局：平移在 [3,0]/[3,1]，[0,1] 才是 x 对 y 的投影分量；
+    // 不能照抄 Flutter Matrix4 的 setEntry(row, column)，否则平移会被当成透视项。
     val coverMatrix = Matrix().apply {
         this[0, 0] = LanghuanShelfGeometry.depthX
-        this[1, 0] = LanghuanShelfGeometry.depthY
-        this[0, 3] = slot.ox + spine
-        this[1, 3] = slot.oy + spine * shear
+        this[0, 1] = LanghuanShelfGeometry.depthY
+        this[3, 0] = slot.ox + spine
+        this[3, 1] = slot.oy + spine * shear
     }
     withTransform({ transform(coverMatrix) }) {
         clipRect(0f, 0f, metrics.coverW, body) {
@@ -779,11 +782,12 @@ private fun DrawScope.drawVolume(
         style = Stroke(.4f * d),
     )
 
-    // 书脊：x 轴轻微切变，直立在标题行上
+    // 书脊：x 轴轻微切变，直立在标题行上。切变是「x 影响 y」（参考 front = (spine, spine*.10)），
+    // 行向量布局下同样落在 [0,1]，写成 [1,0] 会变成 y 影响 x，书脊整体向右歪。
     val spineMatrix = Matrix().apply {
-        this[1, 0] = shear
-        this[0, 3] = slot.ox
-        this[1, 3] = slot.oy
+        this[0, 1] = shear
+        this[3, 0] = slot.ox
+        this[3, 1] = slot.oy
     }
     withTransform({ transform(spineMatrix) }) {
         clipRect(0f, 0f, spine, body) {
