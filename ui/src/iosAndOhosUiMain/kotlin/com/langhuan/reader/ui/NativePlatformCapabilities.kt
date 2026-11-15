@@ -21,9 +21,6 @@ import com.langhuan.reader.help.upLoadToDirectLink
 import com.langhuan.reader.model.fileBook.FileBook
 import com.langhuan.reader.ui.book.source.BookSourceSort
 import com.langhuan.reader.ui.book.source.manage.selectedSourcesJson
-import com.langhuan.reader.ui.config.MODE_EDIT_CONFIG
-import com.langhuan.reader.ui.config.MODE_EDIT_PREFS
-import com.langhuan.reader.ui.config.MODE_NEW_CONFIG
 import com.langhuan.reader.ui.root.AppNavigatorProviders
 import com.langhuan.reader.ui.root.AppOverlay
 import com.langhuan.reader.ui.root.AppRoute
@@ -163,25 +160,6 @@ interface NativePlatformCapabilities : SharedPlatformCapabilities {
 
     override fun getDeleteBookOriginal(): Boolean =
         PreferenceProviders.get().getBoolean(LocalConfigKeys.deleteBookOriginal, false)
-
-    override fun showThemeCustomizeDialog(configIndex: Int?, isNight: Boolean) {
-        val mode = if (configIndex == null) MODE_NEW_CONFIG else MODE_EDIT_CONFIG
-        AppNavigatorProviders.get().showOverlay(
-            AppOverlay.Dialog("theme_customize", payload = "$mode,${configIndex ?: -1},$isNight")
-        )
-    }
-
-    override fun showCustomizeDayThemeDialog() {
-        AppNavigatorProviders.get().showOverlay(
-            AppOverlay.Dialog("theme_customize", payload = "$MODE_EDIT_PREFS,-1,false")
-        )
-    }
-
-    override fun showCustomizeNightThemeDialog() {
-        AppNavigatorProviders.get().showOverlay(
-            AppOverlay.Dialog("theme_customize", payload = "$MODE_EDIT_PREFS,-1,true")
-        )
-    }
 
     /** 分享选中书源 (导出前强制关闭危险 API 开关, 见 [selectedSourcesJson])。 */
     override fun shareBookSourceSelection(

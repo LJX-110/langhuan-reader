@@ -89,14 +89,10 @@ import com.langhuan.reader.ui.compose.platform.handleBackKey
 import com.langhuan.reader.ui.compose.platform.performBack
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.LocalEInk
-import com.langhuan.reader.ui.config.BookshelfLayoutConfigDialog
 import com.langhuan.reader.ui.config.BottomNavConfigDialog
 import com.langhuan.reader.ui.config.CheckSourceConfigDialog
 import com.langhuan.reader.ui.config.DefaultCoverGalleryOverlayDialogContent
 import com.langhuan.reader.ui.config.DirectLinkUploadConfigDialog
-import com.langhuan.reader.ui.config.MODE_EDIT_PREFS
-import com.langhuan.reader.ui.config.ThemeCustomizeDialog
-import com.langhuan.reader.ui.config.ThemeListDialog
 import com.langhuan.reader.ui.route.ReviewListOverlayDialogContent
 import com.langhuan.reader.ui.widget.dialog.PhotoViewOverlayDialog
 import com.langhuan.reader.ui.widget.dialog.decodePhotoOverlayPayload
@@ -877,16 +873,7 @@ private fun DialogOverlayContent(overlay: AppOverlay.Dialog, navigator: AppNavig
         // 崩溃日志 (对照 app 端 CrashLogsDialog Fragment)
         "crash_logs" -> CrashLogsOverlayDialogContent(overlay, navigator)
 
-        // 主题列表 (对照 app 端 ThemeListDialog Fragment)
-        "theme_list" -> ThemeListOverlayDialogContent(overlay, navigator)
-
-        // 主题定制 (对照 app 端 ThemeCustomizeDialog Fragment, 背景图功能不下沉)
-        // payload 形如 "mode,configIndex,isNight"
-        "theme_customize" -> ThemeCustomizeOverlayDialogContent(overlay, navigator)
-
-        // 书架布局配置 / 底栏配置 (对照 app 端 ThemeConfigFragment 对话框;
-        // app 端仍走原 Fragment 实现, 其他端经平台能力弹此 shared 对话框)
-        "bookshelf_layout" -> BookshelfLayoutOverlayDialogContent(overlay, navigator)
+        // 底栏配置 (对照 app 端 ThemeConfigFragment 对话框)
         "bottom_nav_config" -> BottomNavConfigOverlayDialogContent(overlay, navigator)
 
         // 校验设置 (对照 app 端 CheckSourceConfig Fragment; 书源管理页"校验书源"对话框的中性钮入口)
@@ -1165,67 +1152,6 @@ private fun CrashLogsOverlayDialogContent(overlay: AppOverlay.Dialog, navigator:
             }
         },
         onShare = { item -> provider.shareCrashLog(item.name) },
-    )
-}
-
-// 主题列表对话框 (对照 app 端 ThemeListDialog Fragment 壳)
-// 包装 shared ThemeListDialog Composable, 通过 PlatformServices 提供剪贴板/分享能力,
-// ThemeCustomizeDialog 仍走平台 Fragment (ThemeCustomizeDialog 未下沉 shared)
-@Composable
-private fun ThemeListOverlayDialogContent(overlay: AppOverlay.Dialog, navigator: AppNavigator) {
-    val services = PlatformServiceProviders.get()
-    val platform = PlatformCapabilityProviders.get()
-
-    ThemeListDialog(
-        onDismiss = { navigator.dismissOverlay(overlay.key) },
-        onEditConfig = { configIndex ->
-            // 编辑主题: 委托平台能力 (app 端 ThemeCustomizeDialog Fragment)
-            platform.showThemeCustomizeDialog(configIndex)
-        },
-        onNewConfig = { isNight ->
-            // 新建主题: 委托平台能力 (app 端 ThemeCustomizeDialog Fragment)
-            platform.showThemeCustomizeDialog(null, isNight)
-        },
-        onImportFromClip = {
-            platform.getClipboardText()
-        },
-        onShare = { json ->
-            // 分享: 通过 ShareService
-            services.sharing.shareText(json)
-        },
-    )
-}
-
-// 主题定制对话框 (对照 app 端 ThemeCustomizeDialog Fragment 壳)
-// payload 形如 "mode,configIndex,isNight"; Toast 通过 shared Toasters
-@Composable
-private fun ThemeCustomizeOverlayDialogContent(
-    overlay: AppOverlay.Dialog,
-    navigator: AppNavigator,
-) {
-    val parts = overlay.payload.orEmpty().split(",")
-    val mode = parts.getOrNull(0)?.toIntOrNull() ?: MODE_EDIT_PREFS
-    val configIndex = parts.getOrNull(1)?.toIntOrNull() ?: -1
-    val isNight = parts.getOrNull(2)?.toBooleanStrictOrNull() ?: false
-
-    ThemeCustomizeDialog(
-        onDismiss = { navigator.dismissOverlay(overlay.key) },
-        onToast = { msg -> com.langhuan.reader.help.toast.Toasters.get().toast(msg) },
-        mode = mode,
-        configIndex = configIndex,
-        initIsNight = isNight,
-    )
-}
-
-// 书架布局配置对话框 (对照 app 端 ThemeConfigHost.configBookshelf + dialog_bookshelf_config.xml)
-// shared 实现; 变更事件走 FlowBus (NOTIFY_MAIN / BOOKSHELF_REFRESH / RECREATE)
-@Composable
-private fun BookshelfLayoutOverlayDialogContent(
-    overlay: AppOverlay.Dialog,
-    navigator: AppNavigator,
-) {
-    BookshelfLayoutConfigDialog(
-        onDismiss = { navigator.dismissOverlay(overlay.key) },
     )
 }
 

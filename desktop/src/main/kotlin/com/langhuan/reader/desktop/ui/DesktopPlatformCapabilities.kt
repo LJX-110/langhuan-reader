@@ -37,9 +37,6 @@ import com.langhuan.reader.ui.book.source.BookSourceSort
 import com.langhuan.reader.ui.book.source.manage.BookSourceViewModelShared
 import com.langhuan.reader.ui.book.source.manage.selectedSourcesJson
 import com.langhuan.reader.ui.compose.platform.syncGetString
-import com.langhuan.reader.ui.config.MODE_EDIT_CONFIG
-import com.langhuan.reader.ui.config.MODE_EDIT_PREFS
-import com.langhuan.reader.ui.config.MODE_NEW_CONFIG
 import com.langhuan.reader.ui.root.AppNavigatorProviders
 import com.langhuan.reader.ui.root.AppOverlay
 import com.langhuan.reader.ui.root.AppRoute
@@ -327,25 +324,6 @@ object DesktopPlatformCapabilities : SharedPlatformCapabilities {
     // 按 bookUrl 查 DB 解析 BookRef, 供 deep link / 文件关联的路由导航
     override suspend fun resolveBookRef(bookUrl: String): BookRef? =
         appDb.bookDao.getBook(bookUrl)?.toRouteRef()
-
-    // 书架布局 / 底栏配置: shared Compose 对话框 (BookshelfNavConfigDialogs.kt)
-
-    override fun showThemeCustomizeDialog(configIndex: Int?, isNight: Boolean) {
-        val mode = if (configIndex == null) MODE_NEW_CONFIG else MODE_EDIT_CONFIG
-        val index = configIndex ?: -1
-        AppNavigatorProviders.get()
-            .showOverlay(AppOverlay.Dialog("theme_customize", payload = "$mode,$index,$isNight"))
-    }
-
-    override fun showCustomizeDayThemeDialog() {
-        AppNavigatorProviders.get()
-            .showOverlay(AppOverlay.Dialog("theme_customize", payload = "$MODE_EDIT_PREFS,-1,false"))
-    }
-
-    override fun showCustomizeNightThemeDialog() {
-        AppNavigatorProviders.get()
-            .showOverlay(AppOverlay.Dialog("theme_customize", payload = "$MODE_EDIT_PREFS,-1,true"))
-    }
 
     override fun getAppVersionName(): String? = DesktopAppInfo.versionName
 

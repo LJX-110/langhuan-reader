@@ -6,6 +6,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -40,7 +41,6 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -1001,6 +1001,28 @@ private fun ShelfMeta(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            // 阅读进度细线：只给已开读的书，章数做分母，避免进度看起来永远为 0
+            val totalChapters = book.totalChapterNum
+            if (totalChapters > 0 && book.durChapterIndex > 0) {
+                val fraction = ((book.durChapterIndex + 1).toFloat() / totalChapters)
+                    .coerceIn(0f, 1f)
+                Spacer(Modifier.height(5.dp))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .clip(RoundedCornerShape(1.dp))
+                        .background(colors.line)
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(fraction)
+                            .height(2.dp)
+                            .clip(RoundedCornerShape(1.dp))
+                            .background(colors.accent)
+                    )
+                }
+            }
         }
         Spacer(Modifier.width(10.dp))
         if (total > 1) {
@@ -1024,7 +1046,7 @@ private fun ShelfPageStepper(
 ) {
     val colors = AppTheme.colors
     Row(verticalAlignment = Alignment.CenterVertically) {
-        ShelfStepperArrow("<", enabled = index > 0, onClick = onPrev, color = colors.summaryText)
+        ShelfStepperArrow("‹", enabled = index > 0, onClick = onPrev, color = colors.summaryText)
         Text(
             text = "${(index + 1).toString().padStart(2, '0')} / " +
                 total.toString().padStart(2, '0'),
@@ -1033,7 +1055,7 @@ private fun ShelfPageStepper(
             letterSpacing = 1.sp,
             modifier = Modifier.padding(horizontal = 2.dp),
         )
-        ShelfStepperArrow("<", rotation = 180f, enabled = index < total - 1, onClick = onNext, color = colors.summaryText)
+        ShelfStepperArrow("›", enabled = index < total - 1, onClick = onNext, color = colors.summaryText)
     }
 }
 
@@ -1043,20 +1065,18 @@ private fun ShelfStepperArrow(
     enabled: Boolean,
     color: Color,
     onClick: () -> Unit,
-    rotation: Float = 0f,
 ) {
     Box(
         Modifier
-            .size(28.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .size(40.dp)
+            .clip(RoundedCornerShape(20.dp))
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = glyph,
             color = color.copy(alpha = if (enabled) 1f else .35f),
-            fontSize = 14.sp,
-            modifier = Modifier.rotate(rotation),
+            fontSize = 20.sp,
         )
     }
 }

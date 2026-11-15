@@ -93,9 +93,6 @@ import com.langhuan.reader.ui.compose.dialogs.selector
 import com.langhuan.reader.ui.compose.platform.rememberString
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
-import com.langhuan.reader.ui.config.MODE_EDIT_CONFIG
-import com.langhuan.reader.ui.config.MODE_EDIT_PREFS
-import com.langhuan.reader.ui.config.MODE_NEW_CONFIG
 import com.langhuan.reader.ui.file.HandleFileContract
 import com.langhuan.reader.ui.file.HandleFileRequestHost
 import com.langhuan.reader.ui.file.registerHandleFile
@@ -1379,31 +1376,6 @@ class AndroidPlatformCapabilities(
     }
 
     // ===== 书源编辑平台能力: 对照 BookSourceEditActivity 同名方法 =====
-
-    // ===== 主题设置弹窗平台能力: 对照 ThemeConfigFragment 同名方法 =====
-
-    // 主题自定义编辑 (对照 ThemeCustomizeDialog.editConfig / newConfig)
-    // 经 showOverlay("theme_customize") 弹 shared 完整实现 (含背景图/模糊, 选图走 FilePickerService)
-    override fun showThemeCustomizeDialog(configIndex: Int?, isNight: Boolean) {
-        val mode = if (configIndex == null) MODE_NEW_CONFIG else MODE_EDIT_CONFIG
-        AppNavigatorProviders.get().showOverlay(
-            AppOverlay.Dialog("theme_customize", payload = "$mode,${configIndex ?: -1},$isNight")
-        )
-    }
-
-    // 对照 ThemeConfigFragment: "customizeDayTheme" -> ThemeCustomizeDialog.editPrefs(false)
-    override fun showCustomizeDayThemeDialog() {
-        AppNavigatorProviders.get().showOverlay(
-            AppOverlay.Dialog("theme_customize", payload = "$MODE_EDIT_PREFS,-1,false")
-        )
-    }
-
-    // 对照 ThemeConfigFragment: "customizeNightTheme" -> ThemeCustomizeDialog.editPrefs(true)
-    override fun showCustomizeNightThemeDialog() {
-        AppNavigatorProviders.get().showOverlay(
-            AppOverlay.Dialog("theme_customize", payload = "$MODE_EDIT_PREFS,-1,true")
-        )
-    }
 
     // 莫奈取色: 壁纸取色 API 仅 Android 12+ (S=31) 提供; eInk 显隐门在 ThemeConfigRoute
     // (对齐 AppTheme 读取层判定, 本端不再重复判断)

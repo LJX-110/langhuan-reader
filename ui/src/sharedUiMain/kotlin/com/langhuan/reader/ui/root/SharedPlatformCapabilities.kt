@@ -277,10 +277,6 @@ interface SharedPlatformCapabilities : PlatformCapabilities {
 
     // ===== 主题 / 封面 =====
 
-    override fun showThemeListDialog() {
-        AppNavigatorProviders.get().showOverlay(AppOverlay.Dialog("theme_list"))
-    }
-
     override fun showDefaultCoverGallery(isNight: Boolean) {
         AppNavigatorProviders.get().showOverlay(
             AppOverlay.Dialog(
@@ -312,11 +308,7 @@ interface SharedPlatformCapabilities : PlatformCapabilities {
         AppNavigatorProviders.get().showOverlay(AppOverlay.Dialog("crash_logs"))
     }
 
-    // ===== 书架布局 / 底栏配置 =====
-
-    override fun showBookshelfLayoutDialog() {
-        AppNavigatorProviders.get().showOverlay(AppOverlay.Dialog("bookshelf_layout"))
-    }
+    // ===== 底栏配置 =====
 
     override fun showBottomNavConfigDialog() {
         AppNavigatorProviders.get().showOverlay(AppOverlay.Dialog("bottom_nav_config"))

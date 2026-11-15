@@ -77,13 +77,13 @@ import com.langhuan.reader.ui.compose.component.filletChipPaddingH
 import com.langhuan.reader.ui.compose.component.filletChipPaddingV
 import com.langhuan.reader.ui.compose.component.pullToRefresh
 import com.langhuan.reader.ui.compose.component.rememberPullToRefreshState
-import com.langhuan.reader.ui.compose.platform.rememberColor
 import com.langhuan.reader.ui.compose.platform.rememberPainter
 import com.langhuan.reader.ui.compose.platform.rememberString
 import com.langhuan.reader.ui.compose.platform.platformStatusBarHeight
 import com.langhuan.reader.ui.compose.platform.platformStatusBarPadding
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
+import com.langhuan.reader.ui.compose.theme.LanghuanType
 import com.langhuan.reader.utils.ColorUtils
 import com.langhuan.reader.utils.splitNotBlank
 import com.langhuan.reader.ui.generated.resources.Res
@@ -513,21 +513,19 @@ private fun HairlineDivider(modifier: Modifier = Modifier) {
     )
 }
 
-/** 区块标题：短标签 + 一条延伸到右侧的细线，替代整块留白来做分段。 */
+/** 区块标题：衬线小节标题 + 一条延伸到右侧的细线，替代整块留白来做分段。 */
 @Composable
 private fun SectionHeader(label: String, modifier: Modifier = Modifier) {
     Row(
         modifier
             .fillMaxWidth()
-            .padding(top = DesignTokens.spacingLg, bottom = DesignTokens.spacingDefault),
+            .padding(top = DesignTokens.spacingMax, bottom = DesignTokens.spacingDefault),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = label,
+            style = LanghuanType.sectionTitle,
             color = AppTheme.colors.primaryText,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 0.4.sp,
         )
         Spacer(Modifier.width(DesignTokens.spacingMd))
         Box(
@@ -561,7 +559,8 @@ private fun InfoTitleBar(
         Text(
             text = stringResource(Res.string.book_info),
             color = contentColor,
-            fontSize = 20.sp,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
@@ -607,6 +606,10 @@ private fun InfoOverflowMenu(
             val dismiss = { expanded = false }
             // 刷新: 等价下拉刷新 (onRefresh), 无下拉手势的端 (如桌面) 走此入口
             MenuItem(stringResource(Res.string.refresh)) { dismiss(); actions.onRefresh() }
+            MenuItem(stringResource(Res.string.to_top)) { dismiss(); actions.onTopBook() }
+            if (menu.isLocal || menu.isWebDav) {
+                MenuDivider()
+            }
             if (menu.isLocal) {
                 MenuItem(stringResource(Res.string.upload_to_remote)) {
                     dismiss(); actions.onUploadBook()
@@ -617,7 +620,9 @@ private fun InfoOverflowMenu(
                     dismiss(); actions.onDownloadToLocal()
                 }
             }
-            MenuItem(stringResource(Res.string.to_top)) { dismiss(); actions.onTopBook() }
+            if (menu.sourceHasLogin || menu.sourceHasReviewRule || menu.hasSource) {
+                MenuDivider()
+            }
             if (menu.sourceHasLogin) {
                 MenuItem(stringResource(Res.string.login)) { dismiss(); actions.onLogin() }
             }
@@ -634,18 +639,20 @@ private fun InfoOverflowMenu(
                     dismiss(); actions.onSetBookVariable()
                 }
             }
+            if (menu.hasSource) {
+                CheckMenuItem(stringResource(Res.string.allow_update), menu.canUpdate) {
+                    dismiss(); actions.onToggleCanUpdate()
+                }
+            }
+            MenuDivider()
             MenuItem(stringResource(Res.string.copy_book_url)) {
                 dismiss(); menu.bookUrl?.let { actions.onCopyBookUrl() }
             }
             MenuItem(stringResource(Res.string.copy_toc_url)) {
                 dismiss(); menu.tocUrl?.let { actions.onCopyTocUrl() }
             }
-            if (menu.hasSource) {
-                CheckMenuItem(stringResource(Res.string.allow_update), menu.canUpdate) {
-                    dismiss(); actions.onToggleCanUpdate()
-                }
-            }
             if (menu.isLocalTxt) {
+                MenuDivider()
                 CheckMenuItem(
                     stringResource(Res.string.split_long_chapter),
                     menu.splitLongChapter,
@@ -653,12 +660,25 @@ private fun InfoOverflowMenu(
                     dismiss(); actions.onToggleSplitLongChapter()
                 }
             }
+            MenuDivider()
             MenuItem(stringResource(Res.string.clear_cache)) { dismiss(); actions.onClearCache() }
             MenuItem(stringResource(Res.string.log)) {
                 dismiss(); actions.onShowLog()
             }
         }
     }
+}
+
+/** 菜单分组线：把同步 / 书源 / 复制 / 调试几类动作分开，避免 14 项连成一片。 */
+@Composable
+private fun MenuDivider() {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = DesignTokens.spacingXs)
+            .height(DesignTokens.strokeHairline)
+            .background(AppTheme.colors.line)
+    )
 }
 
 @Composable
@@ -695,7 +715,12 @@ private fun TopSectionVertical(
             state, coverSlot,
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
-                .padding(DesignTokens.spacingDefault),
+                .padding(
+                    start = DesignTokens.spacingDefault,
+                    end = DesignTokens.spacingDefault,
+                    top = DesignTokens.spacingMd,
+                    bottom = DesignTokens.spacingMd,
+                ),
         )
         Column(
             Modifier
@@ -741,12 +766,10 @@ private fun NameText(state: BookInfoUiState, align: TextAlign, maxLines: Int) {
         text = state.book?.name ?: stringResource(Res.string.book_name),
         // 封面取色生效时按共享亮暗判定映射 primaryText 昼夜对, 否则随主题
         color = LocalBookCoverPalette.current?.nameFg ?: AppTheme.colors.primaryText,
-        fontSize = 23.sp,
-        lineHeight = 28.sp,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = (-0.7).sp,
+        style = LanghuanType.pageTitle,
         textAlign = align,
         maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
         modifier = Modifier
             .fillMaxWidth()
             .clickable { actions.onNameClick() },
@@ -769,9 +792,9 @@ private fun WordCountText(state: BookInfoUiState, align: TextAlign) {
 @Composable
 private fun LastedRow(state: BookInfoUiState, modifier: Modifier) {
     val iconSize = with(LocalDensity.current) { 18.sp.toDp() }
-    // summaryText 刻意不随昼夜, 取色两态同值; 未取到色时对齐原版固定淡灰
+    // summaryText 跟随主题语义色, 不再写死固定灰
     val summaryColor = LocalBookCoverPalette.current?.lastedFg
-        ?: rememberColor("tv_text_summary")
+        ?: AppTheme.colors.summaryText
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Icon(
             painterResource(Res.drawable.ic_book_last),

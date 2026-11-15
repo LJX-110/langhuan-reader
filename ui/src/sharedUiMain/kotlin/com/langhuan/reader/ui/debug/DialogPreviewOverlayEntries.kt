@@ -8,7 +8,6 @@ import com.langhuan.reader.help.sourceLoginOverlayPayload
 import com.langhuan.reader.help.update.UpdateCheckInfo
 import com.langhuan.reader.ui.about.CRASH_NOTICE_OVERLAY_KEY
 import com.langhuan.reader.ui.association.OpenUrlConfirmPayload
-import com.langhuan.reader.ui.config.MODE_EDIT_PREFS
 import com.langhuan.reader.ui.root.AppOverlay
 import com.langhuan.reader.ui.root.ExportDispatchPayload
 import com.langhuan.reader.ui.root.AppRoute
@@ -18,13 +17,11 @@ import com.langhuan.reader.ui.route.encodeReviewListDialogPayload
 import com.langhuan.reader.utils.encodeStringMap
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.assists_key_config
-import com.langhuan.reader.ui.generated.resources.bookshelf_layout
 import com.langhuan.reader.ui.generated.resources.bottom_nav_config
 import com.langhuan.reader.ui.generated.resources.change_cover_source
 import com.langhuan.reader.ui.generated.resources.check_source_config
 import com.langhuan.reader.ui.generated.resources.copy_to_clipboard
 import com.langhuan.reader.ui.generated.resources.crash_log
-import com.langhuan.reader.ui.generated.resources.customize_day_theme
 import com.langhuan.reader.ui.generated.resources.default_cover
 import com.langhuan.reader.ui.generated.resources.export
 import com.langhuan.reader.ui.generated.resources.export_config
@@ -38,7 +35,6 @@ import com.langhuan.reader.ui.generated.resources.login_source
 import com.langhuan.reader.ui.generated.resources.search_book_key
 import com.langhuan.reader.ui.generated.resources.set_book_variable
 import com.langhuan.reader.ui.generated.resources.set_source_variable
-import com.langhuan.reader.ui.generated.resources.theme_list
 import com.langhuan.reader.ui.generated.resources.txt_toc_rule
 
 /**
@@ -82,11 +78,6 @@ internal suspend fun buildOverlayEntries(): List<DialogPreviewEntry.Overlay> {
     dialog("crash_logs", titleOf(Res.string.crash_log), "crash_logs") { AppOverlay.Dialog(it) }
     dialog("crash_notice", nameText("崩溃后提示"), CRASH_NOTICE_OVERLAY_KEY) { AppOverlay.Dialog(it) }
     dialog("app_log", titleOf(Res.string.log), "app_log") { AppOverlay.Dialog(it) }
-    dialog("theme_list", titleOf(Res.string.theme_list), "theme_list") { AppOverlay.Dialog(it) }
-    dialog("theme_customize_day", titleOf(Res.string.customize_day_theme), "theme_customize") {
-        AppOverlay.Dialog(it, payload = "$MODE_EDIT_PREFS,-1,false")
-    }
-    dialog("bookshelf_layout", titleOf(Res.string.bookshelf_layout), "bookshelf_layout") { AppOverlay.Dialog(it) }
     dialog("bottom_nav_config", titleOf(Res.string.bottom_nav_config), "bottom_nav_config") { AppOverlay.Dialog(it) }
     dialog("check_source_config", titleOf(Res.string.check_source_config), "check_source_config") { AppOverlay.Dialog(it) }
     // 半屏浏览器: 需要一个真实地址 (打开即真实加载), 用中性示例域名

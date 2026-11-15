@@ -718,29 +718,8 @@ interface PlatformCapabilities {
     // 主页管理平台能力 (各端按需 override, 未实现端统一给出明确提示)
     // 主题设置弹窗平台能力 (各端按需 override, 未实现端统一给出明确提示)
     // 对照 app 端 ThemeConfigHost 同名方法; onSearchLayout 已在 shared 用 Compose 重建, 不在此注入
-    /** 显示书架布局配置对话框 (对照 ThemeConfigHost.configBookshelf) */
-    fun showBookshelfLayoutDialog() = unsupported("书架布局配置")
-
     /** 显示底栏配置对话框 (对照 ThemeConfigHost.configBottomNav) */
     fun showBottomNavConfigDialog() = unsupported("底栏配置")
-
-    /** 显示主题列表对话框 (对照 ThemeListDialog) */
-    fun showThemeListDialog() = unsupported("主题列表")
-
-    /**
-     * 显示主题自定义编辑对话框 (对照 ThemeCustomizeDialog)。
-     *
-     * - configIndex != null: 编辑指定索引的自定义主题
-     * - configIndex == null: 新建主题, isNight 指定日间/夜间
-     */
-    fun showThemeCustomizeDialog(configIndex: Int?, isNight: Boolean = false) =
-        unsupported("自定义主题")
-
-    /** 显示自定义日间主题对话框 (对照 ThemeCustomizeDialog.editPrefs(false)) */
-    fun showCustomizeDayThemeDialog() = unsupported("自定义日间主题")
-
-    /** 显示自定义夜间主题对话框 (对照 ThemeCustomizeDialog.editPrefs(true)) */
-    fun showCustomizeNightThemeDialog() = unsupported("自定义夜间主题")
 
     // 莫奈取色平台能力: 依赖 Android 12+ 壁纸取色 API + material-color-utilities (仅 app 端在
     // classpath), 其他端无实现, 与弹窗类能力一样默认 unsupported + 入口按 [monetColorExtractSupported] 隐藏
@@ -749,8 +728,7 @@ interface PlatformCapabilities {
 
     /**
      * 一键取当前系统壁纸主色作种子, 派生日/夜两组色板写入 8 个主题色 pref 并走既有刷新管线
-     * 生效 (对照 ThemeCustomizeDialog.saveToPrefs 的写键+applyThemeMode)。壁纸取不到时 toast
-     * 提示且不改任何状态。
+     * 生效。壁纸取不到时 toast 提示且不改任何状态。
      */
     fun applyMonetColorFromWallpaper() = unsupported("莫奈取色")
 

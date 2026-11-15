@@ -26,9 +26,10 @@
 - 主题：`LanghuanTheme.kt` 里的 12 套双色主题，每套只有主色与辅助色；页面主体恒为白底（`#FFFFFF`）或近黑底（`#0E0E0E`），不要把强调色铺成整页背景。
 - 对比度：文字与图标走 `langhuanReadable(minRatio = 4.5f)`；大面积填充走 `langhuanThemeAccent`，小面积点缀走 `langhuanCompanion`。
 - 颜色取值：只能用 `AppTheme.colors`（`AppColors`）里的字段，不要在页面里写死色值。新增语义色时先给 `AppColors` 加带默认值的字段，再在 `readAppColors()` 里由主题解析。
-- 字体：页眉、分组标题、书名使用 `LanghuanType` 的衬线样式，正文保持系统字体。正文与标题若需分字体，必须同时改度量与绘制两侧，否则会错行。
+- 字体：页眉、分组标题、书名使用 `LanghuanType` 的衬线样式，正文保持系统字体。字体族、字重与界面字号统一在「我的 → 字体」；正文字号在阅读面板，且阅读页必须屏蔽界面字号对正文的二次缩放。正文与标题若需分字体，必须同时改度量与绘制两侧，否则会错行。
 - 组件：页眉 `LanghuanPageHeader`、搜索入口 `LanghuanSearchEntry`、分组标题 `LanghuanSectionTitle`、3D 书架 `LanghuanShelf`、皮肤弹窗 `LanghuanSkinDialog`、阅读排版面板 `ReaderStylePanel`。新增外观组件统一用 `Langhuan*` 前缀，放在与业务就近的 `component/` 目录。
-- 阅读设置只有一处：阅读菜单的「排版」面板（`ReadMenu.kt` 的 `ReaderStylePanel`）。不要再新增全屏「界面设置」弹窗；放不下的项做成子弹窗（`ReadStyleDialog.kt` 的字体/简繁/配色板、`ReadLayoutConfigDialog.kt`、`BgTextConfigDialog.kt`）。
+- 阅读设置只有一处：阅读菜单的「排版」面板（`ReadMenu.kt` 的 `ReaderStylePanel`），按文字 / 段落 / 背景 / 翻页四组排布。不要再新增全屏「界面设置」弹窗；放不下的项做成子弹窗（`ReadLayoutConfigDialog.kt`、`BgTextConfigDialog.kt`），字体选择走「我的 → 字体」的 `FontSelectDialogHost`。翻页固定四档：滚动 / 覆盖 / 仿真 / 无动画。
+- 书架只保留 3D 书架一种形态：分组 tab + 横向 pager，不提供列表/网格样式或书架布局开关。底栏配置（显示项、顺序、高度、图标大小、标签模式）保留在「我的 → 外观 → 底部导航」。
 - 不提供帮助、教程、更新日志类弹层，设置项只给名称与当前值，不加解释性小字。`files/web/help` 只保留 Markdown 渲染资源（鸿蒙 WebView 复用）。
 - 图标：只保留一套「阁顶为书」图标（鸢尾蓝 `#0F64B5` 底 / 流光白 `#FFFFFBEA` 阁顶），启动页与图标同源；不提供换图标入口，也不保留旧图标资源。
 - 3D 书架几何常量集中在 `LanghuanShelfGeometry`，不要在绘制代码里另写一套数字。

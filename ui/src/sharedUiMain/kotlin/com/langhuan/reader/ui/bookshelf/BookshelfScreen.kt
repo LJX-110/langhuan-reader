@@ -1,19 +1,22 @@
 package com.langhuan.reader.ui.bookshelf
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -31,9 +34,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.lifecycle.Lifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import com.langhuan.reader.constant.BookType
 import com.langhuan.reader.constant.EventBus
@@ -48,14 +49,14 @@ import com.langhuan.reader.help.config.AppConfigProviders
 import com.langhuan.reader.help.config.PreferenceProviders
 import com.langhuan.reader.help.config.resolveImagePath
 import com.langhuan.reader.help.coroutine.IoDispatcher
-import com.langhuan.reader.model.BookCoverShared.CoverRatio
 import com.langhuan.reader.uimodel.BookItemUi
 import com.langhuan.reader.uimodel.GroupUi
 import com.langhuan.reader.ui.bookshelf.shelf.LanghuanShelf
 import com.langhuan.reader.ui.bookshelf.shelf.LanghuanShelfState
 import com.langhuan.reader.ui.compose.component.AppScrollTabRow
+import com.langhuan.reader.ui.compose.component.LanghuanPageHeader
+import com.langhuan.reader.ui.compose.component.LanghuanSearchEntry
 import com.langhuan.reader.ui.compose.component.pagerPageFocus
-import com.langhuan.reader.ui.compose.platform.platformStatusBarPadding
 import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
 import com.langhuan.reader.ui.root.OnRouteLifecycle
 import com.langhuan.reader.ui.compose.theme.AppTheme
@@ -66,29 +67,25 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.bookshelf
+import com.langhuan.reader.ui.generated.resources.bookshelf_empty
+import com.langhuan.reader.ui.generated.resources.loading
+import com.langhuan.reader.ui.generated.resources.search_book_key
 import org.jetbrains.compose.resources.stringResource
 
 /**
  * 书架 Screen (KMP 版, commonMain 共享)。
  *
- * 按 `AppConfig.bookGroupStyle` 分流 (对照 app 端 MainActivity.getFragmentId):
- * 1 走 [BookshelfScreen2] (对照 BookshelfFragment2, 单列表 + 分组下钻), 否则走本函数的
- * 样式1 骨架 (对照 BookshelfFragment1, 分组 tab + HorizontalPager):
+ * 3D 书架单一形态：分组 tab + HorizontalPager，每页一整排 3D 书（[LanghuanShelf]），
+ * 中心那本抽出、其余退回书脊。分组切换与滚顶都由 3D 书架自身状态承担。
  *
  * - **顶栏**: 分组切换 ([AppScrollTabRow]) + 搜索图标 + 溢出菜单槽 ([actions] slot)
- * - **内容区**: [HorizontalPager] 左右滑切换分组 (对照 app 端 style1), 每页复用
- *   [ShelfBooksContent] (按 [tier] 选 LIST/GRID, 享受 contentType /
- *   animateItem / timeTick / 滚顶等性能优化; 列表/网格条目由 shared 端 [ShelfListItem] /
- *   [ShelfGridItem] 渲染); 顶部 tab 点击同步 pager, pager 滑动同步 tab 高亮
- * - **空态**: 由 [ShelfBooksContent] 内部居中提示
+ * - **内容区**: [HorizontalPager] 左右滑切换分组，pager 滑动同步 tab 高亮
+ * - **空态**: 居中提示 [bookshelf_empty]
  *
- * # 简化项 (对照 app 端 ShelfBooksContent)
+ * # 简化项
  *
  * - 下拉刷新: 启用 (refreshEnabled=true), onRefresh 调 [BookshelfViewModel.upToc]
- * - refreshingUrls 由 [BookshelfViewModel] 订阅 UP_BOOKSHELF 事件维护,
- *   coverReloadTick 跟随 configTick (设置变更时可见条目重组重载封面)
- * - 封面由 [coverSlot] 注入: 默认取 [LocalBookCoverSlot] (兜底 [SharedBookCover]);
- *   各端统一默认实现, 宿主端可用 [CompositionLocalProvider] 覆盖注入定制实现
+ * - refreshingUrls 由 [BookshelfViewModel] 订阅 UP_BOOKSHELF 事件维护
  *
  * # 路由跳转
  *
@@ -99,22 +96,15 @@ import org.jetbrains.compose.resources.stringResource
  * - [actions]: 顶栏右侧溢出菜单槽 (添加书/书架管理/分组管理等, 由宿主端注入)
  *
  * @param viewModel 书架 VM (持有 groups/books/currentGroupId state)
- * @param isRootTop 主界面是否栈顶 (分组返回拦截只在主界面可见时生效)
  * @param onBookClick 书籍点击回调
  * @param onBookLongClick 书籍长按回调 (默认空)
  * @param onSearchClick 搜索图标点击回调 (默认空)
  * @param onGroupLongClick 分组长按回调 (默认空)
  * @param modifier 外部 Modifier
- * @param tier 布局档位; null = 按 [AppConfigAccessor.bookshelfLayout] 决定 (0=LIST, 其他=GRID)
- * @param coverSlot 封面渲染 slot, 默认取 [LocalBookCoverSlot] (兜底 [SharedBookCover]);
- *   宿主端可通过 [CompositionLocalProvider] 覆盖 [LocalBookCoverSlot] 注入定制实现,
- *   也可直接由此参数显式传入;
- *   第 4 参为封面重载 tick (configTick), 配置变更时可见条目重载封面
  * @param bookshelfActionsCallbacks 顶栏溢出菜单回调集合 (书架管理/添加本地/远程书籍/分组管理/日志等), 默认空实现; 宿主端注入后菜单项生效
  * @param actions 顶栏右侧溢出菜单槽, 默认 [DefaultBookshelfActions] (搜索图标 + 完整溢出菜单)
- * @param scrollState 外部注入的滚动状态; 默认内部 remember 新建。样式2 / 无分组时的滚动位置载体
  * @param gotoTopTick 滚顶信号 (对照 BookshelfTabController.gotoTop), 宿主端每次 tab 双击 +1;
- *   实际滚哪个状态由本函数按"当前分组页 + [ShelfLayoutSpec.tier]"决定
+ *   作用于当前分组页的 3D 书架, 回到第一本
  */
 @Composable
 fun BookshelfScreen(
@@ -124,8 +114,6 @@ fun BookshelfScreen(
     onSearchClick: () -> Unit = {},
     onGroupLongClick: (BookGroup) -> Unit = {},
     modifier: Modifier = Modifier,
-    tier: BookshelfTier? = null,
-    coverSlot: (@Composable (Book, Modifier, CoverSlotRatio, Int) -> Unit)? = null,
     bookshelfActionsCallbacks: BookshelfActionsCallbacks = BookshelfActionsCallbacks(),
     actions: @Composable RowScope.() -> Unit = {
         DefaultBookshelfActions(
@@ -133,10 +121,7 @@ fun BookshelfScreen(
             bookshelfActionsCallbacks
         )
     },
-    scrollState: ShelfScrollState = remember { ShelfScrollState() },
     gotoTopTick: Int = 0,
-    // 主界面是否栈顶: 分组返回拦截只在主界面可见时生效, 详见 BookshelfScreen2.isRootTop
-    isRootTop: Boolean = true,
     /**
      * 本页在当前 tab 内是否处于选中态 (书架 tab 被选中)。
      *
@@ -160,8 +145,7 @@ fun BookshelfScreen(
         onLeave = { viewModel.setBookshelfActive(false) },
     )
     val appConfig = remember { AppConfigProviders.get() }
-    // 配置项每次变更后重读 (对照原版: 分组样式变更走 NOTIFY_MAIN 重建 Fragment,
-    // 数量开关变更走 BOOKSHELF_REFRESH 重绑 tab)
+    // 数量开关等配置变更走 BOOKSHELF_REFRESH, 顶栏计数与显示项据此重读
     var configTick by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
         coroutineScope {
@@ -169,22 +153,13 @@ fun BookshelfScreen(
             launch { FlowBus.with(EventBus.BOOKSHELF_REFRESH).collect { configTick++ } }
         }
     }
-    // 稳定化透传到条目层的回调/封面槽: 上层 (MainRoute 等) 重组会新建 lambda 实例,
-    // 直接透传时每次上层重组 → 本屏重组 → 各分组页参数变化 → LazyGrid content 重建 →
-    // 全部可见条目全量重组 (Compose 对 item 参数按 == 比较, 新 lambda 必不等)。
+    // 稳定化透传到条目层的回调: 上层 (MainRoute 等) 重组会新建 lambda 实例,
+    // 直接透传时每次上层重组 → 本屏重组 → 各分组页参数变化。
     // rememberUpdatedState 桥接: 透传引用恒定, 调用时读最新实现, 行为语义不变。
     val state by viewModel.shelfState.collectAsState()
-    // Ui 模型 → 实体回查表: 实体只在页面边界 (封面 slot / 点击长按) 使用, 不进条目组件
+    // Ui 模型 → 实体回查表: 实体只在页面边界 (封面 / 点击长按) 使用, 不进条目组件
     val bookEntities by viewModel.bookEntities.collectAsState()
     val currentBookEntities = rememberUpdatedState(bookEntities)
-    val currentCoverSlot = rememberUpdatedState(coverSlot ?: LocalBookCoverSlot.current)
-    val stableCoverSlot: @Composable (BookItemUi, Modifier, CoverSlotRatio, Int) -> Unit = remember {
-        { item, modifier, coverRatio, tick ->
-            currentBookEntities.value[item.bookUrl]?.let { book ->
-                currentCoverSlot.value(book, modifier, coverRatio, tick)
-            }
-        }
-    }
     val currentOnBookClick = rememberUpdatedState(onBookClick)
     val stableOnBookClick: (BookItemUi, String?) -> Unit = remember {
         { item, token -> currentBookEntities.value[item.bookUrl]?.let { currentOnBookClick.value(it, token) } }
@@ -202,39 +177,12 @@ fun BookshelfScreen(
     }
     val currentOnRefresh = rememberUpdatedState<() -> Unit>({ viewModel.upToc() })
     val stableOnRefresh: () -> Unit = remember { { currentOnRefresh.value() } }
-    // 分组样式分流 (对照 MainActivity.getFragmentId: bookGroupStyle==1 走 BookshelfFragment2)
-    if (remember(configTick) { appConfig.bookGroupStyle } == 1) {
-        BookshelfScreen2(
-            viewModel = viewModel,
-            onBookClick = stableOnBookClick,
-            onBookLongClick = stableOnBookLongClick,
-            onGroupLongClick = stableOnGroupLongClick,
-            modifier = modifier,
-            tier = tier,
-            coverSlot = stableCoverSlot,
-            scrollState = scrollState,
-            actions = actions,
-            gotoTopTick = gotoTopTick,
-            configTick = configTick,
-            isRootTop = isRootTop,
-        )
-        return
-    }
     val eInk = LocalEInk.current
-    // 封面 slot 直接透传 (引用已稳定, 不再包新 lambda, 避免所有可见条目一起重组)
-    val bookCoverSlot: @Composable (BookItemUi, Modifier, CoverSlotRatio, Int) -> Unit = stableCoverSlot
-    // 分组封面仍以实体渲染 (仅根级若干组), 在边界按 groupId 回查
-    val groupCoverSlot: @Composable (GroupUi, Modifier, CoverSlotRatio, Int) -> Unit = remember {
-        { group, m, coverRatio, tick ->
-            viewModel.bookGroups.value.find { it.groupId == group.groupId }
-                ?.let { DefaultGroupCoverSlot(it, m, coverRatio, tick) }
-        }
-    }
     val groups = state.groups
     val currentGroupId = state.currentGroupId
     // 单一数据源: 页数据/顶栏计数均读 [ShelfStateUi] (未访问过的分组无条目, 顶栏显示 "..")
     val booksByGroup = state.booksByGroup
-    // 封面比例收敛: 活跃集合 = 全部分组书籍 + 分组封面 (与样式2同口径), 随书架数据增删清理;
+    // 封面比例收敛: 活跃集合 = 全部分组书籍 + 分组封面, 随书架数据增删清理;
     // 持有者由路由层下发, 书架子树重建 (导航栏方位切换) 不丢
     val coverRatioState = LocalCoverRatioLayout.current
     val activeCoverResources = remember(groups, booksByGroup) {
@@ -245,11 +193,6 @@ fun BookshelfScreen(
 
     // 顶栏 tab 是否显示分组数量 (对照 app 端 AppConfig.bookshelfShowGroupCount)
     val showGroupCount = remember(configTick) { appConfig.bookshelfShowGroupCount }
-
-    // 布局 spec 各 pager 页共用, 计算一次。
-    val layoutSpec = rememberBookshelfLayoutSpec(tier)
-    // 各分组页的滚动状态 (对照 BookshelfFragment1.fragmentMap): 滚顶要作用于当前分组页
-    // 登记表由宿主持有 (随主界面 entry 存活), 页面离开组合后滚顶仍能拿到实例
 
     // HorizontalPager (对照 app 端 BookshelfScreen1, pageCount 动态跟随 groups)
     val pagerState = rememberPagerState(
@@ -299,7 +242,16 @@ fun BookshelfScreen(
         groups.getOrNull(pagerState.currentPage)?.let { shelfStates[it.groupId]?.gotoTop() }
     }
 
-    Column(modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize().statusBarsPadding()) {
+        LanghuanPageHeader(title = stringResource(Res.string.bookshelf)) {
+            actions()
+        }
+        Spacer(Modifier.height(DesignTokens.spacingDefault))
+        LanghuanSearchEntry(
+            hint = stringResource(Res.string.search_book_key),
+            onClick = onSearchClick,
+            modifier = Modifier.padding(horizontal = DesignTokens.spacingMax),
+        )
         BookshelfTopBar(
             groups = groups,
             currentGroupId = displayGroupId,
@@ -315,7 +267,6 @@ fun BookshelfScreen(
                 }
             },
             onGroupLongClick = stableOnGroupLongClick,
-            actions = actions,
         )
         if (groups.isEmpty()) {
             // 对照 BookshelfFragment1.upGroup: 无可见分组时自愈, 启用"全部"分组
@@ -324,23 +275,8 @@ fun BookshelfScreen(
                     AppDbProviders.get().bookGroupDao.enableGroup(BookGroup.IdAll)
                 }
             }
-            // 无分组时显示空状态 (ShelfBooksContent 内部居中提示 bookshelf_empty)
-            ShelfBooksContent(
-                items = emptyList(),
-                spec = layoutSpec,
-                scroll = scrollState,
-                refreshEnabled = false,
-                onRefresh = {},
-                coverReloadTick = 0,
-                refreshingUrls = emptySet(),
-                onBookClick = stableOnBookClick,
-                onBookLongClick = stableOnBookLongClick,
-                showLastUpdateTime = true,
-                showKindIntro = true,
-                bookCoverSlot = bookCoverSlot,
-                groupCoverSlot = groupCoverSlot,
-                pairBlockId = "shelf-loading",
-            )
+            // 无分组时显示空态 (懒加载自愈后会有"全部"分组, 这里只是过渡帧)
+            BookshelfEmptyState()
         } else {
             HorizontalPager(
                 state = pagerState,
@@ -365,70 +301,6 @@ fun BookshelfScreen(
                 }
             }
         }
-    }
-}
-
-/**
- * 布局 spec 决策 (两种分组样式共用)。
- *
- * 未显式传 [tier] 时走 [rememberShelfLayoutSpec] (对照 BooksFragment/BookshelfFragment2 的
- * getCols/createAdapter: bookshelfFixedWidthMode 按屏宽换算列数, 否则读 bookshelfLayout 位段)。
- */
-@Composable
-internal fun rememberBookshelfLayoutSpec(tier: BookshelfTier?): ShelfLayoutSpec {
-    val appConfig = remember { AppConfigProviders.get() }
-    // tier 决策: 显式传入优先, 否则按 bookshelfLayout (0=LIST, 其他=GRID)
-    val resolvedTier = remember(tier, appConfig.bookshelfLayout) {
-        tier ?: if (appConfig.bookshelfLayout == 0) BookshelfTier.LIST else BookshelfTier.GRID
-    }
-    // 网格列宽 (对照 app 端 bookshelfGridWidth, Adaptive 模式)
-    val gridWidthDp = remember(appConfig.bookshelfGridWidth) {
-        appConfig.bookshelfGridWidth.coerceIn(60, 240)
-    }
-    val containerSize = LocalWindowInfo.current.containerSize
-    val density = LocalDensity.current
-    val screenWidthDp = remember(containerSize.width, density) {
-        with(density) { containerSize.width.toDp().value.toInt() }.coerceAtLeast(1)
-    }
-    val autoSpec = rememberShelfLayoutSpec(layoutSpecTick = 0, screenWidthDp = screenWidthDp)
-    return if (tier == null) autoSpec else remember(resolvedTier, gridWidthDp) {
-        when (resolvedTier) {
-            BookshelfTier.LIST -> ShelfLayoutSpec(
-                tier = ShelfTier.LIST,
-                isVideoList = false,
-                cols = 1,
-                fixedWidth = false,
-                gridWidthDp = gridWidthDp,
-            )
-
-            BookshelfTier.GRID -> ShelfLayoutSpec(
-                tier = ShelfTier.GRID,
-                isVideoList = false,
-                cols = 1,
-                fixedWidth = true,
-                gridWidthDp = gridWidthDp,
-            )
-        }
-    }
-}
-
-/**
- * 滚顶 (对照 BooksFragment/BookshelfFragment2.gotoTop: E-Ink 直接跳, 否则平滑滚动)。
- * 滚列表还是网格由 [tier] 决定, 与 [ShelfBooksContent] 的取用保持同源。
- */
-internal suspend fun ShelfScrollState.gotoTop(tier: ShelfTier, eInk: Boolean) {
-    if (tier == ShelfTier.LIST) {
-        if (eInk) list.scrollToItem(0) else list.animateScrollToItem(0)
-    } else if (tier == ShelfTier.VIDEO) {
-        if (eInk) {
-            grid.scrollToItem(0)
-            staggered.scrollToItem(0)
-        } else {
-            grid.animateScrollToItem(0)
-            staggered.animateScrollToItem(0)
-        }
-    } else {
-        if (eInk) grid.scrollToItem(0) else grid.animateScrollToItem(0)
     }
 }
 
@@ -468,14 +340,14 @@ private fun GroupBooksPage(
     if (list == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
-                text = "正在整理书架…",
+                text = stringResource(Res.string.loading),
                 color = AppTheme.colors.summaryText,
                 fontSize = 13.sp,
             )
         }
     } else {
         // 3D 书架按 Ui 模型绘制, 封面解密 / cbz 取图所需实体只在页面边界按 bookUrl 回查
-        // 下拉刷新沿用分组开关 (对照 BookshelfScreen2: enableRefresh && 有书)
+        // 下拉刷新沿用分组开关 (enableRefresh && 有书)
         val enableRefresh = group.enableRefresh
         val refreshEnabled = enableRefresh && list.isNotEmpty()
         val refreshing = remember(list, refreshingUrls) {
@@ -498,6 +370,21 @@ private fun GroupBooksPage(
     }
 }
 
+/** 无分组时的空态：安静的一行提示，不加图标与装饰。 */
+@Composable
+private fun BookshelfEmptyState() {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(
+            text = stringResource(Res.string.bookshelf_empty),
+            color = AppTheme.colors.secondaryText,
+            fontSize = 14.sp,
+            lineHeight = 22.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = DesignTokens.spacingXl),
+        )
+    }
+}
+
 /**
  * 顶栏: 分组 tab (左) + 操作区 (右)。
  *
@@ -514,14 +401,18 @@ internal fun BookshelfTopBar(
     showGroupCount: Boolean,
     onGroupClick: (Long) -> Unit,
     onGroupLongClick: (GroupUi) -> Unit,
-    actions: @Composable RowScope.() -> Unit,
 ) {
+    if (groups.isEmpty()) return
     val colors = AppTheme.colors
     val eInk = LocalEInk.current
-    BookshelfTopBarContainer(actions) {
-        if (groups.isNotEmpty()) {
-            val selectedIndex = groups.indexOfFirst { it.groupId == currentGroupId }
-                .coerceAtLeast(0)
+    val selectedIndex = groups.indexOfFirst { it.groupId == currentGroupId }.coerceAtLeast(0)
+    Box(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = DesignTokens.viewHeightXl),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             AppScrollTabRow(
                 tabCount = groups.size,
                 selectedIndex = selectedIndex,
@@ -542,49 +433,17 @@ internal fun BookshelfTopBar(
                     onLongClick = { onGroupLongClick(group) },
                 )
             }
-        } else {
-            // 无分组时占位 (CommonMain 无 R.string.bookshelf, 用 key 兜底返回 key 本身)
-            BookshelfTitleText(stringResource(Res.string.bookshelf))
+        }
+        if (eInk) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(DesignTokens.strokeHairline)
+                    .background(colors.line)
+                    .align(Alignment.BottomStart)
+            )
         }
     }
-}
-
-/** 顶栏容器 (两种分组样式共用): 背景 + 48dp 高 Row (原版 TabLayout 默认高), 左侧 [content] 右侧 [actions] */
-@Composable
-internal fun BookshelfTopBarContainer(
-    actions: @Composable RowScope.() -> Unit,
-    content: @Composable RowScope.() -> Unit,
-) {
-    val eInk = LocalEInk.current
-    Box(
-        // 不涂背景, 颜色由页面容器/壁纸层统一管; 内容推到状态栏之下, eInk 不避让
-        Modifier
-            .fillMaxWidth()
-            .then(if (eInk) Modifier else Modifier.platformStatusBarPadding())
-    ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = DesignTokens.viewHeightXl),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            content()
-            actions()
-        }
-    }
-}
-
-/** 顶栏标题 (对照 app 端 TitleBar 的 toolbar title): 样式2 显示分组名/书架, 样式1 无分组时占位 */
-@Composable
-internal fun RowScope.BookshelfTitleText(title: String) {
-    Text(
-        text = title,
-        color = AppTheme.colors.primaryText,
-        fontSize = 20.sp,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.weight(1f).padding(start = DesignTokens.spacingLg),
-    )
 }
 
 /** 单个分组 tab 项 (对照 app 端 style1.GroupTab) */
@@ -628,7 +487,7 @@ internal fun DefaultBookshelfActions(
     onSearchClick: () -> Unit,
     callbacks: BookshelfActionsCallbacks = BookshelfActionsCallbacks(),
 ) {
-    BookshelfActions(callbacks.copy(onOpenSearch = onSearchClick))
+    BookshelfActions(callbacks.copy(onOpenSearch = onSearchClick), showSearch = false)
 }
 
 /**
@@ -679,11 +538,54 @@ fun SharedBookCover(
 
 
 /**
- * 默认分组封面 slot: 与书架同源 (转 [LocalGroupCoverSlot] → [SharedGroupCover]),
- * 分组封面渲染与书架 style2 条目/编辑分组对话框一致, 不再空白占位。
+ * 分组封面 (对照分组管理对话框与书架分组的封面渲染)。
+ *
+ * 加载与渲染管线与书籍封面同源 ([SharedCoverContent]); 数据差异: 封面取 [BookGroup.cover]
+ * (图集内部相对引用, 经 [resolveImagePath] 解析为展示路径), 默认封面选图 seed = 组名,
+ * 无书源来源 (origin 恒 null), 无共享元素转场端点。
+ *
+ * 原版分组封面不传 name/author, 故默认封面上无竖排书名/作者可画。
+ *
+ * @param reloadTick 封面重载信号 (configTick): 变化时重启加载, 不变不额外触发
  */
-private val DefaultGroupCoverSlot: @Composable (BookGroup, Modifier, CoverSlotRatio, Int) -> Unit =
-    { group, m, coverRatio, tick -> LocalGroupCoverSlot.current(group, m, coverRatio, tick) }
+@Composable
+fun SharedGroupCover(
+    group: BookGroup,
+    modifier: Modifier = Modifier,
+    coverRatio: CoverSlotRatio = CoverSlotRatio.NOVEL,
+    reloadTick: Int = 0,
+) {
+    SharedCoverContent(
+        source = CoverSource(
+            coverUrl = resolveImagePath(group.cover),
+            origin = null,
+            cacheKey = null,
+            defaultCoverSeed = group.groupName,
+            shareDecodedCover = false,
+            persistentCover = true,
+            sharedTransition = false,
+            contentDescription = group.groupName,
+            title = null,
+            author = null,
+        ),
+        modifier = modifier,
+        coverRatio = coverRatio,
+        reloadTick = reloadTick,
+        nameAuthorOverlay = false,
+    )
+}
+
+/**
+ * 分组封面渲染 slot 的 CompositionLocal: 默认兜底 [SharedGroupCover]。
+ *
+ * 与 [LocalBookCoverSlot] 对称, 宿主端可用 `CompositionLocalProvider` 覆盖注入平台实现。
+ */
+val LocalGroupCoverSlot =
+    staticCompositionLocalOf<@Composable (BookGroup, Modifier, CoverSlotRatio, Int) -> Unit> {
+        @Composable { group, modifier, coverRatio, tick ->
+            SharedGroupCover(group, modifier, coverRatio, tick)
+        }
+    }
 
 /**
  * 封面渲染 slot 的 CompositionLocal: 默认兜底 [SharedBookCover]。
@@ -691,7 +593,7 @@ private val DefaultGroupCoverSlot: @Composable (BookGroup, Modifier, CoverSlotRa
  * 宿主端可用 [CompositionLocalProvider] 覆盖注入, 替换 shared 路由
  * ([BookshelfScreen] / `BookInfoRoute`) 的封面实现; 各端默认统一走 [SharedBookCover]。
  *
- * 签名 `(Book, Modifier, CoverSlotRatio, Int) -> Unit` 对齐 [ShelfBooksContent] 的 `coverSlot`
+ * 签名 `(Book, Modifier, CoverSlotRatio, Int) -> Unit` 对齐条目层的 `coverSlot`
  * (book / modifier / 比例档位 / 重载信号), modifier 与比例档位不被丢弃。
  */
 val LocalBookCoverSlot =
@@ -711,7 +613,7 @@ fun SearchBook.toCoverBook(inBookshelf: Boolean = false): Book = toBook().apply 
 }
 
 /**
- * 书架活跃封面资源集合: 全部分组书籍 + 分组封面 (样式1 pager 全页与样式2 各层级条目的并集)。
+ * 书架活跃封面资源集合：全部分组书籍 + 分组封面（3D 书架各分组页与分组管理共用）。
  * 持有者清理由此收敛: 书架数据增删即清理对应资源比例, 下钻/翻页等未减结果集的变化全保留。
  */
 internal fun shelfActiveCoverResources(

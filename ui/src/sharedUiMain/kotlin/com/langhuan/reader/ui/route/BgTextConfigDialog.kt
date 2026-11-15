@@ -144,7 +144,7 @@ fun BgTextConfigContent(
                 readBookConfig.save()
             }
 
-            // 清除图片背景回到当前模式默认纯色 (对照 ThemeCustomizeDialog 背景图清除按钮)
+            // 清除图片背景回到当前模式默认纯色
             override fun clearBgImage() {
                 readBookConfig.config.setCurBg(0, readBookConfig.config.defaultCurBgStr())
                 readBookConfig.save()

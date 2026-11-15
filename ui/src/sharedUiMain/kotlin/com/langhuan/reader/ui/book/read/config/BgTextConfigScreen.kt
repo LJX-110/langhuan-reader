@@ -167,7 +167,7 @@ interface BgTextConfigActions {
  *
  * # 背景图片行
  * 原版底部是 LazyRow 预设列表（内置图已下线），现为单行：左"背景图片"文案 +
- * 右"选择图片"/文件名，整行可点击唤起平台选图（对照 ThemeCustomizeDialog 背景图行）。
+ * 右"选择图片"/文件名，整行可点击唤起平台选图。
  *
  * @param controller 配置读写桥接
  * @param actions 动作回调桥接
@@ -312,8 +312,7 @@ fun BgTextConfigScreen(
                 actions.onPostConfig(listOf(ReadConfigChange.BG_ALPHA))
             },
         )
-        // 背景图片行: 整行可点击唤起平台选图 (原版底部 LazyRow 预设列表随内置图下线移除,
-        // 行式布局对照 ThemeCustomizeDialog 背景图行)
+        // 背景图片行: 整行可点击唤起平台选图 (原版底部 LazyRow 预设列表随内置图下线移除)
         Row(
             Modifier
                 .fillMaxWidth()
@@ -330,7 +329,7 @@ fun BgTextConfigScreen(
                 color = colors.secondaryText,
                 fontSize = 13.sp,
                 maxLines = 1,
-                // 文件名长时从头部省略, 保留文件名 (对齐 ThemeCustomizeDialog ellipsize start)
+                // 文件名长时从头部省略, 保留文件名
                 overflow = TextOverflow.StartEllipsis,
                 modifier = Modifier.widthIn(max = 180.dp),
             )

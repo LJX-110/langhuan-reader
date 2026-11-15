@@ -50,7 +50,6 @@ import com.langhuan.reader.ui.bookshelf.BookshelfScreen
 import com.langhuan.reader.ui.bookshelf.BookshelfViewModel
 import com.langhuan.reader.ui.bookshelf.CoverRatioLayoutState
 import com.langhuan.reader.ui.bookshelf.LocalCoverRatioLayout
-import com.langhuan.reader.ui.bookshelf.ShelfScrollState
 import com.langhuan.reader.ui.compose.component.AlertButton
 import com.langhuan.reader.ui.compose.component.AppAlertDialog
 import com.langhuan.reader.ui.compose.component.LanghuanPageHeader
@@ -199,8 +198,8 @@ fun MainRoute(
     // 对照 MainActivity.bookshelfReselected/exploreReselected: 300ms 双击 reselect
     var bookshelfReselected by remember { mutableLongStateOf(0L) }
     var exploreReselected by remember { mutableLongStateOf(0L) }
-    // 书架滚顶信号 (对照 BookshelfTabController.gotoTop): 具体滚哪个状态由 BookshelfScreen
-    // 按"当前分组页 + 布局档位"决定, 此处只发信号
+    // 书架滚顶信号 (对照 BookshelfTabController.gotoTop): 由 BookshelfScreen 作用于
+    // 当前分组页的 3D 书架, 此处只发信号
     var bookshelfGotoTopTick by remember { mutableIntStateOf(0) }
     // 书架 tab 是否选中: 书架 DB 订阅的另一个维度 (前台 + 栈顶由本页 Lifecycle 提供)
     val bookshelfTabSelected = visibleTags.getOrNull(currentPage) == BottomNavTag.BOOKSHELF
@@ -211,9 +210,6 @@ fun MainRoute(
     // ScreenModelStore 持有 BookshelfViewModel + ExploreScreenModel, 生命周期随 entry
     val mainScreenModel = screenModelStore.getOrCreateTyped(entry) { MainScreenModel() }
     val exploreListState = rememberLazyListState()
-    val bookshelfScrollState = rememberSaveable(saver = ShelfScrollState.Saver) {
-        ShelfScrollState()
-    }
     val scope = rememberCoroutineScope()
 
     // F5 刷新: 四个 tab 共享同一 entry, 故只在此处唯一注册, 按当前页分发到对应 tab 的刷新入口
@@ -237,13 +233,11 @@ fun MainRoute(
     // 主界面返回键/ESC: 对齐底栏起始页回退规范与 onBackPressedDispatcher 回调——
     // 非默认主页 tab → 先切回默认主页; 默认主页 tab → 双击退出 (2000ms 窗口, 对齐原版 EXIT_INTERVAL)。
     // 经 AppBackHandler 注册进统一返回链 (覆盖物→Overlay→页面拦截→出栈): 主界面是根页面,
-    // 出栈无效, 故启用时恒消费。书架分组页 (BookshelfScreen2) 的返回拦截在本组合之后注册,
-    // 栈序优先 (后注册先分发), 分组内返回键先回根分组, 与"书架内部 back() 优先"语义一致。
+    // 出栈无效, 故启用时恒消费。
     // LanghuanApp 保持栈内页面同一 Composition (非顶层仅移出可见区), 故仅当主界面是栈顶
     // (backStack.last 为本 entry) 时才拦截——详情页等顶层页面无自身拦截器时返回键正常出栈。
     val backStack by navigator.backStack.collectAsState()
     val overlays by navigator.overlays.collectAsState()
-    val isMainTop = backStack.lastOrNull()?.id == entry.id
     var exitTime by remember { mutableLongStateOf(0L) }
     val platformCapabilities = LocalPlatformCapabilities.current
     // enabled 条件: 主界面是栈顶 (详情页等打开时不拦截, 返回键正常出栈) 且无 Overlay
@@ -322,10 +316,8 @@ fun MainRoute(
                 BookshelfTabContent(
                     mainScreenModel.bookshelfViewModel,
                     navigator,
-                    bookshelfScrollState,
                     bookshelfGotoTopTick,
                     bookshelfTabSelected,
-                    isRootTop = isMainTop,
                     showImportShelf = showImportShelf,
                     onDismissImportShelf = { showImportShelf = false },
                 )
@@ -390,12 +382,9 @@ private fun computeVisibleTags(appConfig: AppConfigAccessor): List<String> {
 private fun BookshelfTabContent(
     viewModel: BookshelfViewModel,
     navigator: AppNavigator,
-    scrollState: ShelfScrollState,
     gotoTopTick: Int,
     // 书架 tab 是否选中 (书架 DB 订阅的 tab 维度; 前台 + 栈顶由本页 Lifecycle 提供)
     tabSelected: Boolean,
-    // 主界面是栈顶时分组返回拦截才生效 (否则压栈页面的返回键会被不可见书架页吞掉)
-    isRootTop: Boolean,
     // 「本地」页触发的导入书单对话框（状态放在 MainRoute，与本地页共享）
     showImportShelf: Boolean,
     onDismissImportShelf: () -> Unit,
@@ -454,9 +443,7 @@ private fun BookshelfTabContent(
         onSearchClick = { navigator.push(AppRoute.Search()) },
         onGroupLongClick = { group -> editingGroup = group },
         bookshelfActionsCallbacks = callbacks,
-        scrollState = scrollState,
         gotoTopTick = gotoTopTick,
-        isRootTop = isRootTop,
         tabSelected = tabSelected,
     )
     // 添加网址 / 导入书架进度 (对照 BaseBookshelfFragment.observeLiveBus + ensureWaitDialog:

@@ -39,16 +39,6 @@ import kotlinx.coroutines.launch
 import kotlin.concurrent.Volatile
 
 /**
- * 书架布局档位 (KMP 版, 对照 app 端 ShelfTier)。
- *
- * - [LIST]：单列详情 (封面 + 书名 + 作者 + 最新章节)
- * - [GRID]：网格 (封面 + 书名, 桌面端默认)
- *
- * app 端原 [ShelfTier.VIDEO] 视频卡片档位仅在书源浏览场景使用, 书架不下沉该档位。
- */
-enum class BookshelfTier { LIST, GRID }
-
-/**
  * 书架 ViewModel (KMP 版, commonMain 共享)。
  *
  * 对照 app 端 `BookshelfViewModel` + `BaseBookshelfState` + `BookshelfState1/2` 中的

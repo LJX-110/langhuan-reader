@@ -16,8 +16,16 @@ import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.auto_check_new_backup_t
 import com.langhuan.reader.ui.generated.resources.backup
+import com.langhuan.reader.ui.generated.resources.backup_password
 import com.langhuan.reader.ui.generated.resources.backup_restore
 import com.langhuan.reader.ui.generated.resources.book_tree_uri_t
+import com.langhuan.reader.ui.generated.resources.ic_cfg_backup
+import com.langhuan.reader.ui.generated.resources.ic_folder
+import com.langhuan.reader.ui.generated.resources.ic_import
+import com.langhuan.reader.ui.generated.resources.ic_lock_outline
+import com.langhuan.reader.ui.generated.resources.ic_outline_cloud_24
+import com.langhuan.reader.ui.generated.resources.ic_refresh_black_24dp
+import com.langhuan.reader.ui.generated.resources.ic_visibility_off
 import com.langhuan.reader.ui.generated.resources.only_latest_backup_t
 import com.langhuan.reader.ui.generated.resources.restore
 import com.langhuan.reader.ui.generated.resources.restore_ignore
@@ -29,6 +37,7 @@ import com.langhuan.reader.ui.generated.resources.web_dav_pw
 import com.langhuan.reader.ui.generated.resources.web_dav_set
 import com.langhuan.reader.ui.generated.resources.web_dav_url
 import com.langhuan.reader.ui.generated.resources.webdav_device_name
+import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -50,6 +59,7 @@ fun BackupConfigScreen(
     webDavDirSummary: String,
     webDavDeviceNameSummary: String,
     bookSaveDirWarning: String? = null,
+    onBackupPassword: () -> Unit,
     onWebDavBackup: () -> Unit,
     onWebDavBackupLong: () -> Unit,
     onWebDavRestore: () -> Unit,
@@ -78,6 +88,15 @@ fun BackupConfigScreen(
     val titleRestoreIgnore = stringResource(Res.string.restore_ignore)
     val titleOnlyLatest = stringResource(Res.string.only_latest_backup_t)
     val titleAutoCheckNewBackup = stringResource(Res.string.auto_check_new_backup_t)
+    val titleBackupPassword = stringResource(Res.string.backup_password)
+
+    val iconCloud = painterResource(Res.drawable.ic_outline_cloud_24)
+    val iconFolder = painterResource(Res.drawable.ic_folder)
+    val iconSync = painterResource(Res.drawable.ic_refresh_black_24dp)
+    val iconBackup = painterResource(Res.drawable.ic_cfg_backup)
+    val iconRestore = painterResource(Res.drawable.ic_import)
+    val iconRestoreIgnore = painterResource(Res.drawable.ic_visibility_off)
+    val iconPassword = painterResource(Res.drawable.ic_lock_outline)
 
     AppTheme {
         PreferenceScreen {
@@ -87,18 +106,21 @@ fun BackupConfigScreen(
                 prefKey = PreferKey.webDavUrl,
                 title = titleWebDavUrl,
                 summary = webDavUrlSummary,
+                icon = iconCloud,
                 widthFraction = editDialogWidthFraction,
             )
             editTextPreference(
                 prefKey = PreferKey.webDavAccount,
                 title = titleWebDavAccount,
                 summary = webDavAccountSummary,
+                icon = iconCloud,
                 widthFraction = editDialogWidthFraction,
             )
             editTextPreference(
                 prefKey = PreferKey.webDavPassword,
                 title = titleWebDavPw,
                 summary = webDavPasswordSummary,
+                icon = iconCloud,
                 isPassword = true,
                 widthFraction = editDialogWidthFraction,
             )
@@ -106,6 +128,7 @@ fun BackupConfigScreen(
                 prefKey = PreferKey.webDavDir,
                 title = titleSubDir,
                 summary = webDavDirSummary,
+                icon = iconFolder,
                 // 复刻 setOnBindEditTextListener 预填 AppConfig.webDavDir（默认 "langhuan"）
                 defaultValue = AppConfigProviders.get().webDavDir,
                 widthFraction = editDialogWidthFraction,
@@ -114,6 +137,7 @@ fun BackupConfigScreen(
                 prefKey = PreferKey.webDavDeviceName,
                 title = titleDeviceName,
                 summary = webDavDeviceNameSummary,
+                icon = iconFolder,
                 // 复刻预填 AppConfig.webDavDeviceName（app 端默认 Build.MODEL, 其他平台默认空串）
                 defaultValue = AppConfigProviders.get().webDavDeviceName,
                 widthFraction = editDialogWidthFraction,
@@ -121,17 +145,25 @@ fun BackupConfigScreen(
             switchPreference(
                 prefKey = PreferKey.syncBookProgress,
                 title = titleSyncProgress,
+                icon = iconSync,
                 defaultValue = true,
                 onCheckedChange = { syncBookProgress = it },
             )
             switchPreference(
                 prefKey = PreferKey.syncBookProgressPlus,
                 title = titleSyncProgressPlus,
+                icon = iconSync,
                 defaultValue = false,
                 enabled = syncBookProgress,
             )
 
             preferenceCategory(titleBackupRestore)
+            // 备份加密口令: 与「我的」拆分入口合并到备份页, 新建备份时用于加密、恢复加密备份时需同一口令
+            preference(
+                title = titleBackupPassword,
+                icon = iconPassword,
+                onClick = onBackupPassword,
+            )
             // 未设置书籍保存位置时自动备份不会执行 (备份产物落该目录): 在这里明确告知
             bookSaveDirWarning?.let { warning ->
                 preference(
@@ -141,16 +173,19 @@ fun BackupConfigScreen(
             }
             preference(
                 title = titleBackup,
+                icon = iconBackup,
                 onClick = onWebDavBackup,
                 onLongClick = onWebDavBackupLong,
             )
             preference(
                 title = titleRestore,
+                icon = iconRestore,
                 onClick = onWebDavRestore,
                 onLongClick = onWebDavRestoreLong,
             )
             preference(
                 title = titleRestoreIgnore,
+                icon = iconRestoreIgnore,
                 onClick = onRestoreIgnore,
             )
             switchPreference(

@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.langhuan.reader.constant.AppConst
 import com.langhuan.reader.constant.PageAnim
 import com.langhuan.reader.data.AppDbProviders
 import com.langhuan.reader.data.entities.Book
@@ -40,7 +39,6 @@ import com.langhuan.reader.help.book.isLocal
 import com.langhuan.reader.help.book.isNotShelf
 import com.langhuan.reader.help.config.AppConfigProviders
 import com.langhuan.reader.help.config.LocalReadConfigProviders
-import com.langhuan.reader.help.config.ReadBookConfigProviders
 import com.langhuan.reader.help.config.ReadBookConfigShared
 import com.langhuan.reader.help.coroutine.IoDispatcher
 import com.langhuan.reader.help.service.ServiceLaunchers
@@ -263,7 +261,11 @@ fun ReaderRoute(
         val textArea = textAreaSize ?: return@LaunchedEffect
         screenModel.viewModel.updateLayoutConfig(
             buildLayoutConfig(
-                textArea, density, readBookConfig, screenModel.viewModel.pageAnim
+                // 正文字号只由阅读面板 textSize 决定，屏蔽界面字号对排版度量的二次缩放
+                textArea,
+                Density(density.density, fontScale = 1f),
+                readBookConfig,
+                screenModel.viewModel.pageAnim
             )
         )
     }
@@ -638,9 +640,6 @@ fun ReaderRoute(
     // region ReadBookEvents 订阅 (对照 app 端 ReadBookActivity.observeLiveBus 的 ReadBookEvents 收集)
     val eventBus = LocalEventBusProvider.current
     LaunchedEffect(screenModel, eventBus, menuController) {
-        // 主题模式切换/重建 (对照 app 端 EventBus.RECREATE): 菜单只有日/夜图标与主题相关,
-        // 其余状态由 AppTheme 换色时的整树重组自然重读
-        launch { eventBus.recreateEvent.collect { menuController.state.upNightTheme() } }
         // 菜单/顶栏重建 (对照 app 端 actionBarChange → readMenu.reset())
         launch { ReadBookEvents.actionBarChange.collect { menuController.state.reset() } }
         // 进度条刷新 (对照 app 端 seekBarChange → readMenu.upSeekBar())

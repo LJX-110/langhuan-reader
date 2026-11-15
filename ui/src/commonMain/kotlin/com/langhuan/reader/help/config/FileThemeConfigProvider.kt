@@ -74,7 +74,7 @@ class FileThemeConfigProvider : ThemeConfigProvider {
         }
     }
 
-    /** 对照 ThemeCustomizeDialog.saveToConfig: 按索引替换 + save (主题改名不残留旧条目) */
+    /** 按索引替换 + save（主题改名不残留旧条目） */
     override fun replaceConfig(index: Int, config: ThemeConfigData) {
         if (!ThemeConfigStore.validate(config)) return
         ThemeConfigStore.withLock {

@@ -18,7 +18,7 @@ interface EventBusProvider {
     val recreateEvent: Flow<Unit>
 
     /**
-     * 触发 recreate 事件 (供 ThemeCustomizeDialog/ThemeListDialog 下沉后跨平台调用)。
+     * 触发 recreate 事件 (供换肤/配置变更跨平台调用)。
      *
      * - Android actual: 包装 postEvent(EventBus.RECREATE, "")
      * - 桌面/iOS/鸿蒙 actual: emit 本地 SharedFlow 触发 AppTheme 重组

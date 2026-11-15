@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import com.langhuan.reader.data.entities.Bookmark
 import com.langhuan.reader.ui.book.read.page.LocalReaderTextMeasurer
@@ -130,26 +132,33 @@ fun ReaderScreen(
             .focusable()
     ) {
         CompositionLocalProvider(LocalReaderTextMeasurer provides readerTextMeasurer) {
-            ReadViewComposable(
-                viewModel = state.viewModel,
-                batteryLevel = batteryLevel,
-                clockText = clockText,
-                onClick = { actions.onPageClick() },
-                onImageLongPress = { src, x, y -> actions.onImageLongPress(src, x, y) },
-                onAction = { action -> actions.onPageAction(action) },
-                onSelectionMenu = { text, geometry ->
-                    actions.onTextSelection(text, geometry)
-                },
-                // 点按取消选择等手势分支：同步关平台浮动菜单（对照原版 ACTION_DOWN →
-                // textActionMenu.dismiss 同步语义，避免事件链异步延迟的"闪一下再消失"）
-                onDismissSelectionMenu = { actions.onDismissTextActionMenu() },
-                onUnderlineTap = { bookmark, anchor -> actions.onUnderlineTap(bookmark, anchor) },
-                // 菜单可见让位判定含搜索菜单（对照原版 menuLayoutIsVisible =
-                // readMenu.isVisible || searchMenu.isVisible）
-                menuVisible = { state.menuState.isVisible || state.searchMenuState.rootVisible },
-                onTextAreaMeasured = onTextAreaMeasured,
-                externalSelection = state.selection,
-            )
+            // 正文与页眉页脚不受「我的 → 字体」界面字号缩放影响：正文字号只由阅读面板的
+            // textSize 决定，否则两处字号会相乘（界面 1.6 × 正文 27sp ≈ 43sp）。
+            val density = LocalDensity.current
+            CompositionLocalProvider(
+                LocalDensity provides Density(density.density, fontScale = 1f)
+            ) {
+                ReadViewComposable(
+                    viewModel = state.viewModel,
+                    batteryLevel = batteryLevel,
+                    clockText = clockText,
+                    onClick = { actions.onPageClick() },
+                    onImageLongPress = { src, x, y -> actions.onImageLongPress(src, x, y) },
+                    onAction = { action -> actions.onPageAction(action) },
+                    onSelectionMenu = { text, geometry ->
+                        actions.onTextSelection(text, geometry)
+                    },
+                    // 点按取消选择等手势分支：同步关平台浮动菜单（对照原版 ACTION_DOWN →
+                    // textActionMenu.dismiss 同步语义，避免事件链异步延迟的"闪一下再消失"）
+                    onDismissSelectionMenu = { actions.onDismissTextActionMenu() },
+                    onUnderlineTap = { bookmark, anchor -> actions.onUnderlineTap(bookmark, anchor) },
+                    // 菜单可见让位判定含搜索菜单（对照原版 menuLayoutIsVisible =
+                    // readMenu.isVisible || searchMenu.isVisible）
+                    menuVisible = { state.menuState.isVisible || state.searchMenuState.rootVisible },
+                    onTextAreaMeasured = onTextAreaMeasured,
+                    externalSelection = state.selection,
+                )
+            }
         }
         ReadMenuOverlay(state = state.menuState)
         // 对照原版 activity_book_read.xml：SearchMenu 在 ReadMenu 之后（上层）

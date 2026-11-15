@@ -79,7 +79,6 @@ import com.langhuan.reader.ui.generated.resources.explore_cols
 import com.langhuan.reader.ui.generated.resources.explore_item_style
 import com.langhuan.reader.ui.generated.resources.explore_style
 import com.langhuan.reader.ui.generated.resources.help
-import com.langhuan.reader.ui.generated.resources.ic_bug_report
 import com.langhuan.reader.ui.generated.resources.ic_save
 import com.langhuan.reader.ui.generated.resources.js_tutorial
 import com.langhuan.reader.ui.generated.resources.login

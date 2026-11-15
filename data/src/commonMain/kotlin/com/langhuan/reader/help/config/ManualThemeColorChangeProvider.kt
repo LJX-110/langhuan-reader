@@ -5,7 +5,7 @@ import kotlin.concurrent.Volatile
 /**
  * "用户手动改色"的通知出口 (commonMain)。
  *
- * 主题定制对话框在 `MODE_EDIT_PREFS` 模式下按下确定 (`ThemeCustomizeDialog.saveToPrefs`) 是
+ * 主题定制在手动模式下按下确定时是
  * "用户自己定了这套颜色"这条语义的唯一提交点: 当前模式 (日/夜) 的一组自定义色 pref 落盘, 随后按
  * 当前主题模式刷新界面。
  * 选预设/应用内置主题走另一条路 (`ThemeConfigProvider` 的 `applyConfig`/`applyBuiltin`), 不发本通知。

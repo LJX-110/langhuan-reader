@@ -741,7 +741,7 @@ private fun ColumnScope.ResultArea(
     val state = rememberLazyGridState()
     val staggeredState = rememberLazyStaggeredGridState()
     // 新批次插到头部时回顶 (对齐原 AdapterDataObserver 的 positionStart==0);
-    // 仅列表停在顶部时才回顶, 滚动中不打断 (对照书架 ShelfBooksContent 的 firstKey 守卫)
+    // 仅列表停在顶部时才回顶, 滚动中不打断 (对照书架列表的 firstKey 守卫)
     val firstKey = books.firstOrNull()?.let { "${it.name}|${it.author}" }
     LaunchedEffect(firstKey) {
         if (firstKey != null) {

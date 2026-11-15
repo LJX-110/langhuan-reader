@@ -44,8 +44,10 @@ import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
 import com.langhuan.reader.ui.config.BackupConfigScreen
 import com.langhuan.reader.ui.config.BackupConfigScreenModel
 import com.langhuan.reader.ui.config.BackupConfigUiEvent
+import com.langhuan.reader.ui.dialog.TextInputDialog
 import com.langhuan.reader.ui.root.AppNavigator
 import com.langhuan.reader.ui.root.FileFilter
+import com.langhuan.reader.ui.root.PlatformCapabilityProviders
 import com.langhuan.reader.ui.root.PlatformServiceProviders
 import com.langhuan.reader.ui.root.RouteEntry
 import com.langhuan.reader.ui.root.ScreenModelStore
@@ -61,6 +63,7 @@ import com.langhuan.reader.ui.generated.resources.auto_backup_no_book_save_dir
 import com.langhuan.reader.ui.generated.resources.backup_dir_unwritable
 import com.langhuan.reader.ui.generated.resources.backup_fail
 import com.langhuan.reader.ui.generated.resources.backup_no_destination
+import com.langhuan.reader.ui.generated.resources.backup_password
 import com.langhuan.reader.ui.generated.resources.backup_restore
 import com.langhuan.reader.ui.generated.resources.backup_success
 import com.langhuan.reader.ui.generated.resources.cancel
@@ -69,6 +72,7 @@ import com.langhuan.reader.ui.generated.resources.ok
 import com.langhuan.reader.ui.generated.resources.restore
 import com.langhuan.reader.ui.generated.resources.restore_ignore
 import com.langhuan.reader.ui.generated.resources.select_restore_file
+import com.langhuan.reader.ui.generated.resources.set_local_password_summary
 import com.langhuan.reader.ui.generated.resources.web_dav_account_s
 import com.langhuan.reader.ui.generated.resources.web_dav_pw_s
 import com.langhuan.reader.ui.generated.resources.web_dav_url_s
@@ -125,6 +129,7 @@ fun BackupConfigRoute(
     val loadingStr = stringResource(Res.string.loading)
 
     var showRestoreIgnore by remember { mutableStateOf(false) }
+    var showBackupPassword by remember { mutableStateOf(false) }
     // WaitDialog 状态 + 后台任务 Job (取消用), 对照 app 端 WaitDialog.from(activity) + onCancelListener
     var waitDialogMessage by remember { mutableStateOf<String?>(null) }
     var backupRestoreJob by remember { mutableStateOf<Job?>(null) }
@@ -330,11 +335,26 @@ fun BackupConfigRoute(
                 webDavAccountPref.isNullOrBlank() -> noBackupDestinationWarning
                 else -> autoBackupNoDirWarning
             },
+            onBackupPassword = { showBackupPassword = true },
             onWebDavBackup = { screenModel.dispatch(BackupConfigUiEvent.Backup) },
             onWebDavBackupLong = { screenModel.dispatch(BackupConfigUiEvent.BackupLocal) },
             onWebDavRestore = { screenModel.dispatch(BackupConfigUiEvent.Restore) },
             onWebDavRestoreLong = { screenModel.dispatch(BackupConfigUiEvent.RestoreFromLocal) },
             onRestoreIgnore = { screenModel.dispatch(BackupConfigUiEvent.RestoreIgnore) },
+        )
+    }
+
+    // 备份加密口令 (原「我的 → 备份密码」, 迁移到备份页)
+    if (showBackupPassword) {
+        TextInputDialog(
+            title = stringResource(Res.string.backup_password),
+            message = stringResource(Res.string.set_local_password_summary),
+            hint = "password",
+            onConfirm = { password ->
+                PlatformCapabilityProviders.get().setLocalPassword(password)
+                showBackupPassword = false
+            },
+            onDismiss = { showBackupPassword = false },
         )
     }
 

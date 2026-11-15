@@ -9,7 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import com.langhuan.reader.help.update.AppUpdateManager
-import com.langhuan.reader.ui.about.AboutHeaderCard
+import com.langhuan.reader.ui.about.AboutHeader
 import com.langhuan.reader.ui.about.AboutScreen
 import com.langhuan.reader.ui.about.AboutScreenModel
 import com.langhuan.reader.ui.about.AboutUiActions
@@ -68,7 +68,7 @@ fun AboutRoute(
             title = stringResource(Res.string.about),
             onBack = { navigator.pop() },
         )
-        AboutHeaderCard(
+        AboutHeader(
             version = state.appVersion,
             onCopyVersion = actions::onCopyVersion,
         )

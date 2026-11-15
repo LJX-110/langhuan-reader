@@ -28,7 +28,7 @@ import com.langhuan.reader.help.config.currentEInkMode
  *
  * 映射依据 (拍板): accent←scheme.primary, background←scheme.surface,
  * bottomBackground←scheme.surfaceContainer, cPrimary←与 background 同值
- * (对齐 ThemeCustomizeDialog 的 cPrimary=背景色 现状语义)。
+ * (cPrimary 仍是背景色语义)。
  * 文字色不落盘, 仍由 AppTheme.readAppColors 按背景亮度反推; eInk 读取层强制白底黑字,
  * 与本类写入的键值无关。
  *
@@ -215,7 +215,7 @@ object MonetColorExtract {
         prefs.putInt(PreferKey.cNBackground, night.surface)
         prefs.putInt(PreferKey.cNBBackground, night.surfaceContainer)
         // 8 键日/夜两套都已写好, 与当前 themeMode 无关, 直接按当前模式重算 ThemeStore
-        // 并触发全局重组 (同 ThemeCustomizeDialog.saveToPrefs 的刷新管线, 不改 themeMode)
+        // 并触发全局重组（刷新管线, 不改 themeMode）
         ThemeConfigProviders.get().applyThemeMode()
     }
 

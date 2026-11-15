@@ -98,7 +98,7 @@ data class ThemeConfigData(
  * 主题自定义编辑表单的色值状态 (三色, ARGB packed Int, 与 ColorPicker 一致)。
  *
  * 颜色用 Int 而非 Compose Color, 保持 commonMain 无 Compose UI 依赖 (与 [ThemeConfigData] 用 String 同理);
- * 供 ThemeCustomizeDialog 跨平台共享表单状态 (EDIT_PREFS / EDIT_CONFIG / NEW_CONFIG 三模式)。
+ * 供主题配置编辑跨平台共享表单状态（三模式）。
  */
 data class CustomThemeData(
     val accent: Int,
@@ -165,8 +165,7 @@ interface ThemeConfigProvider {
     fun delConfig(index: Int)
 
     /**
-     * 替换指定索引的主题配置 (对照 ThemeCustomizeDialog.saveToConfig 的
-     * `configList[index] = ...` + `save()`)。
+     * 替换指定索引的主题配置（`configList[index] = ...` + `save()`）。
      *
      * 与 [addConfig] 的区别: 按位置替换而非按主题名覆盖, 主题改名时不产生残留旧条目。
      *

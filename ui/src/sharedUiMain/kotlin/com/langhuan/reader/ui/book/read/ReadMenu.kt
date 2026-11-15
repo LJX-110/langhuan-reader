@@ -61,6 +61,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -75,10 +77,9 @@ import com.langhuan.reader.help.book.isEpub
 import com.langhuan.reader.help.book.isLocal
 import com.langhuan.reader.help.book.isLocalTxt
 import com.langhuan.reader.help.book.isNotShelf
+import com.langhuan.reader.help.config.AppConfigProviders
 import com.langhuan.reader.help.config.ReadBookConfigProviders
-import com.langhuan.reader.help.config.ThemeConfigProviders
 import com.langhuan.reader.help.config.currentEInkMode
-import com.langhuan.reader.help.config.currentNightTheme
 import com.langhuan.reader.help.showSourceLogin
 import com.langhuan.reader.help.toast.Toasters
 import com.langhuan.reader.ui.compose.component.AppDetailSeekBar
@@ -106,16 +107,15 @@ import com.langhuan.reader.ui.root.RouteResults
 import com.langhuan.reader.ui.root.toRouteRef
 import com.langhuan.reader.ui.route.BgTextConfigDialogHost
 import com.langhuan.reader.ui.route.ChineseConverterDialogHost
-import com.langhuan.reader.ui.route.FontSelectDialogHost
 import com.langhuan.reader.ui.route.ReadLayoutConfigDialogHost
 import com.langhuan.reader.utils.ColorUtils
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.ic_arrow_back
+import com.langhuan.reader.ui.generated.resources.chinese_mode
 import com.langhuan.reader.ui.generated.resources.indent
 import com.langhuan.reader.ui.generated.resources.next_chapter
 import com.langhuan.reader.ui.generated.resources.previous_chapter
 import com.langhuan.reader.ui.generated.resources.search_content
-import com.langhuan.reader.ui.generated.resources.text_font_weight
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringArrayResource
 import kotlinx.coroutines.flow.Flow
@@ -213,7 +213,6 @@ interface ReadMenuState {
     val seekValue: Int
     val prevEnabled: Boolean
     val nextEnabled: Boolean
-    val isNightTheme: Boolean
 
     /** 全书进度（0f..1f），底栏进度条显示用 */
     val bookProgress: Float
@@ -243,7 +242,6 @@ interface ReadMenuState {
     fun onSeekStop(progress: Int)
     fun clickSearch()
     fun clickReplaceRule()
-    fun clickNightTheme()
     fun clickPre()
     fun clickNext()
     fun clickCatalog()
@@ -302,14 +300,6 @@ interface ReadMenuState {
     /** 刷新菜单数据 (对照 app 端 menuRefresh → `upMenuView()`)。待平台 actual 覆盖。 */
     fun refresh() {
         // 待实现：平台 actual 刷新顶栏/底栏展示数据
-    }
-
-    /**
-     * 同步日/夜模式 (对照 app 端 RECREATE → Activity 重启后重读 `AppConfig.isNightTheme`)。
-     * 菜单其余状态与主题无关，故 RECREATE 只需本方法，不必整套 [reset]。
-     */
-    fun upNightTheme() {
-        // 待实现：平台 actual 重读日/夜模式
     }
     // endregion
 }
@@ -409,8 +399,6 @@ open class BaseReadMenuState(
     override var prevEnabled: Boolean by mutableStateOf(false)
         protected set
     override var nextEnabled: Boolean by mutableStateOf(false)
-        protected set
-    override var isNightTheme: Boolean by mutableStateOf(currentNightTheme())
         protected set
     override var bookProgress: Float by mutableStateOf(0f)
         protected set
@@ -634,14 +622,6 @@ open class BaseReadMenuState(
         }
     }
 
-    override fun clickNightTheme() {
-        val newNight = !isNightTheme
-        ThemeConfigProviders.get().applyDayNight(newNight)
-        // 以参数为准立即置位（applyDayNight 内部发的 RECREATE 会驱动画布/页眉页脚重建，
-        // 不额外发 ReadConfigChange —— 切日/夜只换颜色分支，排版参数没变）
-        isNightTheme = newNight
-    }
-
     override fun clickPre() {
         screenModel.viewModel.moveToPrevChapter()
     }
@@ -707,7 +687,6 @@ open class BaseReadMenuState(
     }
 
     override fun refresh() {
-        upNightTheme()
         upTopMenu()
         upMenuView()
         upSourceAction()
@@ -760,13 +739,8 @@ open class BaseReadMenuState(
     override fun clickChapterEnd() = screenModel.jumpToChapterEnd()
 
     override fun reset() {
-        upNightTheme()
         upTopMenu()
         upMenuView()
-    }
-
-    override fun upNightTheme() {
-        isNightTheme = currentNightTheme()
     }
 }
 
@@ -1036,9 +1010,6 @@ private fun ReadMenuBottom(
     val panelDark = bg.luminance() < .5f
     val panelAccent =
         if (eInk) text else langhuanReadable(AppTheme.colors.accentFill, panelDark)
-    // 章节进度用辅助色；E-Ink 下退回正文色，避免黑白模式出现彩色数字
-    val progressColor =
-        if (eInk) text else langhuanReadable(AppTheme.colors.companion, panelDark)
 
     // 4dp 阴影向上: 默认 shadow 光源在上方, 先翻转 180° 加阴影再翻回,
     // 阴影即投射到屏幕底部外侧的上方。面板内容随当前页切换，外壳只此一份。
@@ -1067,7 +1038,7 @@ private fun ReadMenuBottom(
         }
         when (panel) {
             ReaderPanel.DOCK -> ReaderDockContent(state, text)
-            ReaderPanel.STYLE -> ReaderStylePanel(state, text, eInk, progressColor, panelAccent)
+            ReaderPanel.STYLE -> ReaderStylePanel(text, eInk, panelAccent)
             ReaderPanel.MORE -> ReaderMorePanel(state, text, panelAccent)
         }
     }
@@ -1207,20 +1178,35 @@ private fun ReaderDockContent(state: ReadMenuState, text: Color) {
 private fun ReaderPanelAction(
     label: String,
     text: Color,
+    value: String? = null,
     horizontalPadding: Dp = 16.dp,
     verticalPadding: Dp = 8.dp,
     onClick: () -> Unit,
 ) {
-    Text(
-        text = label,
-        color = text,
-        fontSize = 13.sp,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .clip(RoundedCornerShape(14.dp))
             .background(text.copy(alpha = .08f))
             .clickable(onClick = onClick)
             .padding(horizontal = horizontalPadding, vertical = verticalPadding),
-    )
+    ) {
+        Text(
+            text = label,
+            color = text,
+            fontSize = 13.sp,
+            maxLines = 1,
+        )
+        if (!value.isNullOrBlank()) {
+            Text(
+                text = value,
+                color = text.copy(alpha = .55f),
+                fontSize = 12.sp,
+                maxLines = 1,
+                modifier = Modifier.padding(start = DesignTokens.spacingXs),
+            )
+        }
+    }
 }
 
 /**
@@ -1370,23 +1356,20 @@ private fun ReaderMorePanel(state: ReadMenuState, text: Color, accent: Color) {
 }
 
 /**
- * 面板「排版」页：
+ * 面板「排版」页：文字 / 段落 / 背景 / 翻页 四组。
  *
- * 1. 上半：四道带数值的滑条（字号 / 字距 / 行距 / 段距），单次调节即生效；
- * 2. 其下一排二级胶囊（字重 / 字体 / 缩进 / 简繁 / 版面），放不下的项收进各自子弹窗；
- * 3. 背景：宣纸/青笺/墨夜三张拟物纸样 + 自定义；
- * 4. 翻页方式独立成三态（滚动 / 覆盖 / 无动画）；
- * 5. 本章进度压成一行，底部是恢复默认排版。
+ * - 文字：正文字号滑条 + 缩进 / 简繁 / 版面 三个带当前值的二级入口
+ * - 段落：字距 / 行距 / 段距 三道滑条，行间留出呼吸间距
+ * - 背景：宣纸 / 青笺 / 墨夜三张纸样 + 自定义，图片与自定义底色会点亮「自定义」
+ * - 翻页：滚动 / 覆盖 / 仿真 / 无动画，E-Ink 下同样可改（写入 pageAnimEInk）
  *
- * 单列布局，整页可滚动。书签、共用布局、朗读跟随与设置入口都收进「更多」。
+ * 字体族与字重收进「我的 → 字体」，面板不再重复；本章进度由操作坞的全书进度承担。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ReaderStylePanel(
-    state: ReadMenuState,
     text: Color,
     eInk: Boolean,
-    progressColor: Color,
     accent: Color,
 ) {
     val readConfig = ReadBookConfigProviders.get()
@@ -1400,15 +1383,16 @@ private fun ReaderStylePanel(
     var pageAnim by remember { mutableIntStateOf(readConfig.pageAnim) }
     var paperBg by remember { mutableStateOf(readConfig.config.curBgStr()) }
 
-    var showWeight by remember { mutableStateOf(false) }
     var showIndent by remember { mutableStateOf(false) }
-    var showFont by remember { mutableStateOf(false) }
     var showConverter by remember { mutableStateOf(false) }
     var showLayout by remember { mutableStateOf(false) }
     var showBgText by remember { mutableStateOf(false) }
 
-    val weightNames = stringArrayResource(Res.array.text_font_weight)
     val indentNames = stringArrayResource(Res.array.indent)
+    val converterModes = stringArrayResource(Res.array.chinese_mode)
+    val currentIndent = indentNames.getOrNull(readConfig.paragraphIndent.length).orEmpty()
+    val currentConverter =
+        converterModes.getOrNull(AppConfigProviders.get().chineseConverterType).orEmpty()
 
     fun postConfig(vararg changes: ReadConfigChange) {
         ReadBookEvents.postConfig(changes.toList())
@@ -1455,7 +1439,7 @@ private fun ReaderStylePanel(
         postConfig(ReadConfigChange.PAGE_ANIM, ReadConfigChange.LOAD_CONTENT)
     }
 
-    /** 恢复默认排版：重置字号、字距、行距、段距、字重与缩进；背景、字体文件与翻页方式保持不变 */
+    /** 恢复默认排版：重置字号、字距、行距、段距与缩进；字体、背景与翻页方式保持不变 */
     fun resetStyle() {
         fontSize = DEFAULT_TEXT_SIZE
         letterSpacing = 50
@@ -1465,7 +1449,6 @@ private fun ReaderStylePanel(
         readConfig.letterSpacing = 0f
         readConfig.lineSpacingExtra = DEFAULT_LINE_SPACING
         readConfig.paragraphSpacing = DEFAULT_PARAGRAPH_SPACING
-        readConfig.textBold = 0
         readConfig.paragraphIndent = "　　"
         readConfig.save()
         postConfig(
@@ -1475,16 +1458,26 @@ private fun ReaderStylePanel(
         )
     }
 
+    // 自定义背景判定：选了图片/自定义底色，或当前纸色不等于任何一张纸样
+    val customPaperSelected = readConfig.config.curBgType() != 0 ||
+        readerPaperTones.none { paperBg.equals(it.bg, ignoreCase = true) }
+
+    // 面板上限跟随屏高（约 62%，360~620dp），小屏也不会把顶栏挤出屏幕
+    val density = LocalDensity.current
+    val screenHeight = with(density) { LocalWindowInfo.current.containerSize.height.toDp() }
+    val panelMaxHeight = (screenHeight * .62f).coerceIn(360.dp, 620.dp)
+
     Column(
         Modifier
             .fillMaxWidth()
-            .heightIn(max = 420.dp)
+            .heightIn(max = panelMaxHeight)
             .verticalScroll(rememberScrollState()),
     ) {
+        // ---- 文字 ----
         ReaderStyleSectionLabel(
-            text = rememberString("reader_section_typography"),
+            text = rememberString("reader_section_text"),
             color = text,
-            modifier = Modifier.padding(top = DesignTokens.spacingDefault),
+            modifier = Modifier.padding(top = DesignTokens.spacingMd),
         )
         AppDetailSeekBar(
             title = rememberString("text_size"),
@@ -1493,9 +1486,36 @@ private fun ReaderStylePanel(
             min = MIN_READER_FONT_SIZE,
             textColor = text,
             modifier = Modifier
-                .height(DesignTokens.viewHeightSmall)
+                .height(DesignTokens.viewHeightLarge)
                 .padding(horizontal = DesignTokens.spacingLg),
             onChanged = ::applyFontSize,
+        )
+        FlowRow(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
+            horizontalArrangement = Arrangement.spacedBy(DesignTokens.spacingDefault),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.spacingXs),
+        ) {
+            ReaderPanelAction(
+                rememberString("text_indent"), text, value = currentIndent,
+                horizontalPadding = 12.dp, verticalPadding = 6.dp,
+            ) { showIndent = true }
+            ReaderPanelAction(
+                rememberString("chinese_converter"), text, value = currentConverter,
+                horizontalPadding = 12.dp, verticalPadding = 6.dp,
+            ) { showConverter = true }
+            ReaderPanelAction(
+                rememberString("reader_layout"), text,
+                horizontalPadding = 12.dp, verticalPadding = 6.dp,
+            ) { showLayout = true }
+        }
+
+        // ---- 段落 ----
+        ReaderStyleSectionLabel(
+            text = rememberString("reader_section_paragraph"),
+            color = text,
+            modifier = Modifier.padding(top = DesignTokens.spacingLg),
         )
         AppDetailSeekBar(
             title = rememberString("text_letter_spacing"),
@@ -1505,7 +1525,7 @@ private fun ReaderStylePanel(
             textColor = text,
             valueFormat = { ((it - 50) / 100f).toString() },
             modifier = Modifier
-                .height(DesignTokens.viewHeightSmall)
+                .height(DesignTokens.viewHeightLarge)
                 .padding(horizontal = DesignTokens.spacingLg),
             onChanged = ::applyLetterSpacing,
         )
@@ -1517,7 +1537,7 @@ private fun ReaderStylePanel(
             textColor = text,
             valueFormat = { "${it / 10f}×" },
             modifier = Modifier
-                .height(DesignTokens.viewHeightSmall)
+                .height(DesignTokens.viewHeightLarge)
                 .padding(horizontal = DesignTokens.spacingLg),
             onChanged = ::applyLineSpacing,
         )
@@ -1529,46 +1549,17 @@ private fun ReaderStylePanel(
             textColor = text,
             valueFormat = { (it / 10f).toString() },
             modifier = Modifier
-                .height(DesignTokens.viewHeightSmall)
+                .height(DesignTokens.viewHeightLarge)
                 .padding(horizontal = DesignTokens.spacingLg),
             onChanged = ::applyParagraphSpacing,
         )
-        // 二级入口：字重 / 字体 / 缩进 / 简繁 / 版面。
-        // 高频的四道滑块留在面板上，低频项收进这排胶囊，点开各自的子弹窗。
-        FlowRow(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
-            horizontalArrangement = Arrangement.spacedBy(DesignTokens.spacingDefault),
-            verticalArrangement = Arrangement.spacedBy(DesignTokens.spacingXs),
-        ) {
-            ReaderPanelAction(
-                rememberString("font_weight_text"), text,
-                horizontalPadding = 12.dp, verticalPadding = 6.dp,
-            ) { showWeight = true }
-            ReaderPanelAction(
-                rememberString("text_font"), text,
-                horizontalPadding = 12.dp, verticalPadding = 6.dp,
-            ) { showFont = true }
-            ReaderPanelAction(
-                rememberString("text_indent"), text,
-                horizontalPadding = 12.dp, verticalPadding = 6.dp,
-            ) { showIndent = true }
-            ReaderPanelAction(
-                rememberString("chinese_converter"), text,
-                horizontalPadding = 12.dp, verticalPadding = 6.dp,
-            ) { showConverter = true }
-            ReaderPanelAction(
-                rememberString("reader_layout"), text,
-                horizontalPadding = 12.dp, verticalPadding = 6.dp,
-            ) { showLayout = true }
-        }
+
         if (!eInk) {
-            // 背景：宣纸 / 青笺 / 墨夜三张拟物纸样 + 自定义
+            // ---- 背景 ----
             ReaderStyleSectionLabel(
                 text = rememberString("reader_section_paper"),
                 color = text,
-                modifier = Modifier.padding(top = DesignTokens.spacingDefault),
+                modifier = Modifier.padding(top = DesignTokens.spacingLg),
             )
             Row(
                 Modifier
@@ -1595,83 +1586,58 @@ private fun ReaderStylePanel(
                     label = rememberString("reader_custom_bg"),
                     background = text.copy(alpha = .06f),
                     ink = text,
-                    selected = false,
+                    selected = customPaperSelected,
                     panelText = text,
                     accent = accent,
                 ) { showBgText = true }
             }
-            // 翻页方式：滚动 / 覆盖 / 无动画。滑动、仿真等旧值在 UI 上按覆盖显示。
-            ReaderStyleSectionLabel(
-                text = rememberString("page_anim"),
-                color = text,
-                modifier = Modifier.padding(top = DesignTokens.spacingDefault),
-            )
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
-                horizontalArrangement = Arrangement.spacedBy(DesignTokens.spacingDefault),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ReaderPageModeChip(
-                    label = rememberString("page_anim_scroll"),
-                    selected = pageAnim == PageAnim.scrollPageAnim,
-                    tint = text,
-                    accent = accent,
-                ) { applyPageAnim(PageAnim.scrollPageAnim) }
-                ReaderPageModeChip(
-                    label = rememberString("page_anim_cover"),
-                    selected = pageAnim == PageAnim.coverPageAnim ||
-                        pageAnim == PageAnim.slidePageAnim ||
-                        pageAnim == PageAnim.simulationPageAnim,
-                    tint = text,
-                    accent = accent,
-                ) { applyPageAnim(PageAnim.coverPageAnim) }
-                ReaderPageModeChip(
-                    label = rememberString("page_anim_none"),
-                    selected = pageAnim == PageAnim.noAnim,
-                    tint = text,
-                    accent = accent,
-                ) { applyPageAnim(PageAnim.noAnim) }
-            }
         }
-        // 本章进度压成一行：百分比、目录位置、章首/章末跳转都在同一行里
-        Row(
+
+        // ---- 翻页 ----
+        ReaderStyleSectionLabel(
+            text = rememberString("page_anim"),
+            color = text,
+            modifier = Modifier.padding(top = DesignTokens.spacingLg),
+        )
+        FlowRow(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
-            verticalAlignment = Alignment.CenterVertically,
+                .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
+            horizontalArrangement = Arrangement.spacedBy(DesignTokens.spacingDefault),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.spacingXs),
         ) {
-            Text(
-                text = state.chapterProgressText,
-                color = progressColor,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = state.chapterIndexText,
-                color = text.copy(alpha = .55f),
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            ReaderPanelAction(
-                rememberString("reader_chapter_start"), text,
-                horizontalPadding = 10.dp, verticalPadding = 4.dp,
-            ) { state.clickChapterStart() }
-            Spacer(Modifier.width(6.dp))
-            ReaderPanelAction(
-                rememberString("reader_chapter_end"), text,
-                horizontalPadding = 10.dp, verticalPadding = 4.dp,
-            ) { state.clickChapterEnd() }
+            ReaderPageModeChip(
+                label = rememberString("page_anim_scroll"),
+                selected = pageAnim == PageAnim.scrollPageAnim,
+                tint = text,
+                accent = accent,
+            ) { applyPageAnim(PageAnim.scrollPageAnim) }
+            ReaderPageModeChip(
+                label = rememberString("page_anim_cover"),
+                selected = pageAnim == PageAnim.coverPageAnim ||
+                    pageAnim == PageAnim.slidePageAnim,
+                tint = text,
+                accent = accent,
+            ) { applyPageAnim(PageAnim.coverPageAnim) }
+            ReaderPageModeChip(
+                label = rememberString("page_anim_simulation"),
+                selected = pageAnim == PageAnim.simulationPageAnim,
+                tint = text,
+                accent = accent,
+            ) { applyPageAnim(PageAnim.simulationPageAnim) }
+            ReaderPageModeChip(
+                label = rememberString("page_anim_none"),
+                selected = pageAnim == PageAnim.noAnim,
+                tint = text,
+                accent = accent,
+            ) { applyPageAnim(PageAnim.noAnim) }
         }
+
         // 底部只留一个低频动作：恢复默认排版
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingDefault),
+                .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingMd),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1679,23 +1645,6 @@ private fun ReaderStylePanel(
         }
     }
 
-    if (showWeight) {
-        AppSelectorDialog(
-            onDismissRequest = { showWeight = false },
-            title = rememberString("text_font_weight_converter"),
-            items = weightNames,
-            onItemSelected = { index ->
-                showWeight = false
-                readConfig.textBold = index
-                readConfig.save()
-                postConfig(
-                    ReadConfigChange.CHAPTER_STYLE,
-                    ReadConfigChange.INVALIDATE_TEXT_PAGE,
-                    ReadConfigChange.UP_CONTENT,
-                )
-            },
-        )
-    }
     if (showIndent) {
         AppSelectorDialog(
             onDismissRequest = { showIndent = false },
@@ -1709,9 +1658,6 @@ private fun ReaderStylePanel(
                 postConfig(ReadConfigChange.CHAPTER_STYLE, ReadConfigChange.LOAD_CONTENT)
             },
         )
-    }
-    if (showFont) {
-        FontSelectDialogHost(onDismiss = { showFont = false })
     }
     if (showConverter) {
         ChineseConverterDialogHost(onDismiss = { showConverter = false })

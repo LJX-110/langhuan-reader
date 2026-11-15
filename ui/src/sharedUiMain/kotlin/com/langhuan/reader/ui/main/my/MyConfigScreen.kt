@@ -11,14 +11,14 @@ import com.langhuan.reader.ui.compose.platform.rememberNavigationBarPaddingValue
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.about
-import com.langhuan.reader.ui.generated.resources.backup_password
 import com.langhuan.reader.ui.generated.resources.backup_restore
 import com.langhuan.reader.ui.generated.resources.book_source
 import com.langhuan.reader.ui.generated.resources.book_source_manage
 import com.langhuan.reader.ui.generated.resources.bookmark
+import com.langhuan.reader.ui.generated.resources.bottom_nav_config
 import com.langhuan.reader.ui.generated.resources.check_update
 import com.langhuan.reader.ui.generated.resources.clear_cache
-import com.langhuan.reader.ui.generated.resources.font_scale
+import com.langhuan.reader.ui.generated.resources.font_weight
 import com.langhuan.reader.ui.generated.resources.ic_bookmark
 import com.langhuan.reader.ui.generated.resources.ic_cfg_about
 import com.langhuan.reader.ui.generated.resources.ic_cfg_backup
@@ -28,15 +28,17 @@ import com.langhuan.reader.ui.generated.resources.ic_cfg_theme
 import com.langhuan.reader.ui.generated.resources.ic_clear_all
 import com.langhuan.reader.ui.generated.resources.ic_history
 import com.langhuan.reader.ui.generated.resources.ic_interface_setting
-import com.langhuan.reader.ui.generated.resources.ic_lock_outline
 import com.langhuan.reader.ui.generated.resources.ic_save
+import com.langhuan.reader.ui.generated.resources.ic_settings
 import com.langhuan.reader.ui.generated.resources.ic_toc
 import com.langhuan.reader.ui.generated.resources.ic_update
+import com.langhuan.reader.ui.generated.resources.interface_font_size
 import com.langhuan.reader.ui.generated.resources.my_group_appearance
 import com.langhuan.reader.ui.generated.resources.my_group_data
 import com.langhuan.reader.ui.generated.resources.read_record
 import com.langhuan.reader.ui.generated.resources.replace_purify
 import com.langhuan.reader.ui.generated.resources.shrink_database
+import com.langhuan.reader.ui.generated.resources.text_font
 import com.langhuan.reader.ui.generated.resources.theme_mode
 import com.langhuan.reader.ui.generated.resources.txt_toc_rule
 import com.langhuan.reader.ui.generated.resources.version
@@ -47,21 +49,26 @@ import org.jetbrains.compose.resources.stringResource
  * 「我的」页设置面板（四组：外观 / 书源 / 数据 / 关于）。
  *
  * 只做展示与回调，弹窗与读写在 MyConfigContent 里承接。
- * 行内不写解释性小字，右侧只放当前值（字体大小、版本号）。
+ * 行内不写解释性小字，右侧只放当前值（字体、字重、界面字号、版本号）。
  */
 @Composable
 fun MyConfigScreen(
+    themeValue: String,
+    fontValue: String,
+    fontWeightValue: String,
     fontScaleValue: String,
     versionValue: String,
     showCheckUpdate: Boolean,
     checkingUpdate: Boolean,
     onThemeMode: () -> Unit,
+    onFont: () -> Unit,
+    onFontWeight: () -> Unit,
     onFontScale: () -> Unit,
+    onBottomNav: () -> Unit,
     onBookSourceManage: () -> Unit,
     onReplaceManage: () -> Unit,
     onTxtTocRuleManage: () -> Unit,
     onBackupRestore: () -> Unit,
-    onBackupPassword: () -> Unit,
     onBookmark: () -> Unit,
     onReadRecord: () -> Unit,
     onCleanCache: () -> Unit,
@@ -71,11 +78,11 @@ fun MyConfigScreen(
 ) {
     val iconTheme = painterResource(Res.drawable.ic_cfg_theme)
     val iconFont = painterResource(Res.drawable.ic_interface_setting)
+    val iconBottomNav = painterResource(Res.drawable.ic_settings)
     val iconSource = painterResource(Res.drawable.ic_cfg_source)
     val iconReplace = painterResource(Res.drawable.ic_cfg_replace)
     val iconToc = painterResource(Res.drawable.ic_toc)
     val iconBackup = painterResource(Res.drawable.ic_cfg_backup)
-    val iconPassword = painterResource(Res.drawable.ic_lock_outline)
     val iconBookmark = painterResource(Res.drawable.ic_bookmark)
     val iconHistory = painterResource(Res.drawable.ic_history)
     val iconClean = painterResource(Res.drawable.ic_clear_all)
@@ -98,14 +105,35 @@ fun MyConfigScreen(
                     LanghuanSettingsRow(
                         title = stringResource(Res.string.theme_mode),
                         icon = iconTheme,
+                        value = themeValue,
                         onClick = onThemeMode,
                     )
                     LanghuanSettingsDivider()
                     LanghuanSettingsRow(
-                        title = stringResource(Res.string.font_scale),
+                        title = stringResource(Res.string.text_font),
+                        icon = iconFont,
+                        value = fontValue,
+                        onClick = onFont,
+                    )
+                    LanghuanSettingsDivider()
+                    LanghuanSettingsRow(
+                        title = stringResource(Res.string.font_weight),
+                        icon = iconFont,
+                        value = fontWeightValue,
+                        onClick = onFontWeight,
+                    )
+                    LanghuanSettingsDivider()
+                    LanghuanSettingsRow(
+                        title = stringResource(Res.string.interface_font_size),
                         icon = iconFont,
                         value = fontScaleValue,
                         onClick = onFontScale,
+                    )
+                    LanghuanSettingsDivider()
+                    LanghuanSettingsRow(
+                        title = stringResource(Res.string.bottom_nav_config),
+                        icon = iconBottomNav,
+                        onClick = onBottomNav,
                     )
                 }
             }
@@ -136,12 +164,6 @@ fun MyConfigScreen(
                         title = stringResource(Res.string.backup_restore),
                         icon = iconBackup,
                         onClick = onBackupRestore,
-                    )
-                    LanghuanSettingsDivider()
-                    LanghuanSettingsRow(
-                        title = stringResource(Res.string.backup_password),
-                        icon = iconPassword,
-                        onClick = onBackupPassword,
                     )
                     LanghuanSettingsDivider()
                     LanghuanSettingsRow(

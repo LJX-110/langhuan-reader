@@ -15,7 +15,6 @@ import com.langhuan.reader.help.book.isSameNameAuthor
 import com.langhuan.reader.help.book.readSimulating
 import com.langhuan.reader.help.book.simulatedTotalChapterNum
 import com.langhuan.reader.help.config.ReadBookConfigProviders
-import com.langhuan.reader.help.config.currentEInkMode
 import com.langhuan.reader.help.coroutine.IoDispatcher
 import com.langhuan.reader.help.coroutine.mainDispatcher
 import com.langhuan.reader.help.coroutine.runBlockingInScope
@@ -380,16 +379,9 @@ open class ReadBookShared : CoroutineScope {
 
     fun pageAnim(): Int {
         val raw = ReadBookConfigProviders.get().pageAnim
-        // 琅嬛阁正文只暴露滚动/覆盖：滑动、仿真旧值按覆盖降级；
-        // E-Ink 保留无动画档位（pageAnimEInk 默认就是 noAnim）。
-        val anim = if (currentEInkMode()) {
-            raw
-        } else {
-            when (raw) {
-                PageAnim.scrollPageAnim -> PageAnim.scrollPageAnim
-                else -> PageAnim.coverPageAnim
-            }
-        }
+        // 「滑动」档位已从面板移除，历史值统一按覆盖渲染；滚动 / 覆盖 / 仿真 / 无动画原样生效
+        // （E-Ink 档位已由 ReadBookConfig.pageAnim getter 分派，这里不再按 E-Ink 二次降级）。
+        val anim = if (raw == PageAnim.slidePageAnim) PageAnim.coverPageAnim else raw
         return if (bookValue?.config?.imageStyle
                 .equals(Book.imgStyleSingle, true) && anim == scrollPageAnim
         ) {

@@ -480,7 +480,7 @@ object WebBookProvidersImpl :
         ThemeConfig.delConfig(index)
     }
 
-    /** 对照 ThemeCustomizeDialog.saveToConfig: 索引替换 + 同一锁内完整保存/发布 */
+    /** 主题配置保存：索引替换 + 同一锁内完整保存/发布 */
     override fun replaceConfig(index: Int, config: ThemeConfigData) {
         ThemeConfig.replaceConfig(index, config.toThemeConfig())
     }
