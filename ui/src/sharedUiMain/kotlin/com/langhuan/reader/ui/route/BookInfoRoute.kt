@@ -24,7 +24,6 @@ import com.langhuan.reader.help.book.changeSourceTo
 import com.langhuan.reader.help.book.isAudio
 import com.langhuan.reader.help.book.isLocal
 import com.langhuan.reader.help.book.isLocalTxt
-import com.langhuan.reader.help.book.isVideo
 import com.langhuan.reader.help.book.isWebFile
 import com.langhuan.reader.help.book.removeType
 import com.langhuan.reader.help.book.toggleBookshelfCore
@@ -743,16 +742,13 @@ fun BookInfoRoute(
         }
     }
 
-    // 四态注入 (对照 BookInfoActivity.Content: isLandscape/useDevFeat/isDarkTheme/isEInkMode)
+    // 三态注入 (对照 BookInfoActivity.Content: isLandscape/isDarkTheme/isEInkMode)
     val currentBook = state.book ?: book
     // isLandscape: 窗口宽度 > 高度 (跨平台, 对照 Android LocalConfiguration.orientation)
     val containerSize = LocalWindowInfo.current.containerSize
     val isLandscape = containerSize.width > containerSize.height
     // isDarkTheme: 背景色亮度反推 (= 背景为深色; 对照 Activity.isDarkTheme)
     val isDarkTheme = AppTheme.colors.isDark
-    // useDevFeat: 竖屏 + 开启横向布局 + 非视频 (对照 Activity Content)
-    val useDevFeat = AppConfigProviders.get().bookInfoHorizontalLayout &&
-        !currentBook.isVideo && !isLandscape
 
     // 计算 menuState (对照 Activity Content 内 menuState 构造)。
     // isLocal 用 origin 判定而非 Book.isLocal 扩展: 原版菜单的“上传到 WebDav”项就是
@@ -774,7 +770,6 @@ fun BookInfoRoute(
         book = currentBook,
         menuState = menuState,
         isLandscape = isLandscape,
-        useDevFeat = useDevFeat,
         isDarkTheme = isDarkTheme,
         isEInkMode = AppConfigProviders.get().isEInkMode,
     )

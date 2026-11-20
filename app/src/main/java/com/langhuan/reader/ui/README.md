@@ -4,10 +4,11 @@
 * association 导入书源界面
 * book\audio 音频播放界面
 * book\arrange 书架整理界面
-* book\info 书籍信息查看
+* book\info 书籍信息查看（竖屏编辑式档案头 / 横屏左右分栏）
 * book\read 书籍阅读界面
 * book\search 搜索书籍界面
 * book\source 书源界面
+* book\source\health 书源体检配置与结果面板
 * book\changeCover 封面换源界面
 * book\changeSource 换源界面
 * book\toc 目录界面

@@ -13,6 +13,7 @@ import com.langhuan.reader.help.IntentData
 import com.langhuan.reader.help.i18n.androidAppString
 import com.langhuan.reader.help.setLiveProgress
 import com.langhuan.reader.model.CheckSourceRunner
+import com.langhuan.reader.model.CheckSourceShared
 import com.langhuan.reader.model.Debug
 import com.langhuan.reader.notificationManager
 import com.langhuan.reader.ui.main.MainActivity
@@ -75,6 +76,8 @@ class CheckSourceService : BaseService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // 体检的临时校验项只在本次服务生命周期内有效; 正常校验时为空操作
+        CheckSourceShared.endHealthCheck()
         Debug.finishChecking()
         postEvent(EventBus.CHECK_SOURCE_DONE, 0)
         notificationManager.cancel(NotificationId.CheckSourceService)

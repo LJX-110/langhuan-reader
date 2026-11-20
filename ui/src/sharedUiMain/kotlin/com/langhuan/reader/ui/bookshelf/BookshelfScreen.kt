@@ -1,5 +1,7 @@
 package com.langhuan.reader.ui.bookshelf
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
@@ -456,6 +458,11 @@ internal fun GroupTab(
     onLongClick: () -> Unit,
 ) {
     val colors = AppTheme.colors
+    val titleColor by animateColorAsState(
+        targetValue = if (selected) colors.accent else colors.primaryText,
+        animationSpec = tween(durationMillis = 180),
+        label = "shelfGroupTabColor",
+    )
     Box(
         Modifier
             .heightIn(min = DesignTokens.viewHeightXl)
@@ -465,7 +472,7 @@ internal fun GroupTab(
     ) {
         Text(
             text = title,
-            color = if (selected) colors.accent else colors.primaryText,
+            color = titleColor,
             fontSize = 14.sp,
             maxLines = 1,
         )

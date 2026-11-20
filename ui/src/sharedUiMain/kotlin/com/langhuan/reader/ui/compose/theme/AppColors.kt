@@ -47,4 +47,8 @@ data class AppColors(
     val shelfFloor: Color = summaryText,
     /** 3D 书架顶面描边色 */
     val shelfEdge: Color = line,
+    /** 状态点/成功反馈: 不随主题变化, 保证「启用」始终是同一颗绿点。 */
+    val success: Color = Color(0xFF43A047),
+    /** 失效/危险动作: 删除确认、失效数量等。 */
+    val danger: Color = Color(0xFFE53935),
 )

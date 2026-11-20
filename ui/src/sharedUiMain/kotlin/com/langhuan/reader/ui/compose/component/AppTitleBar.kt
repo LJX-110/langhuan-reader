@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import com.langhuan.reader.ui.compose.platform.platformStatusBarPadding
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
+import com.langhuan.reader.ui.compose.theme.LanghuanType
 import com.langhuan.reader.ui.compose.theme.LocalEInk
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.back
@@ -119,7 +120,7 @@ fun AppTitleBar(
                     Text(
                         text = title,
                         color = colors.primaryText,
-                        fontSize = 20.sp,
+                        style = LanghuanType.pageTitle.copy(fontSize = 20.sp, lineHeight = 25.sp),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -128,7 +129,7 @@ fun AppTitleBar(
                         Text(
                             text = title,
                             color = colors.primaryText,
-                            fontSize = 20.sp,
+                            style = LanghuanType.pageTitle.copy(fontSize = 20.sp, lineHeight = 25.sp),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )

@@ -295,8 +295,6 @@
     <string name="timeout">Timeout</string>
     <string name="crash_log">Crash log</string>
     <string name="other">Other</string>
-    <string name="background_image">Background image</string>
-    <string name="bg_image_import_failed">Failed to import background image</string>
     <string name="default_cover">Default cover</string>
     <string name="bottom_nav_config">Bottom bar</string>
     <string name="bottom_bar_items_order">Entry order</string>
@@ -308,7 +306,6 @@
     <string name="bottom_bar_label_selected">Selected only</string>
     <string name="bottom_bar_label_auto">Auto</string>
     <string name="select_image">Select a picture</string>
-    <string name="background_image_blurring">Background image blurring</string>
     <string name="theme_mode">Theme mode</string>
     <string name="day">Day</string>
     <string name="night">Night</string>
@@ -974,4 +971,36 @@
     <string name="thread_count">Threads</string>
     <string name="no_prev_page">This is the first page</string>
     <string name="no_next_page">This is the last page</string>
+    <!-- Source health check -->
+    <string name="book_tags">Tags</string>
+    <string name="source_health_check">Source health check</string>
+    <string name="source_health_scope">Scope</string>
+    <string name="source_health_scope_all">All sources</string>
+    <string name="source_health_scope_current">Current results</string>
+    <string name="source_health_only_enabled">Enabled sources only</string>
+    <string name="source_health_mode">Check mode</string>
+    <string name="source_health_quick">Quick</string>
+    <string name="source_health_quick_desc">Search and discovery only</string>
+    <string name="source_health_full">Full</string>
+    <string name="source_health_full_desc">Search, discovery, info, chapters and content</string>
+    <string name="source_health_start">Start check</string>
+    <string name="source_health_result">Check result</string>
+    <string name="source_health_total">%1$d sources checked</string>
+    <string name="source_health_usable">Usable</string>
+    <string name="source_health_failed">Failed</string>
+    <string name="source_health_reasons">Failure reasons</string>
+    <string name="source_health_view_failed">View failed</string>
+    <string name="source_health_export_failed">Export failed</string>
+    <string name="source_health_disable_failed">Disable failed</string>
+    <string name="source_health_delete_failed">Delete failed</string>
+    <string name="source_health_deleted">%1$d failed sources deleted</string>
+    <string name="source_health_disabled">%1$d failed sources disabled</string>
+    <string name="source_health_already_disabled">All failed sources are already disabled</string>
+    <string name="source_health_undo">Undo</string>
+    <string name="source_health_restored">%1$d sources restored</string>
+    <string name="source_health_delete_confirm">Delete %1$d failed sources? This cannot be undone.</string>
+    <string name="source_health_empty_scope">No sources in this scope</string>
+    <string name="source_health_checking">A source check is already running. Try again after it finishes.</string>
+    <string name="source_health_quick_note">Quick mode skips info, chapters and content checks</string>
+    <string name="source_health_reason_other">Other</string>
 </resources>

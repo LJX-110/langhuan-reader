@@ -73,6 +73,22 @@ class BookSourceScreenModel(
             _state.value.selected.contains(it.bookSourceUrl)
         }
 
+    /** 批量启停的唯一落库口: 选择栏与体检结果都走这里。 */
+    private fun enableSources(sources: List<BookSourcePart>, enabled: Boolean) {
+        if (sources.isEmpty()) return
+        scope.launch(IoDispatcher) {
+            appDb.bookSourceDao.enable(enabled, sources)
+        }
+    }
+
+    /** 批量删除的唯一落库口: 选择栏与体检结果都走这里。 */
+    private fun deleteSources(sources: List<BookSourcePart>) {
+        if (sources.isEmpty()) return
+        scope.launch(IoDispatcher) {
+            SourceHelp.deleteBookSourceParts(sources)
+        }
+    }
+
     private fun observeGroups() {
         groupsJob?.cancel()
         groupsJob = scope.launch {
@@ -228,21 +244,23 @@ class BookSourceScreenModel(
             }
 
             is BookSourceUiEvent.Del -> {
-                scope.launch(IoDispatcher) {
-                    SourceHelp.deleteBookSourceParts(listOf(event.item))
-                }
+                deleteSources(listOf(event.item))
             }
 
             BookSourceUiEvent.DelSelection -> {
-                scope.launch(IoDispatcher) {
-                    SourceHelp.deleteBookSourceParts(selection())
-                }
+                deleteSources(selection())
+            }
+
+            is BookSourceUiEvent.DeleteSources -> {
+                deleteSources(event.sources)
             }
 
             is BookSourceUiEvent.Enable -> {
-                scope.launch(IoDispatcher) {
-                    appDb.bookSourceDao.enable(event.enabled, listOf(event.item))
-                }
+                enableSources(listOf(event.item), event.enabled)
+            }
+
+            is BookSourceUiEvent.EnableSources -> {
+                enableSources(event.sources, event.enabled)
             }
 
             is BookSourceUiEvent.EnableExplore -> {
@@ -279,10 +297,7 @@ class BookSourceScreenModel(
             }
 
             is BookSourceUiEvent.EnableSelection -> {
-                val selection = selection()
-                scope.launch(IoDispatcher) {
-                    appDb.bookSourceDao.enable(event.enabled, selection)
-                }
+                enableSources(selection(), event.enabled)
             }
 
             BookSourceUiEvent.EnableSelectExplore -> {
@@ -374,6 +389,8 @@ sealed interface BookSourceUiEvent {
     data class Del(val item: BookSourcePart) : BookSourceUiEvent
     object DelSelection : BookSourceUiEvent
     data class Enable(val item: BookSourcePart, val enabled: Boolean) : BookSourceUiEvent
+    data class EnableSources(val sources: List<BookSourcePart>, val enabled: Boolean) : BookSourceUiEvent
+    data class DeleteSources(val sources: List<BookSourcePart>) : BookSourceUiEvent
     data class EnableExplore(val item: BookSourcePart, val enabled: Boolean) : BookSourceUiEvent
     data class ToTop(val item: BookSourcePart) : BookSourceUiEvent
     data class ToBottom(val item: BookSourcePart) : BookSourceUiEvent

@@ -57,10 +57,15 @@ object CheckSource {
     fun putConfig() = CheckSourceShared.putConfig()
 
     fun start(context: Context, sources: List<BookSourcePart>) {
-        val selectedIds = sources.map {
-            it.bookSourceUrl
-        }
-        IntentData.put("checkSourceSelectedIds", selectedIds)
+        startUrls(context, sources.map { it.bookSourceUrl })
+    }
+
+    /**
+     * 按 URL 启动校验。服务只按 id 从库里取源, 体检与共享对话框都只拿得到 URL,
+     * 不必为凑 [BookSourcePart] 再查一次库。
+     */
+    fun startUrls(context: Context, urls: List<String>) {
+        IntentData.put("checkSourceSelectedIds", urls)
         context.startService<CheckSourceService> {
             action = IntentAction.start
         }

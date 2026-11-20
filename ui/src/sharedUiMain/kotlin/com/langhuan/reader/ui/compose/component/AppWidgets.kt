@@ -15,11 +15,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSizeIn
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,6 +34,7 @@ import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -44,6 +48,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
@@ -58,6 +63,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.langhuan.reader.ui.compose.platform.rememberColor
 import com.langhuan.reader.ui.compose.theme.AppTheme
+import com.langhuan.reader.ui.compose.theme.langhuanOnColor
+import com.langhuan.reader.utils.ColorUtils
 import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
 import com.langhuan.reader.ui.compose.theme.LocalEInk
 
@@ -90,6 +97,50 @@ fun AppOutlinedButton(
         ),
     ) {
         Text(text)
+    }
+}
+
+/**
+ * 实色主要按钮: 用于每页最多一个的主行动 (开始体检、继续阅读等)。
+ *
+ * 底色由调用方给语义色 (通常 accent / accentFill), 文字色按底色亮度自动取黑或白;
+ * 按下时整体压暗 [ColorUtils.darkenColor], 不用水波纹, 与小面积图标按钮的反馈一致。
+ */
+@Composable
+fun AppSolidButton(
+    text: String,
+    modifier: Modifier = Modifier,
+    bg: Color = AppTheme.colors.accentFill,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val effectiveBg = when {
+        !enabled -> bg.copy(alpha = 0.38f)
+        pressed -> Color(ColorUtils.darkenColor(bg.toArgb()))
+        else -> bg
+    }
+    val textColor = langhuanOnColor(bg)
+    Box(
+        modifier
+            .height(DesignTokens.viewHeightXl)
+            .clip(DesignTokens.shapeDefault)
+            .background(effectiveBg)
+            .clickable(
+                enabled = enabled,
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            color = if (enabled) textColor else AppTheme.colors.textDisabled,
+            fontSize = 14.sp,
+            maxLines = 1,
+        )
     }
 }
 

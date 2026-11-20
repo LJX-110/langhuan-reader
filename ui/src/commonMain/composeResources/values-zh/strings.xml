@@ -295,8 +295,6 @@
     <string name="timeout">超时</string>
     <string name="crash_log">崩溃日志</string>
     <string name="other">其它</string>
-    <string name="background_image">背景图片</string>
-    <string name="bg_image_import_failed">背景图片导入失败</string>
     <string name="default_cover">默认封面</string>
     <string name="bottom_nav_config">底栏设置</string>
     <string name="bottom_bar_items_order">入口顺序</string>
@@ -308,7 +306,6 @@
     <string name="bottom_bar_label_selected">仅显示选中</string>
     <string name="bottom_bar_label_auto">自动</string>
     <string name="select_image">选择图片</string>
-    <string name="background_image_blurring">背景图片虚化</string>
     <string name="theme_mode">主题模式</string>
     <string name="day">白天</string>
     <string name="night">夜间</string>
@@ -974,4 +971,36 @@
     <string name="thread_count">线程数</string>
     <string name="no_prev_page">已经是第一页</string>
     <string name="no_next_page">已经是最后一页</string>
+    <!-- 书源体检 -->
+    <string name="book_tags">标签</string>
+    <string name="source_health_check">书源体检</string>
+    <string name="source_health_scope">体检范围</string>
+    <string name="source_health_scope_all">全部书源</string>
+    <string name="source_health_scope_current">当前筛选结果</string>
+    <string name="source_health_only_enabled">仅检查已启用的书源</string>
+    <string name="source_health_mode">校验模式</string>
+    <string name="source_health_quick">快速</string>
+    <string name="source_health_quick_desc">只查搜索与发现，速度快</string>
+    <string name="source_health_full">完整</string>
+    <string name="source_health_full_desc">搜索、发现、详情、目录、正文</string>
+    <string name="source_health_start">开始体检</string>
+    <string name="source_health_result">体检结果</string>
+    <string name="source_health_total">共检查 %1$d 个书源</string>
+    <string name="source_health_usable">可用</string>
+    <string name="source_health_failed">失效</string>
+    <string name="source_health_reasons">失效原因</string>
+    <string name="source_health_view_failed">查看失效源</string>
+    <string name="source_health_export_failed">导出失效源</string>
+    <string name="source_health_disable_failed">禁用失效源</string>
+    <string name="source_health_delete_failed">删除失效源</string>
+    <string name="source_health_deleted">已删除 %1$d 个失效书源</string>
+    <string name="source_health_disabled">已禁用 %1$d 个失效书源</string>
+    <string name="source_health_already_disabled">失效书源均已处于禁用状态</string>
+    <string name="source_health_undo">撤销</string>
+    <string name="source_health_restored">已恢复 %1$d 个书源</string>
+    <string name="source_health_delete_confirm">将删除 %1$d 个失效书源，此操作不可撤销。</string>
+    <string name="source_health_empty_scope">当前范围内没有书源</string>
+    <string name="source_health_checking">已有书源在校验，请完成后再试</string>
+    <string name="source_health_quick_note">快速模式会跳过详情、目录与正文校验</string>
+    <string name="source_health_reason_other">其它原因</string>
 </resources>

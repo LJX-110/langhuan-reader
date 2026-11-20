@@ -1351,10 +1351,7 @@ class AndroidPlatformCapabilities(
                 // 校验期间的亮屏由 shared BookSourceManageRoute 按 Debug.checkState.isChecking
                 // 统一驱动 (四端一处接线), 此处不再各自开关
                 getKey().takeIf { it.isNotEmpty() }?.let { CheckSource.keyword = it }
-                CheckSource.start(activity, selection)
-                val firstItem = selection.firstOrNull()
-                val lastItem = selection.lastOrNull()
-                Debug.isChecking = firstItem != null && lastItem != null
+                startCheckBookSource(selection.map { it.bookSourceUrl })
                 // 校验进度由 BookSourceManageRoute 收集 EventBus.CHECK_SOURCE 驱动,
                 // 不再需要原版 adapter 轮询刷新 (startCheckMessageRefreshJob)
             }
@@ -1365,6 +1362,15 @@ class AndroidPlatformCapabilities(
             }
             cancelButton()
         }
+    }
+
+    // 共享对话框与书源体检直启入口: 关键词与校验项已由调用方写进 CheckSourceShared
+    override fun startCheckBookSource(urls: List<String>) {
+        if (urls.isEmpty()) return
+        // 新一轮开始前清旧文案: 结果面板按本轮终态统计, 不能让上一轮残留冒充本轮完成
+        if (!Debug.isChecking) Debug.clearCheckMessages()
+        CheckSource.startUrls(activity, urls)
+        Debug.isChecking = true
     }
 
     // 对照 BookSourceActivity.resumeCheckSource: 校验中重进书源管理页时让 Service 重发一次

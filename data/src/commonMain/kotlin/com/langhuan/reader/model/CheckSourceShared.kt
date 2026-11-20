@@ -116,6 +116,56 @@ object CheckSourceShared {
         cachePut("checkContent", checkContent)
     }
 
+    // ---- 书源体检临时配置 ----
+
+    /** 体检开始前的用户配置快照, 体检结束 (含取消) 时原样恢复。 */
+    private data class HealthProfile(
+        val timeout: Long,
+        val checkSearch: Boolean,
+        val checkDiscovery: Boolean,
+        val checkInfo: Boolean,
+        val checkCategory: Boolean,
+        val checkContent: Boolean,
+    )
+
+    private var healthProfileBackup: HealthProfile? = null
+
+    /**
+     * 进入体检模式: 临时覆盖校验项, 不改写用户持久化配置。
+     *
+     * 快速模式只保留搜索/发现, 并把单源超时收到不超过 30 秒; 完整模式沿用用户当前超时。
+     * 重复调用不覆盖第一份快照 (已有体检在跑时, 新一次启动应被服务拒绝)。
+     */
+    fun beginHealthCheck(quick: Boolean) {
+        if (healthProfileBackup != null) return
+        healthProfileBackup = HealthProfile(
+            timeout = timeout,
+            checkSearch = checkSearch,
+            checkDiscovery = checkDiscovery,
+            checkInfo = checkInfo,
+            checkCategory = checkCategory,
+            checkContent = checkContent,
+        )
+        checkSearch = true
+        checkDiscovery = true
+        checkInfo = !quick
+        checkCategory = !quick
+        checkContent = !quick
+        if (quick) timeout = minOf(timeout, 30_000L)
+    }
+
+    /** 恢复体检前的配置。未处于体检模式时为空操作。 */
+    fun endHealthCheck() {
+        val backup = healthProfileBackup ?: return
+        healthProfileBackup = null
+        timeout = backup.timeout
+        checkSearch = backup.checkSearch
+        checkDiscovery = backup.checkDiscovery
+        checkInfo = backup.checkInfo
+        checkCategory = backup.checkCategory
+        checkContent = backup.checkContent
+    }
+
     // ---- CacheManager 派生访问 (通过 SourceCacheProvider 间接, 与原 CacheManager.getLong/get/put 等价) ----
 
     /**

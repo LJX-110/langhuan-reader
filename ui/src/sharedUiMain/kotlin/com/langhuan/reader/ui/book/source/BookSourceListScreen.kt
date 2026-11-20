@@ -1,6 +1,11 @@
 package com.langhuan.reader.ui.book.source
 
 import androidx.compose.foundation.Image
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -99,6 +104,7 @@ import com.langhuan.reader.ui.generated.resources.sort_by_respondTime
 import com.langhuan.reader.ui.generated.resources.sort_by_url
 import com.langhuan.reader.ui.generated.resources.sort_desc
 import com.langhuan.reader.ui.generated.resources.sort_manual
+import com.langhuan.reader.ui.generated.resources.source_health_check
 import com.langhuan.reader.ui.generated.resources.to_bottom
 import com.langhuan.reader.ui.generated.resources.to_top
 import org.jetbrains.compose.resources.painterResource
@@ -218,7 +224,11 @@ fun BookSourceListScreen(
         },
         actionBar = {
             Column {
-                if (state.checkSourceVisible) {
+                AnimatedVisibility(
+                    visible = state.checkSourceVisible,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically(),
+                ) {
                     CheckSourceProgress(
                         msg = state.checkSourceMsg.orEmpty(),
                         onCancel = callbacks.onCancelCheckSource,
@@ -302,6 +312,7 @@ data class BookSourceListCallbacks(
     val onDel: (BookSourcePart) -> Unit = {},
     val onDelSelection: () -> Unit = {},
     val onCancelCheckSource: () -> Unit = {},
+    val onSourceHealthCheck: () -> Unit = {},
     val onAddBookSource: () -> Unit = {},
     val onImportLocal: () -> Unit = {},
     val onImportOnline: () -> Unit = {},
@@ -338,6 +349,7 @@ private fun BookSourceActions(state: BookSourceListState, callbacks: BookSourceL
     val strImportOnline = stringResource(Res.string.import_on_line)
     val strGroupSourcesByDomain = stringResource(Res.string.group_sources_by_domain)
     val strShowSourceIcon = stringResource(Res.string.show_source_icon)
+    val strSourceHealthCheck = stringResource(Res.string.source_health_check)
 
     // 排序菜单 (降序开关 + 单选各排序方式 + 按域名分组开关)
     Box {
@@ -385,6 +397,7 @@ private fun BookSourceActions(state: BookSourceListState, callbacks: BookSourceL
         }
     }
     OverflowMenu { dismiss ->
+        MenuItem(strSourceHealthCheck) { dismiss(); callbacks.onSourceHealthCheck() }
         MenuItem(strAddBookSource) { dismiss(); callbacks.onAddBookSource() }
         MenuItem(strImportLocal) { dismiss(); callbacks.onImportLocal() }
         MenuItem(strImportOnline) { dismiss(); callbacks.onImportOnline() }
@@ -539,7 +552,7 @@ private fun ReorderableCollectionItemScope.BookSourceItem(
                             .align(Alignment.TopEnd)
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(if (item.enabledExplore) Color(0xFF43A047) else Color(0xFFE53935)),
+                            .background(if (item.enabledExplore) colors.success else colors.danger),
                     )
                 }
                 BookSourceItemMenu(

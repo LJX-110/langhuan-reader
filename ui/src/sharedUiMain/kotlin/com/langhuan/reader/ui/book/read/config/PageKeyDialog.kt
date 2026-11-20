@@ -23,8 +23,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
-import com.langhuan.reader.constant.PreferKey
-import com.langhuan.reader.help.config.PreferenceProviders
 import com.langhuan.reader.ui.compose.component.AppDialogScaffold
 import com.langhuan.reader.ui.compose.component.AppDialogSizes
 import com.langhuan.reader.ui.compose.component.AppTextButton
@@ -181,49 +179,4 @@ private fun buildKeyMappings(prev: String, next: String): Map<Int, String> {
         .mapNotNull { it.trim().toIntOrNull() }
         .forEach { result[it] = "next_page" }
     return result
-}
-
-/**
- * 自定义翻页按键对话框宿主: 读当前 prevKeys/nextKeys 偏好 → [PageKeyDialog] → 确认后回写两个键。
- *
- * 由"其它设置"的自定义翻页按键入口与阅读页首启引导(电视形态)共用, 两处读写同一对偏好键。
- * 确认即关闭 (对照原版 PageKeyDialog 的 tvOk 写入后 dismiss)。
- */
-@Composable
-fun CustomPageKeyDialogHost(
-    onDismiss: () -> Unit,
-) {
-    val pref = remember { PreferenceProviders.get() }
-    val keyMappings = remember {
-        parsePageKeyMappings(
-            pref.getStringOrNull(PreferKey.prevKeys) ?: "",
-            pref.getStringOrNull(PreferKey.nextKeys) ?: "",
-        )
-    }
-    PageKeyDialog(
-        keyMappings = keyMappings,
-        onConfirm = { mappings ->
-            val (prev, next) = splitPageKeyMappings(mappings)
-            pref.putString(PreferKey.prevKeys, prev)
-            pref.putString(PreferKey.nextKeys, next)
-            onDismiss()
-        },
-        onDismiss = onDismiss,
-    )
-}
-
-// 解析 prevKeys/nextKeys 字符串为 PageKeyDialog 需要的 Map<Int, String>
-// 与 PageKeyDialog 内部 buildKeyMappings 反向逻辑对齐
-private fun parsePageKeyMappings(prevKeys: String, nextKeys: String): Map<Int, String> {
-    val map = mutableMapOf<Int, String>()
-    prevKeys.split(",").mapNotNull { it.trim().toIntOrNull() }.forEach { map[it] = "prev_page" }
-    nextKeys.split(",").mapNotNull { it.trim().toIntOrNull() }.forEach { map[it] = "next_page" }
-    return map
-}
-
-// 将 Map<Int, String> 反序列化为 prevKeys/nextKeys 字符串写回 prefs
-private fun splitPageKeyMappings(mappings: Map<Int, String>): Pair<String, String> {
-    val prev = mappings.filter { it.value == "prev_page" }.keys.joinToString(",") { it.toString() }
-    val next = mappings.filter { it.value == "next_page" }.keys.joinToString(",") { it.toString() }
-    return prev to next
 }

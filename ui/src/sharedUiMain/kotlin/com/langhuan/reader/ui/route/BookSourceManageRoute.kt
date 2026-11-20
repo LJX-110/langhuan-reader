@@ -10,11 +10,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import com.langhuan.reader.constant.EventBus
+import com.langhuan.reader.data.AppDbProviders
 import com.langhuan.reader.data.entities.BookSourcePart
 import com.langhuan.reader.help.coroutine.IoDispatcher
 import com.langhuan.reader.help.showSourceLogin
 import com.langhuan.reader.help.storage.BackupFileOps
 import com.langhuan.reader.help.toast.Toasters
+import com.langhuan.reader.model.CheckSourceShared
 import com.langhuan.reader.model.Debug
 import com.langhuan.reader.ui.association.ImportBookSourceItemsDialog
 import com.langhuan.reader.ui.association.ImportBookSourceViewModelShared
@@ -22,6 +24,12 @@ import com.langhuan.reader.ui.book.search.SearchScope
 import com.langhuan.reader.ui.book.source.BookSourceListCallbacks
 import com.langhuan.reader.ui.book.source.BookSourceListScreen
 import com.langhuan.reader.ui.book.source.SourceFilter
+import com.langhuan.reader.ui.book.source.health.SourceHealthCheckSheet
+import com.langhuan.reader.ui.book.source.health.SourceHealthDeleteConfirmDialog
+import com.langhuan.reader.ui.book.source.health.SourceHealthResult
+import com.langhuan.reader.ui.book.source.health.SourceHealthResultSheet
+import com.langhuan.reader.ui.book.source.health.SourceHealthScope
+import com.langhuan.reader.ui.book.source.health.isFailedSource
 import com.langhuan.reader.ui.book.source.manage.BookSourceGroupManageDialog
 import com.langhuan.reader.ui.book.source.manage.BookSourceScreenModel
 import com.langhuan.reader.ui.book.source.manage.BookSourceUiEvent
@@ -39,6 +47,7 @@ import com.langhuan.reader.ui.root.ScreenModelStore
 import com.langhuan.reader.ui.widget.dialog.OnlineImportUrlDialog
 import com.langhuan.reader.utils.FlowBus
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.langhuan.reader.ui.generated.resources.Res
@@ -62,6 +71,14 @@ import com.langhuan.reader.ui.generated.resources.remove_group
 import com.langhuan.reader.ui.generated.resources.selection_to_bottom
 import com.langhuan.reader.ui.generated.resources.selection_to_top
 import com.langhuan.reader.ui.generated.resources.share_selected_source
+import com.langhuan.reader.ui.generated.resources.source_health_already_disabled
+import com.langhuan.reader.ui.generated.resources.source_health_checking
+import com.langhuan.reader.ui.generated.resources.source_health_deleted
+import com.langhuan.reader.ui.generated.resources.source_health_disable_failed
+import com.langhuan.reader.ui.generated.resources.source_health_disabled
+import com.langhuan.reader.ui.generated.resources.source_health_empty_scope
+import com.langhuan.reader.ui.generated.resources.source_health_restored
+import com.langhuan.reader.ui.generated.resources.source_health_undo
 import com.langhuan.reader.ui.generated.resources.sure_del
 import com.langhuan.reader.ui.generated.resources.wrong_format
 import com.langhuan.reader.ui.generated.resources.yes
@@ -146,6 +163,30 @@ fun BookSourceManageRoute(
     // 书源分组管理对话框 (对照 app 端 GroupManageDialog; 管理 BookSource.bookSourceGroup, 非书架 BookGroup)
     var showGroupManage by remember { mutableStateOf(false) }
 
+    // ---- 书源体检 ----
+    // 配置面板 → 校验服务 → 结果面板。pendingCheckIds 只记本轮实际送检的源, 结果不掺历史失效源。
+    var healthConfigVisible by remember { mutableStateOf(false) }
+    var healthAllCount by remember { mutableStateOf(0) }
+    var healthResult by remember { mutableStateOf<SourceHealthResult?>(null) }
+    // 结果对象保留到下一轮体检, 面板显隐单独一份: 禁用后面板要关, 但 toast/撤销仍要用本轮数量
+    var healthResultVisible by remember { mutableStateOf(false) }
+    var pendingCheckIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var pendingCheckQuick by remember { mutableStateOf(false) }
+    var showHealthDeleteConfirm by remember { mutableStateOf(false) }
+    // 最近一次批量禁用中原本启用的源; 撤销只恢复这一批, 不碰本来就禁用的源
+    var undoDisabledParts by remember { mutableStateOf<List<BookSourcePart>>(emptyList()) }
+
+    val healthFailedCount = healthResult?.failed?.size ?: 0
+    val strHealthEmptyScope = stringResource(Res.string.source_health_empty_scope)
+    val strHealthDisabled = stringResource(Res.string.source_health_disabled, healthFailedCount)
+    val strHealthDeleted = stringResource(Res.string.source_health_deleted, healthFailedCount)
+    val strHealthRestored = stringResource(Res.string.source_health_restored, undoDisabledParts.size)
+    val strHealthDisableFailed = stringResource(Res.string.source_health_disable_failed)
+    val strHealthUndo = stringResource(Res.string.source_health_undo)
+    val strHealthAlreadyDisabled = stringResource(Res.string.source_health_already_disabled)
+    val strHealthChecking = stringResource(Res.string.source_health_checking)
+    val strNo = stringResource(Res.string.no)
+
     // 校验进度文案 (对照 app 端 observeLiveBus: EventBus.CHECK_SOURCE)
     LaunchedEffect(Unit) {
         FlowBus.with(EventBus.CHECK_SOURCE).collect { event ->
@@ -167,6 +208,34 @@ fun BookSourceManageRoute(
     LaunchedEffect(Unit) {
         FlowBus.with(EventBus.CHECK_SOURCE_DONE).collect {
             screenModel.dispatch(BookSourceUiEvent.HideCheckSource)
+            val checkedIds = pendingCheckIds
+            val quick = pendingCheckQuick
+            pendingCheckIds = emptySet()
+            if (checkedIds.isNotEmpty()) {
+                // 本轮参与校验的源从库里重新取: 校验过程中分组与启用态已落库, 直接读最新态
+                scope.launch {
+                    val all = withContext(IoDispatcher) {
+                        AppDbProviders.get().bookSourceDao.flowAll().first()
+                    }
+                    val checked = all.filter { it.bookSourceUrl in checkedIds }
+                    // 只统计本轮真正跑完的源: 中途取消时未排到的源没有终态文案, 不能算进"可用"
+                    val messages = Debug.checkState.value.messages
+                    val completed = checked.filter { part ->
+                        messages[part.bookSourceUrl]?.let { msg ->
+                            "校验成功" in msg || "校验失败" in msg
+                        } == true
+                    }
+                    if (completed.isEmpty()) return@launch
+                    healthResult = SourceHealthResult(
+                        total = completed.size,
+                        failed = completed.filter { it.isFailedSource() },
+                        quick = quick,
+                    )
+                    healthResultVisible = true
+                }
+                return@collect
+            }
+            // 兜底: 校验不是本页发起的 (重进页面恢复/其它入口), 保留原有自动筛选行为
             val st = screenModel.state.value
             if (st.searchKey.isEmpty()) {
                 // 失效源已统一带"失效"分组：用 group: 前缀按组精确筛选，避免模糊搜"失效"
@@ -277,6 +346,14 @@ fun BookSourceManageRoute(
             onDel = { delTarget = it },
             onDelSelection = { showDelSelection = true },
             onCancelCheckSource = { PlatformCapabilityProviders.get().cancelCheckSource() },
+            onSourceHealthCheck = {
+                scope.launch {
+                    healthAllCount = withContext(IoDispatcher) {
+                        AppDbProviders.get().bookSourceDao.flowAll().first().size
+                    }
+                    healthConfigVisible = true
+                }
+            },
             onAddBookSource = { PlatformCapabilityProviders.get().addBookSource() },
             onImportLocal = {
                 // 对照 ReplaceRuleRoute onImportLocal: 文件选择器 + ImportBookSourceViewModelShared
@@ -339,8 +416,11 @@ fun BookSourceManageRoute(
                         )
                     },
                     SelectAction(strCheckSelectSource) {
-                        PlatformCapabilityProviders.get()
-                            .checkBookSource(screenModel.selection())
+                        val selection = screenModel.selection()
+                        // 记下本轮送检范围, 完成时按同一批源出结果; 取消关键词框不会发完成事件
+                        pendingCheckIds = selection.map { it.bookSourceUrl }.toSet()
+                        pendingCheckQuick = false
+                        PlatformCapabilityProviders.get().checkBookSource(selection)
                     },
                     SelectAction(strCheckSelectedInterval) {
                         screenModel.dispatch(BookSourceUiEvent.CheckSelectedInterval)
@@ -414,6 +494,113 @@ fun BookSourceManageRoute(
                 screenModel.dispatch(BookSourceUiEvent.DelSelection)
             },
             cancelButton = AlertButton(stringResource(Res.string.no)),
+        )
+    }
+
+    // ---- 书源体检面板 ----
+    if (healthConfigVisible) {
+        SourceHealthCheckSheet(
+            allCount = healthAllCount,
+            currentCount = state.sources.size,
+            keyword = CheckSourceShared.keyword,
+            defaultScope = if (state.searchKey.isEmpty()) SourceHealthScope.All else SourceHealthScope.Current,
+            onDismiss = { healthConfigVisible = false },
+            onStart = start@{ healthScope, onlyEnabled, quick, keyword ->
+                if (Debug.isChecking) {
+                    Toasters.get().toast(strHealthChecking)
+                    return@start
+                }
+                healthConfigVisible = false
+                scope.launch {
+                    val all = withContext(IoDispatcher) {
+                        AppDbProviders.get().bookSourceDao.flowAll().first()
+                    }
+                    val base = if (healthScope == SourceHealthScope.All) all else screenModel.state.value.sources
+                    val sources = base.filter { !onlyEnabled || it.enabled }
+                    if (sources.isEmpty()) {
+                        Toasters.get().toast(strHealthEmptyScope)
+                        return@launch
+                    }
+                    // 新一轮体检重置上一轮结果与撤销批次
+                    healthResult = null
+                    healthResultVisible = false
+                    undoDisabledParts = emptyList()
+                    pendingCheckIds = sources.map { it.bookSourceUrl }.toSet()
+                    pendingCheckQuick = quick
+                    CheckSourceShared.keyword = keyword
+                    CheckSourceShared.beginHealthCheck(quick)
+                    PlatformCapabilityProviders.get().startCheckBookSource(
+                        sources.map { it.bookSourceUrl }
+                    )
+                }
+            },
+        )
+    }
+
+    if (healthResultVisible) {
+        val result = healthResult
+        if (result != null) {
+            SourceHealthResultSheet(
+                result = result,
+                onDismiss = { healthResultVisible = false },
+                onViewFailed = {
+                    healthResultVisible = false
+                    screenModel.dispatch(BookSourceUiEvent.Search("group:失效"))
+                },
+                onExportFailed = {
+                    PlatformCapabilityProviders.get().exportBookSourceSelection(
+                        selection = result.failed,
+                        allCount = result.total,
+                        sortAscending = state.sortAscending,
+                        sort = state.sort,
+                    )
+                },
+                onDisableFailed = {
+                    val enabledOnes = result.failed.filter { it.enabled }
+                    screenModel.dispatch(BookSourceUiEvent.EnableSources(result.failed, false))
+                    undoDisabledParts = enabledOnes
+                    healthResultVisible = false
+                    Toasters.get().toast(
+                        if (enabledOnes.isEmpty()) strHealthAlreadyDisabled else strHealthDisabled
+                    )
+                },
+                onDeleteFailed = { showHealthDeleteConfirm = true },
+            )
+        }
+    }
+
+    if (showHealthDeleteConfirm) {
+        val result = healthResult
+        if (result != null) {
+            SourceHealthDeleteConfirmDialog(
+                failedCount = result.failed.size,
+                onConfirm = {
+                    screenModel.dispatch(BookSourceUiEvent.DeleteSources(result.failed))
+                    showHealthDeleteConfirm = false
+                    healthResultVisible = false
+                    undoDisabledParts = emptyList()
+                    Toasters.get().toast(strHealthDeleted)
+                },
+                onDismiss = { showHealthDeleteConfirm = false },
+            )
+        }
+    }
+
+    // 禁用后给一次明确的撤销机会; 关闭即放弃 (之后仍可在列表里手动启用)
+    if (undoDisabledParts.isNotEmpty()) {
+        AppAlertDialog(
+            onDismissRequest = { undoDisabledParts = emptyList() },
+            title = strHealthDisableFailed,
+            message = strHealthDisabled,
+            okButton = AlertButton(strHealthUndo) {
+                val parts = undoDisabledParts
+                screenModel.dispatch(BookSourceUiEvent.EnableSources(parts, true))
+                undoDisabledParts = emptyList()
+                Toasters.get().toast(strHealthRestored)
+            },
+            cancelButton = AlertButton(strNo) {
+                undoDisabledParts = emptyList()
+            },
         )
     }
 

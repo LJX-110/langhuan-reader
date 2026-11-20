@@ -251,4 +251,27 @@ object LanghuanType {
         lineHeight = 20.sp,
         fontWeight = FontWeight.SemiBold,
     )
+
+    /** 编号/栏目小标签: 11sp + 松字距, 只用淡色, 不与标题争重量。 */
+    val label: TextStyle = TextStyle(
+        fontSize = 11.sp,
+        lineHeight = 14.sp,
+        letterSpacing = 1.2.sp,
+    )
+
+    /** 辅助信息行: 字数、最近更新、信息表标签。 */
+    val meta: TextStyle = TextStyle(
+        fontSize = 12.sp,
+        lineHeight = 17.sp,
+        letterSpacing = 0.4.sp,
+    )
+
+    /** 结果数字: 衬线大字号, 用于体检结果等数据呈现。 */
+    val numeral: TextStyle = TextStyle(
+        fontFamily = serif,
+        fontSize = 30.sp,
+        lineHeight = 36.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 0.5.sp,
+    )
 }

@@ -103,7 +103,6 @@ class BookInfoScreenModel(initialBook: Book? = null) : ScreenModel {
             lastedTitle = "",
             wordCountText = null,
             isLandscape = false,
-            useDevFeat = false,
             isDarkTheme = false,
             menuState = BookInfoMenuState(
                 // 与路由层同一口径 (origin 判定): 路由每次组合都会重算并覆盖本初值,

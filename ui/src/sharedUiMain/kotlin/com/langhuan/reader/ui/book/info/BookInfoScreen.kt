@@ -1,10 +1,14 @@
 package com.langhuan.reader.ui.book.info
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +22,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -48,8 +51,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.Placeholder
@@ -60,6 +63,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fleeksoft.ksoup.Ksoup
@@ -71,20 +75,21 @@ import com.langhuan.reader.help.book.isWebFile
 import com.langhuan.reader.ui.compose.component.AppDropdownMenu
 import com.langhuan.reader.ui.compose.component.AppFilletTextButton
 import com.langhuan.reader.ui.compose.component.AppMenuCheckbox
+import com.langhuan.reader.ui.compose.component.AppOutlinedButton
+import com.langhuan.reader.ui.compose.component.AppSolidButton
 import com.langhuan.reader.ui.compose.component.listItemFocus
 import com.langhuan.reader.ui.compose.component.PullToRefreshDefaults
 import com.langhuan.reader.ui.compose.component.filletChipPaddingH
 import com.langhuan.reader.ui.compose.component.filletChipPaddingV
 import com.langhuan.reader.ui.compose.component.pullToRefresh
 import com.langhuan.reader.ui.compose.component.rememberPullToRefreshState
-import com.langhuan.reader.ui.compose.platform.rememberPainter
 import com.langhuan.reader.ui.compose.platform.rememberString
 import com.langhuan.reader.ui.compose.platform.platformStatusBarHeight
 import com.langhuan.reader.ui.compose.platform.platformStatusBarPadding
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
 import com.langhuan.reader.ui.compose.theme.LanghuanType
-import com.langhuan.reader.utils.ColorUtils
+import com.langhuan.reader.ui.compose.theme.LocalEInk
 import com.langhuan.reader.utils.splitNotBlank
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.allow_update
@@ -92,14 +97,20 @@ import com.langhuan.reader.ui.generated.resources.author
 import com.langhuan.reader.ui.generated.resources.book_info
 import com.langhuan.reader.ui.generated.resources.book_intro
 import com.langhuan.reader.ui.generated.resources.book_name
+import com.langhuan.reader.ui.generated.resources.book_source
+import com.langhuan.reader.ui.generated.resources.book_tags
+import com.langhuan.reader.ui.generated.resources.chapter_list
+import com.langhuan.reader.ui.generated.resources.group
 import com.langhuan.reader.ui.generated.resources.clear_cache
 import com.langhuan.reader.ui.generated.resources.collapse
 import com.langhuan.reader.ui.generated.resources.copy_book_url
 import com.langhuan.reader.ui.generated.resources.copy_toc_url
 import com.langhuan.reader.ui.generated.resources.download_to_local
 import com.langhuan.reader.ui.generated.resources.edit
+import com.langhuan.reader.ui.generated.resources.empty
 import com.langhuan.reader.ui.generated.resources.expand
 import com.langhuan.reader.ui.generated.resources.ic_arrow_back
+import com.langhuan.reader.ui.generated.resources.ic_arrow_right
 import com.langhuan.reader.ui.generated.resources.ic_book_last
 import com.langhuan.reader.ui.generated.resources.ic_edit
 import com.langhuan.reader.ui.generated.resources.ic_more_vert
@@ -170,9 +181,8 @@ import org.jetbrains.compose.resources.stringResource
  * - [refreshing]: 刷新中标志, 只驱动下拉指示器。**非**原版 upLoading 的等价物 ——
  *   原版 `upLoading(true)` 只改 `tvToc` 文案 (archive BookInfoActivity:523-535),
  *   下拉指示器在 `setOnRefreshListener` 开头就 `isRefreshing = false` (:616-619), 从不表达刷新中
- * - [isLandscape] / [useDevFeat] / [isDarkTheme] / [isEInkMode]: 由路由层计算后传入
- *   (useDevFeat = bookInfoHorizontalLayout && !isVideo && !isLandscape;
- *   isEInkMode 时模糊封面背景与取色均跳过, 回退主题文字色)
+ * - [isLandscape] / [isDarkTheme] / [isEInkMode]: 由路由层计算后传入
+ *   (isEInkMode 时模糊封面背景与取色均跳过, 回退主题文字色)
  * - [menuState]: 溢出菜单显隐控制状态 (对照原 onMenuOpened 内联求值)
  */
 data class BookInfoUiState(
@@ -187,7 +197,6 @@ data class BookInfoUiState(
     val lastedTitle: String,
     val wordCountText: String?,
     val isLandscape: Boolean,
-    val useDevFeat: Boolean,
     val isDarkTheme: Boolean,
     val isEInkMode: Boolean = false,
     val menuState: BookInfoMenuState,
@@ -255,7 +264,7 @@ interface BookInfoUiActions {
 }
 
 /**
- * [BookInfoUiActions] 的 CompositionLocal, 供深层 Composable (NameText/InfoCover)
+ * [BookInfoUiActions] 的 CompositionLocal, 供深层 Composable (HeroNameText/InfoCover)
  * 直接取用, 避免层层透传 actions 参数。
  *
  * 由 [BookInfoScreen] 顶层 provides, 子树所有 Composable 可通过
@@ -267,7 +276,7 @@ val LocalBookInfoActions = compositionLocalOf<BookInfoUiActions> {
 
 /**
  * 书籍详情页(对照 activity_book_info.xml / layout-land 变体)：
- * 竖屏=模糊封面背景+纵向头部(bookInfoHorizontalLayout 时横向)，横屏=左右分栏。
+ * 竖屏=白底编辑式档案头 + 编号分节，横屏=左封面/右内容的左右分栏。
  *
  * 下沉自 app 端原 `BookInfoScreen(activity: BookInfoActivity)`，将 `BookInfoActivity`
  * 直接依赖拆为 [state] (展示状态) + [actions] (交互回调) + 三个 slot (Android 专属
@@ -317,7 +326,6 @@ fun BookInfoScreen(
     val blurPainted = remember(
         cover,
         state.isLandscape,
-        state.useDevFeat,
         state.isEInkMode,
     ) { mutableStateOf(false) }
     val blurredCoverPainted = blurPainted.value
@@ -364,6 +372,7 @@ private fun PortraitLayout(
 ) {
     val pullState = rememberPullToRefreshState()
     val isRefreshing = state.refreshing
+    val hasKinds = state.hasKinds()
     Box(Modifier.fillMaxSize()) {
         Box(
             Modifier
@@ -379,52 +388,56 @@ private fun PortraitLayout(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState()),
             ) {
-                Box(Modifier.fillMaxWidth()) {
-                    if (!state.useDevFeat) {
-                        blurCoverBgSlot(
-                            Modifier
-                                .fillMaxWidth()
-                                .height(300.dp),
-                            false,
-                        )
-                    }
-                    Column(Modifier.fillMaxWidth()) {
-                        Spacer(Modifier.height(platformStatusBarHeight()))
-                        Spacer(Modifier.height(56.dp)) // actionBarSize
-                        if (state.useDevFeat) TopSectionHorizontal(state, coverSlot)
-                        else TopSectionVertical(state, coverSlot, land = false)
-                        // 头部与索引区之间一道细分隔线，让书名/元信息与操作区分层
-                        HairlineDivider(
-                            Modifier.padding(
-                                start = DesignTokens.spacingLg,
-                                end = DesignTokens.spacingLg,
-                                top = DesignTokens.spacingDefault,
-                            )
-                        )
-                        ActionsRow(state, actions, Modifier.padding(horizontal = DesignTokens.spacingDefault))
-                        KindsSection(state, actions, Modifier.padding(horizontal = DesignTokens.spacingDefault))
-                        SectionHeader(
-                            stringResource(Res.string.book_intro),
-                            Modifier.padding(horizontal = DesignTokens.spacingLg),
-                        )
-                        IntroSection(
-                            state, actions, introImageSlot,
-                            Modifier.padding(start = DesignTokens.spacingLg, end = DesignTokens.spacingDefault, bottom = DesignTokens.spacingDefault),
-                        )
-                        // 底部按钮悬浮，滚动内容留出等高空间(原 scrollView bottom padding)
-                        Spacer(Modifier.height(64.dp))
-                        Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
-                    }
+                // 顶栏悬浮在内容之上: 内容顶部留出状态栏 + 标题栏高度
+                Spacer(Modifier.height(platformStatusBarHeight() + DesignTokens.viewHeightMax))
+                EditorialHero(state, coverSlot)
+                SectionHeader(
+                    index = "01",
+                    label = stringResource(Res.string.book_intro),
+                    modifier = Modifier.padding(horizontal = DesignTokens.spacingLg),
+                )
+                IntroSection(
+                    state, actions, introImageSlot,
+                    Modifier.padding(
+                        start = DesignTokens.spacingLg,
+                        end = DesignTokens.spacingLg,
+                        bottom = DesignTokens.spacingDefault,
+                    ),
+                )
+                if (hasKinds) {
+                    SectionHeader(
+                        index = "02",
+                        label = stringResource(Res.string.book_tags),
+                        modifier = Modifier.padding(horizontal = DesignTokens.spacingLg),
+                    )
+                    KindsSection(
+                        state, actions,
+                        Modifier.padding(horizontal = DesignTokens.spacingLg),
+                    )
                 }
+                SectionHeader(
+                    index = if (hasKinds) "03" else "02",
+                    label = stringResource(Res.string.book_info),
+                    modifier = Modifier.padding(horizontal = DesignTokens.spacingLg),
+                )
+                InfoTable(
+                    state, actions,
+                    Modifier.padding(horizontal = DesignTokens.spacingLg),
+                )
+                // 底部按钮悬浮，滚动内容留出等高空间
+                Spacer(Modifier.height(88.dp))
+                Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
             }
             PullToRefreshDefaults.Indicator(
                 state = pullState,
                 isRefreshing = isRefreshing,
-                modifier = Modifier.align(Alignment.TopCenter),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = platformStatusBarHeight() + DesignTokens.viewHeightMax),
                 color = AppTheme.colors.accent,
             )
         }
-        InfoTitleBar(state, actions, titleColor, Modifier.align(Alignment.TopCenter))
+        InfoTitleBar(state, actions, titleColor, Modifier.align(Alignment.TopCenter), solid = true)
         BottomButtons(state, actions, Modifier.align(Alignment.BottomCenter))
     }
 }
@@ -439,7 +452,7 @@ private fun LandscapeLayout(
     introImageSlot: @Composable (String, () -> Unit) -> Unit,
 ) {
     Row(Modifier.fillMaxSize()) {
-        // 左半:模糊背景铺满 + 标题栏 + 居中头部
+        // 左半: 模糊封面 + 标题栏 + 居中书封/书名, 保留沉浸感
         Box(
             Modifier
                 .weight(1f)
@@ -455,13 +468,14 @@ private fun LandscapeLayout(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    TopSectionVertical(state, coverSlot, land = true)
+                    LandscapeHero(state, coverSlot)
                 }
             }
         }
-        // 右半:下拉刷新 + 动作行/分类/简介 + 底部按钮
+        // 右半: 下拉刷新 + 简介/标签/信息 + 底部按钮
         val pullState = rememberPullToRefreshState()
         val isRefreshing = state.refreshing
+        val hasKinds = state.hasKinds()
         Box(
             Modifier
                 .weight(1f)
@@ -480,14 +494,18 @@ private fun LandscapeLayout(
                     Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
-                        .padding(horizontal = DesignTokens.spacingDefault),
+                        .padding(horizontal = DesignTokens.spacingLg),
                 ) {
                     Spacer(Modifier.height(platformStatusBarHeight()))
-                    ActionsRow(state, actions, Modifier)
-                    KindsSection(state, actions, Modifier)
-                    SectionHeader(stringResource(Res.string.book_intro), Modifier)
-                    IntroSection(state, actions, introImageSlot, Modifier.padding(start = DesignTokens.spacingDefault, bottom = DesignTokens.spacingDefault))
-                    Spacer(Modifier.height(64.dp))
+                    SectionHeader("01", stringResource(Res.string.book_intro))
+                    IntroSection(state, actions, introImageSlot, Modifier.padding(bottom = DesignTokens.spacingDefault))
+                    if (hasKinds) {
+                        SectionHeader("02", stringResource(Res.string.book_tags))
+                        KindsSection(state, actions)
+                    }
+                    SectionHeader(if (hasKinds) "03" else "02", stringResource(Res.string.book_info))
+                    InfoTable(state, actions)
+                    Spacer(Modifier.height(88.dp))
                     Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
                 }
                 PullToRefreshDefaults.Indicator(
@@ -513,27 +531,49 @@ private fun HairlineDivider(modifier: Modifier = Modifier) {
     )
 }
 
-/** 区块标题：衬线小节标题 + 一条延伸到右侧的细线，替代整块留白来做分段。 */
+/**
+ * 编辑式分节头: 上方一道细线, 下方是编号 + 衬线标题。
+ *
+ * 编号用 summaryText 小字, 标题才承担视觉重量; 不加背景块, 层级靠留白与线。
+ */
 @Composable
-private fun SectionHeader(label: String, modifier: Modifier = Modifier) {
-    Row(
+private fun SectionHeader(
+    index: String,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(
         modifier
             .fillMaxWidth()
-            .padding(top = DesignTokens.spacingMax, bottom = DesignTokens.spacingDefault),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(top = DesignTokens.spacingMax),
     ) {
-        Text(
-            text = label,
-            style = LanghuanType.sectionTitle,
-            color = AppTheme.colors.primaryText,
-        )
-        Spacer(Modifier.width(DesignTokens.spacingMd))
         Box(
             Modifier
-                .weight(1f)
+                .fillMaxWidth()
                 .height(DesignTokens.strokeHairline)
                 .background(AppTheme.colors.line)
         )
+        Row(
+            Modifier.padding(top = DesignTokens.spacingMd, bottom = DesignTokens.spacingXs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = index,
+                color = AppTheme.colors.summaryText,
+                style = LanghuanType.label,
+            )
+            Text(
+                text = "/",
+                color = AppTheme.colors.summaryText,
+                style = LanghuanType.label,
+                modifier = Modifier.padding(horizontal = 6.dp),
+            )
+            Text(
+                text = label,
+                style = LanghuanType.sectionTitle,
+                color = AppTheme.colors.primaryText,
+            )
+        }
     }
 }
 
@@ -545,43 +585,53 @@ private fun InfoTitleBar(
     actions: BookInfoUiActions,
     contentColor: Color,
     modifier: Modifier,
+    solid: Boolean = false,
 ) {
-    Row(
+    Column(
         modifier
             .fillMaxWidth()
-            .platformStatusBarPadding()
-            .height(DesignTokens.viewHeightMax),
-        verticalAlignment = Alignment.CenterVertically,
+            .background(if (solid) AppTheme.colors.background else Color.Transparent)
+            .platformStatusBarPadding(),
     ) {
-        IconButton(onClick = { actions.onBack() }) {
-            Icon(painterResource(Res.drawable.ic_arrow_back), null, tint = contentColor)
-        }
-        Text(
-            text = stringResource(Res.string.book_info),
-            color = contentColor,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        if (state.inBookshelf) {
-            IconButton(onClick = { actions.onEdit() }) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(DesignTokens.viewHeightMax),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = { actions.onBack() }) {
+                Icon(painterResource(Res.drawable.ic_arrow_back), null, tint = contentColor)
+            }
+            Text(
+                text = stringResource(Res.string.book_info),
+                color = contentColor,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (state.inBookshelf) {
+                IconButton(onClick = { actions.onEdit() }) {
+                    Icon(
+                        painterResource(Res.drawable.ic_edit),
+                        stringResource(Res.string.edit),
+                        tint = contentColor,
+                    )
+                }
+            }
+            IconButton(onClick = { actions.onShare() }) {
                 Icon(
-                    painterResource(Res.drawable.ic_edit),
-                    stringResource(Res.string.edit),
+                    painterResource(Res.drawable.ic_share),
+                    stringResource(Res.string.share),
                     tint = contentColor,
                 )
             }
+            InfoOverflowMenu(state, actions, contentColor)
         }
-        IconButton(onClick = { actions.onShare() }) {
-            Icon(
-                painterResource(Res.drawable.ic_share),
-                stringResource(Res.string.share),
-                tint = contentColor,
-            )
+        if (solid) {
+            HairlineDivider(Modifier.padding(horizontal = DesignTokens.spacingLg))
         }
-        InfoOverflowMenu(state, actions, contentColor)
     }
 }
 
@@ -702,71 +752,76 @@ private fun CheckMenuItem(text: String, checked: Boolean, onClick: () -> Unit) {
     }
 }
 
-// ---- 头部(封面+书名/字数/最新章) ----
+/** 没有分类时不画「02 / 标签」空节。 */
+private fun BookInfoUiState.hasKinds(): Boolean = !book?.kind.isNullOrBlank()
 
-@Composable
-private fun TopSectionVertical(
-    state: BookInfoUiState,
-    coverSlot: @Composable (Book?, Modifier) -> Unit,
-    land: Boolean,
-) {
-    Column(Modifier.fillMaxWidth()) {
-        InfoCover(
-            state, coverSlot,
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .padding(
-                    start = DesignTokens.spacingDefault,
-                    end = DesignTokens.spacingDefault,
-                    top = DesignTokens.spacingMd,
-                    bottom = DesignTokens.spacingMd,
-                ),
-        )
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = if (land) DesignTokens.spacingLg else DesignTokens.spacingDefault)
-                .padding(bottom = if (land) DesignTokens.spacingDefault else 0.dp),
-        ) {
-            NameText(state, TextAlign.Center, if (land) 3 else Int.MAX_VALUE)
-            WordCountText(state, TextAlign.Center)
-            LastedRow(
-                state,
-                Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(vertical = if (land) 3.dp else DesignTokens.spacingXs),
-            )
-        }
-    }
-}
+// ---- 头部(封面 + 书名 + 作者/字数/最新章) ----
 
+/**
+ * 编辑式头部: 封面在左、文字在右，标题用衬线大字，作者/字数/最近更新三行小字。
+ *
+ * 不再把封面居中放在 300dp 模糊图上: 白底留白让书名成为页面唯一重心，
+ * 封面只作为档案卡的一枚缩略图。
+ */
 @Composable
-private fun TopSectionHorizontal(
+private fun EditorialHero(
     state: BookInfoUiState,
     coverSlot: @Composable (Book?, Modifier) -> Unit,
 ) {
-    Row(Modifier.fillMaxWidth()) {
-        InfoCover(state, coverSlot, modifier = Modifier.padding(DesignTokens.spacingDefault))
-        Column(
-            Modifier
-                .weight(1f)
-                .padding(end = DesignTokens.spacingDefault),
-        ) {
-            NameText(state, TextAlign.Start, Int.MAX_VALUE)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingLg),
+        verticalAlignment = Alignment.Top,
+    ) {
+        InfoCover(state, coverSlot, Modifier, width = 96.dp)
+        Spacer(Modifier.width(DesignTokens.spacingLg))
+        Column(Modifier.weight(1f)) {
+            HeroNameText(state, TextAlign.Start, 3)
+            Spacer(Modifier.height(4.dp))
+            AuthorName(state)
+            Spacer(Modifier.height(8.dp))
             WordCountText(state, TextAlign.Start)
-            LastedRow(state, Modifier.padding(vertical = DesignTokens.spacingXs))
+            LastedRow(state, Modifier.padding(top = 4.dp))
         }
     }
 }
 
+/** 横屏左栏: 模糊封面上的居中档案卡，保留封面取色。 */
 @Composable
-private fun NameText(state: BookInfoUiState, align: TextAlign, maxLines: Int) {
+private fun LandscapeHero(
+    state: BookInfoUiState,
+    coverSlot: @Composable (Book?, Modifier) -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = DesignTokens.spacingLg),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        InfoCover(state, coverSlot, Modifier, width = 124.dp)
+        Spacer(Modifier.height(DesignTokens.spacingDefault))
+        HeroNameText(state, TextAlign.Center, 3)
+        Spacer(Modifier.height(4.dp))
+        AuthorName(state)
+        Spacer(Modifier.height(6.dp))
+        WordCountText(state, TextAlign.Center)
+        LastedRow(state, Modifier.padding(top = 4.dp))
+    }
+}
+
+@Composable
+private fun HeroNameText(state: BookInfoUiState, align: TextAlign, maxLines: Int) {
     val actions = LocalBookInfoActions.current
     Text(
         text = state.book?.name ?: stringResource(Res.string.book_name),
-        // 封面取色生效时按共享亮暗判定映射 primaryText 昼夜对, 否则随主题
+        // 横屏封面取色生效时按共享亮暗判定映射 primaryText 昼夜对, 竖屏白底直接走主题
         color = LocalBookCoverPalette.current?.nameFg ?: AppTheme.colors.primaryText,
-        style = LanghuanType.pageTitle,
+        style = LanghuanType.pageTitle.copy(
+            fontSize = 26.sp,
+            lineHeight = 33.sp,
+            letterSpacing = 0.5.sp,
+        ),
         textAlign = align,
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
@@ -776,131 +831,39 @@ private fun NameText(state: BookInfoUiState, align: TextAlign, maxLines: Int) {
     )
 }
 
+/**
+ * 作者行: 单人点按直接搜索，多作者弹选择菜单，长按进入探索。
+ *
+ * 原四列动作格被信息表取代后，作者搜索仍需保留入口，所以收在这里。
+ */
 @Composable
-private fun WordCountText(state: BookInfoUiState, align: TextAlign) {
-    val text = state.wordCountText ?: return
-    Text(
-        text = text,
-        color = LocalBookCoverPalette.current?.wordCountFg ?: AppTheme.colors.secondaryText,
-        fontSize = 12.sp,
-        letterSpacing = 0.3.sp,
-        textAlign = align,
-        modifier = Modifier.fillMaxWidth(),
-    )
-}
-
-@Composable
-private fun LastedRow(state: BookInfoUiState, modifier: Modifier) {
-    val iconSize = with(LocalDensity.current) { 18.sp.toDp() }
-    // summaryText 跟随主题语义色, 不再写死固定灰
-    val summaryColor = LocalBookCoverPalette.current?.lastedFg
-        ?: AppTheme.colors.summaryText
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            painterResource(Res.drawable.ic_book_last),
-            stringResource(Res.string.read_dur_progress),
-            tint = summaryColor,
-            modifier = Modifier
-                .size(iconSize)
-                .padding(end = 2.dp),
-        )
+private fun AuthorName(state: BookInfoUiState) {
+    val actions = LocalBookInfoActions.current
+    var authorMenu by remember { mutableStateOf<List<String>>(emptyList()) }
+    val author = state.book?.getRealAuthor()?.takeIf { it.isNotBlank() }
+    Box {
         Text(
-            text = state.lastedTitle,
-            color = summaryColor,
-            fontSize = 12.sp,
+            text = author?.lines()?.joinToString(" / ") ?: stringResource(Res.string.author),
+            color = LocalBookCoverPalette.current?.nameFg ?: AppTheme.colors.secondaryText,
+            fontSize = 13.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
-private fun InfoCover(
-    state: BookInfoUiState,
-    coverSlot: @Composable (Book?, Modifier) -> Unit,
-    modifier: Modifier,
-) {
-    val actions = LocalBookInfoActions.current
-    val book = state.book
-    // 对照原 View 版 onMeasure: 高固定 144dp, 宽按比例反推 (视频 16:9, 小说 3:4)
-    val coverRatio = if (book?.isVideo == true) 16f / 9f else 3f / 4f
-    // align/padding 留在父节点: 共享端点由 SharedBookCover 统一挂在它收到的链首,
-    // 与封面同一 LayoutNode 的 padding 会被算进共享元素的起止盒 (起手矩形比可见封面大 8dp)
-    Box(modifier) {
-        coverSlot(
-            book,
-            Modifier
-                .height(144.dp)
-                .aspectRatio(coverRatio, matchHeightConstraintsFirst = true)
+            modifier = Modifier
                 .clip(DesignTokens.shapeSm)
-                .listItemFocus()
                 .combinedClickable(
-                    onClick = { actions.onCoverClick() },
-                    onLongClick = { actions.onCoverLongClick() },
+                    onClick = {
+                        val authors = state.book?.author?.splitNotBlank("\n") ?: return@combinedClickable
+                        when {
+                            authors.isEmpty() -> Unit
+                            authors.size == 1 -> actions.onSearchAuthor(authors[0], true)
+                            else -> authorMenu = authors.toList()
+                        }
+                    },
+                    onLongClick = {
+                        state.book?.getRealAuthor()?.let { actions.onSearchAuthor(it, false) }
+                    },
                 )
-        )
-    }
-}
-
-// ---- 动作行(作者/来源/分组/目录) ----
-
-@Composable
-private fun ActionsRow(
-    state: BookInfoUiState,
-    actions: BookInfoUiActions,
-    modifier: Modifier,
-) {
-    val book = state.book
-    Row(modifier.fillMaxWidth()) {
-        AuthorActionCell(state, actions, Modifier.weight(1f))
-        ActionCell(
-            iconKey = "ic_web_outline",
-            text = book?.originName.orEmpty(),
-            modifier = Modifier.weight(1f),
-            onClick = { actions.onOriginClick() },
-            onLongClick = { actions.onOriginLongClick() },
-        )
-        ActionCell(
-            iconKey = "ic_groups",
-            text = state.groupName,
-            modifier = Modifier.weight(1f),
-            onClick = { actions.onGroupClick() },
-        )
-        if (book?.isWebFile != true) {
-            ActionCell(
-                iconKey = "ic_folder_open",
-                text = state.tocText ?: stringResource(Res.string.loading),
-                modifier = Modifier.weight(1f),
-                onClick = { actions.onTocClick() },
-            )
-        }
-    }
-}
-
-@Composable
-private fun AuthorActionCell(
-    state: BookInfoUiState,
-    actions: BookInfoUiActions,
-    modifier: Modifier,
-) {
-    var authorMenu by remember { mutableStateOf<List<String>>(emptyList()) }
-    Box(modifier) {
-        ActionCell(
-            iconKey = "ic_author",
-            text = state.book?.getRealAuthor() ?: stringResource(Res.string.author),
-            modifier = Modifier.fillMaxWidth(),
-            onClick = {
-                val book = state.book
-                val authors = book?.author?.splitNotBlank("\n") ?: return@ActionCell
-                when {
-                    authors.isEmpty() -> Unit
-                    authors.size == 1 -> actions.onSearchAuthor(authors[0], true)
-                    else -> authorMenu = authors.toList()
-                }
-            },
-            onLongClick = {
-                state.book?.getRealAuthor()?.let { actions.onSearchAuthor(it, false) }
-            },
+                .padding(vertical = 2.dp),
         )
         AppDropdownMenu(
             expanded = authorMenu.isNotEmpty(),
@@ -917,40 +880,156 @@ private fun AuthorActionCell(
 }
 
 @Composable
-private fun ActionCell(
-    iconKey: String,
-    text: String,
+private fun WordCountText(state: BookInfoUiState, align: TextAlign) {
+    val text = state.wordCountText ?: return
+    Text(
+        text = text,
+        color = LocalBookCoverPalette.current?.wordCountFg ?: AppTheme.colors.secondaryText,
+        style = LanghuanType.meta,
+        textAlign = align,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun LastedRow(state: BookInfoUiState, modifier: Modifier) {
+    val iconSize = with(LocalDensity.current) { 16.sp.toDp() }
+    // summaryText 跟随主题语义色, 不再写死固定灰
+    val summaryColor = LocalBookCoverPalette.current?.lastedFg
+        ?: AppTheme.colors.summaryText
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            painterResource(Res.drawable.ic_book_last),
+            stringResource(Res.string.read_dur_progress),
+            tint = summaryColor,
+            modifier = Modifier
+                .size(iconSize)
+                .padding(end = 3.dp),
+        )
+        Text(
+            text = state.lastedTitle,
+            color = summaryColor,
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun InfoCover(
+    state: BookInfoUiState,
+    coverSlot: @Composable (Book?, Modifier) -> Unit,
     modifier: Modifier,
+    width: Dp = 96.dp,
+) {
+    val actions = LocalBookInfoActions.current
+    val book = state.book
+    // 固定宽、按比例反推高 (视频 16:9, 小说 3:4); 档案卡不随屏宽膨胀
+    val coverRatio = if (book?.isVideo == true) 16f / 9f else 3f / 4f
+    // 封面按压: 轻微回缩替代水波纹, 与实色按钮的按压语义一致
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (!LocalEInk.current && pressed) 0.97f else 1f,
+        animationSpec = tween(durationMillis = 120),
+        label = "bookInfoCoverPress",
+    )
+    // align/padding 留在父节点: 共享端点由 SharedBookCover 统一挂在它收到的链首,
+    // 与封面同一 LayoutNode 的 padding 会被算进共享元素的起止盒
+    Box(modifier) {
+        coverSlot(
+            book,
+            Modifier
+                .width(width)
+                .aspectRatio(coverRatio)
+                .graphicsLayer {
+                    scaleX = pressScale
+                    scaleY = pressScale
+                }
+                .clip(DesignTokens.shapeSm)
+                .border(DesignTokens.strokeHairline, AppTheme.colors.line, DesignTokens.shapeSm)
+                .listItemFocus()
+                .combinedClickable(
+                    interactionSource = interaction,
+                    indication = null,
+                    onClick = { actions.onCoverClick() },
+                    onLongClick = { actions.onCoverLongClick() },
+                )
+        )
+    }
+}
+
+// ---- 书籍信息表(书源/分组/目录) ----
+
+@Composable
+private fun InfoTable(
+    state: BookInfoUiState,
+    actions: BookInfoUiActions,
+    modifier: Modifier = Modifier,
+) {
+    val book = state.book
+    val emptyText = stringResource(Res.string.empty)
+    Column(modifier.fillMaxWidth()) {
+        InfoRow(
+            label = stringResource(Res.string.book_source),
+            value = book?.originName?.takeIf { it.isNotBlank() } ?: emptyText,
+            onClick = { actions.onOriginClick() },
+            onLongClick = { actions.onOriginLongClick() },
+        )
+        HairlineDivider()
+        InfoRow(
+            label = stringResource(Res.string.group),
+            value = state.groupName.takeIf { it.isNotBlank() } ?: emptyText,
+            onClick = { actions.onGroupClick() },
+        )
+        if (book?.isWebFile != true) {
+            HairlineDivider()
+            InfoRow(
+                label = stringResource(Res.string.chapter_list),
+                value = state.tocText ?: stringResource(Res.string.loading),
+                onClick = { actions.onTocClick() },
+            )
+        }
+    }
+}
+
+/** 信息行: 标签定宽、值占满剩余宽度，右侧小箭头提示可点。 */
+@Composable
+private fun InfoRow(
+    label: String,
+    value: String,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
 ) {
-    // 对齐原版 tv_text_summary #909090 固定淡灰 (不随主题); secondaryText 偏深
-    val summary = AppTheme.colors.summaryText
-    // 两行最小高度, 复刻原 XML lines=2 + gravity=center 的文本垂直居中
-    val twoLineHeight = with(LocalDensity.current) { (14.sp * 1.5f * 2).toDp() }
-    Column(
-        modifier
+    val colors = AppTheme.colors
+    Row(
+        Modifier
+            .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(vertical = DesignTokens.spacingXs),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(rememberPainter(iconKey), null, tint = summary, modifier = Modifier.size(24.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 2.dp)
-                .heightIn(min = twoLineHeight),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = text,
-                color = summary,
-                fontSize = 14.sp,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        Text(
+            text = label,
+            color = colors.summaryText,
+            style = LanghuanType.meta,
+            modifier = Modifier.width(56.dp),
+        )
+        Text(
+            text = value,
+            color = colors.primaryText,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            painter = painterResource(Res.drawable.ic_arrow_right),
+            contentDescription = null,
+            tint = colors.summaryText,
+            modifier = Modifier.size(14.dp),
+        )
     }
 }
 
@@ -961,7 +1040,7 @@ private fun ActionCell(
 private fun KindsSection(
     state: BookInfoUiState,
     actions: BookInfoUiActions,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
     val otherLabel = stringResource(Res.string.other)
     val groups = remember(state.bookTick) {
@@ -972,19 +1051,28 @@ private fun KindsSection(
         groups.forEach { (groupName, items) ->
             FlowRow(Modifier.fillMaxWidth()) {
                 if (groups.size > 1 || groupName != otherLabel) {
-                    // 组名 label: 加粗 + 0.8 透明, 不可点
-                    AppFilletTextButton(
+                    // 组名 label: 小字淡灰, 不参与点击; 标签用 # 前缀承担可点语义
+                    Text(
                         text = groupName,
-                        alpha = 0.8f,
-                        bold = true,
+                        color = AppTheme.colors.summaryText,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(end = 8.dp, top = 7.dp),
                     )
                 }
                 items.forEach { (value, fullKind) ->
                     if (value.isNotEmpty()) {
-                        AppFilletTextButton(
-                            text = value,
-                            onClick = { actions.onSearchKind(fullKind, true) },
-                            onLongClick = { actions.onSearchKind(value, false) },
+                        Text(
+                            text = "#$value",
+                            color = AppTheme.colors.accent,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            modifier = Modifier
+                                .clip(DesignTokens.shapeSm)
+                                .combinedClickable(
+                                    onClick = { actions.onSearchKind(fullKind, true) },
+                                    onLongClick = { actions.onSearchKind(value, false) },
+                                )
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
                         )
                     }
                 }
@@ -1031,6 +1119,7 @@ private fun IntroSection(
     modifier: Modifier,
 ) {
     val intro = state.book?.getDisplayIntro()
+    val eInk = LocalEInk.current
     // 简介默认折叠，避免长简介把整页撑满并压到下方操作栏
     var expanded by remember(intro) { mutableStateOf(false) }
     val plainPreview = remember(intro) {
@@ -1040,11 +1129,16 @@ private fun IntroSection(
 
     if (intro.isNullOrBlank() || !intro.contains('<')) {
         SelectionContainer(modifier.fillMaxWidth()) {
-            Column(Modifier.fillMaxWidth()) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (eInk) Modifier else Modifier.animateContentSize(tween(220))),
+            ) {
                 Text(
                     text = intro ?: stringResource(Res.string.book_intro),
                     color = AppTheme.colors.secondaryText,
-                    fontSize = 14.sp,
+                    fontSize = 15.sp,
+                    lineHeight = 26.sp,
                     maxLines = if (expanded) Int.MAX_VALUE else INTRO_COLLAPSED_LINES,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -1057,7 +1151,11 @@ private fun IntroSection(
     }
     val parts = remember(intro) { parseIntro(intro) }
     SelectionContainer(modifier.fillMaxWidth()) {
-        Column(Modifier.fillMaxWidth()) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .then(if (eInk) Modifier else Modifier.animateContentSize(tween(220))),
+        ) {
             if (expanded) {
                 parts.forEach { part ->
                     when (part) {
@@ -1076,7 +1174,8 @@ private fun IntroSection(
                 Text(
                     text = plainPreview,
                     color = AppTheme.colors.secondaryText,
-                    fontSize = 14.sp,
+                    fontSize = 15.sp,
+                    lineHeight = 26.sp,
                     maxLines = INTRO_COLLAPSED_LINES,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -1187,7 +1286,8 @@ private fun IntroRichText(part: IntroTextPart, onAction: (String) -> Unit) {
     Text(
         text = text,
         color = secondary,
-        fontSize = 14.sp,
+        fontSize = 15.sp,
+        lineHeight = 26.sp,
         inlineContent = inline,
         modifier = Modifier.fillMaxWidth(),
     )
@@ -1202,56 +1302,37 @@ private fun BottomButtons(
     modifier: Modifier,
 ) {
     val colors = AppTheme.colors
-    val bottomBg = colors.bottomBackground
-    val shelfText = if (ColorUtils.isColorLight(bottomBg.toArgb())) Color(0xDE000000)
-    else Color.White
-    Row(
+    Column(
         modifier
             .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(bottom = DesignTokens.spacingLg),
+            .background(colors.bottomBackground)
+            .navigationBarsPadding(),
     ) {
-        ArcoSolidButton(
-            text = rememberString(
-                if (state.inBookshelf) "remove_from_bookshelf"
-                else "add_to_bookshelf"
-            ),
-            bg = bottomBg,
-            textColor = shelfText,
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = DesignTokens.spacingLg, end = DesignTokens.spacingLg),
-        ) { actions.onShelfClick() }
-        ArcoSolidButton(
-            text = stringResource(Res.string.reading),
-            bg = colors.accent,
-            textColor = if (ColorUtils.isColorLight(AppTheme.colors.accent.toArgb())) Color.Black else Color.White,
-            modifier = Modifier
-                .weight(1f)
-                .padding(end = DesignTokens.spacingLg),
-        ) { actions.onReadClick() }
-    }
-}
-
-@Composable
-private fun ArcoSolidButton(
-    text: String,
-    bg: Color,
-    textColor: Color,
-    modifier: Modifier,
-    onClick: () -> Unit,
-) {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val realBg = if (pressed) Color(ColorUtils.darkenColor(bg.toArgb())) else bg
-    Box(
-        modifier
-            .height(DesignTokens.viewHeightXl)
-            .clip(DesignTokens.shapeDefault)
-            .background(realBg)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(text, color = textColor, fontSize = 14.sp, maxLines = 1)
+        HairlineDivider()
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    start = DesignTokens.spacingLg,
+                    end = DesignTokens.spacingLg,
+                    top = DesignTokens.spacingMd,
+                    bottom = DesignTokens.spacingMd,
+                ),
+            horizontalArrangement = Arrangement.spacedBy(DesignTokens.spacingDefault),
+        ) {
+            AppOutlinedButton(
+                text = rememberString(
+                    if (state.inBookshelf) "remove_from_bookshelf"
+                    else "add_to_bookshelf"
+                ),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(DesignTokens.viewHeightXl),
+            ) { actions.onShelfClick() }
+            AppSolidButton(
+                text = stringResource(Res.string.reading),
+                modifier = Modifier.weight(1f),
+            ) { actions.onReadClick() }
+        }
     }
 }
