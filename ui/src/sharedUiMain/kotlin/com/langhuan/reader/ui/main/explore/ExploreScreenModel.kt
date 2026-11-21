@@ -69,6 +69,7 @@ class ExploreScreenModel : ScreenModel {
     init {
         collectGroups()
         collectSources()
+        collectSourceTotal()
         observePinnedEvent()
         observeRefreshEvent()
         // 对照 ExploreFragment.onFragmentCreated 的 upPinned(): 进页主动拉一次,
@@ -136,6 +137,16 @@ class ExploreScreenModel : ScreenModel {
                         it.copy(sources = sources, sourcesLoaded = true, sourcesError = false)
                     }
                 }
+        }
+    }
+
+    /** 书源总数流: 只服务发现页的筛选口径说明, 失败不影响列表。 */
+    private fun collectSourceTotal() {
+        scope.launch {
+            appDb.bookSourceDao.flowAllCount()
+                .distinctUntilChanged()
+                .catch { AppLog.put("发现界面读取书源总数出错", it) }
+                .collect { total -> _state.update { it.copy(totalSourceCount = total) } }
         }
     }
 
@@ -346,6 +357,8 @@ data class ExploreScreenState(
     val sourcesLoaded: Boolean = false,
     /** 书源流是否异常结束; 界面给重试入口 */
     val sourcesError: Boolean = false,
+    /** 书源管理里的总数 (含禁用/无发现分类), 用于解释发现页筛选口径 */
+    val totalSourceCount: Int = 0,
     /** 当前展开行 url (null = 全部收起); 对应原版 ExploreAdapter.exIndex */
     val expandedUrl: String? = null,
     /** 当前展开行本次现查的源对象: 点分类进 show 直接用

@@ -82,6 +82,7 @@ import com.langhuan.reader.ui.dialog.TextInputDialog
 import com.langhuan.reader.ui.compose.component.directionKeyFocusNavigation
 import com.langhuan.reader.ui.compose.platform.LocalEventBusProvider
 import com.langhuan.reader.ui.compose.platform.LocalThemeStoreProvider
+import com.langhuan.reader.ui.compose.platform.AppearanceRefresh
 import com.langhuan.reader.ui.compose.platform.PlatformBackHandler
 import com.langhuan.reader.ui.compose.platform.PlatformPredictiveBackHandler
 import com.langhuan.reader.ui.compose.platform.dismissTopLayer
@@ -292,15 +293,16 @@ fun LanghuanApp(
         // 计数触发重读 —— 提交背景图设置 (commitBackgroundImage) 后必然 emitRecreate。
         val themeStore = LocalThemeStoreProvider.current
         val themeEventBus = LocalEventBusProvider.current
+        val appearanceVersion = AppearanceRefresh.version
         var themeTick by remember(themeEventBus) { mutableIntStateOf(0) }
         LaunchedEffect(themeEventBus) {
             themeEventBus.recreateEvent.collect { themeTick++ }
         }
         // eInk 对齐原版行为: 恒不渲染已设的背景图, 整端纯白
-        val bgImagePath = remember(themeStore, themeTick, eInk) {
+        val bgImagePath = remember(themeStore, themeTick, appearanceVersion, eInk) {
             themeStore.bgImagePath?.takeIf { it.isNotBlank() && !eInk }
         }
-        val bgImageBlur = remember(themeStore, themeTick) { themeStore.bgImageBlur }
+        val bgImageBlur = remember(themeStore, themeTick, appearanceVersion) { themeStore.bgImageBlur }
         val hasBgImage = bgImagePath != null
         // 全应用共用一份壁纸位图 (见 rememberWallpaperBitmap 的按栈深度重复解码说明)
         val wallpaper = bgImagePath?.let { rememberWallpaperBitmap(it, bgImageBlur, themeTick) }

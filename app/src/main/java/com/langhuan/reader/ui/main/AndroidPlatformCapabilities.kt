@@ -90,6 +90,7 @@ import com.langhuan.reader.ui.book.source.manage.selectedSourcesJson
 import com.langhuan.reader.ui.compose.component.AppCheckbox
 import com.langhuan.reader.ui.compose.dialogs.alert
 import com.langhuan.reader.ui.compose.dialogs.selector
+import com.langhuan.reader.ui.compose.platform.AppearanceRefresh
 import com.langhuan.reader.ui.compose.platform.rememberString
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
@@ -492,6 +493,7 @@ class AndroidPlatformCapabilities(
     // 对照 ThemeConfig.applyDayNight
     override fun applyDayNight() {
         ThemeConfig.applyDayNight(activity)
+        AppearanceRefresh.bump()
     }
 
     // 对照 Context.sendToClip

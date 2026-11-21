@@ -104,6 +104,7 @@ import com.langhuan.reader.ui.generated.resources.search
 import com.langhuan.reader.ui.generated.resources.search_book_source
 import com.langhuan.reader.ui.generated.resources.search_result
 import com.langhuan.reader.ui.generated.resources.source_group_empty
+import com.langhuan.reader.ui.generated.resources.source_filter_note
 import com.langhuan.reader.ui.generated.resources.source_load_failed
 import com.langhuan.reader.ui.generated.resources.state_collapsed
 import com.langhuan.reader.ui.generated.resources.state_expanded
@@ -183,6 +184,7 @@ data class ExploreUiState(
     val selectedGroup: String?,
     val sourcesLoaded: Boolean,
     val sourcesError: Boolean,
+    val totalSourceCount: Int,
     val expandedUrl: String?,
     val expandedSource: BookSource?,
     val expandedKinds: List<ExploreKind>,
@@ -359,7 +361,23 @@ fun ExploreScreen(
                         }
                     }
                     item(key = "__source_header__", contentType = "header") {
-                        SourceSectionHeader(title = sourceHeaderTitle, count = sources.size)
+                        SourceSectionHeader(
+                            title = sourceHeaderTitle,
+                            count = sources.size,
+                            total = if (!filtering && state.totalSourceCount > sources.size) {
+                                state.totalSourceCount
+                            } else {
+                                null
+                            },
+                            note = if (!filtering && state.totalSourceCount > sources.size) {
+                                stringResource(
+                                    Res.string.source_filter_note,
+                                    state.totalSourceCount,
+                                )
+                            } else {
+                                null
+                            },
+                        )
                     }
                     items(
                         sourceItems,
@@ -567,7 +585,11 @@ private fun PinnedSection(
             text = stringResource(Res.string.favorite),
             modifier = Modifier.padding(start = DesignTokens.spacingXs),
         )
-        FlowRow(Modifier.fillMaxWidth()) {
+        FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(DesignTokens.spacingXs),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.spacingXs),
+        ) {
             pinned.forEach { pin ->
                 AppFilletTextButton(
                     text = pin.label,
@@ -579,25 +601,39 @@ private fun PinnedSection(
     }
 }
 
-/** 「全部书源 / 搜索结果 / 当前分组」节标题 + 数量。 */
+/** 「全部书源 / 搜索结果 / 当前分组」节标题 + 数量；可选总数与筛选口径说明。 */
 @Composable
-private fun SourceSectionHeader(title: String, count: Int) {
+private fun SourceSectionHeader(
+    title: String,
+    count: Int,
+    total: Int? = null,
+    note: String? = null,
+) {
     val colors = AppTheme.colors
-    Row(
+    Column(
         Modifier.fillMaxWidth().padding(
             start = DesignTokens.spacingXs,
             end = DesignTokens.spacingXs,
             top = DesignTokens.spacingMd,
             bottom = DesignTokens.spacingXs,
         ),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        LanghuanSectionTitle(text = title, modifier = Modifier.weight(1f))
-        Text(
-            text = count.toString(),
-            color = colors.summaryText,
-            style = TextStyle(fontSize = 12.sp),
-        )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            LanghuanSectionTitle(text = title, modifier = Modifier.weight(1f))
+            Text(
+                text = if (total != null) "$count / $total" else count.toString(),
+                color = colors.summaryText,
+                style = TextStyle(fontSize = 12.sp),
+            )
+        }
+        if (note != null) {
+            Text(
+                text = note,
+                color = colors.summaryText,
+                style = TextStyle(fontSize = 11.5.sp, lineHeight = 16.sp),
+                modifier = Modifier.padding(top = 2.dp, end = DesignTokens.spacingDefault),
+            )
+        }
     }
 }
 

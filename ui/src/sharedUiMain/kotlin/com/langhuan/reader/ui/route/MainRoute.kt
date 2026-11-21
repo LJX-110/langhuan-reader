@@ -33,7 +33,6 @@ import com.langhuan.reader.data.entities.BookSource
 import com.langhuan.reader.data.entities.BookSourcePart
 import com.langhuan.reader.data.entities.PinnedExplore
 import com.langhuan.reader.data.entities.rule.ExploreKind
-import com.langhuan.reader.help.config.AppConfigAccessor
 import com.langhuan.reader.help.config.AppConfigProviders
 import com.langhuan.reader.help.coroutine.IoDispatcher
 import com.langhuan.reader.help.showSourceLogin
@@ -127,12 +126,10 @@ fun MainRoute(
     val eventBus = LocalEventBusProvider.current
 
     // 底栏配置变更即时生效 (修复: 调整底栏设置后需切 tab 才刷新):
-    // 各端底栏设置对话框写入后 emitRecreate()/postEvent(EventBus.RECREATE), 本组合
+    // 底栏设置对话框写入后 emitRecreate()/postEvent(EventBus.RECREATE), 本组合
     // 订阅 recreateEvent 递增 configTick 强制重组 (与 AppTheme 观察同一事件流同模式)。
-    // 底栏配置 (bottomBarHeight/IconSize/LabelMode/showHome/showDiscovery/bottomNavItemOrder)
-    // 均为直读配置的普通 getter (Android 直读 SharedPreferences, 桌面/iOS/鸿蒙经
-    // CachedPrefValue 由 pref 变更监听同步刷新), 重组即读到新值, remember 键变化后
-    // 底栏立即按新配置刷新, 无需切 tab。
+    // 底栏高度 / 图标大小 / 标签模式是直读配置的普通 getter, 重组即读到新值。
+    // 四页签固定为书架 / 发现 / 本地 / 我，设置页不再提供隐藏与换序。
     // 对照原版: BaseActivity 观察 EventBus.RECREATE → recreate() → upHomePage() 整页重建。
     var configTick by remember(eventBus) { mutableIntStateOf(0) }
     LaunchedEffect(eventBus) {
@@ -141,8 +138,7 @@ fun MainRoute(
     configTick
 
     // 琅嬛阁固定四页签：书架 / 发现 / 本地 / 我。
-    // HOME tag 在这里承载「本地」页；底栏顺序与显隐不再跟随上游配置，
-    // 保证外观与琅嬛阁一致（配置项仍保留，只是不参与主界面装配）。
+    // HOME tag 在这里承载「本地」页；底栏设置只调高度/图标/标签，不再改顺序与显隐。
     val visibleTags = remember {
         listOf(
             BottomNavTag.BOOKSHELF,
@@ -358,28 +354,6 @@ private class MainScreenModel : ScreenModel {
     }
 }
 
-/** 对照 MainActivity.computeVisibleTags: 顺序配置校验 + showHome/showDiscovery 过滤 */
-private fun computeVisibleTags(appConfig: AppConfigAccessor): List<String> {
-    val defaultTagOrder = listOf(
-        BottomNavTag.HOME,
-        BottomNavTag.BOOKSHELF,
-        BottomNavTag.DISCOVERY,
-        BottomNavTag.MY,
-    )
-    val savedTagOrder = appConfig.bottomNavItemOrder.split(",").filter { it.isNotEmpty() }
-    val orderedTags = savedTagOrder
-        .takeIf { it.size == 4 && it.toSet() == defaultTagOrder.toSet() }
-        ?: defaultTagOrder
-    val tags = orderedTags.filter { tag ->
-        when (tag) {
-            BottomNavTag.HOME -> appConfig.showHome
-            BottomNavTag.DISCOVERY -> appConfig.showDiscovery
-            else -> true
-        }
-    }
-    return tags.ifEmpty { listOf(BottomNavTag.BOOKSHELF) }
-}
-
 /** 书架页：3D 书架 + 分组页签 + 下拉刷新（交互细节在 LanghuanShelf） */
 @Composable
 private fun BookshelfTabContent(
@@ -570,6 +544,7 @@ private fun ExploreTabContent(
             selectedGroup = screenState.selectedGroup,
             sourcesLoaded = screenState.sourcesLoaded,
             sourcesError = screenState.sourcesError,
+            totalSourceCount = screenState.totalSourceCount,
             expandedUrl = screenState.expandedUrl,
             expandedSource = screenState.expandedSource,
             expandedKinds = screenState.expandedKinds,

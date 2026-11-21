@@ -1210,10 +1210,10 @@ private fun ReaderPanelAction(
 }
 
 /**
- * 面板「更多」页：低频动作 + 整本书相关的开关。
+ * 面板「更多」页：阅读设置 / 本书 / 同步。
  *
- * 第一行是查找正文 / 专注模式 / 添加书签；其下是本书书签列表（点跳转，右端删除）；
- * 再往下是共用布局、朗读跟随两个开关，最后一行是设置入口。
+ * 缩进、中文简繁体、版面三项从「排版」迁到这里，用整行设置项承载：
+ * 标题 + 当前值 + 箭头，和全应用设置页同一种层级，不再用一排小胶囊。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1224,18 +1224,70 @@ private fun ReaderMorePanel(state: ReadMenuState, text: Color, accent: Color) {
         state.bookmarkFlow() ?: flowOf(emptyList())
     }.collectAsState(emptyList())
 
+    var showIndent by remember { mutableStateOf(false) }
+    var showConverter by remember { mutableStateOf(false) }
+    var showLayout by remember { mutableStateOf(false) }
+    var configTick by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        ReadBookEvents.configChange.collect {
+            configTick++
+            shareLayout = readConfig.shareLayout
+        }
+    }
+    configTick
+
+    val indentNames = stringArrayResource(Res.array.indent)
+    val converterModes = stringArrayResource(Res.array.chinese_mode)
+    val currentIndent = indentNames.getOrNull(readConfig.paragraphIndent.length).orEmpty()
+    val currentConverter =
+        converterModes.getOrNull(AppConfigProviders.get().chineseConverterType).orEmpty()
+
     Column(
         Modifier
             .fillMaxWidth()
-            .heightIn(max = 420.dp)
+            .heightIn(max = 480.dp)
             .verticalScroll(rememberScrollState()),
     ) {
+        // ---- 阅读设置 ----
+        ReaderStyleSectionLabel(
+            text = rememberString("reader_section_reading"),
+            color = text,
+            modifier = Modifier.padding(top = DesignTokens.spacingMd),
+        )
+        Column(
+            Modifier.padding(horizontal = DesignTokens.spacingLg),
+            verticalArrangement = Arrangement.spacedBy(DesignTokens.spacingXs),
+        ) {
+            ReaderSettingRow(
+                label = rememberString("text_indent"),
+                value = currentIndent,
+                text = text,
+            ) { showIndent = true }
+            ReaderSettingRow(
+                label = rememberString("chinese_converter"),
+                value = currentConverter,
+                text = text,
+            ) { showConverter = true }
+            ReaderSettingRow(
+                label = rememberString("reader_layout"),
+                value = null,
+                text = text,
+            ) { showLayout = true }
+        }
+
+        // ---- 本书 ----
+        ReaderStyleSectionLabel(
+            text = rememberString("reader_section_book"),
+            color = text,
+            modifier = Modifier.padding(top = DesignTokens.spacingLg),
+        )
         FlowRow(
             Modifier
                 .fillMaxWidth()
                 .padding(
                     horizontal = DesignTokens.spacingLg,
-                    vertical = DesignTokens.spacingDefault,
+                    vertical = DesignTokens.spacingXs,
                 ),
             horizontalArrangement = Arrangement.spacedBy(DesignTokens.spacingDefault),
             verticalArrangement = Arrangement.spacedBy(DesignTokens.spacingXs),
@@ -1315,6 +1367,12 @@ private fun ReaderMorePanel(state: ReadMenuState, text: Color, accent: Color) {
             }
         }
 
+        // ---- 同步 ----
+        ReaderStyleSectionLabel(
+            text = rememberString("reader_section_sync"),
+            color = text,
+            modifier = Modifier.padding(top = DesignTokens.spacingLg),
+        )
         ReaderSwitchRow(
             label = rememberString("share_layout"),
             checked = shareLayout,
@@ -1353,12 +1411,79 @@ private fun ReaderMorePanel(state: ReadMenuState, text: Color, accent: Color) {
             ReaderPanelAction(rememberString("setting"), text) { state.clickSetting() }
         }
     }
+
+    if (showIndent) {
+        AppSelectorDialog(
+            onDismissRequest = { showIndent = false },
+            title = rememberString("text_indent"),
+            items = indentNames,
+            onItemSelected = { index ->
+                showIndent = false
+                // 对齐 app 端: ReadBookConfig.paragraphIndent = "　".repeat(index)
+                readConfig.paragraphIndent = "　".repeat(index)
+                readConfig.save()
+                ReadBookEvents.postConfig(
+                    listOf(ReadConfigChange.CHAPTER_STYLE, ReadConfigChange.LOAD_CONTENT),
+                )
+            },
+        )
+    }
+    if (showConverter) {
+        ChineseConverterDialogHost(onDismiss = { showConverter = false })
+    }
+    if (showLayout) {
+        ReadLayoutConfigDialogHost(onDismiss = { showLayout = false })
+    }
+}
+
+/** 整行设置项：标题 + 当前值 + 箭头；与全局设置页同一套层级。 */
+@Composable
+private fun ReaderSettingRow(
+    label: String,
+    value: String?,
+    text: Color,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(text.copy(alpha = .06f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = DesignTokens.spacingMd, vertical = DesignTokens.spacingDefault),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            color = text,
+            fontSize = 13.5.sp,
+            maxLines = 1,
+            modifier = Modifier.weight(1f),
+        )
+        if (!value.isNullOrBlank()) {
+            Text(
+                text = value,
+                color = text.copy(alpha = .55f),
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(end = DesignTokens.spacingXs),
+            )
+        }
+        Icon(
+            painter = rememberPainter("ic_arrow_right"),
+            contentDescription = null,
+            tint = text.copy(alpha = .35f),
+            modifier = Modifier.size(14.dp),
+        )
+    }
 }
 
 /**
  * 面板「排版」页：文字 / 段落 / 背景 / 翻页 四组。
  *
- * - 文字：正文字号滑条 + 缩进 / 简繁 / 版面 三个带当前值的二级入口
+ * - 文字：正文字号滑条（缩进 / 简繁 / 版面已迁到「更多」的阅读设置区）
  * - 段落：字距 / 行距 / 段距 三道滑条，行间留出呼吸间距
  * - 背景：宣纸 / 青笺 / 墨夜三张纸样 + 自定义，图片与自定义底色会点亮「自定义」
  * - 翻页：滚动 / 覆盖 / 仿真 / 无动画，E-Ink 下同样可改（写入 pageAnimEInk）
@@ -1383,16 +1508,28 @@ private fun ReaderStylePanel(
     var pageAnim by remember { mutableIntStateOf(readConfig.pageAnim) }
     var paperBg by remember { mutableStateOf(readConfig.config.curBgStr()) }
 
-    var showIndent by remember { mutableStateOf(false) }
-    var showConverter by remember { mutableStateOf(false) }
-    var showLayout by remember { mutableStateOf(false) }
     var showBgText by remember { mutableStateOf(false) }
 
-    val indentNames = stringArrayResource(Res.array.indent)
-    val converterModes = stringArrayResource(Res.array.chinese_mode)
-    val currentIndent = indentNames.getOrNull(readConfig.paragraphIndent.length).orEmpty()
-    val currentConverter =
-        converterModes.getOrNull(AppConfigProviders.get().chineseConverterType).orEmpty()
+    // 外部配置变更 (如从「更多」改字号/缩进/背景) 时同步面板本地状态，避免面板显示旧值
+    LaunchedEffect(Unit) {
+        ReadBookEvents.configChange.collect { changes ->
+            if (changes.any {
+                    it == ReadConfigChange.STYLE ||
+                        it == ReadConfigChange.BG ||
+                        it == ReadConfigChange.LOAD_CONTENT ||
+                        it == ReadConfigChange.PAGE_ANIM ||
+                        it == ReadConfigChange.INVALIDATE_TEXT_PAGE
+                }
+            ) {
+                fontSize = readConfig.textSize
+                letterSpacing = (readConfig.letterSpacing * 100).toInt() + 50
+                lineSpacing = readConfig.lineSpacingExtra
+                paragraphSpacing = readConfig.paragraphSpacing
+                pageAnim = readConfig.pageAnim
+                paperBg = readConfig.config.curBgStr()
+            }
+        }
+    }
 
     fun postConfig(vararg changes: ReadConfigChange) {
         ReadBookEvents.postConfig(changes.toList())
@@ -1490,26 +1627,6 @@ private fun ReaderStylePanel(
                 .padding(horizontal = DesignTokens.spacingLg),
             onChanged = ::applyFontSize,
         )
-        FlowRow(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = DesignTokens.spacingLg, vertical = DesignTokens.spacingXs),
-            horizontalArrangement = Arrangement.spacedBy(DesignTokens.spacingDefault),
-            verticalArrangement = Arrangement.spacedBy(DesignTokens.spacingXs),
-        ) {
-            ReaderPanelAction(
-                rememberString("text_indent"), text, value = currentIndent,
-                horizontalPadding = 12.dp, verticalPadding = 6.dp,
-            ) { showIndent = true }
-            ReaderPanelAction(
-                rememberString("chinese_converter"), text, value = currentConverter,
-                horizontalPadding = 12.dp, verticalPadding = 6.dp,
-            ) { showConverter = true }
-            ReaderPanelAction(
-                rememberString("reader_layout"), text,
-                horizontalPadding = 12.dp, verticalPadding = 6.dp,
-            ) { showLayout = true }
-        }
 
         // ---- 段落 ----
         ReaderStyleSectionLabel(
@@ -1645,26 +1762,6 @@ private fun ReaderStylePanel(
         }
     }
 
-    if (showIndent) {
-        AppSelectorDialog(
-            onDismissRequest = { showIndent = false },
-            title = rememberString("text_indent"),
-            items = indentNames,
-            onItemSelected = { index ->
-                showIndent = false
-                // 对齐 app 端: ReadBookConfig.paragraphIndent = "　".repeat(index)
-                readConfig.paragraphIndent = "　".repeat(index)
-                readConfig.save()
-                postConfig(ReadConfigChange.CHAPTER_STYLE, ReadConfigChange.LOAD_CONTENT)
-            },
-        )
-    }
-    if (showConverter) {
-        ChineseConverterDialogHost(onDismiss = { showConverter = false })
-    }
-    if (showLayout) {
-        ReadLayoutConfigDialogHost(onDismiss = { showLayout = false })
-    }
     if (showBgText) {
         BgTextConfigDialogHost(
             onDismiss = {

@@ -43,10 +43,13 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.langhuan.reader.constant.BottomNavTag
+import com.langhuan.reader.ui.compose.platform.rememberString
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.LocalEInk
 
@@ -147,6 +150,7 @@ private fun DockItem(
     val colors = AppTheme.colors
     // 选中态用辅助色，与强调色的按钮/标题形成层次
     val tint = if (selected) colors.companion else colors.summaryText
+    val label = rememberString(tag.dockLabelKey())
     val interaction = remember { MutableInteractionSource() }
     // clickable 在按下/抬起/移出时都会给出正确的按压态，据此驱动整条胶囊的接触反馈
     val isPressed by interaction.collectIsPressedAsState()
@@ -161,19 +165,21 @@ private fun DockItem(
         label = "dockIndicator",
     )
     Column(
-        modifier = modifier.clickable(
-            interactionSource = interaction,
-            indication = null,
-            onClick = onClick,
-        ),
+        modifier = modifier
+            .semantics { contentDescription = label }
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick,
+            ),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Canvas(Modifier.size(iconDp)) { drawDockIcon(tag, tint) }
+        DockIcon(tag = tag, color = tint, modifier = Modifier.size(iconDp))
         if (showLabel) {
             Spacer(Modifier.height(3.dp))
             Text(
-                text = tag.dockLabel(),
+                text = label,
                 color = tint,
                 fontSize = 11.sp,
                 maxLines = 1,
@@ -190,11 +196,17 @@ private fun DockItem(
     }
 }
 
-private fun String.dockLabel(): String = when (this) {
-    BottomNavTag.BOOKSHELF -> "书架"
-    BottomNavTag.DISCOVERY -> "发现"
-    BottomNavTag.HOME -> "本地"
-    else -> "我"
+/** 底栏/侧栏/设置预览共用的自绘图标，保证三处字形同源。 */
+@Composable
+internal fun DockIcon(tag: String, color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier) { drawDockIcon(tag, color) }
+}
+
+private fun String.dockLabelKey(): String = when (this) {
+    BottomNavTag.BOOKSHELF -> "bookshelf"
+    BottomNavTag.DISCOVERY -> "discovery"
+    BottomNavTag.HOME -> "home"
+    else -> "my"
 }
 
 /** 四个页签的线性图标，路径与琅嬛阁 DockBar 的 CustomPainter 一致。 */

@@ -20,7 +20,6 @@ import com.langhuan.reader.ui.generated.resources.bookmark
 import com.langhuan.reader.ui.generated.resources.bottom_nav_config
 import com.langhuan.reader.ui.generated.resources.check_update
 import com.langhuan.reader.ui.generated.resources.clear_cache
-import com.langhuan.reader.ui.generated.resources.font_weight
 import com.langhuan.reader.ui.generated.resources.ic_bookmark
 import com.langhuan.reader.ui.generated.resources.ic_cfg_about
 import com.langhuan.reader.ui.generated.resources.ic_cfg_backup
@@ -34,7 +33,6 @@ import com.langhuan.reader.ui.generated.resources.ic_save
 import com.langhuan.reader.ui.generated.resources.ic_settings
 import com.langhuan.reader.ui.generated.resources.ic_toc
 import com.langhuan.reader.ui.generated.resources.ic_update
-import com.langhuan.reader.ui.generated.resources.interface_font_size
 import com.langhuan.reader.ui.generated.resources.loading
 import com.langhuan.reader.ui.generated.resources.my_group_appearance
 import com.langhuan.reader.ui.generated.resources.my_group_data
@@ -59,15 +57,11 @@ import org.jetbrains.compose.resources.stringResource
 fun MyConfigScreen(
     themeValue: String,
     fontValue: String,
-    fontWeightValue: String,
-    fontScaleValue: String,
     versionValue: String,
     showCheckUpdate: Boolean,
     checkingUpdate: Boolean,
     onThemeMode: () -> Unit,
     onFont: () -> Unit,
-    onFontWeight: () -> Unit,
-    onFontScale: () -> Unit,
     onBottomNav: () -> Unit,
     onBookSourceManage: () -> Unit,
     onReplaceManage: () -> Unit,
@@ -117,20 +111,6 @@ fun MyConfigScreen(
                     icon = iconFont,
                     value = fontValue,
                     onClick = onFont,
-                )
-                LanghuanSettingsDivider()
-                LanghuanSettingsRow(
-                    title = stringResource(Res.string.font_weight),
-                    icon = iconFont,
-                    value = fontWeightValue,
-                    onClick = onFontWeight,
-                )
-                LanghuanSettingsDivider()
-                LanghuanSettingsRow(
-                    title = stringResource(Res.string.interface_font_size),
-                    icon = iconFont,
-                    value = fontScaleValue,
-                    onClick = onFontScale,
                 )
                 LanghuanSettingsDivider()
                 LanghuanSettingsRow(

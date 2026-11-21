@@ -44,9 +44,6 @@ import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.cancel
 import com.langhuan.reader.ui.generated.resources.clear
 import com.langhuan.reader.ui.generated.resources.clear_search_history
-import com.langhuan.reader.ui.generated.resources.draw
-import com.langhuan.reader.ui.generated.resources.ok
-import com.langhuan.reader.ui.generated.resources.sure_clear_search_history
 import org.jetbrains.compose.resources.stringResource
 
 /**

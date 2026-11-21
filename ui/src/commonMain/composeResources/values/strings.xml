@@ -197,6 +197,7 @@
     <string name="no_matching_source">No matching sources</string>
     <string name="source_group_empty">No sources in this group</string>
     <string name="source_load_failed">Failed to load sources</string>
+    <string name="source_filter_note">Only sources with discovery enabled and a discovery URL are shown; %1$d sources in total.</string>
     <string name="retry">Retry</string>
     <string name="clear_filter">Clear filter</string>
     <string name="state_expanded">Expanded</string>
@@ -236,7 +237,7 @@
     <string name="last_read_time_sort">Sort by read time</string>
     <string name="enable_record">Enable record</string>
     <string name="delete_all">Delete all</string>
-    <string name="sure_del_any">Are you sure to delete %1$s?</string>
+
     <string name="today_read_time">Today</string>
     <string name="month_read_time">This month</string>
     <string name="read_book_count">Books read</string>
@@ -323,7 +324,7 @@
     <string name="other">Other</string>
     <string name="default_cover">Default cover</string>
     <string name="bottom_nav_config">Bottom bar</string>
-    <string name="bottom_bar_items_order">Entry order</string>
+    <string name="bottom_bar_icons">Bottom bar icons</string>
     <string name="bottom_bar_height">Bar height</string>
     <string name="bottom_bar_icon_size">Icon size</string>
     <string name="bottom_bar_label_mode">Label visibility</string>
@@ -452,7 +453,7 @@
     <string name="review_title_with_count">Comments (%1$s)</string>
     <string name="review_sort_hot">Hot</string>
     <string name="review_sort_latest">Latest</string>
-    <string name="confirm_delete_review">Delete this comment?</string>
+
     <string name="vote_up">Like</string>
     <string name="vote_down">Dislike</string>
     <string name="review_replies_count">All %1$d replies &gt;</string>
@@ -476,7 +477,7 @@
     <string name="lookup_word">Look up word</string>
     <string name="save_success">Saved</string>
     <string name="post_review">Post</string>
-    <string name="sure">OK</string>
+
     <string name="error">Error</string>
     <string name="error_no_source">No source</string>
     <string name="error_get_book_info">Failed to obtain book information</string>
@@ -527,11 +528,12 @@
     <string name="share_layout">Shared layout</string>
     <string name="share_selected_source">Share selected sources</string>
     <string name="style_name">Style name:</string>
-    <string name="sure_clear_search_history">Are you sure to clear all search history</string>
+
     <string name="system_tts">System tts</string>
     <string name="text">Text</string>
     <string name="text_font">Font</string>
     <string name="font_weight">Weight</string>
+    <string name="font_settings">Font</string>
     <string name="interface_font_size">Interface size</string>
     <string name="system_font">System font</string>
     <string name="text_indent">Indent</string>
@@ -770,6 +772,9 @@
     <string name="reader_section_text">Text</string>
     <string name="reader_section_paragraph">Paragraph</string>
     <string name="reader_section_paper">Paper &amp; theme</string>
+    <string name="reader_section_reading">Reading</string>
+    <string name="reader_section_book">This book</string>
+    <string name="reader_section_sync">Sync</string>
     <string name="reader_layout">Layout</string>
     <string name="reader_custom_bg">Custom</string>
 

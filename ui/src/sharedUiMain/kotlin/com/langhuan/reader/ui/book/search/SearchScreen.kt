@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.LazyGridState
@@ -157,7 +158,7 @@ interface SearchNavCallbacks {
     /**
      * 清空搜索历史 (宿主实现, 通常弹确认对话框)。
      *
-     * 原 app 端 [SearchActivity.alertClearHistory] 弹 `R.string.sure_clear_search_history` 确认框,
+     * 原 app 端 [SearchActivity.alertClearHistory] 的清空确认框, 现由路由层 AppAlertDialog 承接。
      * 用户确认后调 `viewModel.clearHistory()`。下沉后由宿主决定是否弹确认。
      * 默认实现直接清空 (桌面端验证场景), app 端 override 弹确认框保留原交互。
      */
@@ -691,10 +692,16 @@ private fun ColumnScope.InputHelp(
                 .padding(horizontal = DesignTokens.spacingDefault)
                 .padding(navPad),
         ) {
-            FlowRow(Modifier.fillMaxWidth()) {
+            FlowRow(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(DesignTokens.spacingDefault),
+                verticalArrangement = Arrangement.spacedBy(DesignTokens.spacingXs),
+            ) {
                 historyKeys.forEach { keyword ->
                     AppFilletTextButton(
                         text = keyword.word,
+                        modifier = Modifier.widthIn(max = 240.dp),
+                        compact = true,
                         onLongClick = { viewModel.deleteHistory(keyword) },
                         onClick = { onHistoryClick(keyword.word) },
                     )

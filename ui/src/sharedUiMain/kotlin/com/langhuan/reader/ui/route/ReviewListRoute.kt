@@ -21,7 +21,7 @@ import com.langhuan.reader.ui.root.RouteEntry
 import com.langhuan.reader.ui.root.ScreenModelStore
 import com.langhuan.reader.ui.root.asBook
 import com.langhuan.reader.ui.generated.resources.Res
-import com.langhuan.reader.ui.generated.resources.confirm_delete_review
+
 import com.langhuan.reader.ui.generated.resources.cancel
 import com.langhuan.reader.ui.generated.resources.delete
 import com.langhuan.reader.ui.generated.resources.delete_review
@@ -41,7 +41,7 @@ import org.jetbrains.compose.resources.stringResource
  * - 发布/回复: 弹 [ReviewPostDialogHost] (对照原版 ReviewPostActivity 底部输入面板),
  *   提交内容直连 screenModel.submit (原 REVIEW_POST 路由回传结果处理逻辑);
  *   点击单条先 setReplyTo 暂存该条并带 replyPreview (对照 onReviewClicked)
- * - 删除: [AppAlertDialog] 二次确认 (对照 alert(R.string.delete, R.string.confirm_delete_review))
+ * - 删除: [AppAlertDialog] 二次确认 (标题「删除评论」)
  * - 长按: 复制内容 (对照 sendToClip)
  * - 头像/配图: photo overlay 看大图 (对照 PhotoDialog)
  * - 回复详情: 复用共享 [ReviewListDialogHost] 再开一层底部弹窗 (对照 app 原版 openReplies)
@@ -170,7 +170,7 @@ fun ReviewListRoute(
         )
     }
 
-    // 删除二次确认 (对照 app 端 alert(delete, confirm_delete_review) + yesButton/noButton)
+    // 删除二次确认
     pendingDelete.value?.let { review ->
         AppAlertDialog(
             onDismissRequest = { pendingDelete.value = null },

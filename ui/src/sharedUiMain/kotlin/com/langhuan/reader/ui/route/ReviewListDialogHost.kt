@@ -32,7 +32,7 @@ import com.langhuan.reader.ui.root.PlatformCapabilityProviders
 import com.langhuan.reader.utils.KS_JSON
 import kotlinx.serialization.Serializable
 import com.langhuan.reader.ui.generated.resources.Res
-import com.langhuan.reader.ui.generated.resources.confirm_delete_review
+
 import com.langhuan.reader.ui.generated.resources.cancel
 import com.langhuan.reader.ui.generated.resources.delete
 import com.langhuan.reader.ui.generated.resources.delete_review
@@ -242,7 +242,7 @@ fun ReviewListContent(
         }
     }
 
-    // 删除二次确认 (对照 app 端 alert(delete, confirm_delete_review))
+    // 删除二次确认
     pendingDelete.value?.let { review ->
         AppAlertDialog(
             onDismissRequest = { pendingDelete.value = null },

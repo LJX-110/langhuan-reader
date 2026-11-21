@@ -29,6 +29,7 @@ import com.langhuan.reader.ui.compose.platform.LocalAppConfigProvider
 import com.langhuan.reader.ui.compose.platform.LocalEventBusProvider
 import com.langhuan.reader.ui.compose.platform.ProvidePlatformImeEditCommands
 import com.langhuan.reader.ui.compose.platform.LocalThemeStoreProvider
+import com.langhuan.reader.ui.compose.platform.AppearanceRefresh
 import com.langhuan.reader.ui.compose.platform.ThemeStoreProvider
 import com.langhuan.reader.ui.compose.platform.platformTextStyleNoFontPadding
 
@@ -270,6 +271,7 @@ fun AppTheme(
     val themeStore = LocalThemeStoreProvider.current
     val appConfig = LocalAppConfigProvider.current
     val eventBus = LocalEventBusProvider.current
+    val appearanceVersion = AppearanceRefresh.version
 
     var recreateTick by remember(themeStore, eventBus) { mutableIntStateOf(0) }
     // Native providers 从持久层读取普通值，事件到达时触发重组；Desktop 的 State getter 可直接触发。
@@ -279,6 +281,7 @@ fun AppTheme(
         }
     }
     recreateTick
+    appearanceVersion
     val colors = readAppColors(themeStore, appConfig.isEInkMode)
     // 不传锚点时继承外层 (宿主) 的锚点, 不覆盖成 null
     val dialogAnchor = anchor ?: LocalDialogAnchorSize.current

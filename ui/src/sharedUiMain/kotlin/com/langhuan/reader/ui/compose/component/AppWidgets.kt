@@ -197,12 +197,17 @@ fun AppFilletTextButton(
     bold: Boolean = false,
     focusable: Boolean = true,
     enabled: Boolean = true,
+    /** 紧凑变体: 视觉更轻、占位更小 (搜索历史等密集列表), 命中区仍保留 40dp。 */
+    compact: Boolean = false,
     onLongClick: (() -> Unit)? = null,
     onClick: (() -> Unit)? = null,
 ) {
     // 复用 btn_bg 色板键 (light @color/btn_bg #100e0e0e / night #14e0e0e0), 不再本地硬编码
     val normalBg = rememberColor("btn_bg")
     val clickable = enabled && (onClick != null || onLongClick != null)
+    val minHit = if (compact) 40.dp else DesignTokens.viewHeightXl
+    val horizontalPadding = if (compact) 12.dp else filletChipPaddingH
+    val verticalPadding = if (compact) 6.dp else filletChipPaddingV
     Box(
         modifier
             .alpha(if (enabled) alpha else alpha * 0.38f)
@@ -210,8 +215,8 @@ fun AppFilletTextButton(
             .then(
                 if (clickable) {
                     Modifier.defaultMinSize(
-                        minWidth = DesignTokens.viewHeightXl,
-                        minHeight = DesignTokens.viewHeightXl,
+                        minWidth = if (compact) 0.dp else minHit,
+                        minHeight = minHit,
                     )
                 } else {
                     Modifier
@@ -242,8 +247,8 @@ fun AppFilletTextButton(
                 .clip(DesignTokens.shapeDefault)
                 .background(normalBg)
                 .padding(
-                    horizontal = filletChipPaddingH,
-                    vertical = filletChipPaddingV,
+                    horizontal = horizontalPadding,
+                    vertical = verticalPadding,
                 ),
             contentAlignment = Alignment.Center,
         ) {

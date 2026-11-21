@@ -4,19 +4,20 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.Icon
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.langhuan.reader.constant.BottomNavTag
+import com.langhuan.reader.ui.compose.platform.AppearanceRefresh
 import com.langhuan.reader.ui.compose.platform.LocalThemeStoreProvider
 import com.langhuan.reader.ui.compose.platform.rememberColor
-import com.langhuan.reader.ui.compose.platform.rememberPainter
 import com.langhuan.reader.ui.compose.platform.rememberString
 
 /**
@@ -30,6 +31,8 @@ internal data class MainNavColors(val bar: Color, val item: Color, val accent: C
 
 @Composable
 internal fun rememberMainNavColors(): MainNavColors {
+    // 主题/背景写入后立即重读, 不等 Activity 重建
+    AppearanceRefresh.version
     val themeStore = LocalThemeStoreProvider.current
     val bg = themeStore.bgImagePath
     val barColor = if (bg.isNullOrBlank()) themeStore.bottomBackground else Color.Transparent
@@ -74,14 +77,15 @@ internal fun MainNavItem(
     val tint = if (selected) colors.accent else colors.item
     val label = rememberString(tag.labelKey())
     Column(
-        modifier.clickable(onClick = onClick),
+        modifier
+            .semantics { contentDescription = label }
+            .clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(
-            painter = rememberPainter(tag.iconKey(selected)),
-            contentDescription = label,
-            tint = tint,
+        DockIcon(
+            tag = tag,
+            color = tint,
             modifier = Modifier.size(iconSize.dp),
         )
         if (showLabel) {
@@ -96,13 +100,6 @@ internal fun MainNavItem(
 }
 
 // selector 不被 painterResource 支持, 按选中态直取 _s(实心)/_e(空心) vector
-private fun String.iconKey(selected: Boolean) = when (this) {
-    BottomNavTag.HOME -> if (selected) "ic_bottom_home_s" else "ic_bottom_home_e"
-    BottomNavTag.BOOKSHELF -> if (selected) "ic_bottom_books_s" else "ic_bottom_books_e"
-    BottomNavTag.DISCOVERY -> if (selected) "ic_bottom_explore_s" else "ic_bottom_explore_e"
-    else -> if (selected) "ic_bottom_person_s" else "ic_bottom_person_e"
-}
-
 private fun String.labelKey() = when (this) {
     BottomNavTag.HOME -> "home"
     BottomNavTag.BOOKSHELF -> "bookshelf"

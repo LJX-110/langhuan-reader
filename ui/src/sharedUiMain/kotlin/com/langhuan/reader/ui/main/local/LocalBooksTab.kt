@@ -178,19 +178,25 @@ internal fun LocalBooksTab(
     }
 }
 
-/** 空态动作：一枚浅底胶囊，不画边框，和阅读面板的次级按钮同一种感觉。 */
+/** 空态动作：一枚浅底胶囊，不画边框；48dp 命中区里放 32dp 的视觉高度，文字居中。 */
 @Composable
 private fun LocalEmptyAction(label: String, onClick: () -> Unit) {
     val colors = AppTheme.colors
-    Text(
-        text = label,
-        color = colors.accent,
-        fontSize = 13.sp,
+    Box(
         modifier = Modifier
             .heightIn(min = DesignTokens.viewHeightXl)
             .clip(RoundedCornerShape(14.dp))
-            .background(colors.accent.copy(alpha = .10f))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 7.dp),
-    )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = colors.accent,
+            fontSize = 13.sp,
+            modifier = Modifier
+                .clip(RoundedCornerShape(14.dp))
+                .background(colors.accent.copy(alpha = .10f))
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+        )
+    }
 }

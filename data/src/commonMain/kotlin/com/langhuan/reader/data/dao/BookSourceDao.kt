@@ -21,6 +21,10 @@ interface BookSourceDao {
     @Query("select * from book_sources_part order by customOrder asc")
     fun flowAll(): Flow<List<BookSourcePart>>
 
+    /** 书源总数 (与发现页"可发现源"口径不同, 用于界面说明筛选差异)。 */
+    @Query("select count(*) from book_sources")
+    fun flowAllCount(): Flow<Int>
+
     @Query(
         """select bp.*
     from book_sources b join book_sources_part bp on b.bookSourceUrl = bp.bookSourceUrl

@@ -197,6 +197,7 @@
     <string name="no_matching_source">没有匹配的书源</string>
     <string name="source_group_empty">该分组暂无书源</string>
     <string name="source_load_failed">书源加载失败</string>
+    <string name="source_filter_note">仅显示启用发现且配置了发现地址的源；书源管理共 %1$d 个</string>
     <string name="retry">重试</string>
     <string name="clear_filter">清除筛选</string>
     <string name="state_expanded">已展开</string>
@@ -236,7 +237,7 @@
     <string name="last_read_time_sort">阅读时间排序</string>
     <string name="enable_record">开启记录</string>
     <string name="delete_all">删除所有</string>
-    <string name="sure_del_any">是否确认删除 %1$s？</string>
+
     <string name="today_read_time">今日</string>
     <string name="month_read_time">本月</string>
     <string name="read_book_count">已读书籍数</string>
@@ -323,7 +324,7 @@
     <string name="other">其它</string>
     <string name="default_cover">默认封面</string>
     <string name="bottom_nav_config">底栏设置</string>
-    <string name="bottom_bar_items_order">入口顺序</string>
+    <string name="bottom_bar_icons">底栏图标</string>
     <string name="bottom_bar_height">底栏高度</string>
     <string name="bottom_bar_icon_size">图标大小</string>
     <string name="bottom_bar_label_mode">文本显示</string>
@@ -452,7 +453,7 @@
     <string name="review_title_with_count">评论(%1$s条)</string>
     <string name="review_sort_hot">最热</string>
     <string name="review_sort_latest">最新</string>
-    <string name="confirm_delete_review">确定删除这条评论？</string>
+
     <string name="vote_up">点赞</string>
     <string name="vote_down">点踩</string>
     <string name="review_replies_count">全部 %1$d 条回复 &gt;</string>
@@ -476,7 +477,7 @@
     <string name="lookup_word">查词</string>
     <string name="save_success">保存成功</string>
     <string name="post_review">发布</string>
-    <string name="sure">确认</string>
+
     <string name="error">错误</string>
     <string name="error_no_source">没有源</string>
     <string name="error_get_book_info">书籍信息获取失败</string>
@@ -527,11 +528,12 @@
     <string name="share_layout">共用布局</string>
     <string name="share_selected_source">分享选中源</string>
     <string name="style_name">样式名称：</string>
-    <string name="sure_clear_search_history">是否确认清除所有搜索历史记录</string>
+
     <string name="system_tts">系统 TTS</string>
     <string name="text">文字</string>
     <string name="text_font">字体</string>
     <string name="font_weight">字重</string>
+    <string name="font_settings">字体</string>
     <string name="interface_font_size">界面字号</string>
     <string name="system_font">系统字体</string>
     <string name="text_indent">缩进</string>
@@ -770,6 +772,9 @@
     <string name="reader_section_text">文字</string>
     <string name="reader_section_paragraph">段落</string>
     <string name="reader_section_paper">背景与主题</string>
+    <string name="reader_section_reading">阅读设置</string>
+    <string name="reader_section_book">本书</string>
+    <string name="reader_section_sync">同步</string>
     <string name="reader_layout">版面</string>
     <string name="reader_custom_bg">自定义</string>
 

@@ -87,7 +87,7 @@ fun LanghuanSkinDialog(onDismiss: () -> Unit) {
             AppTextButton(text = stringResource(Res.string.ok)) {
                 LanghuanThemes.select(selected)
                 PreferenceProviders.get().putString(PreferKey.themeMode, selectedMode.toString())
-                // 明暗档位与皮肤一起落库后重算主题并广播重建，避免两次重建
+                // 明暗档位与皮肤一起落库后重算主题并广播重建, 平台实现同时递增外观令牌
                 PlatformCapabilityProviders.get().applyDayNight()
                 onDismiss()
             }

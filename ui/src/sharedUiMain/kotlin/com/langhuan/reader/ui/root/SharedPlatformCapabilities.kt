@@ -26,6 +26,7 @@ import com.langhuan.reader.ui.book.info.WebFileImportShared
 import com.langhuan.reader.ui.book.manage.reportLocalBookSourceFileDeleteFailure
 import com.langhuan.reader.ui.book.read.config.FontItem
 import com.langhuan.reader.ui.book.read.config.importFontFileToInternalDir
+import com.langhuan.reader.ui.compose.platform.AppearanceRefresh
 import com.langhuan.reader.ui.route.encodeReviewListDialogPayload
 import com.langhuan.reader.ui.widget.dialog.WaitDialogHandle
 import com.langhuan.reader.ui.withLocalDirAccess
@@ -296,6 +297,7 @@ interface SharedPlatformCapabilities : PlatformCapabilities {
      */
     override fun applyDayNight() {
         ThemeConfigProviders.get().applyThemeMode()
+        AppearanceRefresh.bump()
     }
 
     /** 三端无 ViewConfiguration, 取与 Android 默认接近的固定值。 */
