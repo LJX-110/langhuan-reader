@@ -143,6 +143,28 @@ fun langhuanReadable(color: Color, dark: Boolean, minRatio: Float = 4.5f): Color
 }
 
 /**
+ * 把颜色沿亮度轴推离 [background]，直到达到 [minRatio]；色相与饱和度保持不变。
+ *
+ * 与 [langhuanReadable] 的区别：后者的目标是纯黑/纯白，这里直接对页面底色计算，
+ * 用于深色主题下把偏暗的辅助色提亮到可辨认。
+ */
+private fun langhuanReadableOn(color: Color, background: Color, minRatio: Float): Color {
+    if (langhuanContrast(color, background) >= minRatio) return color
+    val step = if (background.luminance() < 0.5f) 0.05f else -0.05f
+    val hsl = color.toHsl()
+    var lightness = hsl[2]
+    var out = color
+    repeat(20) {
+        if (langhuanContrast(out, background) >= minRatio) return out
+        val next = (lightness + step).coerceIn(0f, 1f)
+        if (next == lightness) return out
+        lightness = next
+        out = hslToColor(hsl[0], hsl[1], lightness)
+    }
+    return out
+}
+
+/**
  * 页面主色：与页面底色的对比度不足 1.6 时改用辅助色，
  * 两者都贴近页面时才做可读性校正，避免主题色「消失」。
  *
@@ -160,11 +182,19 @@ fun langhuanThemeAccent(primary: Color, secondary: Color, dark: Boolean): Color 
     return langhuanReadable(primary, dark)
 }
 
-/** 辅助色：可见就用原色；接近页面底色时退回可读的主色。 */
+/**
+ * 辅助色：小面积标记要能看清，目标对比度取 3:1。
+ *
+ * 深色主题下辅助色偏暗时，沿亮度轴提亮并保留色相；浅色主题下辅助色接近纸白时，
+ * 提亮/压暗都会变成灰色，直接退回可读的主色，保住双色配对。
+ */
 fun langhuanCompanion(primary: Color, secondary: Color, dark: Boolean): Color {
     val page = if (dark) DarkPage else LightPage
-    if (langhuanContrast(secondary, page) >= 1.6f) return secondary
-    return langhuanReadable(langhuanThemeAccent(primary, secondary, dark), dark)
+    if (langhuanContrast(secondary, page) >= 3f) return secondary
+    if (!dark) return langhuanThemeAccent(primary, secondary, dark)
+    val lifted = langhuanReadableOn(secondary, page, 3f)
+    if (langhuanContrast(lifted, page) >= 3f) return lifted
+    return langhuanThemeAccent(primary, secondary, dark)
 }
 
 /** 填充色上该用黑字还是白字——直接比对比度，避免临界色取错。 */

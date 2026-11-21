@@ -26,6 +26,8 @@ data class AppColors(
     val statusBar: Color,
     val navigationBar: Color,
     val fillet: Color,
+    /** 搜索框/发现源行等控件的半透明填充（transparent10 语义） */
+    val controlFill: Color = Color(0x10000000),
     val isDark: Boolean,
     /** 大面积填充用的可见主色（按钮、选中块），接近页面底色时已换辅助色 */
     val accentFill: Color = accent,

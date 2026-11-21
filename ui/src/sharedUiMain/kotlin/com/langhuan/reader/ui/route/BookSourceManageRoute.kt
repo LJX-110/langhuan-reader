@@ -52,8 +52,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.add_group
+import com.langhuan.reader.ui.generated.resources.cancel
 import com.langhuan.reader.ui.generated.resources.check_select_source
 import com.langhuan.reader.ui.generated.resources.check_selected_interval
+import com.langhuan.reader.ui.generated.resources.delete
+import com.langhuan.reader.ui.generated.resources.delete_selected_source
+import com.langhuan.reader.ui.generated.resources.delete_source
 import com.langhuan.reader.ui.generated.resources.disable_explore
 import com.langhuan.reader.ui.generated.resources.disable_selection
 import com.langhuan.reader.ui.generated.resources.disabled
@@ -471,29 +475,28 @@ fun BookSourceManageRoute(
         }
     }
 
-    // 单项删除确认 (对照 app 端 del: alert(draw) { sure_del + name; yesButton { del } })
+    // 单项删除确认
     delTarget?.let { part ->
         AppAlertDialog(
             onDismissRequest = { delTarget = null },
-            title = stringResource(Res.string.draw),
-            message = stringResource(Res.string.sure_del) + "\n" + part.bookSourceName,
-            okButton = AlertButton(stringResource(Res.string.yes)) {
+            title = stringResource(Res.string.delete_source),
+            message = part.bookSourceName,
+            okButton = AlertButton(stringResource(Res.string.delete)) {
                 screenModel.dispatch(BookSourceUiEvent.Del(part))
             },
-            cancelButton = AlertButton(stringResource(Res.string.no)),
+            cancelButton = AlertButton(stringResource(Res.string.cancel)),
         )
     }
 
-    // 批量删除确认 (对照 app 端 delSelection: alert(draw, sure_del) { yesButton { del }; noButton() })
+    // 批量删除确认
     if (showDelSelection) {
         AppAlertDialog(
             onDismissRequest = { showDelSelection = false },
-            title = stringResource(Res.string.draw),
-            message = stringResource(Res.string.sure_del),
-            okButton = AlertButton(stringResource(Res.string.yes)) {
+            title = stringResource(Res.string.delete_selected_source),
+            okButton = AlertButton(stringResource(Res.string.delete)) {
                 screenModel.dispatch(BookSourceUiEvent.DelSelection)
             },
-            cancelButton = AlertButton(stringResource(Res.string.no)),
+            cancelButton = AlertButton(stringResource(Res.string.cancel)),
         )
     }
 

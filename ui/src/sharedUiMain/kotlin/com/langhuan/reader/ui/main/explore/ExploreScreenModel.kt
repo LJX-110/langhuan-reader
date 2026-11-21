@@ -85,6 +85,7 @@ class ExploreScreenModel : ScreenModel {
         when (event) {
             is ExploreUiEvent.SetSearch -> setSearch(event.query)
             is ExploreUiEvent.SetGroup -> setGroup(event.group)
+            is ExploreUiEvent.RetrySources -> collectSources()
             is ExploreUiEvent.ToggleExpand -> toggleExpand(event.item)
             is ExploreUiEvent.RefreshSource -> refreshSource(event.item)
             is ExploreUiEvent.ToTop -> viewModelShared.topSource(event.item)
@@ -109,22 +110,32 @@ class ExploreScreenModel : ScreenModel {
         }
     }
 
-    /** 对照 ExploreTabState.collectSources: 按 searchKey 选择 flow, 取消旧 job 重启 */
+    /**
+     * 对照 ExploreTabState.collectSources: 关键词与分组是两个独立筛选, 只会有一个生效
+     * (分组筛选会清空关键词, 输入关键词会退出分组), 取消旧 job 重启。
+     */
     private fun collectSources() {
         sourcesJob?.cancel()
         sourcesJob = scope.launch {
-            val key = _state.value.searchKey
+            val snapshot = _state.value
+            val key = snapshot.searchKey.trim()
+            val group = snapshot.selectedGroup
             val flow = when {
-                key.isBlank() -> appDb.bookSourceDao.flowExplore()
-                key.startsWith("group:") ->
-                    appDb.bookSourceDao.flowGroupExplore(key.substringAfter("group:"))
-
-                else -> appDb.bookSourceDao.flowExplore(key)
+                group != null -> appDb.bookSourceDao.flowGroupExplore(group)
+                key.isNotBlank() -> appDb.bookSourceDao.flowExplore(key)
+                else -> appDb.bookSourceDao.flowExplore()
             }
-            flow.catch { AppLog.put("发现界面更新数据出错", it) }
+            flow.catch {
+                AppLog.put("发现界面更新数据出错", it)
+                _state.update { it.copy(sourcesLoaded = true, sourcesError = true) }
+            }
                 .flowOn(IoDispatcher)
                 .throttleLatest(500)
-                .collect { sources -> _state.update { it.copy(sources = sources) } }
+                .collect { sources ->
+                    _state.update {
+                        it.copy(sources = sources, sourcesLoaded = true, sourcesError = false)
+                    }
+                }
         }
     }
 
@@ -144,15 +155,20 @@ class ExploreScreenModel : ScreenModel {
 
     // ===== 搜索 / 分组 =====
 
-    /** 搜索过滤: 空=全部发现、group: 前缀=按分组、其余=关键词 */
+    /** 搜索过滤: 空=全部发现、非空=关键词 (输入关键词即退出分组筛选) */
     private fun setSearch(query: String) {
-        _state.update { it.copy(searchKey = query) }
+        _state.update {
+            it.copy(
+                searchKey = query,
+                selectedGroup = if (query.isBlank()) it.selectedGroup else null,
+            )
+        }
         collectSources()
     }
 
-    /** 点击分组菜单项 (包 "group:" 前缀) */
-    private fun setGroup(group: String) {
-        _state.update { it.copy(searchKey = "group:$group") }
+    /** 分组筛选: null=全部书源 (选分组即清空关键词) */
+    private fun setGroup(group: String?) {
+        _state.update { it.copy(selectedGroup = group, searchKey = "") }
         collectSources()
     }
 
@@ -322,7 +338,14 @@ data class ExploreScreenState(
     val sources: List<BookSourcePart> = emptyList(),
     val pinned: List<PinnedExplore> = emptyList(),
     val groups: List<String> = emptyList(),
+    /** 关键词筛选; 与 [selectedGroup] 互斥 (输入关键词即退出分组) */
     val searchKey: String = "",
+    /** 当前分组筛选; null = 全部书源 */
+    val selectedGroup: String? = null,
+    /** 书源流是否已产出首帧 (区分"加载中"与"确实为空") */
+    val sourcesLoaded: Boolean = false,
+    /** 书源流是否异常结束; 界面给重试入口 */
+    val sourcesError: Boolean = false,
     /** 当前展开行 url (null = 全部收起); 对应原版 ExploreAdapter.exIndex */
     val expandedUrl: String? = null,
     /** 当前展开行本次现查的源对象: 点分类进 show 直接用
@@ -336,11 +359,14 @@ data class ExploreScreenState(
 
 /** ExploreScreenModel 可下沉处理的 UI 事件 (平台相关回调仍走 ExploreUiActions) */
 sealed interface ExploreUiEvent {
-    /** 搜索过滤: 空=全部发现、group: 前缀=按分组、其余=关键词 */
+    /** 搜索过滤: 空=全部发现、非空=关键词 */
     data class SetSearch(val query: String) : ExploreUiEvent
 
-    /** 点击分组菜单项 (自动包 "group:" 前缀) */
-    data class SetGroup(val group: String) : ExploreUiEvent
+    /** 分组筛选: null=全部书源 */
+    data class SetGroup(val group: String?) : ExploreUiEvent
+
+    /** 书源流异常后重试 */
+    data object RetrySources : ExploreUiEvent
 
     /** 切换某书源展开/收起 (触发 kinds 异步加载) */
     data class ToggleExpand(val item: BookSourcePart) : ExploreUiEvent

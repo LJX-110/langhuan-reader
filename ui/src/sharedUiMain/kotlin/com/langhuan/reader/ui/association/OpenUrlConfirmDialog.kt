@@ -44,6 +44,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.cancel
+import com.langhuan.reader.ui.generated.resources.delete
 import com.langhuan.reader.ui.generated.resources.delete_source
 import com.langhuan.reader.ui.generated.resources.disable_source
 import com.langhuan.reader.ui.generated.resources.draw
@@ -123,9 +124,9 @@ internal fun OpenUrlConfirmOverlayContent(overlay: AppOverlay.Dialog, navigator:
     if (pendingDelete) {
         AppAlertDialog(
             onDismissRequest = { pendingDelete = false },
-            title = stringResource(Res.string.draw),
-            message = stringResource(Res.string.sure_del) + "\n" + payload.sourceTag,
-            okButton = AlertButton(stringResource(Res.string.yes)) {
+            title = stringResource(Res.string.delete_source),
+            message = payload.sourceTag,
+            okButton = AlertButton(stringResource(Res.string.delete)) {
                 payload.sourceKey?.let { key ->
                     scope.launch(IoDispatcher) {
                         SourceHelp.deleteSource(key, payload.sourceType)

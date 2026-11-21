@@ -42,6 +42,8 @@ import com.langhuan.reader.ui.root.toRouteRef
 import kotlinx.coroutines.launch
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.cancel
+import com.langhuan.reader.ui.generated.resources.clear
+import com.langhuan.reader.ui.generated.resources.clear_search_history
 import com.langhuan.reader.ui.generated.resources.draw
 import com.langhuan.reader.ui.generated.resources.ok
 import com.langhuan.reader.ui.generated.resources.sure_clear_search_history
@@ -212,9 +214,8 @@ fun SearchRoute(
     if (showClearHistoryConfirm) {
         AppAlertDialog(
             onDismissRequest = { showClearHistoryConfirm = false },
-            title = stringResource(Res.string.draw),
-            message = stringResource(Res.string.sure_clear_search_history),
-            okButton = AlertButton(stringResource(Res.string.ok)) {
+            title = stringResource(Res.string.clear_search_history),
+            okButton = AlertButton(stringResource(Res.string.clear)) {
                 viewModel.clearHistory()
             },
             cancelButton = AlertButton(stringResource(Res.string.cancel)),

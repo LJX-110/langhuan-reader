@@ -61,6 +61,7 @@ import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.cancel
 import com.langhuan.reader.ui.generated.resources.delete
+import com.langhuan.reader.ui.generated.resources.delete_note
 import com.langhuan.reader.ui.generated.resources.ok
 import com.langhuan.reader.ui.generated.resources.sure_del
 import com.langhuan.reader.ui.generated.resources.underline_note_hint
@@ -182,9 +183,8 @@ fun UnderlineNoteBubbleHost(
     if (showDeleteConfirm) {
         AppAlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = stringResource(Res.string.delete),
-            message = stringResource(Res.string.sure_del),
-            okButton = AlertButton(stringResource(Res.string.ok)) {
+            title = stringResource(Res.string.delete_note),
+            okButton = AlertButton(stringResource(Res.string.delete)) {
                 showDeleteConfirm = false
                 onDelete()
             },

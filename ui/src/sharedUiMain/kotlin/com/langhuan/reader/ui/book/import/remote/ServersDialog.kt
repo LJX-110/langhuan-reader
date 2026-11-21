@@ -50,6 +50,7 @@ import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.cancel
 import com.langhuan.reader.ui.generated.resources.create
 import com.langhuan.reader.ui.generated.resources.delete
+import com.langhuan.reader.ui.generated.resources.delete_server
 import com.langhuan.reader.ui.generated.resources.draw
 import com.langhuan.reader.ui.generated.resources.edit
 import com.langhuan.reader.ui.generated.resources.ic_add
@@ -160,14 +161,13 @@ fun ServersDialog(
         }
     }
 
-    // 删除二次确认 (对照 app 端 alert(R.string.draw, R.string.sure_del) { yesButton { viewModel.delete(server) } })
+    // 删除二次确认
     deletingServer?.let { server ->
         AppAlertDialog(
             onDismissRequest = { deletingServer = null },
-            title = stringResource(Res.string.draw),
-            message = stringResource(Res.string.sure_del),
+            title = stringResource(Res.string.delete_server),
             okButton = AlertButton(
-                text = stringResource(Res.string.ok),
+                text = stringResource(Res.string.delete),
                 onClick = {
                     onDeleteServer(server)
                     deletingServer = null

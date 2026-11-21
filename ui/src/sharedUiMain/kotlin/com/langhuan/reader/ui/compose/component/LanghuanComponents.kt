@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.langhuan.reader.ui.compose.theme.AppTheme
+import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
 import com.langhuan.reader.ui.compose.theme.LanghuanType
 import com.langhuan.reader.ui.compose.theme.langhuanOnColor
 import com.langhuan.reader.ui.generated.resources.Res
@@ -74,31 +75,40 @@ fun LanghuanSearchEntry(
     modifier: Modifier = Modifier,
 ) {
     val colors = AppTheme.colors
-    Row(
+    // 外层 48dp 负责命中区，内层 34dp 保留原来的安静胶囊视觉。
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(34.dp)
+            .heightIn(min = DesignTokens.viewHeightXl)
             .clip(RoundedCornerShape(8.dp))
-            .background(colors.fillet)
-            .border(0.5.dp, colors.line, RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.CenterStart,
     ) {
-        Icon(
-            painter = painterResource(Res.drawable.ic_search),
-            contentDescription = null,
-            tint = colors.summaryText,
-            modifier = Modifier.size(16.dp),
-        )
-        Spacer(Modifier.width(7.dp))
-        Text(
-            text = hint,
-            color = colors.summaryText,
-            fontSize = 12.5.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(34.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(colors.fillet)
+                .border(0.5.dp, colors.line, RoundedCornerShape(8.dp))
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                painter = painterResource(Res.drawable.ic_search),
+                contentDescription = null,
+                tint = colors.summaryText,
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(Modifier.width(7.dp))
+            Text(
+                text = hint,
+                color = colors.summaryText,
+                fontSize = 12.5.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -231,7 +241,7 @@ fun LanghuanSettingsRow(
     }
 }
 
-/** 三段切换：跟随系统 / 浅色 / 深色。选中段用主色填充，其余透明。 */
+/** 三段切换：跟随系统 / 浅色 / 深色。选中段用主色填充，其余透明。段高 42 + 外框 3×2 = 48dp。 */
 @Composable
 fun LanghuanSegmentedControl(
     options: List<String>,
@@ -252,7 +262,7 @@ fun LanghuanSegmentedControl(
             Box(
                 Modifier
                     .weight(1f)
-                    .height(34.dp)
+                    .height(42.dp)
                     .clip(RoundedCornerShape(6.dp))
                     .then(
                         if (selected) Modifier.background(colors.accentFill)

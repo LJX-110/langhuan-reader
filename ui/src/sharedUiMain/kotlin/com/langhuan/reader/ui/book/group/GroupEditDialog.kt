@@ -57,6 +57,7 @@ import com.langhuan.reader.ui.generated.resources.book_sort_reading_time
 import com.langhuan.reader.ui.generated.resources.book_sort_update_time
 import com.langhuan.reader.ui.generated.resources.cancel
 import com.langhuan.reader.ui.generated.resources.delete
+import com.langhuan.reader.ui.generated.resources.delete_group
 import com.langhuan.reader.ui.generated.resources.group_name
 import com.langhuan.reader.ui.generated.resources.ok
 import com.langhuan.reader.ui.generated.resources.sort
@@ -258,14 +259,13 @@ fun GroupEditDialog(
         }
     }
 
-    // 删除二次确认弹窗 (对齐原 alert(R.string.delete, R.string.sure_del) { yesButton { ... } })
+    // 删除二次确认弹窗
     if (showDeleteDialog) {
         AppAlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = stringResource(Res.string.delete),
-            message = stringResource(Res.string.sure_del),
+            title = stringResource(Res.string.delete_group),
             okButton = AlertButton(
-                text = stringResource(Res.string.ok),
+                text = stringResource(Res.string.delete),
                 onClick = {
                     showDeleteDialog = false
                     onDelete?.invoke(editingGroup)

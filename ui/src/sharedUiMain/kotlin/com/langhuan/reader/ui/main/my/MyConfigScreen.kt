@@ -1,6 +1,8 @@
 package com.langhuan.reader.ui.main.my
 
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -8,7 +10,7 @@ import com.langhuan.reader.ui.compose.component.LanghuanSettingsDivider
 import com.langhuan.reader.ui.compose.component.LanghuanSettingsGroup
 import com.langhuan.reader.ui.compose.component.LanghuanSettingsRow
 import com.langhuan.reader.ui.compose.platform.rememberNavigationBarPaddingValues
-import com.langhuan.reader.ui.compose.theme.AppTheme
+import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.about
 import com.langhuan.reader.ui.generated.resources.backup_restore
@@ -33,6 +35,7 @@ import com.langhuan.reader.ui.generated.resources.ic_settings
 import com.langhuan.reader.ui.generated.resources.ic_toc
 import com.langhuan.reader.ui.generated.resources.ic_update
 import com.langhuan.reader.ui.generated.resources.interface_font_size
+import com.langhuan.reader.ui.generated.resources.loading
 import com.langhuan.reader.ui.generated.resources.my_group_appearance
 import com.langhuan.reader.ui.generated.resources.my_group_data
 import com.langhuan.reader.ui.generated.resources.read_record
@@ -50,6 +53,7 @@ import org.jetbrains.compose.resources.stringResource
  *
  * 只做展示与回调，弹窗与读写在 MyConfigContent 里承接。
  * 行内不写解释性小字，右侧只放当前值（字体、字重、界面字号、版本号）。
+ * 主题由外层路由统一提供，本页不再包一层 AppTheme。
  */
 @Composable
 fun MyConfigScreen(
@@ -95,122 +99,123 @@ fun MyConfigScreen(
     val titleData = stringResource(Res.string.my_group_data)
     val titleAbout = stringResource(Res.string.about)
 
-    AppTheme {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = rememberNavigationBarPaddingValues(),
-        ) {
-            item {
-                LanghuanSettingsGroup(title = titleAppearance) {
-                    LanghuanSettingsRow(
-                        title = stringResource(Res.string.theme_mode),
-                        icon = iconTheme,
-                        value = themeValue,
-                        onClick = onThemeMode,
-                    )
-                    LanghuanSettingsDivider()
-                    LanghuanSettingsRow(
-                        title = stringResource(Res.string.text_font),
-                        icon = iconFont,
-                        value = fontValue,
-                        onClick = onFont,
-                    )
-                    LanghuanSettingsDivider()
-                    LanghuanSettingsRow(
-                        title = stringResource(Res.string.font_weight),
-                        icon = iconFont,
-                        value = fontWeightValue,
-                        onClick = onFontWeight,
-                    )
-                    LanghuanSettingsDivider()
-                    LanghuanSettingsRow(
-                        title = stringResource(Res.string.interface_font_size),
-                        icon = iconFont,
-                        value = fontScaleValue,
-                        onClick = onFontScale,
-                    )
-                    LanghuanSettingsDivider()
-                    LanghuanSettingsRow(
-                        title = stringResource(Res.string.bottom_nav_config),
-                        icon = iconBottomNav,
-                        onClick = onBottomNav,
-                    )
-                }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = rememberNavigationBarPaddingValues(),
+    ) {
+        item {
+            LanghuanSettingsGroup(title = titleAppearance) {
+                LanghuanSettingsRow(
+                    title = stringResource(Res.string.theme_mode),
+                    icon = iconTheme,
+                    value = themeValue,
+                    onClick = onThemeMode,
+                )
+                LanghuanSettingsDivider()
+                LanghuanSettingsRow(
+                    title = stringResource(Res.string.text_font),
+                    icon = iconFont,
+                    value = fontValue,
+                    onClick = onFont,
+                )
+                LanghuanSettingsDivider()
+                LanghuanSettingsRow(
+                    title = stringResource(Res.string.font_weight),
+                    icon = iconFont,
+                    value = fontWeightValue,
+                    onClick = onFontWeight,
+                )
+                LanghuanSettingsDivider()
+                LanghuanSettingsRow(
+                    title = stringResource(Res.string.interface_font_size),
+                    icon = iconFont,
+                    value = fontScaleValue,
+                    onClick = onFontScale,
+                )
+                LanghuanSettingsDivider()
+                LanghuanSettingsRow(
+                    title = stringResource(Res.string.bottom_nav_config),
+                    icon = iconBottomNav,
+                    onClick = onBottomNav,
+                )
             }
-            item {
-                LanghuanSettingsGroup(title = titleSource) {
-                    LanghuanSettingsRow(
-                        title = stringResource(Res.string.book_source_manage),
-                        icon = iconSource,
-                        onClick = onBookSourceManage,
-                    )
-                    LanghuanSettingsDivider()
-                    LanghuanSettingsRow(
-                        title = stringResource(Res.string.replace_purify),
-                        icon = iconReplace,
-                        onClick = onReplaceManage,
-                    )
-                    LanghuanSettingsDivider()
-                    LanghuanSettingsRow(
-                        title = stringResource(Res.string.txt_toc_rule),
-                        icon = iconToc,
-                        onClick = onTxtTocRuleManage,
-                    )
-                }
+        }
+        item {
+            LanghuanSettingsGroup(title = titleSource) {
+                LanghuanSettingsRow(
+                    title = stringResource(Res.string.book_source_manage),
+                    icon = iconSource,
+                    onClick = onBookSourceManage,
+                )
+                LanghuanSettingsDivider()
+                LanghuanSettingsRow(
+                    title = stringResource(Res.string.replace_purify),
+                    icon = iconReplace,
+                    onClick = onReplaceManage,
+                )
+                LanghuanSettingsDivider()
+                LanghuanSettingsRow(
+                    title = stringResource(Res.string.txt_toc_rule),
+                    icon = iconToc,
+                    onClick = onTxtTocRuleManage,
+                )
             }
-            item {
-                LanghuanSettingsGroup(title = titleData) {
-                    LanghuanSettingsRow(
-                        title = stringResource(Res.string.backup_restore),
-                        icon = iconBackup,
-                        onClick = onBackupRestore,
-                    )
-                    LanghuanSettingsDivider()
-                    LanghuanSettingsRow(
-                        title = stringResource(Res.string.bookmark),
-                        icon = iconBookmark,
-                        onClick = onBookmark,
-                    )
-                    LanghuanSettingsDivider()
-                    LanghuanSettingsRow(
-                        title = stringResource(Res.string.read_record),
-                        icon = iconHistory,
-                        onClick = onReadRecord,
-                    )
-                    LanghuanSettingsDivider()
-                    LanghuanSettingsRow(
-                        title = stringResource(Res.string.clear_cache),
-                        icon = iconClean,
-                        onClick = onCleanCache,
-                    )
-                    LanghuanSettingsDivider()
-                    LanghuanSettingsRow(
-                        title = stringResource(Res.string.shrink_database),
-                        icon = iconShrink,
-                        onClick = onShrinkDatabase,
-                    )
-                }
+        }
+        item {
+            LanghuanSettingsGroup(title = titleData) {
+                LanghuanSettingsRow(
+                    title = stringResource(Res.string.backup_restore),
+                    icon = iconBackup,
+                    onClick = onBackupRestore,
+                )
+                LanghuanSettingsDivider()
+                LanghuanSettingsRow(
+                    title = stringResource(Res.string.bookmark),
+                    icon = iconBookmark,
+                    onClick = onBookmark,
+                )
+                LanghuanSettingsDivider()
+                LanghuanSettingsRow(
+                    title = stringResource(Res.string.read_record),
+                    icon = iconHistory,
+                    onClick = onReadRecord,
+                )
+                LanghuanSettingsDivider()
+                LanghuanSettingsRow(
+                    title = stringResource(Res.string.clear_cache),
+                    icon = iconClean,
+                    onClick = onCleanCache,
+                )
+                LanghuanSettingsDivider()
+                LanghuanSettingsRow(
+                    title = stringResource(Res.string.shrink_database),
+                    icon = iconShrink,
+                    onClick = onShrinkDatabase,
+                )
             }
-            item {
-                LanghuanSettingsGroup(title = titleAbout) {
+        }
+        item {
+            LanghuanSettingsGroup(title = titleAbout) {
+                LanghuanSettingsRow(
+                    title = stringResource(Res.string.version),
+                    icon = iconAbout,
+                    value = versionValue,
+                    onClick = onAbout,
+                )
+                if (showCheckUpdate) {
+                    LanghuanSettingsDivider()
                     LanghuanSettingsRow(
-                        title = stringResource(Res.string.version),
-                        icon = iconAbout,
-                        value = versionValue,
-                        onClick = onAbout,
+                        title = stringResource(Res.string.check_update),
+                        icon = iconUpdate,
+                        value = if (checkingUpdate) stringResource(Res.string.loading) else null,
+                        showArrow = false,
+                        enabled = !checkingUpdate,
+                        onClick = onCheckUpdate,
                     )
-                    if (showCheckUpdate) {
-                        LanghuanSettingsDivider()
-                        LanghuanSettingsRow(
-                            title = stringResource(Res.string.check_update),
-                            icon = iconUpdate,
-                            showArrow = false,
-                            enabled = !checkingUpdate,
-                            onClick = onCheckUpdate,
-                        )
-                    }
                 }
             }
         }
+        // 最后一组与底栏之间留一口气, 不贴边
+        item { Spacer(Modifier.height(DesignTokens.spacingLg)) }
     }
 }

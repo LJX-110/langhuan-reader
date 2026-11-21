@@ -7,7 +7,7 @@
 - 名称：琅嬛阁（应用内、文档、注释统一用这个名字）
 - 包名：`com.langhuan.reader`
 - 技术栈：Kotlin Multiplatform + Compose Multiplatform（M2），AGP 9.4.1 / Kotlin 2.3.20 / Gradle 9.6.0，compileSdk 37 / targetSdk 36 / minSdk 24
-- 模块：`app`（Android 外壳 + 业务入口）、`ui`（共享 Compose 界面）、`data`、`core`、`foundation`、`modules/*`
+- 模块：`app`（Android 外壳 + 业务入口）、`ui`（共享 Compose 界面）、`ui-model`（界面展示模型）、`data`、`core`、`foundation`、`modules/*`
 - 平台：Android 是唯一维护与发布平台；桌面 / iOS / 鸿蒙已明确放弃，代码保留但不适配、不验收、不发布
 - 品牌与文案：统一称「琅嬛阁」，不引用上游项目名，也不使用其它同类产品的名称、栏目名与字样
 
@@ -30,10 +30,11 @@
 - 组件：页眉 `LanghuanPageHeader`、搜索入口 `LanghuanSearchEntry`、分组标题 `LanghuanSectionTitle`、3D 书架 `LanghuanShelf`、皮肤弹窗 `LanghuanSkinDialog`、阅读排版面板 `ReaderStylePanel`。新增外观组件统一用 `Langhuan*` 前缀，放在与业务就近的 `component/` 目录。
 - 阅读设置只有一处：阅读菜单的「排版」面板（`ReadMenu.kt` 的 `ReaderStylePanel`），按文字 / 段落 / 背景 / 翻页四组排布。不要再新增全屏「界面设置」弹窗；放不下的项做成子弹窗（`ReadLayoutConfigDialog.kt`、`BgTextConfigDialog.kt`），字体选择走「我的 → 字体」的 `FontSelectDialogHost`。翻页固定四档：滚动 / 覆盖 / 仿真 / 无动画。
 - 书架只保留 3D 书架一种形态：分组 tab + 横向 pager，不提供列表/网格样式或书架布局开关。底栏配置（显示项、顺序、高度、图标大小、标签模式）保留在「我的 → 外观 → 底部导航」。
-- 书籍详情：竖屏固定为白底编辑式档案头（封面在左、衬线大标题在右），内容按 `01 / 简介`、`02 / 标签`、`03 / 书籍信息` 编号分节；书源 / 分组 / 目录走信息表，不再用四列图标动作格。横屏保留模糊封面左右分栏。不要再加回 `bookInfoHorizontalLayout` 一类的详情页布局开关。
+- 书籍详情：竖屏固定为白底编辑式档案头（封面在左、衬线大标题在右），内容按「简介」「标签」「书籍信息」标题分节，不编序号；书源 / 分组 / 目录走信息表，不再用四列图标动作格。横屏保留模糊封面左右分栏。不要再加回 `bookInfoHorizontalLayout` 一类的详情页布局开关。
 - 书源体检：入口固定在书源页溢出菜单；默认快速模式（搜索 + 发现），完整模式才跑详情 / 目录 / 正文。清理默认先禁用并给撤销，删除必须二次确认；体检临时覆盖的校验项只在本轮服务生命周期内有效，结束即恢复。
 - 书源校验结果只有一套出口：校验完成统一弹结果面板（数量、原因、查看 / 导出 / 禁用 / 删除），不再额外加 toast 自动筛选或第二套清理入口。
-- 不提供帮助、教程、更新日志类弹层，设置项只给名称与当前值，不加解释性小字。`files/web/help` 只保留 Markdown 渲染资源（鸿蒙 WebView 复用）。
+- 不提供帮助、教程、更新日志类弹层，设置项只给名称与当前值，不加解释性小字。`files/web/help` 只保留 Markdown 渲染资源（鸿蒙 WebView 复用）。确认弹层同理：标题直接写动作，不写「提醒 / 是否确认删除？」式衬底小字。
+- 触控：可点元素命中区不小于 48dp，视觉尺寸可以更小，用外扩留白实现；禁用态要能看清，不能只靠低透明度压暗。
 - 图标：只保留一套「阁顶为书」图标（鸢尾蓝 `#0F64B5` 底 / 流光白 `#FFFFFBEA` 阁顶），启动页与图标同源；不提供换图标入口，也不保留旧图标资源。
 - 3D 书架几何常量集中在 `LanghuanShelfGeometry`，不要在绘制代码里另写一套数字。
 - 避免卡片投影、重描边、装饰性渐变这类堆料；层级靠留白与字重区分。

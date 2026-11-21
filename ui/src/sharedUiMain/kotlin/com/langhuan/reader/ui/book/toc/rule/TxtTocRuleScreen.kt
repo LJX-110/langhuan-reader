@@ -43,6 +43,7 @@ import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.cancel
 import com.langhuan.reader.ui.generated.resources.create
 import com.langhuan.reader.ui.generated.resources.delete
+import com.langhuan.reader.ui.generated.resources.delete_rule
 import com.langhuan.reader.ui.generated.resources.disable_selection
 import com.langhuan.reader.ui.generated.resources.draw
 import com.langhuan.reader.ui.generated.resources.edit
@@ -209,9 +210,8 @@ fun TxtTocRuleScreen(state: TxtTocRuleUiState, actions: TxtTocRuleUiActions) {
     if (showDeleteConfirm) {
         AppAlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = stringResource(Res.string.draw),
-            message = stringResource(Res.string.sure_del),
-            okButton = AlertButton(stringResource(Res.string.ok)) {
+            title = stringResource(Res.string.delete_rule),
+            okButton = AlertButton(stringResource(Res.string.delete)) {
                 actions.onDelSelection()
             },
             cancelButton = AlertButton(stringResource(Res.string.cancel)) {},
@@ -221,9 +221,9 @@ fun TxtTocRuleScreen(state: TxtTocRuleUiState, actions: TxtTocRuleUiActions) {
     pendingDeleteRule.value?.let { rule ->
         AppAlertDialog(
             onDismissRequest = { pendingDeleteRule.value = null },
-            title = stringResource(Res.string.draw),
-            message = stringResource(Res.string.sure_del) + "\n" + rule.name,
-            okButton = AlertButton(stringResource(Res.string.ok)) {
+            title = stringResource(Res.string.delete_rule),
+            message = rule.name,
+            okButton = AlertButton(stringResource(Res.string.delete)) {
                 actions.onDel(rule)
             },
             cancelButton = AlertButton(stringResource(Res.string.cancel)) {},

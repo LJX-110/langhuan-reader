@@ -18,6 +18,8 @@ import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.cancel
+import com.langhuan.reader.ui.generated.resources.delete
+import com.langhuan.reader.ui.generated.resources.delete_book
 import com.langhuan.reader.ui.generated.resources.delete_book_file
 import com.langhuan.reader.ui.generated.resources.draw
 import com.langhuan.reader.ui.generated.resources.ok
@@ -44,9 +46,8 @@ fun DeleteConfirmDialog(
     val deleteFile = remember { mutableStateOf(initialDeleteOriginal) }
     AppAlertDialog(
         onDismissRequest = onDismiss,
-        title = stringResource(Res.string.draw),
-        message = stringResource(Res.string.sure_del),
-        okButton = AlertButton(stringResource(Res.string.ok)) {
+        title = stringResource(Res.string.delete_book),
+        okButton = AlertButton(stringResource(Res.string.delete)) {
             onConfirm(deleteFile.value)
         },
         cancelButton = AlertButton(stringResource(Res.string.cancel)) { onDismiss() },

@@ -62,11 +62,14 @@ import com.langhuan.reader.ui.dialog.TextInputDialog
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.add_book_url
 import com.langhuan.reader.ui.generated.resources.cancel
+import com.langhuan.reader.ui.generated.resources.delete
+import com.langhuan.reader.ui.generated.resources.delete_source
 import com.langhuan.reader.ui.generated.resources.draw
 import com.langhuan.reader.ui.generated.resources.error
 import com.langhuan.reader.ui.generated.resources.import_bookshelf
 import com.langhuan.reader.ui.generated.resources.my
 import com.langhuan.reader.ui.generated.resources.ok
+import com.langhuan.reader.ui.generated.resources.remove_favorite
 import com.langhuan.reader.ui.generated.resources.select_file
 import com.langhuan.reader.ui.generated.resources.source_not_found
 import com.langhuan.reader.ui.generated.resources.sure_del
@@ -564,6 +567,9 @@ private fun ExploreTabContent(
             pinned = screenState.pinned,
             groups = screenState.groups,
             searchKey = screenState.searchKey,
+            selectedGroup = screenState.selectedGroup,
+            sourcesLoaded = screenState.sourcesLoaded,
+            sourcesError = screenState.sourcesError,
             expandedUrl = screenState.expandedUrl,
             expandedSource = screenState.expandedSource,
             expandedKinds = screenState.expandedKinds,
@@ -583,8 +589,12 @@ private fun ExploreTabContent(
                 screenModel.dispatch(ExploreUiEvent.SetSearch(query))
             }
 
-            override fun onGroup(group: String) {
+            override fun onGroup(group: String?) {
                 screenModel.dispatch(ExploreUiEvent.SetGroup(group))
+            }
+
+            override fun onRetrySources() {
+                screenModel.dispatch(ExploreUiEvent.RetrySources)
             }
 
             override fun onToggleExpand(item: BookSourcePart) {
@@ -677,26 +687,26 @@ private fun ExploreTabContent(
         }
     }
 
-    // 删除书源确认 (对照 ExploreTabState.deleteSource 的 alert)
+    // 删除书源确认
     pendingDeleteSource?.let { src ->
         AppAlertDialog(
             onDismissRequest = { pendingDeleteSource = null },
-            title = stringResource(Res.string.draw),
-            message = stringResource(Res.string.sure_del) + "\n" + src.bookSourceName,
-            okButton = AlertButton(stringResource(Res.string.ok)) {
+            title = stringResource(Res.string.delete_source),
+            message = src.bookSourceName,
+            okButton = AlertButton(stringResource(Res.string.delete)) {
                 screenModel.dispatch(ExploreUiEvent.DeleteSource(src))
             },
             cancelButton = AlertButton(stringResource(Res.string.cancel)),
         )
     }
 
-    // 移除收藏确认 (对照 ExploreTabState.removePinned 的 alert)
+    // 移除收藏确认
     pendingRemovePin?.let { pin ->
         AppAlertDialog(
             onDismissRequest = { pendingRemovePin = null },
-            title = stringResource(Res.string.draw),
-            message = stringResource(Res.string.sure_del) + "\n${pin.sourceName}-${pin.categoryName}",
-            okButton = AlertButton(stringResource(Res.string.ok)) {
+            title = stringResource(Res.string.remove_favorite),
+            message = "${pin.sourceName}-${pin.categoryName}",
+            okButton = AlertButton(stringResource(Res.string.delete)) {
                 screenModel.dispatch(ExploreUiEvent.RemovePinned(pin))
             },
             cancelButton = AlertButton(stringResource(Res.string.cancel)),

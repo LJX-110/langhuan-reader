@@ -64,6 +64,7 @@ import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.cancel
 import com.langhuan.reader.ui.generated.resources.create
 import com.langhuan.reader.ui.generated.resources.delete
+import com.langhuan.reader.ui.generated.resources.delete_rule
 import com.langhuan.reader.ui.generated.resources.draw
 import com.langhuan.reader.ui.generated.resources.edit
 import com.langhuan.reader.ui.generated.resources.ic_add
@@ -345,13 +346,13 @@ private fun TxtTocRuleDialogContent(
         }
     }
 
-    // 单条删除确认 (对照原版 ivDelete → alert(draw/sure_del))
+    // 单条删除确认
     pendingDelete?.let { rule ->
         AppAlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = stringResource(Res.string.draw),
-            message = stringResource(Res.string.sure_del) + "\n" + rule.name,
-            okButton = AlertButton(stringResource(Res.string.ok)) {
+            title = stringResource(Res.string.delete_rule),
+            message = rule.name,
+            okButton = AlertButton(stringResource(Res.string.delete)) {
                 scope.launch(IoDispatcher) {
                     AppDbProviders.get().txtTocRuleDao.delete(rule)
                 }

@@ -1,8 +1,10 @@
 package com.langhuan.reader.ui.compose.component
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -13,9 +15,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -29,6 +33,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Checkbox
 import androidx.compose.material.CheckboxDefaults
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.LocalTextStyle
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Text
@@ -112,35 +117,57 @@ fun AppSolidButton(
     modifier: Modifier = Modifier,
     bg: Color = AppTheme.colors.accentFill,
     enabled: Boolean = true,
+    loading: Boolean = false,
     onClick: () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val effectiveBg = when {
-        !enabled -> bg.copy(alpha = 0.38f)
+    val colors = AppTheme.colors
+    val eInk = LocalEInk.current
+    val targetBg = when {
+        !enabled -> bg.copy(alpha = 0.12f)
         pressed -> Color(ColorUtils.darkenColor(bg.toArgb()))
         else -> bg
     }
-    val textColor = langhuanOnColor(bg)
+    // 按下/松开走 90ms 颜色过渡; eInk 直接跳变, 不做渐变残影
+    val effectiveBg by animateColorAsState(
+        targetValue = targetBg,
+        animationSpec = if (eInk) snap() else tween(90),
+        label = "solidButtonBg",
+    )
+    // 禁用态不用 38% 黑字压在低透明底色上（对比只有约 2.5:1），改用可读的摘要色。
+    val textColor = if (enabled) langhuanOnColor(bg) else colors.summaryText
     Box(
         modifier
             .height(DesignTokens.viewHeightXl)
             .clip(DesignTokens.shapeDefault)
             .background(effectiveBg)
+            .semantics { role = Role.Button }
             .clickable(
-                enabled = enabled,
+                enabled = enabled && !loading,
                 interactionSource = interaction,
                 indication = null,
                 onClick = onClick,
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = text,
-            color = if (enabled) textColor else AppTheme.colors.textDisabled,
-            fontSize = 14.sp,
-            maxLines = 1,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (loading) {
+                CircularProgressIndicator(
+                    color = textColor,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(DesignTokens.spacingDefault))
+            }
+            Text(
+                text = text,
+                color = textColor,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -169,26 +196,36 @@ fun AppFilletTextButton(
     alpha: Float = 1f,
     bold: Boolean = false,
     focusable: Boolean = true,
+    enabled: Boolean = true,
     onLongClick: (() -> Unit)? = null,
     onClick: (() -> Unit)? = null,
 ) {
     // 复用 btn_bg 色板键 (light @color/btn_bg #100e0e0e / night #14e0e0e0), 不再本地硬编码
     val normalBg = rememberColor("btn_bg")
+    val clickable = enabled && (onClick != null || onLongClick != null)
     Box(
         modifier
-            .alpha(alpha)
-            .padding(DesignTokens.spacingXs)
-            .clip(DesignTokens.shapeDefault)
-            .background(normalBg)
+            .alpha(if (enabled) alpha else alpha * 0.38f)
+            // 只给可点胶囊扩命中区；纯展示的分组名保持原尺寸。
+            .then(
+                if (clickable) {
+                    Modifier.defaultMinSize(
+                        minWidth = DesignTokens.viewHeightXl,
+                        minHeight = DesignTokens.viewHeightXl,
+                    )
+                } else {
+                    Modifier
+                }
+            )
             .then(if (focusable) Modifier else Modifier.focusProperties { canFocus = false })
             .then(
                 when {
-                    onClick != null -> Modifier.combinedClickable(
+                    onClick != null && enabled -> Modifier.combinedClickable(
                         onClick = onClick,
                         onLongClick = onLongClick,
                     )
 
-                    onLongClick != null -> {
+                    onLongClick != null && enabled -> {
                         val longClick = onLongClick
                         Modifier.pointerInput(longClick) {
                             detectTapGestures(onLongPress = { longClick() })
@@ -197,22 +234,29 @@ fun AppFilletTextButton(
 
                     else -> Modifier
                 }
-            )
-            .padding(
-                horizontal = filletChipPaddingH - DesignTokens.spacingXs,
-                vertical = filletChipPaddingV - DesignTokens.spacingXs,
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text,
-            color = AppTheme.colors.secondaryText,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            fontWeight = if (bold) FontWeight.Bold else null,
-            // 不继承 LocalTextStyle：M3 bodyLarge 的 24sp lineHeight 会把小 chip 撑高
-            style = TextStyle(fontSize = 14.sp),
-        )
+        Box(
+            Modifier
+                .clip(DesignTokens.shapeDefault)
+                .background(normalBg)
+                .padding(
+                    horizontal = filletChipPaddingH,
+                    vertical = filletChipPaddingV,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text,
+                color = AppTheme.colors.secondaryText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = if (bold) FontWeight.Bold else null,
+                // 不继承 LocalTextStyle：M3 bodyLarge 的 24sp lineHeight 会把小 chip 撑高
+                style = TextStyle(fontSize = 14.sp),
+            )
+        }
     }
 }
 
@@ -240,15 +284,17 @@ fun AppTextButton(
     // 禁用时只换字色, 背景全程透明
     Box(
         modifier = modifier
+            .defaultMinSize(
+                minWidth = DesignTokens.buttonMinWidth,
+                minHeight = DesignTokens.viewHeightXl,
+            )
             .clip(DesignTokens.buttonShape)
             .semantics { role = Role.Button }
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Row(
-            Modifier
-                .defaultMinSize(minWidth = DesignTokens.buttonMinWidth, minHeight = 0.dp)
-                .padding(horizontal = DesignTokens.spacingDefault, vertical = DesignTokens.spacingDefault),
+            Modifier.padding(horizontal = DesignTokens.spacingDefault, vertical = DesignTokens.spacingDefault),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {

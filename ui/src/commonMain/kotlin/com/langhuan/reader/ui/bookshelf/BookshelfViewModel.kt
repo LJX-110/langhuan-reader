@@ -110,6 +110,9 @@ class BookshelfViewModel {
     private val _bookGroups = MutableStateFlow<List<BookGroup>>(emptyList())
     val bookGroups: StateFlow<List<BookGroup>> = _bookGroups.asStateFlow()
 
+    /** 分组流是否已产出首帧: 书架页据此区分首载与真实空态 */
+    private val _groupsLoaded = MutableStateFlow(false)
+
     private val _currentGroupId = MutableStateFlow(BookGroup.IdAll)
     val currentGroupId: StateFlow<Long> = _currentGroupId.asStateFlow()
 
@@ -157,6 +160,8 @@ class BookshelfViewModel {
             booksByGroup = cache.mapValues { (_, list) -> list.map { it.toBookItemUi() } },
             refreshingBookUrls = refreshing,
         )
+    }.combine(_groupsLoaded) { state, loaded ->
+        state.copy(loaded = loaded)
     }.combine(isRefreshing) { state, refreshing ->
         state.copy(isRefreshing = refreshing)
     }.combine(progressText) { state, text ->
@@ -275,8 +280,11 @@ class BookshelfViewModel {
             // 内容相同的发射会让顶层整树重组 (顶栏 + 各分组页参数比较)
             bookGroupDao.flowShow().distinctUntilChanged().conflate().catch {
                 AppLog.put("书架分组数据加载出错", it)
+                // 异常也要结束首载态, 否则界面永远停在"加载中"
+                _groupsLoaded.value = true
             }.collect { groups ->
                 _bookGroups.value = groups
+                _groupsLoaded.value = true
                 // 首次拿到分组列表后, 若仍是默认 IdAll 且分组非空, 自动切到首个分组
                 if (_currentGroupId.value == BookGroup.IdAll && groups.isNotEmpty()) {
                     selectGroup(groups.first().groupId)

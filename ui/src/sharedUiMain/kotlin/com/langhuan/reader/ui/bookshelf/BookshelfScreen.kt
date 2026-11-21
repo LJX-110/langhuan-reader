@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.Text
@@ -59,6 +58,7 @@ import com.langhuan.reader.ui.compose.component.AppScrollTabRow
 import com.langhuan.reader.ui.compose.component.LanghuanPageHeader
 import com.langhuan.reader.ui.compose.component.LanghuanSearchEntry
 import com.langhuan.reader.ui.compose.component.pagerPageFocus
+import com.langhuan.reader.ui.compose.platform.platformStatusBarPadding
 import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
 import com.langhuan.reader.ui.root.OnRouteLifecycle
 import com.langhuan.reader.ui.compose.theme.AppTheme
@@ -244,7 +244,11 @@ fun BookshelfScreen(
         groups.getOrNull(pagerState.currentPage)?.let { shelfStates[it.groupId]?.gotoTop() }
     }
 
-    Column(modifier.fillMaxSize().statusBarsPadding()) {
+    Column(
+        modifier
+            .fillMaxSize()
+            .then(if (eInk) Modifier else Modifier.platformStatusBarPadding()),
+    ) {
         LanghuanPageHeader(title = stringResource(Res.string.bookshelf)) {
             actions()
         }
@@ -277,8 +281,8 @@ fun BookshelfScreen(
                     AppDbProviders.get().bookGroupDao.enableGroup(BookGroup.IdAll)
                 }
             }
-            // 无分组时显示空态 (懒加载自愈后会有"全部"分组, 这里只是过渡帧)
-            BookshelfEmptyState()
+            // 分组流首帧未到时不显示"空空如也": 先给加载态, 自愈启用"全部"分组后再落空态
+            if (state.loaded) BookshelfEmptyState() else BookshelfLoadingState()
         } else {
             HorizontalPager(
                 state = pagerState,
@@ -387,6 +391,18 @@ private fun BookshelfEmptyState() {
     }
 }
 
+/** 分组流首帧未到时的加载态, 避免闪一下"书架空空如也"。 */
+@Composable
+private fun BookshelfLoadingState() {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(
+            text = stringResource(Res.string.loading),
+            color = AppTheme.colors.summaryText,
+            fontSize = 14.sp,
+        )
+    }
+}
+
 /**
  * 顶栏: 分组 tab (左) + 操作区 (右)。
  *
@@ -394,7 +410,7 @@ private fun BookshelfEmptyState() {
  * 横向滚动 tab, 选中色 accent, 指示条 2dp 贴底; 选中同 tab 再点不触发滚顶
  * (app 端 onTabReselect 调 gotoTop, 此处简化)。
  *
- * @param showGroupCount 是否在 tab 标题后显示 "(n)" 数量 (数量取自 [GroupUi.bookCount], null 显示 "..")
+ * @param showGroupCount 是否在 tab 标题后显示 "(n)" 数量 (数量取自 [GroupUi.bookCount]; 未加载时不显示, 不占位)
  */
 @Composable
 internal fun BookshelfTopBar(
@@ -422,8 +438,9 @@ internal fun BookshelfTopBar(
                 modifier = Modifier.weight(1f).padding(start = DesignTokens.spacingLg),
             ) { index ->
                 val group = groups[index]
-                val title = if (showGroupCount) {
-                    "${group.groupName}(${group.bookCount ?: ".."})"
+                val count = group.bookCount
+                val title = if (showGroupCount && count != null) {
+                    "${group.groupName}($count)"
                 } else {
                     group.groupName
                 }

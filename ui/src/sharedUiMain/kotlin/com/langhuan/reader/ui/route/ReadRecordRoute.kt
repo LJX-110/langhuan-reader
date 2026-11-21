@@ -36,10 +36,10 @@ import com.langhuan.reader.utils.yearMonthDayFromMillis
 import kotlinx.coroutines.launch
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.cancel
+import com.langhuan.reader.ui.generated.resources.clear
 import com.langhuan.reader.ui.generated.resources.delete
-import com.langhuan.reader.ui.generated.resources.ok
-import com.langhuan.reader.ui.generated.resources.sure_del
-import com.langhuan.reader.ui.generated.resources.sure_del_any
+import com.langhuan.reader.ui.generated.resources.delete_read_record
+import com.langhuan.reader.ui.generated.resources.clear_read_record
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -224,21 +224,20 @@ fun ReadRecordRoute(
     if (pendingClearAll.value) {
         AppAlertDialog(
             onDismissRequest = { pendingClearAll.value = false },
-            title = stringResource(Res.string.delete),
-            message = stringResource(Res.string.sure_del),
-            okButton = AlertButton(stringResource(Res.string.ok)) {
+            title = stringResource(Res.string.clear_read_record),
+            okButton = AlertButton(stringResource(Res.string.clear)) {
                 screenModel.dispatch(ReadRecordUiEvent.ClearAll)
             },
             cancelButton = AlertButton(stringResource(Res.string.cancel)) {},
         )
     }
-    // 单条删除确认弹窗
+    // 单条删除确认弹窗: 正文只放书名, 不再垫一句"确定删除吗"
     pendingDeleteItem.value?.let { item ->
         AppAlertDialog(
             onDismissRequest = { pendingDeleteItem.value = null },
-            title = stringResource(Res.string.delete),
-            message = stringResource(Res.string.sure_del_any, item.bookName),
-            okButton = AlertButton(stringResource(Res.string.ok)) {
+            title = stringResource(Res.string.delete_read_record),
+            message = item.bookName,
+            okButton = AlertButton(stringResource(Res.string.delete)) {
                 screenModel.dispatch(ReadRecordUiEvent.DeleteByName(item.bookName))
             },
             cancelButton = AlertButton(stringResource(Res.string.cancel)) {},
@@ -246,11 +245,14 @@ fun ReadRecordRoute(
     }
     // 热力图长按按日删除确认弹窗 (对照 app 端 sureDelAlert + deleteByDay)
     pendingDeleteDay.value?.let { dayKey ->
+        val dayText = dayKey.toString().let { raw ->
+            if (raw.length == 8) "${raw.substring(0, 4)}-${raw.substring(4, 6)}-${raw.substring(6)}" else raw
+        }
         AppAlertDialog(
             onDismissRequest = { pendingDeleteDay.value = null },
-            title = stringResource(Res.string.delete),
-            message = stringResource(Res.string.sure_del),
-            okButton = AlertButton(stringResource(Res.string.ok)) {
+            title = stringResource(Res.string.delete_read_record),
+            message = dayText,
+            okButton = AlertButton(stringResource(Res.string.delete)) {
                 screenModel.dispatch(ReadRecordUiEvent.DeleteDay(dayKey))
             },
             cancelButton = AlertButton(stringResource(Res.string.cancel)) {},

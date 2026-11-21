@@ -28,7 +28,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -174,13 +173,12 @@ fun AppSearchField(
     onSearch: (() -> Unit)? = null,
 ) {
     val colors = AppTheme.colors
-    // transparent10: light #10000000 / dark #10ffffff
-    val fillStroke = if (colors.isDark) Color(0x10ffffff) else Color(0x10000000)
+    val fillStroke = colors.controlFill
     Row(
         modifier
             .fillMaxWidth()
             .padding(end = DesignTokens.spacingDefault)
-            .height(DesignTokens.viewHeightDefault)
+            .height(DesignTokens.viewHeightXl)
             .clip(DesignTokens.shapeDefault)
             .border(DesignTokens.strokeHairline, fillStroke, DesignTokens.shapeDefault)
             .background(fillStroke)
@@ -223,12 +221,13 @@ fun AppSearchField(
             )
         }
         if (value.isNotEmpty()) {
-            IconButton(onClick = { onValueChange("") }, modifier = Modifier.size(24.dp)) {
+            // 48dp 命中区，图标保持 18dp：视觉不变，手指有地方落。
+            IconButton(onClick = { onValueChange("") }, modifier = Modifier.size(DesignTokens.viewHeightXl)) {
                 Icon(
                     painter = painterResource(Res.drawable.ic_baseline_close),
                     contentDescription = stringResource(Res.string.clear),
                     tint = colors.secondaryText,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(18.dp),
                 )
             }
         }

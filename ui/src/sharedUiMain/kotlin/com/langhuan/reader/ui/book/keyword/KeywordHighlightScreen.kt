@@ -49,6 +49,7 @@ import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.add
 import com.langhuan.reader.ui.generated.resources.cancel
 import com.langhuan.reader.ui.generated.resources.delete
+import com.langhuan.reader.ui.generated.resources.delete_keyword
 import com.langhuan.reader.ui.generated.resources.edit
 import com.langhuan.reader.ui.generated.resources.ic_add
 import com.langhuan.reader.ui.generated.resources.ic_edit
@@ -118,9 +119,9 @@ fun KeywordHighlightScreen(
     pendingDeleteRule?.let { rule ->
         AppAlertDialog(
             onDismissRequest = { pendingDeleteRule = null },
-            title = stringResource(Res.string.delete),
-            message = stringResource(Res.string.sure_del) + "\n" + rule.word,
-            okButton = AlertButton(stringResource(Res.string.ok)) {
+            title = stringResource(Res.string.delete_keyword),
+            message = rule.word,
+            okButton = AlertButton(stringResource(Res.string.delete)) {
                 actions.onDeleteRule(rule)
             },
             cancelButton = AlertButton(stringResource(Res.string.cancel)) {},

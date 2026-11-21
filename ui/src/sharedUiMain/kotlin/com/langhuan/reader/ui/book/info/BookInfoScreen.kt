@@ -276,7 +276,7 @@ val LocalBookInfoActions = compositionLocalOf<BookInfoUiActions> {
 
 /**
  * 书籍详情页(对照 activity_book_info.xml / layout-land 变体)：
- * 竖屏=白底编辑式档案头 + 编号分节，横屏=左封面/右内容的左右分栏。
+ * 竖屏=白底编辑式档案头 + 标题分节，横屏=左封面/右内容的左右分栏。
  *
  * 下沉自 app 端原 `BookInfoScreen(activity: BookInfoActivity)`，将 `BookInfoActivity`
  * 直接依赖拆为 [state] (展示状态) + [actions] (交互回调) + 三个 slot (Android 专属
@@ -392,7 +392,6 @@ private fun PortraitLayout(
                 Spacer(Modifier.height(platformStatusBarHeight() + DesignTokens.viewHeightMax))
                 EditorialHero(state, coverSlot)
                 SectionHeader(
-                    index = "01",
                     label = stringResource(Res.string.book_intro),
                     modifier = Modifier.padding(horizontal = DesignTokens.spacingLg),
                 )
@@ -406,7 +405,6 @@ private fun PortraitLayout(
                 )
                 if (hasKinds) {
                     SectionHeader(
-                        index = "02",
                         label = stringResource(Res.string.book_tags),
                         modifier = Modifier.padding(horizontal = DesignTokens.spacingLg),
                     )
@@ -416,7 +414,6 @@ private fun PortraitLayout(
                     )
                 }
                 SectionHeader(
-                    index = if (hasKinds) "03" else "02",
                     label = stringResource(Res.string.book_info),
                     modifier = Modifier.padding(horizontal = DesignTokens.spacingLg),
                 )
@@ -497,13 +494,13 @@ private fun LandscapeLayout(
                         .padding(horizontal = DesignTokens.spacingLg),
                 ) {
                     Spacer(Modifier.height(platformStatusBarHeight()))
-                    SectionHeader("01", stringResource(Res.string.book_intro))
+                    SectionHeader(stringResource(Res.string.book_intro))
                     IntroSection(state, actions, introImageSlot, Modifier.padding(bottom = DesignTokens.spacingDefault))
                     if (hasKinds) {
-                        SectionHeader("02", stringResource(Res.string.book_tags))
+                        SectionHeader(stringResource(Res.string.book_tags))
                         KindsSection(state, actions)
                     }
-                    SectionHeader(if (hasKinds) "03" else "02", stringResource(Res.string.book_info))
+                    SectionHeader(stringResource(Res.string.book_info))
                     InfoTable(state, actions)
                     Spacer(Modifier.height(88.dp))
                     Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
@@ -532,13 +529,12 @@ private fun HairlineDivider(modifier: Modifier = Modifier) {
 }
 
 /**
- * 编辑式分节头: 上方一道细线, 下方是编号 + 衬线标题。
+ * 编辑式分节头: 上方一道细线, 下方只留衬线标题。
  *
- * 编号用 summaryText 小字, 标题才承担视觉重量; 不加背景块, 层级靠留白与线。
+ * 不加编号、不加背景块, 层级靠留白、字重与细线。
  */
 @Composable
 private fun SectionHeader(
-    index: String,
     label: String,
     modifier: Modifier = Modifier,
 ) {
@@ -553,27 +549,12 @@ private fun SectionHeader(
                 .height(DesignTokens.strokeHairline)
                 .background(AppTheme.colors.line)
         )
-        Row(
-            Modifier.padding(top = DesignTokens.spacingMd, bottom = DesignTokens.spacingXs),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = index,
-                color = AppTheme.colors.summaryText,
-                style = LanghuanType.label,
-            )
-            Text(
-                text = "/",
-                color = AppTheme.colors.summaryText,
-                style = LanghuanType.label,
-                modifier = Modifier.padding(horizontal = 6.dp),
-            )
-            Text(
-                text = label,
-                style = LanghuanType.sectionTitle,
-                color = AppTheme.colors.primaryText,
-            )
-        }
+        Text(
+            text = label,
+            style = LanghuanType.sectionTitle,
+            color = AppTheme.colors.primaryText,
+            modifier = Modifier.padding(top = DesignTokens.spacingMd, bottom = DesignTokens.spacingXs),
+        )
     }
 }
 
@@ -752,7 +733,7 @@ private fun CheckMenuItem(text: String, checked: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** 没有分类时不画「02 / 标签」空节。 */
+/** 没有分类时不画「标签」空节。 */
 private fun BookInfoUiState.hasKinds(): Boolean = !book?.kind.isNullOrBlank()
 
 // ---- 头部(封面 + 书名 + 作者/字数/最新章) ----

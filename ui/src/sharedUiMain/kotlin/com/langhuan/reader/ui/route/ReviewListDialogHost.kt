@@ -33,7 +33,9 @@ import com.langhuan.reader.utils.KS_JSON
 import kotlinx.serialization.Serializable
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.confirm_delete_review
+import com.langhuan.reader.ui.generated.resources.cancel
 import com.langhuan.reader.ui.generated.resources.delete
+import com.langhuan.reader.ui.generated.resources.delete_review
 import com.langhuan.reader.ui.generated.resources.no
 import com.langhuan.reader.ui.generated.resources.reply_review
 import com.langhuan.reader.ui.generated.resources.review_post_hint
@@ -244,12 +246,11 @@ fun ReviewListContent(
     pendingDelete.value?.let { review ->
         AppAlertDialog(
             onDismissRequest = { pendingDelete.value = null },
-            title = stringResource(Res.string.delete),
-            message = stringResource(Res.string.confirm_delete_review),
-            okButton = AlertButton(stringResource(Res.string.yes)) {
+            title = stringResource(Res.string.delete_review),
+            okButton = AlertButton(stringResource(Res.string.delete)) {
                 viewModel.delete(review) { }
             },
-            cancelButton = AlertButton(stringResource(Res.string.no)) {},
+            cancelButton = AlertButton(stringResource(Res.string.cancel)) {},
         )
     }
 }

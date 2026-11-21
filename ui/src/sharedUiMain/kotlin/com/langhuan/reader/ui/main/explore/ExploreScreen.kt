@@ -13,18 +13,22 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -41,12 +45,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -75,7 +82,11 @@ import com.langhuan.reader.uimodel.KindItemUi
 import com.langhuan.reader.uimodel.PinnedItemUi
 import com.langhuan.reader.uimodel.SourceItemUi
 import kotlinx.coroutines.delay
+import kotlin.coroutines.coroutineContext
 import com.langhuan.reader.ui.generated.resources.Res
+import com.langhuan.reader.ui.generated.resources.all_source
+import com.langhuan.reader.ui.generated.resources.clear_filter
+import com.langhuan.reader.ui.generated.resources.current_group
 import com.langhuan.reader.ui.generated.resources.delete
 import com.langhuan.reader.ui.generated.resources.discovery
 import com.langhuan.reader.ui.generated.resources.edit
@@ -86,9 +97,16 @@ import com.langhuan.reader.ui.generated.resources.ic_arrow_back
 import com.langhuan.reader.ui.generated.resources.ic_arrow_right
 import com.langhuan.reader.ui.generated.resources.ic_groups
 import com.langhuan.reader.ui.generated.resources.login
+import com.langhuan.reader.ui.generated.resources.no_matching_source
 import com.langhuan.reader.ui.generated.resources.refresh
+import com.langhuan.reader.ui.generated.resources.retry
 import com.langhuan.reader.ui.generated.resources.search
 import com.langhuan.reader.ui.generated.resources.search_book_source
+import com.langhuan.reader.ui.generated.resources.search_result
+import com.langhuan.reader.ui.generated.resources.source_group_empty
+import com.langhuan.reader.ui.generated.resources.source_load_failed
+import com.langhuan.reader.ui.generated.resources.state_collapsed
+import com.langhuan.reader.ui.generated.resources.state_expanded
 import com.langhuan.reader.ui.generated.resources.to_top
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
@@ -122,19 +140,18 @@ import org.jetbrains.compose.resources.stringResource
  *   - runScriptWithContext (kind button JS 执行)
  *     → actions.onRunKindJs 回调, app 端实现
  *
- * Color 复用: transparent10 顶栏分组背景 (light #10000000 / dark #10ffffff)
- *   → 内联 isDark 计算, 复刻 R.color.transparent10 (与 AppSearchField.fillStroke 同源)
+ * Color 复用: AppColors.controlFill (原 R.color.transparent10, 与 AppSearchField 同源)
  */
 
 /** 展开/收起动画时长, 对照原 ExploreAdapter.EXPAND_DURATION_MS (Material standard) */
 private const val EXPAND_DURATION_MS = 220
 
-/** 分类网格单行最小高度 (GridPackLayout rowUnitMinHeight; 原 tv.minimumHeight = viewHeight.large) */
-private val KIND_ROW_MIN_HEIGHT = DesignTokens.viewHeightLarge
+/** 分类网格单行最小高度: 与 48dp 命中区一致, 展开高度预计算也随之精确。 */
+private val KIND_ROW_MIN_HEIGHT = DesignTokens.viewHeightXl
 
 /**
  * 展开动画结束后的单次复查缓冲: 覆盖展开动画晚一帧开始 (animateIn 翻转) + 帧渲染余量。
- * 注: 假设系统动画时长缩放 = 1; 被放大时复查按"当前实测"兜底, 属尽力而为 (预滚本身不受影响)。
+ * 实际等待 = 动画时长 × 系统缩放 + 本缓冲; 缩放为 0 时只等一帧。
  */
 private const val EXPAND_RECHECK_BUFFER_MS = 64L
 
@@ -145,8 +162,9 @@ private const val EXPAND_RECHECK_BUFFER_MS = 64L
  * 打包为本 data class 传入; 桌面/iOS 端可同样构造本类复用 [ExploreScreen]。
  *
  * 字段语义对照 app 端原 `ExploreTabState`:
- * - [sources] / [pinned] / [groups] / [searchKey] / [expandedUrl]:
- *   与原同名字段一一对应 (搜索/展开驱动)
+ * - [sources] / [pinned] / [groups] / [searchKey] / [selectedGroup] / [expandedUrl]:
+ *   与原同名字段一一对应 (搜索/分组/展开驱动); 关键词与分组互斥, 由 ScreenModel 维护
+ * - [sourcesLoaded] / [sourcesError]: 首载 / 异常结束判定, 页面据此出骨架、空态或重试
  * - [expandedSource] / [expandedKinds]: 当前展开行 ([expandedUrl]) 本次现取的数据;
  *   不做跨展开历史的 Map 缓存 —— 每次展开由 ExploreScreenModel.loadKinds 现查现算
  *   (对照原版 handleExpand 每次 bind 现查, 底层 exploreKinds() 自带 md5 两级缓存);
@@ -162,6 +180,9 @@ data class ExploreUiState(
     val pinned: List<PinnedExplore>,
     val groups: List<String>,
     val searchKey: String,
+    val selectedGroup: String?,
+    val sourcesLoaded: Boolean,
+    val sourcesError: Boolean,
     val expandedUrl: String?,
     val expandedSource: BookSource?,
     val expandedKinds: List<ExploreKind>,
@@ -180,11 +201,14 @@ data class ExploreUiState(
  * 由 app 端实现内部桥接到 Activity。
  */
 interface ExploreUiActions {
-    /** 搜索过滤: 空=全部发现、group: 前缀=按分组、其余=关键词 */
+    /** 搜索过滤: 空=全部发现、非空=关键词 */
     fun onSearch(query: String)
 
-    /** 点击分组菜单项 (宿主自行包 "group:" 前缀) */
-    fun onGroup(group: String)
+    /** 分组筛选: null=全部书源 */
+    fun onGroup(group: String?)
+
+    /** 书源流异常后重试 */
+    fun onRetrySources()
 
     /** 切换某书源展开/收起 (宿主触发 kinds 异步加载并写入 state) */
     fun onToggleExpand(item: BookSourcePart)
@@ -243,7 +267,6 @@ fun ExploreScreen(
      *  主界面 tab 内由 MainBottomBar 兜底, 保持 false */
     bottomInsetPadding: Boolean = false,
 ) {
-    val colors = AppTheme.colors
     val eInk = LocalEInk.current
     // 导航栏底部 padding: 仅独立路由需要 (主 tab 内列表底部落在 MainBottomBar 之上, 加了反而多空)
     val navBarBottom = if (bottomInsetPadding) {
@@ -254,9 +277,10 @@ fun ExploreScreen(
     Column(Modifier.fillMaxSize()) {
         ExploreTitleBar(
             searchKey = state.searchKey,
+            selectedGroup = state.selectedGroup,
             onSearch = actions::onSearch,
             groups = state.groups,
-            onGroup = { actions.onGroup(it) },
+            onGroup = actions::onGroup,
             onBack = onBack,
         )
         Box(Modifier.fillMaxSize()) {
@@ -272,81 +296,118 @@ fun ExploreScreen(
             val kindByKey = remember(state.expandedKinds) {
                 state.expandedKinds.associateBy { it.title to it.url }
             }
-            if (sources.isEmpty() && state.searchKey.isEmpty()) {
-                Text(
-                    text = stringResource(Res.string.explore_empty),
-                    color = colors.secondaryText,
-                    modifier = Modifier.align(Alignment.Center),
-                )
+            val filtering = state.searchKey.isNotBlank() || state.selectedGroup != null
+            val sourceHeaderTitle = when {
+                state.selectedGroup != null -> state.selectedGroup
+                state.searchKey.isNotBlank() -> stringResource(Res.string.search_result)
+                else -> stringResource(Res.string.all_source)
             }
-            LazyColumn(
-                state = state.listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = DesignTokens.spacingMd,
-                    end = DesignTokens.spacingMd,
-                    bottom = navBarBottom
-                ),
-            ) {
-                if (pinnedItems.isNotEmpty()) {
-                    item(key = "__pinned__", contentType = "pinned") {
-                        PinnedSection(
-                            pinned = pinnedItems,
-                            onOpen = { ui ->
-                                pinnedByKey[pinnedKey(ui.sourceUrl, ui.categoryUrl)]
-                                    ?.let { actions.onOpenPinned(it) }
-                            },
-                            onRemove = { ui ->
-                                pinnedByKey[pinnedKey(ui.sourceUrl, ui.categoryUrl)]
-                                    ?.let { actions.onRemovePinned(it) }
-                            },
+            when {
+                state.sourcesError && sources.isEmpty() -> {
+                    ExploreStateMessage(
+                        message = stringResource(Res.string.source_load_failed),
+                        actionLabel = stringResource(Res.string.retry),
+                        onAction = actions::onRetrySources,
+                    )
+                }
+
+                !state.sourcesLoaded && sources.isEmpty() -> ExploreListSkeleton()
+
+                sources.isEmpty() -> {
+                    when {
+                        state.searchKey.isNotBlank() -> ExploreStateMessage(
+                            message = stringResource(Res.string.no_matching_source),
+                            actionLabel = stringResource(Res.string.clear_filter),
+                            onAction = { actions.onSearch("") },
+                        )
+
+                        state.selectedGroup != null -> ExploreStateMessage(
+                            message = stringResource(Res.string.source_group_empty),
+                            actionLabel = stringResource(Res.string.clear_filter),
+                            onAction = { actions.onGroup(null) },
+                        )
+
+                        else -> ExploreStateMessage(
+                            message = stringResource(Res.string.explore_empty),
                         )
                     }
                 }
-                items(
-                    sourceItems,
-                    key = { it.bookSourceUrl },
-                    contentType = { if (state.expandedUrl == it.bookSourceUrl) "expanded" else "collapsed" },
-                ) { item ->
-                    val expanded = state.expandedUrl == item.bookSourceUrl
-                    val kinds = if (expanded && state.expandedSource != null) {
-                        state.expandedKinds.map { it.toKindItemUi() }
-                    } else {
-                        null
+
+                else -> LazyColumn(
+                    state = state.listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = DesignTokens.spacingMd,
+                        end = DesignTokens.spacingMd,
+                        bottom = navBarBottom
+                    ),
+                ) {
+                    // 筛选时收起收藏区: 焦点在结果, 收藏留给"全部书源"时的日常入口
+                    if (pinnedItems.isNotEmpty() && !filtering) {
+                        item(key = "__pinned__", contentType = "pinned") {
+                            PinnedSection(
+                                pinned = pinnedItems,
+                                onOpen = { ui ->
+                                    pinnedByKey[pinnedKey(ui.sourceUrl, ui.categoryUrl)]
+                                        ?.let { actions.onOpenPinned(it) }
+                                },
+                                onRemove = { ui ->
+                                    pinnedByKey[pinnedKey(ui.sourceUrl, ui.categoryUrl)]
+                                        ?.let { actions.onRemovePinned(it) }
+                                },
+                            )
+                        }
                     }
-                    ExploreSourceItem(
-                        item = item,
-                        expanded = expanded,
-                        loading = state.loadingUrl == item.bookSourceUrl,
-                        kinds = kinds,
-                        onToggleExpand = {
-                            sourceByUrl[item.bookSourceUrl]?.let { actions.onToggleExpand(it) }
-                        },
-                        onEdit = { actions.onEditSource(item.bookSourceUrl) },
-                        onToTop = { sourceByUrl[item.bookSourceUrl]?.let { actions.onToTop(it) } },
-                        onLogin = { sourceByUrl[item.bookSourceUrl]?.let { actions.onLogin(it) } },
-                        onSearchBook = {
-                            sourceByUrl[item.bookSourceUrl]?.let { actions.onSearchBook(it) }
-                        },
-                        onRefresh = {
-                            sourceByUrl[item.bookSourceUrl]?.let { actions.onRefreshSource(it) }
-                        },
-                        onDelete = {
-                            sourceByUrl[item.bookSourceUrl]?.let { actions.onDeleteSource(it) }
-                        },
-                        onKindClick = { kind ->
-                            val kindUrl = kind.url
-                            when {
-                                kindUrl.isNullOrBlank() -> {}
-                                kind.isError -> kindByKey[kind.title to kindUrl]
-                                    ?.let { actions.onShowKindError(it) }
-                                kind.isButton -> state.expandedSource
-                                    ?.let { actions.onRunKindJs(it, kindUrl) }
-                                else -> state.expandedSource
-                                    ?.let { actions.onOpenExplore(it, kind.title, kindUrl) }
-                            }
-                        },
-                    )
+                    item(key = "__source_header__", contentType = "header") {
+                        SourceSectionHeader(title = sourceHeaderTitle, count = sources.size)
+                    }
+                    items(
+                        sourceItems,
+                        key = { it.bookSourceUrl },
+                        contentType = { if (state.expandedUrl == it.bookSourceUrl) "expanded" else "collapsed" },
+                    ) { item ->
+                        val expanded = state.expandedUrl == item.bookSourceUrl
+                        val kinds = if (expanded && state.expandedSource != null) {
+                            state.expandedKinds.map { it.toKindItemUi() }
+                        } else {
+                            null
+                        }
+                        ExploreSourceItem(
+                            item = item,
+                            expanded = expanded,
+                            loading = state.loadingUrl == item.bookSourceUrl,
+                            kinds = kinds,
+                            onToggleExpand = {
+                                sourceByUrl[item.bookSourceUrl]?.let { actions.onToggleExpand(it) }
+                            },
+                            onEdit = { actions.onEditSource(item.bookSourceUrl) },
+                            onToTop = { sourceByUrl[item.bookSourceUrl]?.let { actions.onToTop(it) } },
+                            onLogin = { sourceByUrl[item.bookSourceUrl]?.let { actions.onLogin(it) } },
+                            onSearchBook = {
+                                sourceByUrl[item.bookSourceUrl]?.let { actions.onSearchBook(it) }
+                            },
+                            onRefresh = {
+                                sourceByUrl[item.bookSourceUrl]?.let { actions.onRefreshSource(it) }
+                            },
+                            onDelete = {
+                                sourceByUrl[item.bookSourceUrl]?.let { actions.onDeleteSource(it) }
+                            },
+                            onKindClick = { kind ->
+                                val kindUrl = kind.url
+                                when {
+                                    kindUrl.isNullOrBlank() -> {}
+                                    kind.isError -> kindByKey[kind.title to kindUrl]
+                                        ?.let { actions.onShowKindError(it) }
+
+                                    kind.isButton -> state.expandedSource
+                                        ?.let { actions.onRunKindJs(it, kindUrl) }
+
+                                    else -> state.expandedSource
+                                        ?.let { actions.onOpenExplore(it, kind.title, kindUrl) }
+                                }
+                            },
+                        )
+                    }
                 }
             }
             // ===== 展开并行预滚 =====
@@ -385,8 +446,13 @@ fun ExploreScreen(
                         state.listState, url, contentDeltaPx = contentPx - oldContentPx,
                     )
                     // 单次复查兜底 (非轮询): 预计算是下界, 实际渲染更高时 (字体缩放等) 补滚一次;
-                    // 若预滚已滚过, 此项必然为 no-op (标题已贴顶, 实测仍溢出也无需再动)
-                    delay(EXPAND_DURATION_MS + EXPAND_RECHECK_BUFFER_MS)
+                    // 若预滚已滚过, 此项必然为 no-op (标题已贴顶, 实测仍溢出也无需再动)。
+                    // 系统动画缩放为 0 时不再等整段动画, 只留一帧余量。
+                    val scale = coroutineContext[MotionDurationScale]?.scaleFactor ?: 1f
+                    delay(
+                        if (scale <= 0f) 32L
+                        else (EXPAND_DURATION_MS * scale).toLong() + EXPAND_RECHECK_BUFFER_MS
+                    )
                     ensureExpandedItemVisible(state.listState, url)
                 }
             }
@@ -513,6 +579,83 @@ private fun PinnedSection(
     }
 }
 
+/** 「全部书源 / 搜索结果 / 当前分组」节标题 + 数量。 */
+@Composable
+private fun SourceSectionHeader(title: String, count: Int) {
+    val colors = AppTheme.colors
+    Row(
+        Modifier.fillMaxWidth().padding(
+            start = DesignTokens.spacingXs,
+            end = DesignTokens.spacingXs,
+            top = DesignTokens.spacingMd,
+            bottom = DesignTokens.spacingXs,
+        ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        LanghuanSectionTitle(text = title, modifier = Modifier.weight(1f))
+        Text(
+            text = count.toString(),
+            color = colors.summaryText,
+            style = TextStyle(fontSize = 12.sp),
+        )
+    }
+}
+
+/** 空结果 / 加载失败共用的居中提示，可选一个恢复动作。 */
+@Composable
+private fun ExploreStateMessage(
+    message: String,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    val colors = AppTheme.colors
+    Column(
+        Modifier.fillMaxSize().padding(DesignTokens.spacingXl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = message,
+            color = colors.summaryText,
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center,
+        )
+        if (actionLabel != null && onAction != null) {
+            Spacer(Modifier.height(DesignTokens.spacingDefault))
+            AppFilletTextButton(text = actionLabel, onClick = onAction)
+        }
+    }
+}
+
+/** 首载静态骨架: 不闪动、不发光, 与列表同样的 8dp 圆角与间距。 */
+@Composable
+private fun ExploreListSkeleton() {
+    val colors = AppTheme.colors
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = DesignTokens.spacingMd),
+    ) {
+        Spacer(Modifier.height(DesignTokens.spacingLg))
+        Box(
+            Modifier
+                .width(96.dp)
+                .height(18.dp)
+                .clip(DesignTokens.shapeDefault)
+                .background(colors.controlFill),
+        )
+        Spacer(Modifier.height(DesignTokens.spacingMd))
+        repeat(4) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = DesignTokens.spacingDefault)
+                    .height(DesignTokens.viewHeightMax)
+                    .clip(DesignTokens.shapeDefault)
+                    .background(colors.controlFill),
+            )
+        }
+    }
+}
+
 @Composable
 private fun ExploreSourceItem(
     item: SourceItemUi,
@@ -533,6 +676,9 @@ private fun ExploreSourceItem(
     var showMenu by remember { mutableStateOf(false) }
     val url = item.bookSourceUrl
     val current: List<KindItemUi>? = kinds
+    val expandState = stringResource(
+        if (expanded) Res.string.state_expanded else Res.string.state_collapsed,
+    )
     // 退出动画最后一帧: 按 item 局部冻结 (仅供本行动画期间渲染), 不写回 state、
     // 也不参与"是否需要重新加载"的判定 - 数据新鲜度由每次展开现取保证
     var shown by remember(url) { mutableStateOf(current) }
@@ -554,19 +700,21 @@ private fun ExploreSourceItem(
             .listItemFocus()
             .padding(top = DesignTokens.spacingXs),
     ) {
-        // ll_title: bg_find_book_group (transparent10 填充+8dp 圆角) + padding 8dp
+        // ll_title: bg_find_book_group (controlFill 填充+8dp 圆角) + 8dp 横向留白
         // 外层 Box 承载下拉菜单: DropdownMenu 锚点取本 Box 左上角, 复刻原 PopupMenu(view=llTitle) 左侧弹出
         Box {
             Row(
                 Modifier
                     .fillMaxWidth()
+                    .heightIn(min = DesignTokens.viewHeightXl)
                     .clip(DesignTokens.shapeDefault)
-                    .background(transparent10())
+                    .background(colors.controlFill)
+                    .semantics { stateDescription = expandState }
                     .combinedClickable(
                         onClick = { onToggleExpand() },
                         onLongClick = { showMenu = true },
                     )
-                    .padding(DesignTokens.spacingDefault),
+                    .padding(horizontal = DesignTokens.spacingDefault, vertical = DesignTokens.spacingXs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -578,6 +726,19 @@ private fun ExploreSourceItem(
                     style = TextStyle(fontSize = 14.sp),
                     modifier = Modifier.weight(1f),
                 )
+                // 分组名是行内唯一的次级信息: 矮一档、淡一档, 不与源名争
+                item.bookSourceGroup?.takeIf { it.isNotBlank() }?.let { group ->
+                    Text(
+                        text = group,
+                        color = colors.summaryText,
+                        style = TextStyle(fontSize = 11.5.sp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .padding(start = DesignTokens.spacingDefault)
+                            .widthIn(max = 96.dp),
+                    )
+                }
                 if (expanded && loading) {
                     // 原 rotate_loading: 20dp、trackThickness 1dp、marginEnd 4dp
                     CircularProgressIndicator(
@@ -612,8 +773,12 @@ private fun ExploreSourceItem(
             )
         }
         // 分类区外框: 恒定 paddingTop=4dp (对照原 FrameLayout - GridLayout 收起仅 gone,
-        // 外框始终占 4dp)。收起态相邻项间距 = 本项尾 4dp + 下项根 paddingTop 4dp = 8dp
-        Column(Modifier.fillMaxWidth().padding(top = DesignTokens.spacingXs)) {
+        // 外框始终占 4dp)。收起态相邻项间距 = 本项尾 4dp + 下项根 paddingTop 4dp = 8dp;
+        // 展开区左缩进 8dp, 与源标题形成层级
+        Column(
+            Modifier.fillMaxWidth()
+                .padding(start = DesignTokens.spacingDefault, top = DesignTokens.spacingXs),
+        ) {
             val kindContent: @Composable () -> Unit = {
                 val data = current ?: shown
                 if (data != null && data.isNotEmpty()) {
@@ -748,9 +913,10 @@ private fun ExploreItemMenu(
 @Composable
 private fun ExploreTitleBar(
     searchKey: String,
+    selectedGroup: String?,
     onSearch: (String) -> Unit,
     groups: List<String>,
-    onGroup: (String) -> Unit,
+    onGroup: (String?) -> Unit,
     onBack: (() -> Unit)? = null,
 ) {
     val colors = AppTheme.colors
@@ -784,7 +950,25 @@ private fun ExploreTitleBar(
                     hint = stringResource(Res.string.search_book_source),
                     modifier = Modifier.weight(1f),
                 )
-                GroupMenu(groups, onGroup)
+                GroupMenu(groups, selectedGroup, onGroup)
+            }
+            // 分组是筛选状态而不是搜索词: 单独一行胶囊, 点一下即回到全部书源
+            if (selectedGroup != null) {
+                Row(
+                    Modifier.fillMaxWidth()
+                        .padding(start = DesignTokens.spacingMd, end = DesignTokens.spacingMd),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(Res.string.current_group),
+                        color = colors.summaryText,
+                        style = TextStyle(fontSize = 12.sp),
+                    )
+                    AppFilletTextButton(
+                        text = "$selectedGroup  ×",
+                        onClick = { onGroup(null) },
+                    )
+                }
             }
         }
         if (eInk) {
@@ -801,7 +985,11 @@ private fun ExploreTitleBar(
 
 /** 分组菜单 (替 main_explore 的 menu_group 子菜单): ic_groups 图标 + 分组下拉。 */
 @Composable
-private fun GroupMenu(groups: List<String>, onGroup: (String) -> Unit) {
+private fun GroupMenu(
+    groups: List<String>,
+    selectedGroup: String?,
+    onGroup: (String?) -> Unit,
+) {
     val colors = AppTheme.colors
     var expanded by remember { mutableStateOf(false) }
     Box {
@@ -813,18 +1001,26 @@ private fun GroupMenu(groups: List<String>, onGroup: (String) -> Unit) {
             )
         }
         AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                onClick = { expanded = false; onGroup(null) },
+            ) {
+                Text(
+                    text = stringResource(Res.string.all_source),
+                    color = if (selectedGroup == null) colors.accent else colors.primaryText,
+                )
+            }
             groups.forEach { group ->
                 DropdownMenuItem(
                     onClick = { expanded = false; onGroup(group) },
                 ) {
-                    Text(group, color = colors.primaryText)
+                    Text(
+                        text = group,
+                        color = if (group == selectedGroup) colors.accent else colors.primaryText,
+                    )
                 }
             }
         }
     }
 }
 
-/** R.color.transparent10: light #10000000 / dark #10ffffff (与 AppSearchField.fillStroke 同源) */
-@Composable
-private fun transparent10(): Color =
-    if (AppTheme.colors.isDark) Color(0x10ffffff) else Color(0x10000000)
+/** R.color.transparent10 已收进 AppColors.controlFill (light #10000000 / dark #10ffffff)。 */

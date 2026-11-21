@@ -189,6 +189,7 @@ private fun readAppColors(themeStore: ThemeStoreProvider, isEInk: Boolean): AppC
             statusBar = Color.White,
             navigationBar = Color.White,
             fillet = Color.White,
+            controlFill = Color(0x10000000),
             isDark = false,
         )
     }
@@ -215,6 +216,7 @@ private fun readAppColors(themeStore: ThemeStoreProvider, isEInk: Boolean): AppC
         statusBar = palette.background,
         navigationBar = palette.background,
         fillet = palette.surface,
+        controlFill = if (isDark) Color(0x10FFFFFF) else Color(0x10000000),
         isDark = isDark,
         accentFill = palette.accentFill,
         companion = palette.companion,

@@ -64,6 +64,7 @@ import com.langhuan.reader.ui.generated.resources.add
 import com.langhuan.reader.ui.generated.resources.day
 import com.langhuan.reader.ui.generated.resources.default_cover
 import com.langhuan.reader.ui.generated.resources.delete
+import com.langhuan.reader.ui.generated.resources.delete_cover
 import com.langhuan.reader.ui.generated.resources.night
 import com.langhuan.reader.ui.generated.resources.no
 import com.langhuan.reader.ui.generated.resources.sure_del
@@ -167,13 +168,12 @@ fun DefaultCoverGalleryDialogHost(
         }
     }
 
-    // 删除二次确认 (对照 app 端 alert(delete, sure_del) + yesButton/noButton)
+    // 删除二次确认
     pendingDelete?.let { entry ->
         AppAlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = stringResource(Res.string.delete),
-            message = stringResource(Res.string.sure_del),
-            okButton = AlertButton(stringResource(Res.string.yes)) {
+            title = stringResource(Res.string.delete_cover),
+            okButton = AlertButton(stringResource(Res.string.delete)) {
                 scope.launch {
                     removeDefaultCover(prefKey, entry)
                     pendingDelete = null

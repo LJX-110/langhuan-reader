@@ -42,7 +42,7 @@ import com.langhuan.reader.ui.generated.resources.is_latest_version
 import com.langhuan.reader.ui.generated.resources.ok
 import com.langhuan.reader.ui.generated.resources.shrink_database
 import com.langhuan.reader.ui.generated.resources.success
-import com.langhuan.reader.ui.generated.resources.sure
+
 import com.langhuan.reader.ui.generated.resources.system_font
 import com.langhuan.reader.ui.generated.resources.text_font_weight
 import com.langhuan.reader.ui.generated.resources.check_update
@@ -86,7 +86,6 @@ fun MyConfigContent(
 
     val okStr = stringResource(Res.string.ok)
     val cancelStr = stringResource(Res.string.cancel)
-    val sureStr = stringResource(Res.string.sure)
     val successStr = stringResource(Res.string.success)
     val clearCacheSuccessStr = stringResource(Res.string.clear_cache_success)
     val latestVersionStr = stringResource(Res.string.is_latest_version)
@@ -192,7 +191,6 @@ fun MyConfigContent(
         AppAlertDialog(
             onDismissRequest = { showCleanCacheConfirm = false },
             title = stringResource(Res.string.clear_cache),
-            message = sureStr,
             okButton = AlertButton(text = okStr) {
                 showCleanCacheConfirm = false
                 scope.launch {
@@ -208,8 +206,7 @@ fun MyConfigContent(
     if (showShrinkDatabaseConfirm) {
         AppAlertDialog(
             onDismissRequest = { showShrinkDatabaseConfirm = false },
-            title = sureStr,
-            message = stringResource(Res.string.shrink_database),
+            title = stringResource(Res.string.shrink_database),
             okButton = AlertButton(text = okStr) {
                 showShrinkDatabaseConfirm = false
                 scope.launch {

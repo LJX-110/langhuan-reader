@@ -54,6 +54,8 @@ import kotlinx.coroutines.launch
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.book_type_different
 import com.langhuan.reader.ui.generated.resources.cancel
+import com.langhuan.reader.ui.generated.resources.delete
+import com.langhuan.reader.ui.generated.resources.delete_source
 import com.langhuan.reader.ui.generated.resources.change_source_progress
 import com.langhuan.reader.ui.generated.resources.draw
 import com.langhuan.reader.ui.generated.resources.load_toc
@@ -467,11 +469,10 @@ fun ChangeSourceContent(
                 showDeleteConfirmAlert = false
                 pendingDeleteBook = null
             },
-            title = stringResource(Res.string.draw),
-            message = stringResource(Res.string.sure_del) + "\n" + (pendingDeleteBook?.originName
-                ?: ""),
-            cancelButton = AlertButton(stringResource(Res.string.no)) { },
-            okButton = AlertButton(stringResource(Res.string.yes)) {
+            title = stringResource(Res.string.delete_source),
+            message = pendingDeleteBook?.originName ?: "",
+            cancelButton = AlertButton(stringResource(Res.string.cancel)) { },
+            okButton = AlertButton(stringResource(Res.string.delete)) {
                 pendingDeleteBook?.let { deleteSource(it) }
             },
         )

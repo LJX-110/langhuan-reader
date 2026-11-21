@@ -42,6 +42,7 @@ import kotlinx.coroutines.launch
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.cancel
 import com.langhuan.reader.ui.generated.resources.captcha_load_failed_hint
+import com.langhuan.reader.ui.generated.resources.delete
 import com.langhuan.reader.ui.generated.resources.delete_source
 import com.langhuan.reader.ui.generated.resources.disable_source
 import com.langhuan.reader.ui.generated.resources.draw
@@ -211,13 +212,13 @@ fun VerificationCodeDialog(
         )
     }
 
-    // 删除源确认 (对照 app 端溢出菜单 → alert(draw) { sure_del + 源名; noButton; yesButton { deleteSource } })
+    // 删除源确认
     if (showDeleteConfirm) {
         AppAlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = stringResource(Res.string.draw),
-            message = stringResource(Res.string.sure_del) + "\n" + source.getTag(),
-            okButton = AlertButton(stringResource(Res.string.yes)) {
+            title = stringResource(Res.string.delete_source),
+            message = source.getTag(),
+            okButton = AlertButton(stringResource(Res.string.delete)) {
                 showDeleteConfirm = false
                 scope.launch {
                     SourceHelp.deleteSource(source.getKey(), source.getSourceType())

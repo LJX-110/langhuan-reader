@@ -13,6 +13,8 @@ data class ShelfStateUi(
     val books: List<BookItemUi> = emptyList(),
     /** 各分组最近一次快照, 供分组页/样式2 首帧渲染 */
     val booksByGroup: Map<Long, List<BookItemUi>> = emptyMap(),
+    /** 分组列表是否已产出首帧 (区分"加载中"与"确实没有分组") */
+    val loaded: Boolean = false,
     val isRefreshing: Boolean = false,
     val progressText: String? = null,
     val refreshingBookUrls: Set<String> = emptySet(),

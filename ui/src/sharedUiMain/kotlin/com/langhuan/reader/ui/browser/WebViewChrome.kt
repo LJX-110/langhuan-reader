@@ -22,6 +22,7 @@ import com.langhuan.reader.ui.root.PlatformCapabilityProviders
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.cancel
 import com.langhuan.reader.ui.generated.resources.copy_url
+import com.langhuan.reader.ui.generated.resources.delete
 import com.langhuan.reader.ui.generated.resources.delete_source
 import com.langhuan.reader.ui.generated.resources.disable_source
 import com.langhuan.reader.ui.generated.resources.draw
@@ -221,7 +222,7 @@ private fun WebViewOverflowMenuItems(
 }
 
 /**
- * 删除源确认弹窗 (原 menu_delete_source 的 alert: sure_del + 源名)。
+ * 删除源确认弹窗。
  * [onConfirm] 内自行收起本弹窗并执行删除。
  */
 @Composable
@@ -232,9 +233,9 @@ internal fun WebViewDeleteSourceConfirm(
 ) {
     AppAlertDialog(
         onDismissRequest = onDismiss,
-        title = stringResource(Res.string.draw),
-        message = stringResource(Res.string.sure_del) + "\n" + sourceName,
-        okButton = AlertButton(stringResource(Res.string.ok), dismissOnClick = false) {
+        title = stringResource(Res.string.delete_source),
+        message = sourceName,
+        okButton = AlertButton(stringResource(Res.string.delete), dismissOnClick = false) {
             onConfirm()
         },
         cancelButton = AlertButton(stringResource(Res.string.cancel), dismissOnClick = false) {

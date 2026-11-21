@@ -44,6 +44,7 @@ import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.add_replace_rule
 import com.langhuan.reader.ui.generated.resources.cancel
 import com.langhuan.reader.ui.generated.resources.delete
+import com.langhuan.reader.ui.generated.resources.delete_rule
 import com.langhuan.reader.ui.generated.resources.disable_selection
 import com.langhuan.reader.ui.generated.resources.draw
 import com.langhuan.reader.ui.generated.resources.edit
@@ -189,9 +190,8 @@ fun ReplaceRuleListScreen(
     if (showDeleteConfirm) {
         AppAlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = stringResource(Res.string.draw),
-            message = stringResource(Res.string.sure_del),
-            okButton = AlertButton(stringResource(Res.string.ok)) {
+            title = stringResource(Res.string.delete_rule),
+            okButton = AlertButton(stringResource(Res.string.delete)) {
                 viewModel.deleteSelection()
             },
             cancelButton = AlertButton(stringResource(Res.string.cancel)) {},
@@ -201,9 +201,9 @@ fun ReplaceRuleListScreen(
     pendingDeleteRule.value?.let { rule ->
         AppAlertDialog(
             onDismissRequest = { pendingDeleteRule.value = null },
-            title = stringResource(Res.string.draw),
-            message = stringResource(Res.string.sure_del) + "\n" + rule.name,
-            okButton = AlertButton(stringResource(Res.string.ok)) {
+            title = stringResource(Res.string.delete_rule),
+            message = rule.name,
+            okButton = AlertButton(stringResource(Res.string.delete)) {
                 viewModel.delete(rule)
             },
             cancelButton = AlertButton(stringResource(Res.string.cancel)) {},

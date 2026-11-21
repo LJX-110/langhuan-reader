@@ -114,6 +114,7 @@ import com.langhuan.reader.ui.generated.resources.chapter_jump_confirm
 import com.langhuan.reader.ui.generated.resources.chapter_jump_confirm_msg
 import com.langhuan.reader.ui.generated.resources.check_add_bookshelf
 import com.langhuan.reader.ui.generated.resources.cloud_progress_exceeds_current
+import com.langhuan.reader.ui.generated.resources.restore_progress
 import com.langhuan.reader.ui.generated.resources.draw
 import com.langhuan.reader.ui.generated.resources.name
 import com.langhuan.reader.ui.generated.resources.no
@@ -816,7 +817,7 @@ fun ReaderRoute(
                     screenModel.confirmRestoreProcess = false
                     closeDialog()
                 },
-                title = stringResource(Res.string.draw),
+                title = stringResource(Res.string.restore_progress),
                 message = stringResource(Res.string.restore_last_book_process),
                 okButton = AlertButton(stringResource(Res.string.yes)) {
                     screenModel.confirmRestoreProcess = true

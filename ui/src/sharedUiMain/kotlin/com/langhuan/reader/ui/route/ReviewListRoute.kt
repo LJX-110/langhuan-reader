@@ -22,7 +22,9 @@ import com.langhuan.reader.ui.root.ScreenModelStore
 import com.langhuan.reader.ui.root.asBook
 import com.langhuan.reader.ui.generated.resources.Res
 import com.langhuan.reader.ui.generated.resources.confirm_delete_review
+import com.langhuan.reader.ui.generated.resources.cancel
 import com.langhuan.reader.ui.generated.resources.delete
+import com.langhuan.reader.ui.generated.resources.delete_review
 import com.langhuan.reader.ui.generated.resources.no
 import com.langhuan.reader.ui.generated.resources.review_post_hint
 import com.langhuan.reader.ui.generated.resources.review_title_with_count
@@ -172,12 +174,11 @@ fun ReviewListRoute(
     pendingDelete.value?.let { review ->
         AppAlertDialog(
             onDismissRequest = { pendingDelete.value = null },
-            title = stringResource(Res.string.delete),
-            message = stringResource(Res.string.confirm_delete_review),
-            okButton = AlertButton(stringResource(Res.string.yes)) {
+            title = stringResource(Res.string.delete_review),
+            okButton = AlertButton(stringResource(Res.string.delete)) {
                 screenModel.delete(review)
             },
-            cancelButton = AlertButton(stringResource(Res.string.no)) {},
+            cancelButton = AlertButton(stringResource(Res.string.cancel)) {},
         )
     }
 }

@@ -1,19 +1,21 @@
 package com.langhuan.reader.ui.compose.component
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.Divider
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -22,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.langhuan.reader.ui.compose.theme.AppTheme
 import com.langhuan.reader.ui.compose.theme.AppTheme.DesignTokens
+import com.langhuan.reader.ui.compose.theme.LanghuanType
 
 /**
  * alert DSL 的按钮槽：文案 + 点击回调。dismissOnClick=false 时点击不关闭对话框
@@ -99,9 +102,18 @@ fun AppAlertDialogContent(
                 Text(
                     text = it,
                     color = colors.primaryText,
-                    // 对齐原版 Material AlertDialog 标题 (TextAppearance.MaterialComponents.Headline6 = 20sp)
-                    fontSize = 20.sp,
-                    modifier = Modifier.padding(DesignTokens.spacingDefault)
+                    // 标题走衬线, 与页眉/分组标题同源; 比原版 Headline6 略收一档
+                    style = LanghuanType.sectionTitle.copy(
+                        fontSize = 19.sp,
+                        lineHeight = 25.sp,
+                        letterSpacing = 0.2.sp,
+                    ),
+                    modifier = Modifier.padding(
+                        start = DesignTokens.spacingDefault,
+                        end = DesignTokens.spacingDefault,
+                        top = DesignTokens.spacingXs,
+                        bottom = DesignTokens.spacingXs,
+                    ),
                 )
             }
             // weight+scroll: 长消息(如错误堆栈)收进可滚区, 按钮行恒可见——对齐 AlertDialog 消息区 ScrollView+按钮钉底
@@ -109,10 +121,16 @@ fun AppAlertDialogContent(
                 Text(
                     text = it,
                     color = colors.secondaryText,
-                    fontSize = 15.sp,
+                    fontSize = 14.sp,
+                    lineHeight = 21.sp,
                     modifier = Modifier
                         .weight(1f, fill = false)
                         .verticalScroll(rememberScrollState())
+                        .padding(
+                            start = DesignTokens.spacingDefault,
+                            end = DesignTokens.spacingDefault,
+                            bottom = DesignTokens.spacingXs,
+                        ),
                 )
             }
             content?.let {
@@ -123,11 +141,13 @@ fun AppAlertDialogContent(
                 ) { it() }
             }
             if (okButton != null || cancelButton != null || neutralButton != null) {
+                Spacer(Modifier.height(DesignTokens.spacingDefault))
+                // 细分隔线 + 透明按钮行: 层级靠留白, 不再给整行铺一层底色
+                Divider(color = colors.line, thickness = DesignTokens.strokeHairline)
                 Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(colors.fillet),
-                    horizontalArrangement = Arrangement.End
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     // 布局对齐 AlertDialog：neutral 靠左，cancel/ok 靠右
                     neutralButton?.let {
